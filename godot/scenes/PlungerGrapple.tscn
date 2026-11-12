@@ -1,0 +1,38 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/PlungerGrapple.gd" id="1_pg"]
+
+[sub_resource type="CylinderMesh" id="Cyl_handle"]
+top_radius = 0.03
+bottom_radius = 0.03
+height = 0.5
+
+[sub_resource type="CylinderMesh" id="Cyl_cup"]
+top_radius = 0.1
+bottom_radius = 0.1
+height = 0.06
+
+[sub_resource type="StandardMaterial3D" id="Mat_wood"]
+albedo_color = Color(0.55, 0.35, 0.15, 1)
+
+[sub_resource type="StandardMaterial3D" id="Mat_red"]
+albedo_color = Color(0.9, 0.15, 0.15, 1)
+
+[node name="PlungerGrapple" type="Node3D"]
+position = Vector3(0.32, -0.3, -0.5)
+script = ExtResource("1_pg")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="Handle" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, 0)
+mesh = SubResource("Cyl_handle")
+surface_material_override/0 = SubResource("Mat_wood")
+
+[node name="Cup" type="MeshInstance3D" parent="Model"]
+transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0, 0, -0.28)
+mesh = SubResource("Cyl_cup")
+surface_material_override/0 = SubResource("Mat_red")
+
+[node name="Muzzle" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.34)

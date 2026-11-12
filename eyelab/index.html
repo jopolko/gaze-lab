@@ -1,0 +1,2286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EyeLab: webcam eye and head tracking lab</title>
+<meta name="description" content="Hands-on lab that shows what a webcam can really do for pupil, head and gaze tracking: raw eye pixels, three detectors compared, live 3D head monitor, noise and accuracy tests. Runs entirely in your browser; video never leaves your device.">
+<style>
+  :root { --bg:#0e1117; --panel:#161b24; --line:#2a3342; --fg:#e8edf5; --dim:#97a3b8; --green:#3ddc84; --red:#ff5a4d; --cyan:#4dd2ff; --amber:#ffc24d; --violet:#b48cff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, Segoe UI, sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:12px 18px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:16px; margin:0 10px 0 0; }
+  label { color:var(--dim); font-size:12px; display:flex; align-items:center; gap:6px; }
+  select, input { background:#0b0f15; color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; }
+  input[type=number] { width:72px; }
+  button { background:#24304a; color:var(--fg); border:1px solid #3a4a6b; border-radius:8px; padding:7px 14px; font:inherit; cursor:pointer; }
+  button:hover { background:#2d3c5c; }
+  button.primary { background:#1f6f43; border-color:#2f9a60; }
+  button.warn { background:#7a3b1d; border-color:#b0592c; }
+  button:disabled { opacity:.45; cursor:default; }
+  .hTop, .hCtl { display: contents; }
+  .sigrow { display:grid; grid-template-columns: 112px 1fr 92px; gap:8px; align-items:center; margin:5px 0; font-size:13px; }
+  .sigtrack { position:relative; height:16px; background:#0b0f15; border-radius:4px; overflow:hidden; }
+  .sigfill { height:100%; width:0%; background:#4dd2ff; }
+  .sigtick { position:absolute; top:0; bottom:0; width:2px; background:#fff; opacity:.8; }
+  .sigrow.on .sigfill { background:#ffc24d; }
+  .sigrow.on .siglab { color:#ffc24d; font-weight:700; }
+  #irisMap { display:block; width:100%; aspect-ratio: 560 / 250; background:#0b0f15; border-radius:6px; }
+  #mon { display:block; width:100%; aspect-ratio: 560 / 300; background:#0b0f15; border-radius:6px; }
+  @media (max-width: 980px) {
+    /* Phone / tablet: title + Start, then the BIG cube, then the camera, then settings and everything else */
+    body { display:flex; flex-direction:column; }
+    header, main, main > section, .topRow, .topMain, .topSide { display: contents; }
+    button { padding:12px 14px; }
+    input[type=number] { width:70px; }
+    .card { padding:10px; }
+    .hTop { order:0; display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); }
+    .hTop h1 { width:100%; margin:0; }
+    .hTop #btnStart { flex:1; font-size:18px; padding:14px; }
+    .hTop #status { width:100%; font-size:13px; }
+    #cardMon { order:1; margin:10px 14px 0 !important; }
+    #cardReach { order:2; margin:10px 14px 0 !important; }
+    #cardCam { order:3; margin:10px 14px 0 !important; }
+    #cardCam .videowrap { max-width: 200px; }
+    #cardSig { order:4; margin:10px 14px 0 !important; }
+    .hCtl { order:5; display:flex; flex-wrap:wrap; gap:10px; padding:12px 14px; }
+    #cardStats { order:6; margin:10px 14px 0 !important; }
+    #cardEyes { order:7; margin:10px 14px 0 !important; }
+    #cardMap { order:7; margin:10px 14px 0 !important; }
+    #cardChart { order:8; margin:10px 14px 0 !important; }
+    #cardRes { order:9; margin:10px 14px 16px !important; }
+    #mon { aspect-ratio: 1 / 1; max-height: 70vh; }
+  }
+  a.home { color:var(--dim); font-size:12px; text-decoration:none; margin-left:8px; }
+  main { display:grid; grid-template-columns: minmax(420px, 1.1fr) minmax(420px, 1fr); gap:14px; padding:14px; max-width:1500px; margin:0 auto; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .card h2 { font-size:13px; margin:0 0 8px; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
+  .videowrap { position:relative; width:100%; background:#000; border-radius:8px; overflow:hidden; }
+  .videowrap video, .videowrap canvas { display:block; width:100%; height:auto; transform:scaleX(-1); }
+  .videowrap canvas.ov { position:absolute; inset:0; }
+  .eyes { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .eyes canvas { width:100%; image-rendering:pixelated; background:#000; border-radius:6px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:12px; color:var(--dim); margin-top:6px; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:5px; vertical-align:-1px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:3px 8px 3px 0; border-bottom:1px solid #202838; }
+  th { color:var(--dim); font-weight:600; font-size:12px; }
+  td.num { font-variant-numeric: tabular-nums; text-align:right; }
+  .note { color:var(--dim); font-size:12.5px; margin:8px 0 0; }
+  .big { font-size:15px; }
+  .good { color:var(--green); } .bad { color:var(--red); } .meh { color:var(--amber); }
+  #chart { width:100%; height:170px; background:#0b0f15; border-radius:6px; }
+  #stage { position:fixed; inset:0; background:#05070b; z-index:100; display:none; cursor:none; }
+  #stage .dot { position:absolute; width:34px; height:34px; border-radius:50%; background:var(--amber); border:4px solid #fff; transform:translate(-50%,-50%); margin:0; box-shadow:0 0 0 6px rgba(255,194,77,.25); }
+  #stage .live { position:absolute; width:22px; height:22px; border-radius:50%; transform:translate(-50%,-50%); border:3px solid #fff; margin:0; opacity:.9; }
+  #stagemsg { position:absolute; top:6%; left:0; right:0; text-align:center; font-size:26px; font-weight:700; text-shadow:0 2px 6px #000; }
+  #stageprog { position:absolute; bottom:4%; left:20%; right:20%; height:8px; background:#222a38; border-radius:4px; overflow:hidden; }
+  #stageprog div { height:100%; width:0%; background:var(--green); }
+  #bars .row { display:flex; align-items:center; gap:8px; margin:4px 0; font-size:13px; }
+  #bars .lab { width:150px; color:var(--dim); }
+  #bars .bar { height:14px; border-radius:3px; min-width:2px; }
+  #reachWrap { position:relative; }
+  #reachWrap:fullscreen, #reachWrap.pseudoFull { position:fixed; inset:0; z-index:300; background:#05070b; display:flex; align-items:center; justify-content:center; }
+  #reachWrap:fullscreen #reach, #reachWrap.pseudoFull #reach { width:100vw; height:100vh; border-radius:0; }
+  #rcFsBar { display:none; position:absolute; top:10px; right:10px; gap:8px; z-index:3; }
+  #reachWrap:fullscreen #rcFsBar, #reachWrap.pseudoFull #rcFsBar { display:flex; }
+  #rcLive { display:none; position:absolute; left:12px; bottom:12px; z-index:3; background:rgba(5,7,11,.72); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font:600 15px/1.4 system-ui; font-variant-numeric:tabular-nums; pointer-events:none; }
+  #reachWrap:fullscreen #rcLive, #reachWrap.pseudoFull #rcLive { display:block; }
+  #reach { display:block; width:100%; background:#0b0f15; border-radius:6px; }
+  .rc-ctl { display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:6px 14px; margin-top:8px; }
+  .rc-ctl label { justify-content:space-between; }
+  .rc-ctl input[type=range] { flex:1; min-width:90px; }
+  .rc-ctl b { width:44px; text-align:right; font-variant-numeric:tabular-nums; color:var(--fg); }
+  #rcTable td, #rcTable th { white-space:nowrap; font-size:12.5px; }
+  .topRow { grid-column: 1 / -1; display:grid; grid-template-columns: minmax(420px, 1.3fr) minmax(360px, 1fr); gap:14px; align-items:start; }
+  .topSide { display:flex; flex-direction:column; gap:14px; }
+  #cardCam .videowrap { max-width: 260px; margin: 0 auto; }
+  #cardCam .legend { font-size:11px; gap:4px 10px; }
+  #cardCam h2 { margin-bottom:6px; }
+  pre { background:#0b0f15; border-radius:6px; padding:8px; overflow:auto; max-height:160px; font-size:12px; margin:8px 0 0; }
+  /* Phone / tablet fixes. These come LAST so they beat the desktop rules above them. */
+  .card { min-width: 0; }
+  @media (max-width: 980px) {
+    html, body { overflow-x: hidden; max-width: 100%; }
+    .topRow, .topMain, .topSide { display: contents; }
+    #cardCam .videowrap { max-width: 200px; }
+    #rcTable td, #rcTable th, #rcGuideOut td, #rcGuideOut th { white-space: normal; font-size: 11.5px; padding-right: 5px; }
+    .rc-ctl { grid-template-columns: 1fr; }
+    #rcGuide { width: 100%; font-size: 17px; }
+    #reach, #mon, canvas { max-width: 100%; }
+    .sigrow { grid-template-columns: 90px 1fr 70px; }
+    #bars .lab { width: 100px; }
+    pre { max-width: 100%; }
+    label { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="hTop">
+    <h1>EyeLab <a class="home" href="/">&larr; joshuaopolko.com</a></h1>
+    <button id="btnStart" class="primary">Start camera</button>
+    <span id="status" style="color:var(--amber)">loading tracker...</span>
+  </div>
+  <div id="cardPanel" style="display:none;position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.85);color:#fff;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:16px;text-align:center">
+    <div style="font-size:18px;max-width:520px">Hold a credit card flat against the screen and drag the slider until this box is exactly the card's width (long edge).</div>
+    <div id="cardBox" style="width:324px;height:204px;border:3px solid #6cf;border-radius:12px;background:rgba(100,200,255,.15)"></div>
+    <input id="cardSlider" type="range" min="80" max="900" step="1" value="324" style="width:min(520px,90vw)">
+    <div><button id="cardOk" class="primary">Use this</button> <button id="cardNo">Cancel</button></div>
+  </div>
+  <div class="hCtl">
+    <label>resolution
+      <select id="res">
+        <option value="640x480">640 x 480</option>
+        <option value="1280x720">1280 x 720</option>
+        <option value="1920x1080" selected>1920 x 1080 (best)</option>
+      </select>
+    </label>
+    <label>screen width <input id="scrW" type="number" value="34" step="0.5"> cm</label>
+    <label title="Type your monitor's diagonal in inches and the width is filled in. A 24 inch monitor is 53 cm wide, a 27 inch one 60 cm, a 15.6 inch laptop 34 cm.">or diagonal <input id="scrDiag" type="number" step="0.5" placeholder="inches" style="width:70px"> in</label>
+    <label>eye-to-screen distance <input id="dist" type="number" value="55"> cm</label>
+    <label>camera field of view <input id="hfov" type="number" value="66"> deg</label>
+    <button id="btnFov" title="Sit at exactly the eye-to-screen distance in the box (measure with a ruler or a tape). The iris is 11.7 mm, so its width in pixels gives the camera's field of view.">fit field of view</button>
+    <button id="btnCard" title="Hold a credit card against the screen and resize the box on it. Gives the true screen width.">measure screen with a card</button>
+    <span id="profNote" class="note" style="margin:0"></span>
+    <label>camera sits at <select id="campos"><option value="top">top centre</option><option value="bottom">bottom centre</option><option value="left">left centre</option><option value="right">right centre</option></select></label>
+    <label title="Dim rooms make auto-exposure pick slow shutters, capping the camera near 15 fps. A short fixed exposure gives 30 fps but a darker image: add light."><input id="fastExp" type="checkbox"> fast exposure (30 fps, needs light)</label>
+    <span id="expNote" style="color:var(--dim);font-size:12px"></span>
+    <label title="Remembered on this device. Only works once the browser has already allowed the camera for this site."><input id="autoStart" type="checkbox"> start camera automatically</label>
+    <label><input id="trOn" type="checkbox" checked> tracers</label>
+    <label>trail <select id="trLen"><option value="12">short</option><option value="28" selected>medium</option><option value="60">long</option></select></label>
+    <label><input id="flipx" type="checkbox"> flip left/right</label>
+    <label><input id="flipy" type="checkbox"> flip up/down</label>
+    <button id="btnFix" disabled>1. Noise test (5 s)</button>
+    <button id="btnAcc" disabled>2. Accuracy test (about 40 s)</button>
+    <button id="btnSweep" disabled class="primary" title="Stare at the centre dot while slowly turning and nodding your head. Learns how much of the pupil drift is just your head, and removes it.">Head sweep (8 s): stops the drift</button>
+    <button id="btnCentre" disabled title="Stare at the centre dot: sets your own looking-straight point as the middle of the pupil map.">Centre eyes (3 s)</button>
+    <button id="btnLiveNC" disabled class="primary">0. Live, NO calibration</button>
+    <button id="btnLive" disabled>3. Live gaze dots (18 s calibration, then live)</button>
+    <button id="btnCopy" class="primary" title="Copies the screen-reach report plus any test results as text">Copy results JSON</button>
+  </div>
+</header>
+
+<main>
+  <div class="topRow">
+    <div class="topMain">
+<div class="card" id="cardReach">
+      <h2>Screen reach: does your gaze cover the whole screen?</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px">
+        <button id="rcGuide" disabled class="primary" style="font-size:16px;padding:10px 18px" title="Goes full screen and shows a dot. Look at the dot each time it moves. About 20 seconds.">Guide me: look here (20 s)</button>
+        <button id="rcFull" title="Make the map fill your whole screen: the dot is then exactly where you are looking, in real time. Esc exits.">Full screen map</button>
+        <button id="rcBall" class="primary" title="A tennis-ball sized circle that follows your gaze across the whole screen, full screen, real time.">Ball demo (full screen)</button>
+        <span class="note" style="margin:0">Press Start camera, then this. A dot appears full screen: just look at it each time it moves, eyes only.</span>
+      </div>
+      <div id="reachWrap">
+        <canvas id="reach" width="720" height="405"></canvas>
+        <div id="rcFsBar">
+          <button id="rcFsFit" class="primary">Fit range</button>
+          <button id="rcFsClear">Clear</button>
+          <button id="rcFsExit" class="warn">Exit full screen</button>
+        </div>
+        <div id="rcLive"></div>
+      </div>
+      <div id="rcVerdict" class="big" style="margin:8px 0 4px">Press Start camera, then press "Guide me: look here" and just look at the dot each time it moves.</div>
+      <div style="overflow-x:auto"><table id="rcTable"><thead><tr><th>direction</th><th>gaze reaches</th><th>short of the edge</th><th>iris moved</th><th>angles (gaze / head)</th><th>needs</th></tr></thead><tbody></tbody></table></div>
+      <div id="rcGuideOut" style="overflow-x:auto;margin-top:8px"></div>
+      <div id="rcRes" class="note" style="color:var(--fg)"></div>
+      <div id="rcLeak" class="note"></div>
+      <div class="rc-ctl">
+        <label>head-follow cancel, left/right <input id="rcYaw" type="range" min="-4" max="4" step="0.05" value="0"><b id="rcYawV">0.00</b></label>
+        <label>head-follow cancel, up/down <input id="rcPitch" type="range" min="-4" max="4" step="0.05" value="0"><b id="rcPitchV">0.00</b></label>
+        <label>eye gain, across <input id="rcGx" type="range" min="0.3" max="12" step="0.05" value="1"><b id="rcGxV">1.00</b></label>
+        <label>eye gain, up/down <input id="rcGy" type="range" min="0.3" max="12" step="0.05" value="1"><b id="rcGyV">1.00</b></label>
+        <label>shift across <input id="rcSx" type="range" min="-1" max="1" step="0.01" value="0"><b id="rcSxV">0.00</b></label>
+        <label>shift up/down <input id="rcSy" type="range" min="-1" max="1" step="0.01" value="0"><b id="rcSyV">0.00</b></label>
+        <label title="Below 1 expands small movements near the middle (and keeps the edges). Noise near the middle is expanded by the same amount.">centre boost <input id="rcCurve" type="range" min="0.4" max="1" step="0.05" value="1"><b id="rcCurveV">1.00</b></label>
+        <label title="How strongly the live dot is smoothed. More smoothing = steadier but slower to react to small moves.">smoothing <input id="rcSmooth" type="range" min="0.3" max="8" step="0.1" value="3"><b id="rcSmoothV">3.0</b></label>
+        <label><input id="rcCenter" type="checkbox" checked> centre on my median look</label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+        <button id="rcFitDots" disabled title="After a Guide me run: sets gain and shift so the dots you looked at land where they really were. Run Guide me again to verify.">Fit to the dots</button>
+        <button id="rcFit" disabled class="primary" title="Stretches and shifts so the range you just looked over fills 6% to 94% of the screen.">Fit range to screen</button>
+        <button id="rcFix" disabled title="Keep your eyes on the + in the middle of the map and slowly turn your head left/right, then up/down, for 6 seconds. Works out how much the dot follows your head and cancels it.">Stop head-follow (6 s)</button>
+        <button id="rcCopy" class="primary" title="Copies every number on this card as text. Paste it into the chat.">Copy report for Claude</button>
+        <button id="rcClear" disabled>Clear coverage</button>
+        <button id="rcReset">Reset sliders</button>
+      </div>
+      <p class="note" id="rcMsg"></p>
+      <p class="note"><b style="color:#4dd2ff">Blue glow</b> = where your gaze has been. <b style="color:#ffc24d">Dashed box</b> = the area your gaze covered (middle 94% of samples). <b style="color:#ff5a4d">Red bands</b> = parts of the real screen your gaze never reached, with the distance in cm. The dotted rectangle is this browser window; the hollow circle is where the + in the middle of this map really is on your screen, so look at it and the dot should land there.</p>
+    </div>
+    </div>
+    <div class="topSide">
+<div class="card" id="cardMon">
+      <h2>Head and gaze monitor (mirror view)</h2>
+      <canvas id="mon" width="560" height="300"></canvas>
+      <div id="coach" style="margin-top:8px">
+        <div id="coachMsg" style="font-size:16px;font-weight:600;min-height:2.6em">Start the camera and look at the screen; I will help you line your head up.</div>
+        <div id="coachBars" style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button id="coachSave" title="When the map shows your whole screen covered, press this. The coach will then guide you back to exactly this head position.">Remember this head position</button>
+          <button id="coachClear">Forget it</button>
+        </div>
+      </div>
+      <p class="note"><b style="color:#ffc24d">Amber cube + nose line</b> = your head (turn right and it turns right, like a mirror). <b style="color:#3ddc84">Green arrow</b> = 3D gaze (head + eyes combined). Keep your head still and move only your eyes: the cube should stay put while the green arrow swings.</p>
+    </div>
+<div class="card" id="cardCam">
+      <h2>Camera, as the tracker sees it (mirrored)</h2>
+      <div class="videowrap"><video id="vid" playsinline muted></video><canvas id="ov" class="ov"></canvas></div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--green)"></i>MediaPipe iris (landmark model)</span>
+        <span><i class="dot" style="background:var(--red)"></i>Limbus ring fit (my own: image gradients)</span>
+        <span><i class="dot" style="background:var(--cyan)"></i>Dark-blob centroid (my own: pixel intensity)</span>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <section>
+    
+    <div class="card" id="cardChart" style="margin-top:14px">
+      <h2>Jitter: iris position inside the eye, last ~6 s (pixels, mean removed)</h2>
+      <canvas id="chart" width="900" height="170"></canvas>
+      <p class="note">Hold still and look at one spot: any wobble here is pure measurement noise. Moving your eyes should show as clear steps. If the noise is the same size as the steps, a game cannot see the move.</p>
+    </div>
+  </section>
+
+  <section>
+    
+
+    
+
+    <div class="card" id="cardSig" style="margin-top:14px">
+      <h2>Face signals: which expressions can a game use as buttons?</h2>
+      <div id="sigs"></div>
+      <p class="note">Each bar is how far the signal rises above <b>your own resting level</b> (learned over the last few seconds); the white line is the level I treat as a deliberate press. Try: widen your eyes, squint, raise your brows, frown, open your mouth, smile. A signal that clears the line cleanly, without flickering when you do nothing, is reliable enough to use as a control on your face.</p>
+    </div>
+
+    <div class="card" id="cardEyes" style="margin-top:14px">
+      <h2>Raw eye pixels (what the pupil really looks like to the camera)</h2>
+      <div class="eyes">
+        <div><canvas id="eyeR"></canvas><div class="note" id="eyeRinfo">right eye</div></div>
+        <div><canvas id="eyeL"></canvas><div class="note" id="eyeLinfo">left eye</div></div>
+      </div>
+      <p class="note">Each square is a straight, un-smoothed crop from the camera, blown up with no interpolation: every block is ONE real camera pixel. If the iris is only a handful of blocks wide, that is the whole resolution budget for gaze.</p>
+    </div>
+
+    <div class="card" id="cardMap" style="margin-top:14px">
+      <h2>Pupil map: iris position inside each eye (zoomed, mirror view)</h2>
+      <canvas id="irisMap" width="560" height="250"></canvas>
+      <div id="mapStatus" class="note" style="color:var(--amber)">Not centred yet: press <b>Head sweep</b> (best) or <b>Centre eyes</b>, then stare at the dot.</div>
+      <p class="note">Each box is one eye: left/right edges are the eye corners, top/bottom the lids, zoomed so small movements show. Dots are the three detectors with a mild fading trail; the <b>dashed rectangle is the range your pupil has covered</b> over the last ~10 seconds. Look hard left, right, up and down and check the trail reaches the edges without the three detectors splitting apart.</p>
+    </div>
+
+    <div class="card" id="cardStats" style="margin-top:14px">
+      <h2>Physical limits right now</h2>
+      <table id="stats"></table>
+      <p class="note">An eyeball rotates about its centre, so the iris shifts only <b>~0.21 mm per degree</b> (12 mm radius). The iris is 11.7 mm wide, so <b>pixels per degree = iris width in pixels x 0.0179</b>. That number, versus the noise in pixels, is the accuracy ceiling no software can beat.</p>
+    </div>
+
+    <div class="card" id="cardRes" style="margin-top:14px">
+      <h2>Results</h2>
+      <div id="results" class="big">Run the tests above. The noise test shows the raw precision of each detector; the accuracy test calibrates on 9 dots, then checks 9 different dots and reports the true error in degrees and screen pixels.</div>
+      <div id="bars"></div>
+      <pre id="json" hidden></pre>
+    </div>
+  </section>
+</main>
+
+<div id="stage"><div id="stagemsg"></div><div class="dot" id="sdot"></div><div id="stageprog"><div></div></div></div>
+
+<div id="ballStage" style="display:none;position:fixed;inset:0;z-index:70;background:#0b1220;overflow:hidden;font:14px system-ui,sans-serif;color:#9fb3d1;cursor:none">
+  <div id="ballCross" style="position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;opacity:.35"><div style="position:absolute;left:12px;top:0;width:2px;height:26px;background:#9fb3d1"></div><div style="position:absolute;left:0;top:12px;width:26px;height:2px;background:#9fb3d1"></div></div>
+  <div id="ball" style="position:absolute;left:0;top:0;width:100px;height:100px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#e9f56a 0%,#cddc1f 55%,#a9bb12 100%);box-shadow:0 0 0 3px rgba(255,255,255,.25),0 8px 30px rgba(0,0,0,.45);will-change:transform;transform:translate(-9999px,-9999px)"></div>
+  <div id="ballHud" style="position:absolute;left:14px;top:12px;font-size:15px;line-height:1.5;white-space:pre"></div>
+  <div style="position:absolute;left:14px;bottom:12px;font-size:13px;opacity:.75">Look at the middle of the ball. SPACE: re-centre on where you look now &nbsp; arrows: shift &nbsp; [ ]: gain &nbsp; , . : smoothing &nbsp; H: head cancel &nbsp; D: auto-weighted eyes on/off &nbsp; <b>(no calibration needed: it learns as you look around)</b> &nbsp; Q W: left gain &nbsp; E R: right gain &nbsp; Esc: exit</div>
+  <div id="ballTarget" style="display:none;position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border:3px solid #ffc24d;border-radius:50%;box-shadow:0 0 18px #ffc24d"></div>
+  <div id="ballMsg" style="position:absolute;left:50%;top:40%;transform:translateX(-50%);font-size:20px;color:#ffc24d;text-align:center"></div>
+</div>
+<script type="module">
+const BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+const MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+const $ = (id) => document.getElementById(id);
+// Errors must be visible on a phone, where there is no console. Also: a page restored from the back/forward cache has a dead camera.
+window.addEventListener('error', (e) => { const st = document.getElementById('status'); if (st) { st.style.color = 'var(--red)'; st.textContent = 'error: ' + (e.message || e); } });
+window.addEventListener('unhandledrejection', (e) => { const st = document.getElementById('status'); if (st) { st.style.color = 'var(--red)'; st.textContent = 'error: ' + ((e.reason && (e.reason.message || e.reason.name)) || e.reason); } });
+window.addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
+const vid = $('vid'), ov = $('ov'), octx = ov.getContext('2d');
+const grab = document.createElement('canvas');
+const gctx = grab.getContext('2d', { willReadFrequently: true });
+const chart = $('chart'), cctx = chart.getContext('2d');
+
+const blHist = []; let blBase = 1;   // adaptive open-eye blink level (differs per person / glasses)
+function updBlinkBase(v) { blHist.push(v); if (blHist.length > 90) blHist.shift(); const q = blHist.slice().sort((x, y) => x - y); blBase = q[Math.floor((q.length - 1) * 0.25)]; }
+let lm = null, stream = null, W = 0, H = 0, lastT = -1;
+let frame = null;                  // latest processed frame (features + geometry)
+const ring = [];                   // rolling per-frame records for noise stats / chart
+let fpsEma = 0, infEma = 0, lastTick = 0;
+let modeCollect = null;            // function(frame) called for every good frame during tests
+let results = { noise: null, accuracy: null, camera: null };
+let models = null;                 // fitted per-estimator regressors (after the accuracy test)
+
+const EST = [
+  { key: 'mp',   name: 'MediaPipe iris ratios',      color: '#3ddc84' },
+  { key: 'bs',   name: 'MediaPipe eye-look scores',  color: '#b48cff' },
+  { key: 'limb', name: 'Limbus ring fit (own)',      color: '#ff5a4d' },
+  { key: 'dark', name: 'Dark centroid (own)',        color: '#4dd2ff' },
+  { key: 'geo',  name: 'Geometry (calibration-free)', color: '#7dffb3' },
+  { key: 'lid',  name: 'Eyelid shape (vertical cue)', color: '#ff9bd5' },
+  { key: 'all',  name: 'ALL signals + head pose',    color: '#ffc24d' },
+];
+
+// ---------------------------------------------------------------- setup
+async function loadModel() {
+  const mod = await import(BASE + '/vision_bundle.mjs');
+  const files = await mod.FilesetResolver.forVisionTasks(BASE + '/wasm');
+  const opts = (d) => ({ baseOptions: { modelAssetPath: MODEL, delegate: d }, outputFaceBlendshapes: true,
+    outputFacialTransformationMatrixes: true, runningMode: 'VIDEO', numFaces: 1 });
+  try { lm = await mod.FaceLandmarker.createFromOptions(files, opts('GPU')); }
+  catch (e) { lm = await mod.FaceLandmarker.createFromOptions(files, opts('CPU')); }
+  $('status').textContent = 'tracker ready. Press Start camera.';
+  if (localStorage.getItem('eyelab.autostart') === '1') {
+    try {
+      const perm = await navigator.permissions.query({ name: 'camera' });
+      if (perm.state === 'granted') { $('status').textContent = 'starting camera (auto-start is on)...'; startCam().catch((e) => { $('status').textContent = 'camera error: ' + (e.message || e); }); }
+    } catch (e) { /* permissions API not available: wait for the button */ }
+  }
+}
+
+// After a reload, a phone browser can keep the camera busy for a second or two ("Could not start video source"), and some phones reject
+// the size hints. So: wait for the tracker, retry when the camera is busy, and fall back to simpler requests.
+let modelPromise = null;
+async function getStream(w, h) {
+  const tries = [{ width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: 30 }, facingMode: 'user' }, { facingMode: 'user' }, true];
+  let last = null;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    for (const video of tries) {
+      try { return await navigator.mediaDevices.getUserMedia({ video: video, audio: false }); }
+      catch (e) {
+        last = e;
+        if (e.name === 'NotAllowedError' || e.name === 'SecurityError') throw new Error('camera permission is blocked: allow the camera for this site, then press Start camera');
+        if (e.name === 'NotReadableError' || e.name === 'AbortError' || e.name === 'TrackStartError') { $('status').textContent = 'camera is busy (try ' + (attempt + 1) + ' of 6)...'; await sleep(900); break; }
+      }
+    }
+  }
+  throw last || new Error('no camera found');
+}
+// Release the camera for real: stop every track, detach it from the <video>, and stop the frame loop. Used before every (re)start and when the
+// page goes away (refresh, close, navigate), because a phone can keep the camera locked for seconds after a reload otherwise.
+async function stopCam() {
+  running = false;
+  try { if (stream) stream.getTracks().forEach((t) => t.stop()); } catch (e) {}
+  stream = null;
+  try { vid.pause(); vid.srcObject = null; } catch (e) {}
+}
+window.addEventListener('pagehide', () => { stopCam(); });
+window.addEventListener('beforeunload', () => { stopCam(); });
+let startToken = 0, startChain = Promise.resolve();
+// Starts are serialised: pressing Start while the automatic start is still opening the camera waits for it, instead of tearing its video down
+// (which is what made the browser report "The play() request was interrupted").
+function startCam() {
+  const my = ++startToken;
+  const run = startChain.then(() => startCamNow(my));
+  startChain = run.catch(() => {});
+  return run;
+}
+async function startCamNow(my) {
+  if (my !== startToken) return;                 // a newer press replaced this one
+  const hadCamera = !!stream;
+  await stopCam();
+  if (hadCamera) await sleep(250);              // give the browser a moment to really let go before asking again
+  $('status').style.color = 'var(--amber)';
+  if (modelPromise) { $('status').textContent = 'loading the tracker...'; await modelPromise; }
+  if (!lm) throw new Error('the tracker did not load (check your connection), reload the page');
+  const [w, h] = $('res').value.split('x').map(Number);
+  stream = await getStream(w, h);
+  vid.srcObject = stream;
+  vid.muted = true; vid.playsInline = true;
+  for (let i = 0; ; i++) {                       // a play() can be interrupted by the browser itself; try again rather than fail
+    try { await vid.play(); break; }
+    catch (e) { if (i >= 3 || my !== startToken) { if (my !== startToken) return; throw e; } await sleep(200); }
+  }
+  if (my !== startToken) return;
+  W = vid.videoWidth; H = vid.videoHeight;
+  grab.width = W; grab.height = H; ov.width = W; ov.height = H;
+  const st = stream.getVideoTracks()[0].getSettings();
+  results.camera = { requested: [w, h], actual: [W, H], fps: st.frameRate || null };
+  ring.length = 0;
+  $('status').textContent = 'camera ' + W + 'x' + H + ' running';
+  $('btnFix').disabled = $('btnAcc').disabled = $('btnLive').disabled = $('btnLiveNC').disabled = $('btnSweep').disabled = $('btnCentre').disabled = $('rcFit').disabled = $('rcFix').disabled = $('rcClear').disabled = $('rcGuide').disabled = false;
+  if ($('fastExp').checked) applyExposure();     // only when asked: never touch the camera's exposure by default
+  if (!running) { running = true; schedule(); }
+  // 1080p gives ~1.5x the iris pixels; if this device cannot keep up (under 18 frames/s after 5 s), drop to 720p once.
+  if (w >= 1920 && !autoDowngraded) {
+    autoDowngraded = true;
+    setTimeout(() => { if (running && fpsEma > 0 && fpsEma < 18 && $('res').value === '1920x1080') { $('res').value = '1280x720'; $('status').textContent = '1080p was too slow here (' + fpsEma.toFixed(0) + ' frames/s): switching to 720p'; startCam().catch(() => {}); } }, 5000);
+  }
+}
+let autoDowngraded = false;
+let running = false;
+// Optional short fixed exposure (see the checkbox tooltip). Falls back to the camera's auto exposure when unchecked.
+async function applyExposure() {
+  const tr = stream && stream.getVideoTracks()[0];
+  if (!tr || !tr.applyConstraints) return;
+  const on = $('fastExp').checked;
+  try {
+    await tr.applyConstraints({ advanced: [on ? { exposureMode: 'manual', exposureTime: 150 } : { exposureMode: 'continuous' }] });
+    $('expNote').textContent = '';
+  } catch (e) {
+    // Most phones and front cameras refuse exposure control. That is normal and harmless: say so quietly.
+    if (on) { $('fastExp').checked = false; $('expNote').textContent = 'this camera does not allow exposure control (normal on most phones)'; }
+  }
+}
+$('fastExp').onchange = applyExposure;
+
+// ---------------------------------------------------------------- per-frame pipeline
+const hasRVFC = !!HTMLVideoElement.prototype.requestVideoFrameCallback;
+// One callback per NEW camera image. (Polling currentTime / rAF fires more often than the
+// camera delivers, so the same picture got processed twice while MediaPipe's own temporal
+// smoothing kept moving the markers: overlays updated 2x as fast as the pixels.)
+function schedule() { if (hasRVFC) vid.requestVideoFrameCallback(loop); else requestAnimationFrame(loop); }
+function loop(now) { try { process(now); } catch (e) { console.error(e); } schedule(); }
+const fpCanvas = document.createElement('canvas'); fpCanvas.width = 16; fpCanvas.height = 9;
+const fpc = fpCanvas.getContext('2d', { willReadFrequently: true });
+let lastFp = -1, calls = 0, news = 0, dupes = 0, rateCalls = 0, rateNews = 0, rateDupes = 0, rateT = 0;
+const cropMemo = {};
+
+const EYES = {
+  R: { name: 'right', outer: 33, inner: 133, top: 159, bot: 145, iris: 468, ringIdx: [469, 470, 471, 472] },
+  L: { name: 'left',  outer: 362, inner: 263, top: 386, bot: 374, iris: 473, ringIdx: [474, 475, 476, 477] },
+};
+
+function process(now) {
+  const t0 = performance.now();
+  calls++;
+  if (!hasRVFC) {
+    fpc.drawImage(vid, 0, 0, 16, 9);
+    const fd = fpc.getImageData(0, 0, 16, 9).data; let fp = 0;
+    for (let i = 0; i < fd.length; i += 4) fp = (fp * 31 + fd[i] * 3 + fd[i + 1] * 5 + fd[i + 2]) % 1000000007;
+    if (fp === lastFp) { dupes++; return; }
+    lastFp = fp;
+  }
+  news++;
+  if (t0 - rateT > 1000) { rateCalls = calls * 1000 / (t0 - rateT); rateNews = news * 1000 / (t0 - rateT); rateDupes = dupes; calls = news = dupes = 0; rateT = t0; }
+  gctx.drawImage(vid, 0, 0, W, H);
+  const r = lm.detectForVideo(vid, t0);
+  const dt = now - lastTick; lastTick = now;
+  if (dt > 0 && dt < 500) fpsEma = fpsEma ? fpsEma * 0.92 + (1000 / dt) * 0.08 : 1000 / dt;
+  octx.clearRect(0, 0, W, H);
+  if (!r.faceLandmarks || !r.faceLandmarks.length) { frame = null; drawMonitor(null); updateStats(); return; }
+  const L = r.faceLandmarks[0];
+  const P = (i) => ({ x: L[i].x * W, y: L[i].y * H });
+  const bs = {};
+  for (const c of r.faceBlendshapes[0].categories) bs[c.categoryName] = c.score;
+  let yaw = 0, pitch = 0;
+  const mm = r.facialTransformationMatrixes && r.facialTransformationMatrixes[0] && r.facialTransformationMatrixes[0].data;
+  if (mm) { yaw = Math.atan2(mm[8], mm[10]); pitch = Math.asin(Math.max(-1, Math.min(1, -mm[9]))); }
+  const f = { t: t0, bs, yaw, pitch, nose: [P(1).x, P(1).y], eyes: {}, faceW: Math.abs(P(454).x - P(234).x), blink: Math.max(bs.eyeBlinkLeft || 0, bs.eyeBlinkRight || 0) };
+
+  for (const k of ['R', 'L']) {
+    const E = EYES[k];
+    const o = P(E.outer), i = P(E.inner), tp = P(E.top), bt = P(E.bot), c = P(E.iris);
+    let rad = 0;
+    for (const idx of E.ringIdx) { const q = P(idx); rad += Math.hypot(q.x - c.x, q.y - c.y); }
+    rad /= 4;
+    const eyeW = Math.hypot(i.x - o.x, i.y - o.y);
+    const S = Math.max(24, Math.round(eyeW * 1.5));
+    let x0 = Math.max(0, Math.min(W - S, Math.round(c.x - S / 2)));
+    let y0 = Math.max(0, Math.min(H - S, Math.round(c.y - S / 2)));
+    const pc = cropMemo[k];
+    if (pc && pc.S === S && Math.abs(c.x - (pc.x0 + S / 2)) < 3 && Math.abs(c.y - (pc.y0 + S / 2)) < 3) { x0 = pc.x0; y0 = pc.y0; }
+    cropMemo[k] = { S, x0, y0 };
+    const img = gctx.getImageData(x0, y0, S, S);
+    const gray = toGray(img.data, S);
+    const cx = c.x - x0, cy = c.y - y0;
+    const limb = limbusFit(gray, S, cx, cy, rad);
+    const dark = darkCentroid(gray, S, cx, cy, rad);
+    const mid = { x: (o.x + i.x) / 2, y: (tp.y + bt.y) / 2 };
+    const wx = i.x - o.x, wy = bt.y - tp.y;
+    f.eyes[k] = {
+      o, i, tp, bt, c, rad, eyeW, S, x0, y0, img, cx, cy, limb, dark,
+      // normalised position of each estimator inside the eye (0..1 across / down)
+      mp:   [(c.x - o.x) / wx, (c.y - tp.y) / wy],
+      limbN: [(x0 + limb.x - o.x) / wx, (y0 + limb.y - tp.y) / wy],
+      darkN: [(x0 + dark.x - o.x) / wx, (y0 + dark.y - tp.y) / wy],
+      // pixel position relative to the eye centre (for jitter stats)
+      relMp:   [c.x - mid.x, c.y - mid.y],
+      relLimb: [x0 + limb.x - mid.x, y0 + limb.y - mid.y],
+      relDark: [x0 + dark.x - mid.x, y0 + dark.y - mid.y],
+    };
+  }
+  const R = f.eyes.R, Lf = f.eyes.L;
+  f.vec = {
+    mp:   [R.mp[0], Lf.mp[0], R.mp[1], Lf.mp[1]],
+    bs:   ['eyeLookInLeft','eyeLookOutLeft','eyeLookUpLeft','eyeLookDownLeft','eyeLookInRight','eyeLookOutRight','eyeLookUpRight','eyeLookDownRight'].map((k) => bs[k] || 0),
+    limb: [R.limbN[0], Lf.limbN[0], R.limbN[1], Lf.limbN[1]],
+    dark: [R.darkN[0], Lf.darkN[0], R.darkN[1], Lf.darkN[1]],
+  };
+  const ew = (e) => Math.abs(e.i.x - e.o.x) || 1;
+  f.vec.lid = [bs.eyeBlinkLeft || 0, bs.eyeBlinkRight || 0, (R.bt.y - R.tp.y) / ew(R), (Lf.bt.y - Lf.tp.y) / ew(Lf),
+    (R.c.y - R.tp.y) / ew(R), (R.bt.y - R.c.y) / ew(R), (Lf.c.y - Lf.tp.y) / ew(Lf), (Lf.bt.y - Lf.c.y) / ew(Lf), f.pitch * 2];
+  f.vec.all = [].concat(f.vec.mp, f.vec.bs, f.vec.limb, f.vec.dark, f.vec.lid, [f.yaw * 2, f.pitch * 2]);
+  f.geo = geoGaze(f, mm);
+  f.geoL = geoGaze(f, mm, true);
+  if (f.geoL.ok) f.geoL.px = pxStep(f, mm);
+  f.roll = mm ? Math.atan2(mm[1], mm[5]) : 0;
+  f.vec.geo = f.geo.ok ? [f.geo.u, f.geo.v, f.geo.yaw / 30, f.geo.pitch / 30] : [0.5, 0.5, 0, 0];
+  updBlinkBase(f.blink);
+  updSignals(bs);
+  pushTrace(f);
+  f.closure = f.blink - blBase;
+  frame = f;
+  window.__frame = f; window.__ring = ring;
+  // rolling record for the jitter stats / chart (only when the eyes are open)
+  if (f.closure < 0.2) {
+    ring.push({ t: t0, mp: avg2(R.relMp, Lf.relMp), limb: avg2(R.relLimb, Lf.relLimb), dark: avg2(R.relDark, Lf.relDark) });
+    if (ring.length > 360) ring.shift();
+    if (modeCollect) modeCollect(f);
+  }
+  const ms = performance.now() - t0; infEma = infEma ? infEma * 0.9 + ms * 0.1 : ms;
+  drawOverlay(f); drawVideoTrails(); drawEye('eyeR', 'eyeRinfo', R, 'right eye (left in the picture)', 'R'); drawEye('eyeL', 'eyeLinfo', Lf, 'left eye (right in the picture)', 'L');
+  drawChart(); drawMonitor(f); drawMap(); updMapStatus(); updateStats(); reachFrame(f);
+}
+// Calibration-free gaze from 3D geometry.
+//  1. Depth from the iris: a human iris is ~11.7 mm wide, so depth = focal_px * 11.7 mm / iris_px.
+//  2. Eyeball centre = the eye-corner midpoint pushed ~1.05 cm straight back along the head's own
+//     facing direction (taken from MediaPipe's head-pose matrix), so head turns are compensated.
+//  3. Gaze ray = from the eyeball centre through the iris centre (both eyes averaged).
+//  4. Intersect the ray with the screen plane (camera assumed centred at the top edge of the screen).
+// Needs only: screen width (cm), camera field of view. Assumes eye optical axis = line of sight
+// (the real offset, "kappa", is ~5 degrees and person-specific, which is what calibration normally fixes).
+// What does one pixel of iris movement move the gaze point on the screen by? (numerical derivative of the geometry)
+function pxStep(f, mm) {
+  const base = f.geoL; if (!base || !base.ok) return null;
+  const sh = (dx, dy) => {
+    for (const k of ['R', 'L']) { f.eyes[k].limb.x += dx; f.eyes[k].limb.y += dy; }
+    const g = geoGaze(f, mm, true);
+    for (const k of ['R', 'L']) { f.eyes[k].limb.x -= dx; f.eyes[k].limb.y -= dy; }
+    return g;
+  };
+  const gx = sh(1, 0), gy = sh(0, 1);
+  if (!gx.ok || !gy.ok) return null;
+  return { du: Math.abs(gx.u - base.u), dv: Math.abs(gy.v - base.v) };
+}
+function geoGaze(f, mm, useLimb) {
+  const hfov = (parseFloat($('hfov').value) || 66) * Math.PI / 180;
+  const Wv = W || 1280, Hv = H || 720;
+  const fpx = (Wv / 2) / Math.tan(hfov / 2), cx = Wv / 2, cy = Hv / 2;
+  const diam = f.eyes.R.rad + f.eyes.L.rad;              // = 2 x average iris radius, px
+  if (!(diam > 4)) return { ok: false };
+  const Zi = fpx * 1.17 / diam;                          // cm
+  let back = [0, 0, 1];
+  if (mm) { const n = Math.hypot(mm[8], mm[9], mm[10]) || 1; back = [-mm[8] / n, mm[9] / n, mm[10] / n]; }
+  const per = ['R', 'L'].map((k) => {
+    const e = f.eyes[k];
+    const ic = useLimb ? { x: e.x0 + e.limb.x, y: e.y0 + e.limb.y } : e.c;          // limbus ring fit: sub-pixel iris centre
+    const I = [(ic.x - cx) * Zi / fpx, (ic.y - cy) * Zi / fpx, Zi];
+    const mx = (e.o.x + e.i.x) / 2, my = (e.o.y + e.i.y) / 2;
+    const M = [(mx - cx) * Zi / fpx, (my - cy) * Zi / fpx, Zi + 0.25];
+    const E = [M[0] + back[0] * 1.05, M[1] + back[1] * 1.05, M[2] + back[2] * 1.05];
+    const g = [I[0] - E[0], I[1] - E[1], I[2] - E[2]]; const gl = Math.hypot(g[0], g[1], g[2]) || 1;
+    return { E, g: [g[0] / gl, g[1] / gl, g[2] / gl] };
+  });
+  const O = [0, 1, 2].map((i) => (per[0].E[i] + per[1].E[i]) / 2);
+  const Gs = [0, 1, 2].map((i) => per[0].g[i] + per[1].g[i]); const gl = Math.hypot(Gs[0], Gs[1], Gs[2]) || 1;
+  const G = Gs.map((v) => v / gl);
+  if (G[2] > -0.05) return { ok: false };
+  const t = O[2] / -G[2], Px = O[0] + G[0] * t, Py = O[1] + G[1] * t;
+  const sw = parseFloat($('scrW').value) || 34, sh = sw * ((screen.width > 0 && screen.height > 0) ? screen.height / screen.width : 9 / 16);
+  // camera x is mirrored relative to the user; the camera sits ~0.8 cm above the screen top edge
+  const cp = { top: [0.5, -0.03], bottom: [0.5, 1.03], left: [-0.02, 0.5], right: [1.02, 0.5] }[$('campos').value] || [0.5, -0.03];
+  const eu = [], ev = [];
+  for (const pe of per) {                                          // each eye on its own: [right, left]
+    if (pe.g[2] > -0.05) { eu.push(NaN); ev.push(NaN); continue; }
+    const tt = pe.E[2] / -pe.g[2];
+    eu.push(cp[0] + (-(pe.E[0] + pe.g[0] * tt)) / sw); ev.push(cp[1] + (pe.E[1] + pe.g[1] * tt) / sh);
+  }
+  return { ok: true, eu, ev, u: cp[0] + (-Px) / sw, v: cp[1] + Py / sh, Zi, Zm: mm ? Math.abs(mm[14]) : NaN, yaw: Math.atan2(G[0], -G[2]) * 57.3, pitch: Math.atan2(G[1], -G[2]) * 57.3 };
+}
+const avg2 = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+// ---------------------------------------------------------------- my own pupil / iris detectors
+function toGray(d, S) {
+  const g = new Float32Array(S * S);
+  for (let p = 0, q = 0; p < g.length; p++, q += 4) g[p] = 0.299 * d[q] + 0.587 * d[q + 1] + 0.114 * d[q + 2];
+  return g;
+}
+function bil(a, S, x, y) {
+  if (x < 0) x = 0; if (y < 0) y = 0; if (x > S - 1.001) x = S - 1.001; if (y > S - 1.001) y = S - 1.001;
+  const x0 = x | 0, y0 = y | 0, fx = x - x0, fy = y - y0, i = y0 * S + x0;
+  return a[i] * (1 - fx) * (1 - fy) + a[i + 1] * fx * (1 - fy) + a[i + S] * (1 - fx) * fy + a[i + S + 1] * fx * fy;
+}
+// Limbus ring fit: the iris edge is a dark disc on bright sclera. Slide a ring around the
+// landmark guess and keep the spot where image gradients point straight outward along the
+// left/right arcs (the top/bottom arcs are hidden by eyelids). Sub-pixel via a parabola.
+function limbusFit(gray, S, cx, cy, r0) {
+  const sm = new Float32Array(S * S);
+  for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) {
+    let t = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) t += gray[(y + dy) * S + x + dx];
+    sm[y * S + x] = t / 9;
+  }
+  const gx = new Float32Array(S * S), gy = new Float32Array(S * S);
+  for (let y = 1; y < S - 1; y++) for (let x = 1; x < S - 1; x++) {
+    gx[y * S + x] = (sm[y * S + x + 1] - sm[y * S + x - 1]) * 0.5;
+    gy[y * S + x] = (sm[(y + 1) * S + x] - sm[(y - 1) * S + x]) * 0.5;
+  }
+  const angs = [];
+  for (let a = -55; a <= 55; a += 10) { angs.push(a * Math.PI / 180); angs.push((a + 180) * Math.PI / 180); }
+  const STEP = 0.5, RNG = 3.0, n = Math.round(RNG * 2 / STEP) + 1;
+  let best = -1e9, bi = 0, bj = 0, bestScores = null, bestR = r0;
+  for (const dr of [-1.5, 0, 1.5]) {
+    const rr = Math.max(2.5, r0 + dr);
+    const scores = new Float32Array(n * n);
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const ccx = cx - RNG + i * STEP, ccy = cy - RNG + j * STEP;
+      let sc = 0;
+      for (const th of angs) {
+        const px = ccx + rr * Math.cos(th), py = ccy + rr * Math.sin(th);
+        sc += bil(gx, S, px, py) * Math.cos(th) + bil(gy, S, px, py) * Math.sin(th);
+      }
+      scores[j * n + i] = sc;
+      if (sc > best) { best = sc; bi = i; bj = j; bestScores = scores; bestR = rr; }
+    }
+  }
+  const at = (i, j) => bestScores[Math.max(0, Math.min(n - 1, j)) * n + Math.max(0, Math.min(n - 1, i))];
+  const par = (m, c, p) => { const d = m - 2 * c + p; return Math.abs(d) < 1e-6 ? 0 : 0.5 * (m - p) / d * STEP; };
+  const sx = par(at(bi - 1, bj), at(bi, bj), at(bi + 1, bj));
+  const sy = par(at(bi, bj - 1), at(bi, bj), at(bi, bj + 1));
+  return { x: cx - RNG + bi * STEP + sx, y: cy - RNG + bj * STEP + sy, r: bestR, score: best };
+}
+// Dark blob: darkest ~35% of pixels inside the landmark iris disc, intensity-weighted centroid.
+function darkCentroid(gray, S, cx, cy, r0) {
+  const vals = [], pts = [];
+  const R = r0 * 0.95;
+  for (let y = Math.max(0, Math.floor(cy - R)); y <= Math.min(S - 1, Math.ceil(cy + R)); y++)
+    for (let x = Math.max(0, Math.floor(cx - R)); x <= Math.min(S - 1, Math.ceil(cx + R)); x++)
+      if ((x - cx) ** 2 + (y - cy) ** 2 <= R * R) { vals.push(gray[y * S + x]); pts.push([x, y, gray[y * S + x]]); }
+  if (pts.length < 6) return { x: cx, y: cy };
+  const sorted = vals.slice().sort((a, b) => a - b);
+  const thr = sorted[Math.floor(sorted.length * 0.35)];
+  let sw = 0, sx = 0, sy = 0;
+  for (const [x, y, v] of pts) { if (v <= thr) { const w = thr - v + 1; sw += w; sx += w * x; sy += w * y; } }
+  return sw ? { x: sx / sw + 0.5, y: sy / sw + 0.5 } : { x: cx, y: cy };
+}
+
+// ---------------------------------------------------------------- drawing
+function drawOverlay(f) {
+  const u = W / 640;
+  octx.lineWidth = 1.5 * u;
+  for (const k of ['R', 'L']) {
+    const e = f.eyes[k];
+    octx.strokeStyle = 'rgba(255,255,255,.55)';
+    octx.beginPath(); octx.moveTo(e.o.x, e.o.y); octx.lineTo(e.tp.x, e.tp.y); octx.lineTo(e.i.x, e.i.y); octx.lineTo(e.bt.x, e.bt.y); octx.closePath(); octx.stroke();
+    octx.strokeStyle = '#3ddc84'; octx.beginPath(); octx.arc(e.c.x, e.c.y, e.rad, 0, 7); octx.stroke();
+    cross(e.x0 + e.limb.x, e.y0 + e.limb.y, 4 * u, '#ff5a4d');
+    octx.fillStyle = '#4dd2ff'; octx.beginPath(); octx.arc(e.x0 + e.dark.x, e.y0 + e.dark.y, 1.8 * u, 0, 7); octx.fill();
+  }
+}
+function cross(x, y, s, c) { octx.strokeStyle = c; octx.beginPath(); octx.moveTo(x - s, y); octx.lineTo(x + s, y); octx.moveTo(x, y - s); octx.lineTo(x, y + s); octx.stroke(); }
+
+function drawEye(canvasId, infoId, e, label, k) {
+  const cv = $(canvasId), SC = Math.max(4, Math.round(256 / e.S));
+  cv.width = e.S * SC; cv.height = e.S * SC;
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  const tmp = document.createElement('canvas'); tmp.width = tmp.height = e.S;
+  tmp.getContext('2d').putImageData(e.img, 0, 0);
+  c.drawImage(tmp, 0, 0, e.S * SC, e.S * SC);
+  c.lineWidth = 2;
+  c.strokeStyle = '#3ddc84'; c.beginPath(); c.arc(e.cx * SC, e.cy * SC, e.rad * SC, 0, 7); c.stroke();
+  const x = e.limb.x * SC, y = e.limb.y * SC;
+  c.strokeStyle = '#ff5a4d'; c.beginPath(); c.arc(x, y, e.limb.r * SC, 0, 7); c.moveTo(x - 9, y); c.lineTo(x + 9, y); c.moveTo(x, y - 9); c.lineTo(x, y + 9); c.stroke();
+  c.fillStyle = '#4dd2ff'; c.beginPath(); c.arc(e.dark.x * SC, e.dark.y * SC, 4, 0, 7); c.fill();
+  drawEyeTrail(c, e, SC, k);
+  $(infoId).textContent = label + ': crop ' + e.S + 'x' + e.S + ' px, iris diameter ' + (e.rad * 2).toFixed(1) + ' px';
+}
+
+// Mirror-view 3D monitor: cube + floor grid turn like your head; green arrow is the 3D gaze direction.
+// ---- face signals: expression strengths relative to each person's own resting level
+const SIGS = [
+  { key: 'wide',    label: 'eyes wide',   thr: 0.22 },
+  { key: 'squint',  label: 'eyes squint', thr: 0.25 },
+  { key: 'browUp',  label: 'brows up',    thr: 0.25 },
+  { key: 'browDn',  label: 'brows down',  thr: 0.25 },
+  { key: 'mouth',   label: 'mouth open',  thr: 0.25 },
+  { key: 'smile',   label: 'smile',       thr: 0.30 },
+];
+const sigHist = {}; let sigBuilt = false;
+function buildSigs() {
+  $('sigs').innerHTML = SIGS.map((g) => '<div class="sigrow" id="sg_' + g.key + '"><span class="siglab">' + g.label + '</span><span class="sigtrack"><span class="sigfill"></span><span class="sigtick" style="left:' + (g.thr / 0.6 * 100) + '%"></span></span><span class="signum">-</span></div>').join('');
+  sigBuilt = true;
+}
+function updSignals(bs) {
+  if (!sigBuilt) buildSigs();
+  const a2 = (x, y) => ((bs[x] || 0) + (bs[y] || 0)) / 2;
+  const v = { wide: a2('eyeWideLeft', 'eyeWideRight'), squint: a2('eyeSquintLeft', 'eyeSquintRight'),
+    browUp: ((bs.browInnerUp || 0) + a2('browOuterUpLeft', 'browOuterUpRight')) / 2, browDn: a2('browDownLeft', 'browDownRight'),
+    mouth: bs.jawOpen || 0, smile: a2('mouthSmileLeft', 'mouthSmileRight') };
+  for (const g of SIGS) {
+    const h = (sigHist[g.key] = sigHist[g.key] || []); h.push(v[g.key]); if (h.length > 90) h.shift();
+    const q = h.slice().sort((x, y) => x - y), base = q[Math.floor((q.length - 1) * 0.25)];
+    const rel = Math.max(v[g.key] - base, 0), row = $('sg_' + g.key);
+    row.classList.toggle('on', rel > g.thr);
+    row.querySelector('.sigfill').style.width = Math.min(rel / 0.6, 1) * 100 + '%';
+    row.querySelector('.signum').textContent = '+' + rel.toFixed(2) + '  (' + v[g.key].toFixed(2) + ')';
+  }
+}
+
+// ---- drift correction: the iris position inside the eye box shifts with HEAD pose (a turned head moves the eye
+// corners and the iris differently in the image), and nobody's looking-straight point is the exact box centre.
+// Stare at one fixed spot while moving the head: gaze is constant, so every change in the signal is head-caused.
+// Fit that as a linear function of head yaw / pitch / roll, subtract it, then centre on the stare point.
+const calib = { ready: false, centred: false, coef: {}, h0: [0, 0, 0], centre: {}, report: '' };
+const DETS = ['mp', 'limb', 'dark'];
+const rawSig = (f, k, det, ax) => { const e = f.eyes[k]; return (det === 'mp' ? e.mp : det === 'limb' ? e.limbN : e.darkN)[ax]; };
+const headVec = (f) => [f.yaw, f.pitch, f.roll || 0];
+function headTerm(id, h) { const c = calib.coef[id]; return c ? c[1] * (h[0] - calib.h0[0]) + c[2] * (h[1] - calib.h0[1]) + c[3] * (h[2] - calib.h0[2]) : 0; }
+function corrected(f, k, det, ax) {
+  const id = k + '.' + det + '.' + ax;
+  let v = rawSig(f, k, det, ax);
+  if (calib.ready) v -= headTerm(id, headVec(f));
+  if (calib.centre[id] !== undefined) v = v - calib.centre[id] + 0.5;
+  return v;
+}
+const correctedN = (f, k) => { const o = {}; for (const d of DETS) o[d] = [corrected(f, k, d, 0), corrected(f, k, d, 1)]; return o; };
+const stdOf = (a) => { if (a.length < 3) return 0; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((x, y) => x + (y - m) ** 2, 0) / a.length); };
+// Pure: fit head-induced drift from frames recorded while staring at one spot. Returns coefficients + before / after drift.
+function fitHeadComp(samples) {
+  const n = samples.length; if (n < 30) return null;
+  const hs = samples.map(headVec), h0 = [0, 1, 2].map((i) => hs.reduce((a, h) => a + h[i], 0) / n);
+  const Z = hs.map((h) => [h[0] - h0[0], h[1] - h0[1], h[2] - h0[2], 1]);
+  const coef = {}, centre = {}; let before = 0, after = 0, cnt = 0;
+  for (const k of ['R', 'L']) for (const d of DETS) for (const ax of [0, 1]) {
+    const id = k + '.' + d + '.' + ax, y = samples.map((f) => rawSig(f, k, d, ax));
+    const w = ridgeSolve(Z, y, 1e-4);                 // [b_yaw, b_pitch, b_roll, intercept]
+    coef[id] = [w[3], w[0], w[1], w[2]]; centre[id] = w[3];
+    if (d === 'limb') { before += stdOf(y); after += stdOf(y.map((v, i) => v - (w[0] * Z[i][0] + w[1] * Z[i][1] + w[2] * Z[i][2]))); cnt++; }
+  }
+  return { coef, h0, centre, before: before / cnt, after: after / cnt, n };
+}
+function applyHeadComp(fit) { calib.coef = fit.coef; calib.h0 = fit.h0; calib.centre = fit.centre; calib.ready = true; calib.centred = true; extHist.R.length = 0; extHist.L.length = 0; }
+
+// ---- tracers: mild fading trails so motion history is visible
+const traceHist = [];
+const extHist = { R: [], L: [] };
+function pushTrace(f) {
+  const rec = { yaw: f.yaw, pit: f.pitch, rol: f.roll || 0, nose: f.nose, gy: f.geo && f.geo.ok ? f.geo.yaw / 57.3 : null, gp: f.geo && f.geo.ok ? f.geo.pitch / 57.3 : null, e: {} };
+  for (const k of ['R', 'L']) {
+    const e = f.eyes[k];
+    rec.e[k] = { c: [e.c.x, e.c.y], limb: [e.x0 + e.limb.x, e.y0 + e.limb.y], dark: [e.x0 + e.dark.x, e.y0 + e.dark.y], n: correctedN(f, k) };
+    extHist[k].push(rec.e[k].n.limb); if (extHist[k].length > 600) extHist[k].shift();
+  }
+  traceHist.push(rec); if (traceHist.length > 90) traceHist.shift();
+}
+const trLen = () => ($('trOn') && $('trOn').checked) ? parseInt($('trLen').value, 10) : 0;
+const recent = () => { const n = trLen(); return n ? traceHist.slice(-n) : []; };
+function trailLine(g, pts, color, a0, lw) {
+  const n = pts.length;
+  for (let i = 1; i < n; i++) { g.strokeStyle = color; g.globalAlpha = a0 * i / n; g.lineWidth = lw; g.beginPath(); g.moveTo(pts[i - 1][0], pts[i - 1][1]); g.lineTo(pts[i][0], pts[i][1]); g.stroke(); }
+  g.globalAlpha = 1;
+}
+function drawVideoTrails() {
+  const h = recent(); if (h.length < 2) return;
+  const u = W / 640;
+  for (const k of ['R', 'L']) { trailLine(octx, h.map((r) => r.e[k].c), '#3ddc84', 0.6, 2 * u); trailLine(octx, h.map((r) => r.e[k].limb), '#ff5a4d', 0.6, 2 * u); }
+  trailLine(octx, h.map((r) => r.nose), '#ffc24d', 0.65, 2.5 * u);
+}
+function drawEyeTrail(c, e, SC, k) {
+  const m = (p) => [(p[0] - e.x0) * SC, (p[1] - e.y0) * SC];
+  // eye box ticks: the two corners and the two lid points, so you can see where the pupil is relative to the eye
+  c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 2;
+  for (const p of [e.o, e.i, e.tp, e.bt]) { const q = m([p.x, p.y]); c.beginPath(); c.moveTo(q[0] - 7, q[1]); c.lineTo(q[0] + 7, q[1]); c.moveTo(q[0], q[1] - 7); c.lineTo(q[0], q[1] + 7); c.stroke(); }
+  const h = recent(); if (h.length < 2) return;
+  trailLine(c, h.map((r) => m(r.e[k].c)), '#3ddc84', 0.65, 2);
+  trailLine(c, h.map((r) => m(r.e[k].limb)), '#ff5a4d', 0.65, 2);
+  trailLine(c, h.map((r) => m(r.e[k].dark)), '#4dd2ff', 0.65, 2);
+}
+// Zoomed map of the iris position inside each eye box (x mirrored so looking to YOUR right moves the dot right).
+function drawMap() {
+  const cv = $('irisMap'); if (!cv) return;
+  const g = cv.getContext('2d'), dpr = window.devicePixelRatio || 1;
+  const cw = Math.max(240, Math.round(cv.clientWidth * dpr)), ch = Math.max(120, Math.round(cv.clientHeight * dpr));
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  const w = cv.width, h = cv.height, k = Math.min(w / 2, h) / 200;
+  g.clearRect(0, 0, w, h);
+  const XR = calib.centred ? [0.3, 0.7] : [0.18, 0.82], YR = calib.centred ? [0.3, 0.7] : [0.05, 0.75];     // zoomed window of the normalised eye box
+  const hist = recent();
+  [['L', 'left eye'], ['R', 'right eye']].forEach(([key, name], idx) => {
+    const x0 = idx * w / 2 + 10 * k, y0 = 26 * k, pw = w / 2 - 20 * k, ph = h - 46 * k;
+    const map = (n) => [x0 + ((1 - n[0]) - XR[0]) / (XR[1] - XR[0]) * pw, y0 + (n[1] - YR[0]) / (YR[1] - YR[0]) * ph];
+    g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1.5 * k; g.strokeRect(x0, y0, pw, ph);
+    g.strokeStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.moveTo(x0 + pw / 2, y0); g.lineTo(x0 + pw / 2, y0 + ph); g.moveTo(x0, y0 + ph / 2); g.lineTo(x0 + pw, y0 + ph / 2); g.stroke();
+    // range reached over the last ~10 s
+    const ex = extHist[key];
+    if (ex.length > 10) {
+      let ax = 9, bx = -9, ay = 9, by = -9; for (const n of ex) { ax = Math.min(ax, n[0]); bx = Math.max(bx, n[0]); ay = Math.min(ay, n[1]); by = Math.max(by, n[1]); }
+      const p1 = map([bx, ay]), p2 = map([ax, by]);
+      g.setLineDash([6 * k, 5 * k]); g.strokeStyle = 'rgba(255,194,77,.8)'; g.lineWidth = 1.5 * k; g.strokeRect(Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1]), Math.abs(p2[0] - p1[0]), Math.abs(p2[1] - p1[1])); g.setLineDash([]);
+    }
+    if (hist.length > 1) {
+      trailLine(g, hist.map((r) => map(r.e[key].n.mp)), '#3ddc84', 0.7, 2 * k);
+      trailLine(g, hist.map((r) => map(r.e[key].n.limb)), '#ff5a4d', 0.7, 2 * k);
+      trailLine(g, hist.map((r) => map(r.e[key].n.dark)), '#4dd2ff', 0.7, 2 * k);
+    }
+    const last = traceHist[traceHist.length - 1];
+    if (last) for (const [dk, col] of [['mp', '#3ddc84'], ['limb', '#ff5a4d'], ['dark', '#4dd2ff']]) { const p = map(last.e[key].n[dk]); g.fillStyle = col; g.beginPath(); g.arc(p[0], p[1], 5.5 * k, 0, 7); g.fill(); }
+    g.fillStyle = '#e8edf5'; g.font = (13 * k) + 'px system-ui,sans-serif'; g.fillText(name, x0, y0 - 8 * k);
+    g.fillStyle = '#97a3b8'; g.font = (11 * k) + 'px system-ui,sans-serif'; g.fillText('your left', x0 + 4 * k, y0 + ph + 14 * k);
+    const t = 'your right'; g.fillText(t, x0 + pw - g.measureText(t).width - 4 * k, y0 + ph + 14 * k);
+  });
+}
+
+function updMapStatus() {
+  const el = $('mapStatus'); if (!el) return;
+  if (!calib.centred) { el.textContent = 'Not centred yet: press Head sweep (best) or Centre eyes, then stare at the dot.'; return; }
+  const h = traceHist.slice(-30); let txt = (calib.ready ? 'head-compensated, centred' : 'centred (no head compensation: try Head sweep)');
+  if (h.length > 10) {
+    const sx = (stdOf(h.map((r) => r.e.R.n.limb[0])) + stdOf(h.map((r) => r.e.L.n.limb[0]))) / 2, sy = (stdOf(h.map((r) => r.e.R.n.limb[1])) + stdOf(h.map((r) => r.e.L.n.limb[1]))) / 2;
+    txt += '   |   wobble over the last 2 s: ' + (sx * 100).toFixed(1) + '% x, ' + (sy * 100).toFixed(1) + '% y of the eye box';
+  }
+  el.textContent = txt + (calib.report ? '   |   ' + calib.report : '');
+}
+
+function drawMonitor(f) {
+  const cv = $('mon'), g = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const cw = Math.max(200, Math.round(cv.clientWidth * dpr)), ch = Math.max(150, Math.round(cv.clientHeight * dpr));
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  const w = cv.width, h = cv.height, k = Math.min(w, h) / 300;      // k: scale for line widths / fonts
+  g.clearRect(0, 0, w, h);
+  const live = !!f;
+  const yaw = live ? -f.yaw : 0, pit = live ? f.pitch : 0, rol = live ? -(f.roll || 0) : 0;
+  const A = live ? 1 : 0.35;
+  const Ry = (a, v) => [v[0] * Math.cos(a) + v[2] * Math.sin(a), v[1], -v[0] * Math.sin(a) + v[2] * Math.cos(a)];
+  const Rx = (q, v) => [v[0], v[1] * Math.cos(q) - v[2] * Math.sin(q), v[1] * Math.sin(q) + v[2] * Math.cos(q)];
+  const Rz = (r, v) => [v[0] * Math.cos(r) - v[1] * Math.sin(r), v[0] * Math.sin(r) + v[1] * Math.cos(r), v[2]];
+  const head = (v) => Rz(rol, Rx(pit, Ry(yaw, v)));
+  const view = (v) => Rx(-0.32, v);
+  const cx = w / 2, cy = h * 0.47, S = Math.min(w, h) * 0.235;
+  const proj = (p3) => { const q = view(p3); const kk = 1 / (1 - q[2] * 0.10); return [cx + q[0] * kk * S, cy - q[1] * kk * S]; };
+  const line = (a, b, col, wd) => { g.strokeStyle = col; g.lineWidth = wd * k; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); };
+  g.globalAlpha = A;
+  for (let i = -2; i <= 2; i++) {
+    line(proj([i, -1.7, -2]), proj([i, -1.7, 2]), 'rgba(255,255,255,.2)', 1);
+    line(proj([-2, -1.7, i]), proj([2, -1.7, i]), 'rgba(255,255,255,.2)', 1);
+  }
+  if (live) {
+    const hs = recent();
+    if (hs.length > 1) {
+      const hv = (r) => (v) => Rz(-r.rol, Rx(r.pit, Ry(-r.yaw, v)));
+      trailLine(g, hs.map((r) => proj(hv(r)([0, 0, 2]))), '#ffc24d', 0.55, 2 * k);
+      const gs = hs.filter((r) => r.gy !== null).map((r) => proj([Math.sin(-r.gy) * Math.cos(r.gp) * 2.6, -Math.sin(r.gp) * 2.6, Math.cos(-r.gy) * Math.cos(r.gp) * 2.6]));
+      if (gs.length > 1) trailLine(g, gs, '#3ddc84', 0.55, 2 * k);
+    }
+  }
+  const pts = [];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) pts.push(head([sx, sy, sz]));
+  for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) {
+    const x = i ^ j;
+    if (x === 1 || x === 2 || x === 4) {
+      const front = (i & 1) === 1 && (j & 1) === 1;
+      line(proj(pts[i]), proj(pts[j]), front ? 'rgba(255,204,64,.95)' : 'rgba(255,255,255,.6)', front ? 3.5 : 1.8);
+    }
+  }
+  const o = proj([0, 0, 0]), nose = proj(head([0, 0, 2]));
+  line(o, nose, '#ffc24d', 3.5);
+  g.fillStyle = '#ffc24d'; g.beginPath(); g.arc(nose[0], nose[1], 5 * k, 0, 7); g.fill();
+  if (live && f.geo && f.geo.ok) {
+    const ga = f.geo.yaw / 57.3, gp = f.geo.pitch / 57.3;
+    const gd = [Math.sin(-ga) * Math.cos(gp), -Math.sin(gp), Math.cos(-ga) * Math.cos(gp)];
+    const tip = proj([gd[0] * 2.6, gd[1] * 2.6, gd[2] * 2.6]);
+    line(o, tip, '#3ddc84', 3.5);
+    g.fillStyle = '#3ddc84'; g.beginPath(); g.arc(tip[0], tip[1], 6 * k, 0, 7); g.fill();
+  }
+  g.globalAlpha = 1;
+  g.font = (14 * k) + 'px system-ui,sans-serif';
+  if (live) {
+    g.fillStyle = '#ffc24d'; g.fillText('head  yaw ' + (-f.yaw * 57.3).toFixed(0) + '°   pitch ' + (f.pitch * 57.3).toFixed(0) + '°   roll ' + (-(f.roll || 0) * 57.3).toFixed(0) + '°', 10 * k, h - 10 * k);
+    g.fillStyle = '#3ddc84'; g.fillText('gaze  yaw ' + (f.geo && f.geo.ok ? (-f.geo.yaw).toFixed(0) : '-') + '°   pitch ' + (f.geo && f.geo.ok ? f.geo.pitch.toFixed(0) : '-') + '°', 10 * k, h - 28 * k);
+  } else {
+    g.fillStyle = '#e8edf5'; g.textAlign = 'center'; g.font = (16 * k) + 'px system-ui,sans-serif';
+    g.fillText(stream ? 'No face found: face the camera' : 'Press Start camera, then move your head', w / 2, h - 14 * k);
+    g.textAlign = 'left';
+  }
+}
+window.addEventListener('resize', () => { if (!frame) drawMonitor(null); });
+
+function drawChart() {
+  const w = chart.width, h = chart.height; cctx.clearRect(0, 0, w, h);
+  const N = Math.min(ring.length, 240); if (N < 4) return;
+  const rec = ring.slice(-N), SPAN = 3;
+  cctx.strokeStyle = '#243044'; cctx.lineWidth = 1;
+  for (let v = -SPAN; v <= SPAN; v++) { const y = h / 2 - v / SPAN * (h / 2 - 8); cctx.beginPath(); cctx.moveTo(0, y); cctx.lineTo(w, y); cctx.stroke(); }
+  cctx.fillStyle = '#97a3b8'; cctx.font = '11px sans-serif'; cctx.fillText('+3 px', 4, 12); cctx.fillText('-3 px', 4, h - 4);
+  for (const E of EST.slice(2, 4).concat([EST[0]])) {
+    const key = E.key === 'mp' ? 'mp' : E.key;
+    let m = 0; for (const q of rec) m += q[key][0]; m /= N;
+    cctx.strokeStyle = E.color; cctx.lineWidth = 2; cctx.beginPath();
+    rec.forEach((q, i) => { const x = i / (N - 1) * w, y = h / 2 - (q[key][0] - m) / SPAN * (h / 2 - 8); i ? cctx.lineTo(x, y) : cctx.moveTo(x, y); });
+    cctx.stroke();
+  }
+}
+
+const sd = (a) => { if (a.length < 3) return NaN; const m = a.reduce((s, v) => s + v, 0) / a.length; return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / a.length); };
+function ppd(f) { const d = (f.eyes.R.rad + f.eyes.L.rad); return d * 0.0179; }   // px per degree: (2*r_avg) * 0.0179
+function updateStats() {
+  const t = $('stats');
+  if (!frame) { t.innerHTML = '<tr><td>no face found</td></tr>'; return; }
+  const f = frame, e = f.eyes;
+  const rec = ring.slice(-60);
+  const sdv = (key, ax) => sd(rec.map((q) => q[key][ax]));
+  const pd = ppd(f);
+  const row = (k, v, cls = '') => '<tr><td>' + k + '</td><td class="num ' + cls + '">' + v + '</td></tr>';
+  const noise = (key) => {
+    const sx = sdv(key, 0), sy = sdv(key, 1);
+    return isNaN(sx) ? '-' : sx.toFixed(2) + ' / ' + sy.toFixed(2) + ' px  =  ' + (sx / pd).toFixed(1) + '° / ' + (sy / pd).toFixed(1) + '°';
+  };
+  const faceFrac = f.faceW / W;
+  t.innerHTML =
+    row('camera: new images per second', W + ' x ' + H + '  @ ' + rateNews.toFixed(1) + ' /s' + (hasRVFC ? '  (frame-synced)' : '  (duplicates skipped: ' + rateDupes + ')'), rateNews >= 20 ? 'good' : rateNews >= 12 ? 'meh' : 'bad') +
+    row('tracker time per image', infEma.toFixed(0) + ' ms  ->  can keep up to ' + (1000 / Math.max(infEma, 1)).toFixed(0) + ' images/s', infEma < 40 ? 'good' : 'meh') +
+    row('face width', f.faceW.toFixed(0) + ' px  (' + (faceFrac * 100).toFixed(0) + '% of frame)', faceFrac >= 0.3 ? 'good' : faceFrac >= 0.22 ? 'meh' : 'bad') +
+    row('eye width R / L', e.R.eyeW.toFixed(0) + ' / ' + e.L.eyeW.toFixed(0) + ' px') +
+    row('iris diameter R / L', (e.R.rad * 2).toFixed(1) + ' / ' + (e.L.rad * 2).toFixed(1) + ' px', e.R.rad * 2 >= 14 ? 'good' : e.R.rad * 2 >= 9 ? 'meh' : 'bad') +
+    row('geometry: depth from iris / from head pose', f.geo.ok ? f.geo.Zi.toFixed(0) + ' cm / ' + (isNaN(f.geo.Zm) ? '-' : f.geo.Zm.toFixed(0) + ' cm') : '-') +
+    row('geometry: gaze angle yaw / pitch', f.geo.ok ? f.geo.yaw.toFixed(1) + '° / ' + f.geo.pitch.toFixed(1) + '°   screen point ' + (f.geo.u * 100).toFixed(0) + '% , ' + (f.geo.v * 100).toFixed(0) + '%' : '-') +
+    row('iris pixels per degree of gaze', pd.toFixed(3) + ' px/°   (1 px = ' + (1 / pd).toFixed(1) + '°)') +
+    row('noise, MediaPipe iris  (x / y)', noise('mp')) +
+    row('noise, limbus ring fit (x / y)', noise('limb')) +
+    row('noise, dark centroid   (x / y)', noise('dark')) +
+    row('blink score L / R  (open level learned: ' + blBase.toFixed(2) + ')', ((f.bs.eyeBlinkLeft || 0).toFixed(2)) + ' / ' + ((f.bs.eyeBlinkRight || 0).toFixed(2)));
+}
+
+// ---------------------------------------------------------------- regression helpers
+function ridgeFit(X, Y, lam = 1.0) {               // X: rows of features, Y: rows of [x,y]
+  const m = X[0].length, n = m + 1;
+  const mean = new Array(m).fill(0), std = new Array(m).fill(0);
+  for (const r of X) r.forEach((v, i) => mean[i] += v / X.length);
+  for (const r of X) r.forEach((v, i) => std[i] += (v - mean[i]) ** 2 / X.length);
+  for (let i = 0; i < m; i++) std[i] = Math.max(Math.sqrt(std[i]), 1e-5);
+  const Z = X.map((r) => r.map((v, i) => (v - mean[i]) / std[i]).concat([1]));
+  const solve = (ax) => {
+    const A = Array.from({ length: n }, () => new Array(n).fill(0)), b = new Array(n).fill(0);
+    Z.forEach((z, k) => { for (let i = 0; i < n; i++) { b[i] += z[i] * Y[k][ax]; for (let j = 0; j < n; j++) A[i][j] += z[i] * z[j]; } });
+    for (let i = 0; i < n - 1; i++) A[i][i] += lam;
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+      const pv = A[c][c]; if (Math.abs(pv) < 1e-9) continue;
+      for (let r = 0; r < n; r++) { if (r === c) continue; const f = A[r][c] / pv; if (!f) continue; for (let k = 0; k < n; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+    }
+    return b.map((v, i) => Math.abs(A[i][i]) > 1e-9 ? v / A[i][i] : 0);
+  };
+  const wx = solve(0), wy = solve(1);
+  return { mean, std, wx, wy, predict(v) { let x = wx[m], y = wy[m]; for (let i = 0; i < m; i++) { const z = (v[i] - mean[i]) / std[i]; x += wx[i] * z; y += wy[i] * z; } return [x, y]; } };
+}
+
+// Ridge with leave-one-DOT-out cross-validation. Calibration has few independent targets (one per dot),
+// so a fixed lambda overfits: it memorises each dot's cluster and wobbles in between. Here lambda is
+// chosen by how well the model predicts a dot it never saw, and the shrinkage ridge always adds
+// (predictions pulled toward the middle) is undone with a per-axis gain fitted on those unseen-dot
+// predictions. cvErr is therefore an honest accuracy estimate, in screen pixels.
+function ridgeSolve(Z, y, lam) {
+  const n = Z[0].length;
+  const A = Array.from({ length: n }, () => new Array(n).fill(0)), b = new Array(n).fill(0);
+  for (let k = 0; k < Z.length; k++) { const z = Z[k]; for (let i = 0; i < n; i++) { b[i] += z[i] * y[k]; const Ai = A[i]; for (let j = 0; j < n; j++) Ai[j] += z[i] * z[j]; } }
+  for (let i = 0; i < n - 1; i++) A[i][i] += lam;
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    const pv = A[c][c]; if (Math.abs(pv) < 1e-9) continue;
+    for (let r = 0; r < n; r++) { if (r === c) continue; const f = A[r][c] / pv; if (!f) continue; const Ar = A[r], Ac = A[c]; for (let k = 0; k < n; k++) Ar[k] -= f * Ac[k]; b[r] -= f * b[c]; }
+  }
+  return b.map((v, i) => Math.abs(A[i][i]) > 1e-9 ? v / A[i][i] : 0);
+}
+function fitCV(X, Y, G, vw, vh) {
+  const m = X[0].length;
+  const mean = new Array(m).fill(0), std = new Array(m).fill(0);
+  for (const r of X) r.forEach((v, i) => mean[i] += v / X.length);
+  for (const r of X) r.forEach((v, i) => std[i] += (v - mean[i]) ** 2 / X.length);
+  for (let i = 0; i < m; i++) std[i] = Math.max(Math.sqrt(std[i]), 1e-5);
+  const Z = X.map((r) => r.map((v, i) => (v - mean[i]) / std[i]).concat([1]));
+  const groups = [...new Set(G)].filter((g) => G.filter((x) => x === g).length >= 5);
+  const tgt = {}; groups.forEach((g) => { tgt[g] = Y[G.indexOf(g)]; });
+  let best = null;
+  for (const lam of [0.5, 2, 8, 30, 100, 300, 1000]) {
+    const oof = {}; let err = 0;
+    for (const g of groups) {
+      const tr = [], te = [];
+      G.forEach((x, i) => (x === g ? te : tr).push(i));
+      const wx = ridgeSolve(tr.map((i) => Z[i]), tr.map((i) => Y[i][0]), lam), wy = ridgeSolve(tr.map((i) => Z[i]), tr.map((i) => Y[i][1]), lam);
+      let px = 0, py = 0;
+      for (const i of te) { let a = 0, c = 0; for (let k = 0; k <= m; k++) { a += wx[k] * Z[i][k]; c += wy[k] * Z[i][k]; } px += a / te.length; py += c / te.length; }
+      oof[g] = [px, py];
+      err += Math.hypot((px - tgt[g][0]) * vw, (py - tgt[g][1]) * vh) / groups.length;
+    }
+    if (!best || err < best.err) best = { lam, oof, err };
+  }
+  // undo shrinkage: regress each target axis on the unseen-dot predictions
+  const gain = [1, 1], off = [0, 0];
+  for (const ax of [0, 1]) {
+    const px = groups.map((g) => best.oof[g][ax]), ty = groups.map((g) => tgt[g][ax]);
+    const mp = px.reduce((a, b) => a + b, 0) / px.length, mt = ty.reduce((a, b) => a + b, 0) / ty.length;
+    let cov = 0, vr = 0; px.forEach((v, i) => { cov += (v - mp) * (ty[i] - mt); vr += (v - mp) ** 2; });
+    const b = Math.max(0.6, Math.min(3.0, vr > 1e-9 ? cov / vr : 1));
+    gain[ax] = b; off[ax] = mt - b * mp;
+  }
+  let err2 = 0;
+  for (const g of groups) err2 += Math.hypot((gain[0] * best.oof[g][0] + off[0] - tgt[g][0]) * vw, (gain[1] * best.oof[g][1] + off[1] - tgt[g][1]) * vh) / groups.length;
+  const wx = ridgeSolve(Z, Y.map((y) => y[0]), best.lam), wy = ridgeSolve(Z, Y.map((y) => y[1]), best.lam);
+  return { lam: best.lam, gain, cvErr: err2, rawCvErr: best.err, groups: groups.length,
+    predict(v) {
+      let a = wx[m], c = wy[m];
+      for (let i = 0; i < m; i++) { const z = (v[i] - mean[i]) / std[i]; a += wx[i] * z; c += wy[i] * z; }
+      return [gain[0] * a + off[0], gain[1] * c + off[1]];
+    } };
+}
+class OneEuro {
+  constructor(minc, beta) { this.minc = minc; this.beta = beta; this.x = null; this.dx = 0; }
+  a(c, dt) { const tau = 1 / (2 * Math.PI * c); return 1 / (1 + tau / dt); }
+  f(v, dt) {
+    if (this.x === null) { this.x = v; return v; }
+    dt = Math.max(dt, 1e-3);
+    this.dx += ((v - this.x) / dt - this.dx) * this.a(1.0, dt);
+    this.x += (v - this.x) * this.a(this.minc + this.beta * Math.abs(this.dx), dt);
+    return this.x;
+  }
+}
+
+// ---------------------------------------------------------------- stage (dot) tests
+const stage = $('stage'), sdot = $('sdot'), smsg = $('stagemsg'), sprog = $('stageprog').firstElementChild;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function enterStage() { stage.style.display = 'block'; try { await stage.requestFullscreen(); } catch (e) {} await sleep(300); }
+async function leaveStage() { stage.style.display = 'none'; sdot.style.display = 'block'; document.querySelectorAll('.live, .slegend').forEach((n) => n.remove()); try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (e) {} }
+function place(fx, fy) { sdot.style.left = fx * 100 + '%'; sdot.style.top = fy * 100 + '%'; }
+
+async function holdOn(fx, fy, settleMs, holdMs, label, sink) {
+  place(fx, fy); smsg.textContent = label;
+  sprog.style.width = '0%';
+  await sleep(settleMs);
+  const t0 = performance.now(); const samples = [];
+  modeCollect = (f) => samples.push(f);
+  while (performance.now() - t0 < holdMs) { sprog.style.width = ((performance.now() - t0) / holdMs * 100) + '%'; await sleep(40); }
+  modeCollect = null; sprog.style.width = '100%';
+  return samples;
+}
+
+$('btnFix').onclick = async () => {
+  setBusy(true); await enterStage();
+  const samples = await holdOn(0.5, 0.5, 1200, 5000, 'Stare at the dot. Keep your head still. (noise test)', null);
+  await leaveStage();
+  const pd = samples.length ? ppd(samples[0]) : 0.2;
+  const out = {}; const rows = [];
+  for (const E of EST.slice(0, 4)) {
+    let xs, ys;
+    if (E.key === 'bs') { xs = samples.map((f) => (f.vec.bs[0] + f.vec.bs[5] - f.vec.bs[1] - f.vec.bs[4]) / 2); ys = samples.map((f) => (f.vec.bs[2] + f.vec.bs[6] - f.vec.bs[3] - f.vec.bs[7]) / 2); out[E.key] = { sdX: sd(xs), sdY: sd(ys), unit: 'score' }; rows.push(E.name + ': sd ' + sd(xs).toFixed(4) + ' / ' + sd(ys).toFixed(4) + ' (score units, no pixel meaning)'); continue; }
+    const key = { mp: 'relMp', limb: 'relLimb', dark: 'relDark' }[E.key];
+    xs = samples.map((f) => (f.eyes.R[key][0] + f.eyes.L[key][0]) / 2); ys = samples.map((f) => (f.eyes.R[key][1] + f.eyes.L[key][1]) / 2);
+    out[E.key] = { sdXpx: sd(xs), sdYpx: sd(ys), sdXdeg: sd(xs) / pd, sdYdeg: sd(ys) / pd };
+    rows.push(E.name + ': noise ' + sd(xs).toFixed(2) + ' / ' + sd(ys).toFixed(2) + ' px  =  ' + (sd(xs) / pd).toFixed(1) + '° / ' + (sd(ys) / pd).toFixed(1) + '° (1 sigma, one frame)');
+  }
+  results.noise = { frames: samples.length, pxPerDeg: pd, est: out };
+  const best = Math.min(...EST.slice(2, 4).map((E) => out[E.key].sdXdeg));
+  $('results').innerHTML = '<b>Noise test</b> (' + samples.length + ' frames, ' + pd.toFixed(3) + ' px per degree)<br>' + rows.join('<br>') +
+    '<br><br>Averaging N frames cuts noise by about sqrt(N): e.g. 15 frames (0.5 s) gives roughly ' + (best / Math.sqrt(15)).toFixed(1) + '° from the best pixel-level detector.';
+  setBusy(false); $('btnCopy').disabled = false;
+};
+
+$('btnAcc').onclick = async () => {
+  setBusy(true); await enterStage();
+  const calPts = [[0.12, 0.12], [0.5, 0.12], [0.88, 0.12], [0.12, 0.5], [0.5, 0.5], [0.88, 0.5], [0.12, 0.88], [0.5, 0.88], [0.88, 0.88]];
+  const valPts = [[0.32, 0.32], [0.68, 0.32], [0.32, 0.68], [0.68, 0.68], [0.5, 0.25], [0.5, 0.75], [0.25, 0.5], [0.75, 0.5], [0.42, 0.58]];
+  const cal = [], val = [];
+  let gotFrames = 0;
+  for (let i = 0; i < calPts.length; i++) { const s = await holdOn(calPts[i][0], calPts[i][1], 800, 1400, 'Calibration ' + (i + 1) + ' / 9: look at the dot, head still', null); cal.push(s); }
+  smsg.textContent = 'Now 9 test dots (not used for calibration)...'; await sleep(900);
+  for (let i = 0; i < valPts.length; i++) { const s = await holdOn(valPts[i][0], valPts[i][1], 800, 1400, 'Test ' + (i + 1) + ' / 9', null); val.push(s); }
+  const vw = window.innerWidth, vh = window.innerHeight;
+  await leaveStage();
+  gotFrames = val.reduce((a, b) => a + b.length, 0) + cal.reduce((a, b) => a + b.length, 0);
+  if (gotFrames < 60) { $('results').innerHTML = '<b class="bad">Only ' + gotFrames + ' usable frames were captured, so no result.</b> Check that your face is in view and well lit (open-eye blink level learned: ' + blBase.toFixed(2) + ').'; setBusy(false); return; }
+  // fit one regressor per estimator on the calibration samples
+  const fitted = {};
+  for (const E of EST) {
+    const X = [], Y = [], G = [];
+    cal.forEach((arr, i) => arr.forEach((f) => { X.push(f.vec[E.key]); Y.push(calPts[i]); G.push(i); }));
+    if (X.length < 30) { fitted[E.key] = null; continue; }
+    fitted[E.key] = fitCV(X, Y, G, vw, vh);
+  }
+  models = fitted;
+  const cm = parseFloat($('scrW').value) / screen.width;          // cm per CSS pixel of the real screen
+  const dist = parseFloat($('dist').value);
+  const toDeg = (px) => Math.atan(px * cm / dist) * 180 / Math.PI;
+  const summary = [];
+  for (const E of EST) {
+    const m = fitted[E.key]; if (!m) continue;
+    const perFrame = [], perPoint = [], perX = [], perY = [];
+    val.forEach((arr, i) => {
+      if (!arr.length) return;
+      const pr = arr.map((f) => m.predict(f.vec[E.key]));
+      const tx = valPts[i][0] * vw, ty = valPts[i][1] * vh;
+      pr.forEach((p) => perFrame.push(Math.hypot(p[0] * vw - tx, p[1] * vh - ty)));
+      const mx = pr.reduce((s, p) => s + p[0], 0) / pr.length * vw, my = pr.reduce((s, p) => s + p[1], 0) / pr.length * vh;
+      perPoint.push(Math.hypot(mx - tx, my - ty)); perX.push(Math.abs(mx - tx)); perY.push(Math.abs(my - ty));
+    });
+    const med = (a) => { const s = a.slice().sort((x, y) => x - y); return s[Math.floor(s.length / 2)] || 0; };
+    const p90 = (a) => { const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(s.length * 0.9))] || 0; };
+    const mean = (a) => a.reduce((s, v) => s + v, 0) / (a.length || 1);
+    summary.push({ key: E.key, name: E.name, color: E.color,
+      frameMeanPx: mean(perFrame), frameMeanDeg: toDeg(mean(perFrame)),
+      pointMeanPx: mean(perPoint), pointMeanDeg: toDeg(mean(perPoint)), pointMedDeg: toDeg(med(perPoint)), pointP90Px: p90(perPoint), pointP90Deg: toDeg(p90(perPoint)), pointXDeg: toDeg(mean(perX)), pointYDeg: toDeg(mean(perY)),
+      samples: perFrame.length });
+  }
+  results.accuracy = { screenPx: [vw, vh], screenCm: parseFloat($('scrW').value), distCm: dist, summary };
+  renderAccuracy(summary, vw, vh);
+  setBusy(false); $('btnLive').disabled = false; $('btnCopy').disabled = false;
+};
+
+function renderAccuracy(summary, vw, vh) {
+  const best = summary.slice().sort((a, b) => a.pointMeanDeg - b.pointMeanDeg)[0];
+  const maxDeg = Math.max(...summary.map((s) => s.frameMeanDeg), 1);
+  let html = '<b>Accuracy test</b>: calibrated on 9 dots, scored on 9 other dots.<br><span class="note">"frame" = error of a single camera frame. "1 s average" = average prediction while you looked at a dot for 1.4 s (what a dwell-lock would use).</span>';
+  html += '<table><tr><th>detector</th><th class="num">1 frame</th><th class="num">1 s average</th><th class="num">90% worst</th><th class="num">horiz / vert (1 s)</th></tr>';
+  for (const s of summary) html += '<tr><td><i class="dot" style="background:' + s.color + '"></i>' + s.name + '</td><td class="num">' + s.frameMeanDeg.toFixed(1) + '° / ' + s.frameMeanPx.toFixed(0) + ' px</td><td class="num">' + s.pointMeanDeg.toFixed(1) + '° / ' + s.pointMeanPx.toFixed(0) + ' px</td><td class="num">' + s.pointP90Deg.toFixed(1) + '° / ' + s.pointP90Px.toFixed(0) + ' px</td><td class="num">' + s.pointXDeg.toFixed(1) + '° / ' + s.pointYDeg.toFixed(1) + '°</td></tr>';
+  html += '</table>';
+  const target = Math.round(best.pointP90Px * 2);
+  html += '<p>Best: <b>' + best.name + '</b>. With a 1 s dwell, 90% of looks land within <b>' + best.pointP90Deg.toFixed(1) + '°  (' + best.pointP90Px.toFixed(0) + ' px)</b> of the target, so a target should be about <b>' + target + ' px wide (' + (target / vw * 100).toFixed(0) + '% of the screen width)</b> to be hit reliably.</p>';
+  $('results').innerHTML = html;
+  $('bars').innerHTML = summary.map((s) => '<div class="row"><span class="lab">' + s.name + '</span><span class="bar" style="width:' + Math.max(2, s.pointMeanDeg / maxDeg * 260) + 'px;background:' + s.color + '"></span>' + s.pointMeanDeg.toFixed(1) + '°</div>').join('');
+}
+
+$('btnLive').onclick = async () => {
+  setBusy(true); await enterStage();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const cmPerPx = parseFloat($('scrW').value) / screen.width, dist = parseFloat($('dist').value);
+  const toDeg = (px) => Math.atan(px * cmPerPx / dist) * 180 / Math.PI;
+  // 12 dots (4 x 3), about 18 s. More distinct dots means a model that generalises instead of memorising.
+  const pts = [];
+  for (const y of [0.15, 0.5, 0.85]) for (const x of [0.12, 0.37, 0.63, 0.88]) pts.push([x, y]);
+  const cal = [];
+  for (let i = 0; i < pts.length; i++) cal.push(await holdOn(pts[i][0], pts[i][1], 600, 900, 'Quick calibration ' + (i + 1) + ' / ' + pts.length + ': look at the dot, head still', null));
+  const total = cal.reduce((a, c) => a + c.length, 0);
+  if (total < 60) {
+    await leaveStage();
+    $('results').innerHTML = '<b class="bad">Only ' + total + ' usable frames during calibration, so no live view.</b> Make sure your face is in view and lit (open-eye blink level learned: ' + blBase.toFixed(2) + ').';
+    setBusy(false); return;
+  }
+  const fitted = {};
+  for (const E of EST) {
+    const X = [], Y = [], G = [];
+    cal.forEach((arr, i) => arr.forEach((f) => { X.push(f.vec[E.key]); Y.push(pts[i]); G.push(i); }));
+    fitted[E.key] = X.length >= 40 ? fitCV(X, Y, G, vw, vh) : null;
+  }
+  models = fitted;
+  const ok = EST.filter((E) => models[E.key]);
+  // fused estimate: detectors weighted by 1 / (unseen-dot error)^2
+  const wts = {}; let wsum = 0;
+  for (const E of ok) { const w = 1 / Math.max(models[E.key].cvErr, 20) ** 2; wts[E.key] = w; wsum += w; }
+  const rows = ok.map((E) => ({ E, px: models[E.key].cvErr })).sort((x, y) => x.px - y.px);
+  const legend = document.createElement('div'); legend.className = 'slegend';
+  legend.style.cssText = 'position:absolute;left:18px;bottom:16px;background:rgba(0,0,0,.65);padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.5';
+  legend.innerHTML = '<b>Error on dots it had not seen (cross-validated)</b><br>' + rows.map((r) => '<i class="dot" style="background:' + r.E.color + '"></i>' + r.E.name + ': ' + toDeg(r.px).toFixed(1) + '° / ' + r.px.toFixed(0) + ' px (lambda ' + models[r.E.key].lam + ', gain ' + models[r.E.key].gain.map((g) => g.toFixed(1)).join('/') + ')').join('<br>') + '<br><i class="dot" style="background:#fff"></i><b>FUSED (white, smoothed)</b>';
+  stage.appendChild(legend);
+  results.live = { screenPx: [vw, vh], detectors: rows.map((r) => ({ name: r.E.name, cvErrPx: r.px, cvErrDeg: toDeg(r.px), lambda: models[r.E.key].lam, gain: models[r.E.key].gain })) };
+  sdot.style.display = 'none'; smsg.textContent = 'Live gaze: look around. White = fused estimate. (Esc or click to stop)';
+  const mk = (color, big) => { const d = document.createElement('div'); d.className = 'live'; d.style.background = color; if (big) { d.style.width = d.style.height = '34px'; d.style.border = '4px solid #000'; d.style.boxShadow = '0 0 0 3px #fff'; d.style.opacity = '1'; } stage.appendChild(d); return d; };
+  const dots = ok.map((E) => ({ E, d: mk(E.color, false), bx: [], by: [], sx: 0.5, sy: 0.5, seeded: false }));
+  const fused = { d: mk('#fff', true), sx: 0.5, sy: 0.5, hist: [], seeded: false };
+  const med = (a) => { const q = a.slice().sort((x, y) => x - y); return q[Math.floor(q.length / 2)]; };
+  const jit = document.createElement('div'); jit.style.cssText = 'margin-top:6px;color:#ffc24d'; legend.appendChild(jit);
+  let alive = true, lastFrameT = 0, lastTick = performance.now();
+  const stop = () => { alive = false; };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') stop(); }, { once: true });
+  stage.addEventListener('click', stop, { once: true });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) stop(); }, { once: true });
+  const put = (d, x, y) => { d.style.left = Math.max(0, Math.min(1, x)) * 100 + '%'; d.style.top = Math.max(0, Math.min(1, y)) * 100 + '%'; };
+  while (alive) {
+    const nowT = performance.now(), dtS = Math.min((nowT - lastTick) / 1000, 0.2); lastTick = nowT;
+    // 1. new camera image: predict, but ignore frames where an eyelid is closing (pupil reading is garbage)
+    if (frame && frame.t !== lastFrameT) {
+      lastFrameT = frame.t;
+      if (frame.closure < 0.2) for (const o of dots) {
+        const p = models[o.E.key].predict(frame.vec[o.E.key]);
+        o.bx.push(p[0]); o.by.push(p[1]);
+        if (o.bx.length > 9) { o.bx.shift(); o.by.shift(); }
+      }
+    }
+    // 2. robust target = median of the last 9 predictions (spikes cannot move it), then ease toward it (time constant 0.25 s)
+    const a1 = 1 - Math.exp(-dtS / 0.25), a2 = 1 - Math.exp(-dtS / 0.4);
+    let fxp = 0, fyp = 0;
+    for (const o of dots) {
+      if (o.bx.length) {
+        const tx = med(o.bx), ty = med(o.by);
+        if (!o.seeded) { o.sx = tx; o.sy = ty; o.seeded = true; } else { o.sx += (tx - o.sx) * a1; o.sy += (ty - o.sy) * a1; }
+      }
+      put(o.d, o.sx, o.sy);
+      fxp += o.sx * wts[o.E.key] / wsum; fyp += o.sy * wts[o.E.key] / wsum;
+    }
+    if (!fused.seeded) { fused.sx = fxp; fused.sy = fyp; fused.seeded = true; } else { fused.sx += (fxp - fused.sx) * a2; fused.sy += (fyp - fused.sy) * a2; }
+    put(fused.d, fused.sx, fused.sy);
+    // 3. measured wobble of the white dot over the last 2 s (includes any real eye movement)
+    fused.hist.push([nowT, fused.sx * vw, fused.sy * vh]);
+    while (fused.hist.length && nowT - fused.hist[0][0] > 2000) fused.hist.shift();
+    if (fused.hist.length > 20) {
+      const mx = fused.hist.reduce((s2, h) => s2 + h[1], 0) / fused.hist.length, my = fused.hist.reduce((s2, h) => s2 + h[2], 0) / fused.hist.length;
+      const sdv = Math.sqrt(fused.hist.reduce((s2, h) => s2 + (h[1] - mx) ** 2 + (h[2] - my) ** 2, 0) / fused.hist.length);
+      jit.textContent = 'white dot wobble over the last 2 s: ' + sdv.toFixed(0) + ' px  (' + toDeg(sdv).toFixed(1) + '°)';
+    }
+    await sleep(16);
+  }
+  await leaveStage(); setBusy(false);
+  $('results').innerHTML = '<b>Live calibration</b>: error on dots the model had NOT seen (leave-one-dot-out). This is the honest accuracy of this camera setup.<table><tr><th>detector</th><th class="num">error</th></tr>' +
+    rows.map((r) => '<tr><td><i class="dot" style="background:' + r.E.color + '"></i>' + r.E.name + '</td><td class="num">' + toDeg(r.px).toFixed(1) + '° / ' + r.px.toFixed(0) + ' px</td></tr>').join('') + '</table>';
+  $('btnCopy').disabled = false;
+};
+
+$('btnCentre').onclick = async () => {
+  setBusy(true); await enterStage();
+  const samples = await holdOn(0.5, 0.5, 1200, 3000, 'Stare at the dot. Keep still. (centring your eyes)', null);
+  await leaveStage();
+  if (samples.length < 20) { $('mapStatus').textContent = 'Only ' + samples.length + ' usable frames: face the camera and add light, then try again.'; setBusy(false); return; }
+  for (const k of ['R', 'L']) for (const d of DETS) for (const ax of [0, 1]) {
+    const id = k + '.' + d + '.' + ax;
+    calib.centre[id] = samples.reduce((acc, f) => acc + rawSig(f, k, d, ax) - headTerm(id, headVec(f)), 0) / samples.length;
+  }
+  calib.centred = true; extHist.R.length = 0; extHist.L.length = 0;
+  setBusy(false);
+};
+
+$('btnSweep').onclick = async () => {
+  setBusy(true); await enterStage();
+  const samples = await holdOn(0.5, 0.5, 1500, 8000, 'Stare at the dot. Slowly turn your head left / right, then nod up / down.', null);
+  await leaveStage();
+  const fit = fitHeadComp(samples);
+  if (!fit) { $('mapStatus').textContent = 'Only ' + samples.length + ' usable frames: face the camera and add light, then try again.'; setBusy(false); return; }
+  applyHeadComp(fit);
+  calib.report = 'drift while staring: ' + (fit.before * 100).toFixed(1) + '% -> ' + (fit.after * 100).toFixed(1) + '% of the eye box (' + fit.n + ' frames)';
+  setBusy(false);
+};
+
+$('btnLiveNC').onclick = async () => {
+  setBusy(true); await enterStage();
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const cmPerPx = parseFloat($('scrW').value) / screen.width, dist = parseFloat($('dist').value);
+  const toDeg = (px) => Math.atan(px * cmPerPx / dist) * 180 / Math.PI;
+  sdot.style.display = 'none';
+  smsg.textContent = 'No calibration. Just look around the screen. (Esc or click to stop)';
+  const mk = (color, big) => { const d = document.createElement('div'); d.className = 'live'; d.style.background = color; if (big) { d.style.width = d.style.height = '34px'; d.style.border = '4px solid #000'; d.style.boxShadow = '0 0 0 3px #fff'; d.style.opacity = '1'; } stage.appendChild(d); return d; };
+  const legend = document.createElement('div'); legend.className = 'slegend';
+  legend.style.cssText = 'position:absolute;left:18px;bottom:16px;background:rgba(0,0,0,.65);padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.5;max-width:560px';
+  legend.innerHTML = '<i class="dot" style="background:#7dffb3"></i><b>Green</b>: pure 3D geometry, zero setup, zero fitting<br><i class="dot" style="background:#fff"></i><b>White</b>: geometry + auto-fit (assumes you look around the whole screen, learns the offset and spread as you go)<div id="ncinfo" style="margin-top:6px;color:#ffc24d"></div>';
+  stage.appendChild(legend);
+  const dG = mk('#7dffb3', false), dW = mk('#fff', true);
+  const info = legend.querySelector('#ncinfo');
+  const med = (a) => { const q = a.slice().sort((x, y) => x - y); return q[Math.floor(q.length / 2)]; };
+  const bu = [], bv = [], bo = [];
+  let su = 0.5, sv = 0.5, so = 0.3, wu = 0.5, wv = 0.5, seeded = false;
+  let n = 0, mu = 0.5, mv = 0.5, vu = 0.04, vv = 0.04, mo = 0.3, vo = 0.0004, vzv = 1;       // running mean / variance of the raw geometry output
+  const hist = [];
+  let alive = true, lastFrameT = 0, lastTick = performance.now();
+  const stop = () => { alive = false; };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') stop(); }, { once: true });
+  stage.addEventListener('click', stop, { once: true });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) stop(); }, { once: true });
+  const put = (d, x, y) => { d.style.left = Math.max(0, Math.min(1, x)) * 100 + '%'; d.style.top = Math.max(0, Math.min(1, y)) * 100 + '%'; };
+  while (alive) {
+    const nowT = performance.now(), dtS = Math.min((nowT - lastTick) / 1000, 0.2); lastTick = nowT;
+    if (frame && frame.t !== lastFrameT) {
+      lastFrameT = frame.t;
+      if (frame.closure < 0.2 && frame.geo && frame.geo.ok) {
+        const fu = $('flipx').checked ? 1 - frame.geo.u : frame.geo.u, fv = $('flipy').checked ? 1 - frame.geo.v : frame.geo.v;
+        const op = (frame.vec.lid[2] + frame.vec.lid[3]) / 2;
+        bu.push(fu); bv.push(fv); bo.push(op); if (bu.length > 9) { bu.shift(); bv.shift(); bo.shift(); }
+        n++; const al = Math.max(1 / n, 1 / 900);               // ~60 s memory at 15 fps
+        const x = fu, y = fv;
+        vu += al * ((x - mu) ** 2 - vu); vv += al * ((y - mv) ** 2 - vv); mu += al * (x - mu); mv += al * (y - mv); vo += al * ((op - mo) ** 2 - vo); mo += al * (op - mo);
+        if (n > 30) { const zgr = (y - mv) / Math.max(Math.sqrt(vv), 0.01), zlr = -(op - mo) / Math.max(Math.sqrt(vo), 0.01), zvr = 0.6 * zgr + 0.4 * zlr; vzv += 0.01 * (zvr * zvr - vzv); }
+      }
+    }
+    if (bu.length) {
+      const tu = med(bu), tv = med(bv), a1 = 1 - Math.exp(-dtS / 0.3);
+      const tov = bo.length ? med(bo) : 0.3;
+      if (!seeded) { su = tu; sv = tv; so = tov; seeded = true; } else { su += (tu - su) * a1; sv += (tv - sv) * a1; so += (tov - so) * a1; }
+      // auto-fit: centre on the running mean, scale so the spread matches how people look around a screen
+      // z-scores against the running mean / spread: a weak signal gets the same on-screen range as a strong one.
+      // Vertical = geometry blended with eyelid opening (the upper lid follows the eye: wider up, narrower down).
+      const zx = n > 45 ? Math.max(-2.5, Math.min(2.5, (su - mu) / Math.max(Math.sqrt(vu), 0.01))) : 0;
+      const zg = n > 45 ? (sv - mv) / Math.max(Math.sqrt(vv), 0.01) : 0;
+      const zl = n > 45 ? -(so - mo) / Math.max(Math.sqrt(vo), 0.01) : 0;
+      let zv = 0.6 * zg + 0.4 * zl; zv = Math.max(-2.5, Math.min(2.5, zv / Math.max(Math.sqrt(vzv), 0.3)));
+      const gu = 0.2 / Math.max(Math.sqrt(vu), 0.01), gv = 0.2 / Math.max(Math.sqrt(vv), 0.01);
+      const au = 0.5 + zx * 0.2, av = 0.5 + zv * 0.2;
+      const a2 = 1 - Math.exp(-dtS / 0.2);
+      wu += (au - wu) * a2; wv += (av - wv) * a2;
+      put(dG, su, sv); put(dW, wu, wv);
+      hist.push([nowT, wu * vw, wv * vh]); while (hist.length && nowT - hist[0][0] > 2000) hist.shift();
+      if (hist.length > 20) {
+        const mx = hist.reduce((q, h) => q + h[1], 0) / hist.length, my = hist.reduce((q, h) => q + h[2], 0) / hist.length;
+        const sdv = Math.sqrt(hist.reduce((q, h) => q + (h[1] - mx) ** 2 + (h[2] - my) ** 2, 0) / hist.length);
+        info.textContent = 'raw geometry ' + (su * 100).toFixed(0) + '%, ' + (sv * 100).toFixed(0) + '%   |   learned centre ' + (mu * 100).toFixed(0) + '%, ' + (mv * 100).toFixed(0) + '%   spread gain x' + gu.toFixed(1) + ' / x' + gv.toFixed(1) + '   |   white-dot wobble ' + sdv.toFixed(0) + ' px (' + toDeg(sdv).toFixed(1) + '°)';
+      }
+    }
+    await sleep(16);
+  }
+  await leaveStage(); setBusy(false);
+};
+
+$('btnCopy').onclick = async () => {
+  const txt = JSON.stringify({ reach: reachReport(), results: results }, null, 1); window.__eyelab = results;
+  $('json').hidden = false; $('json').textContent = txt;
+  try { await navigator.clipboard.writeText(txt); $('btnCopy').textContent = 'Copied'; setTimeout(() => $('btnCopy').textContent = 'Copy results JSON', 1500); } catch (e) { $('btnCopy').textContent = 'See text below'; }
+};
+function setBusy(b) { for (const id of ['btnStart', 'btnFix', 'btnAcc', 'btnLive', 'btnLiveNC', 'btnSweep', 'btnCentre']) $(id).disabled = b || (id !== 'btnStart' && !stream) || false; }
+
+$('btnStart').onclick = () => startCam().catch((e) => { $('status').textContent = 'camera error: ' + (e.message || e); });
+$('res').onchange = () => { if (stream) startCam(); };
+window.__eyelabResults = results;
+try { $('autoStart').checked = localStorage.getItem('eyelab.autostart') === '1'; } catch (e) {}
+$('autoStart').onchange = () => { try { localStorage.setItem('eyelab.autostart', $('autoStart').checked ? '1' : '0'); } catch (e) {} };
+// ---------------------------------------------------------------- screen reach: where does the gaze actually land?
+// Uses the sub-pixel iris-edge fit inside the 3D geometry gaze (geoGaze with useLimb), so it shows what the game build can do.
+// Everything is drawn to scale on the real screen: the canvas has the aspect ratio and cm size of your monitor.
+class OneEuroJS {
+  constructor() { this.minC = 3; this.beta = 1.0; this.dC = 1.0; this.x = null; this.dx = 0; this.t = 0; }
+  a(c, dt) { return 1 / (1 + (1 / (2 * Math.PI * c)) / dt); }
+  f(v, t) {
+    if (this.x === null) { this.x = v; this.t = t; return v; }
+    const dt = Math.max(t - this.t, 1e-3); this.t = t;
+    this.dx += this.a(this.dC, dt) * ((v - this.x) / dt - this.dx);
+    this.x += this.a(this.minC + this.beta * Math.abs(this.dx), dt) * (v - this.x);
+    return this.x;
+  }
+}
+// EyeFuse: automatic per-eye calibration and weighting, learned from normal use (no targets, no keys).
+// Glasses (and anatomy) distort each eye's reading differently. For each eye we keep a window of its recent horizontal / vertical gaze values and learn:
+//   * its centre (the median of the window)
+//   * its per-side gains: the left and right (top and bottom) excursions are equalised to their mean, so an eye that responds weakly to one side is boosted there
+//   * a weight: how strong (range / fixation noise) and how symmetric the eye's response is. The more normal-looking eye dominates the blend.
+// Safe by design: gains stay within 0.6..2.5, change slowly, and only update while the window shows real excursions (range well above the noise).
+class EyeFuse {
+  constructor() {
+    this.u = { R: [], L: [] }; this.v = { R: [], L: [] };
+    this.last = 0; this.ready = false; this.info = '';
+    this.c = { R: { u: 0, v: 0 }, L: { u: 0, v: 0 } };
+    this.g = { R: { gl: 1, gr: 1, gt: 1, gb: 1 }, L: { gl: 1, gr: 1, gt: 1, gb: 1 } };
+    this.w = { u: [0.5, 0.5], v: [0.5, 0.5] };
+  }
+  static stats(a) {
+    const b = a.slice().sort((x, y) => x - y), n = b.length, q = (p) => b[Math.min(n - 1, Math.max(0, Math.floor((n - 1) * p)))];
+    const stds = [];
+    for (let i = Math.max(0, n - 180) + 0; i + 12 <= a.length; i += 12) {
+      let m = 0; for (let j = 0; j < 12; j++) m += a[i + j]; m /= 12;
+      let v = 0; for (let j = 0; j < 12; j++) v += (a[i + j] - m) * (a[i + j] - m);
+      stds.push(Math.sqrt(v / 12));
+    }
+    stds.sort((x, y) => x - y);
+    return { med: q(0.5), p5: q(0.05), p95: q(0.95), noise: stds.length ? Math.max(stds[Math.floor(stds.length / 2)], 0.002) : 0.01 };
+  }
+  push(uR, uL, vR, vL, t) {
+    if (![uR, uL, vR, vL].every(isFinite)) return;
+    const put = (arr, x) => { arr.push(x); if (arr.length > 900) arr.shift(); };
+    put(this.u.R, uR); put(this.u.L, uL); put(this.v.R, vR); put(this.v.L, vL);
+    if (t - this.last >= 1000 && this.u.R.length >= 150) { this.last = t; this.update(); }
+  }
+  update() {
+    const ks = ['R', 'L'], sc = { u: [0, 0], v: [0, 0] }, det = {};
+    const lerp = (a, b, r) => a + (b - a) * r;
+    const clampG = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+    for (let i = 0; i < 2; i++) {
+      const k = ks[i];
+      for (const ax of ['u', 'v']) {
+        const st = EyeFuse.stats(this[ax][k]);
+        this.c[k][ax] = lerp(this.c[k][ax], st.med, this.ready ? 0.3 : 1);
+        const dl = st.p5 - st.med, dr = st.p95 - st.med, range = dr - dl;
+        const real = range > Math.max(0.04, 6 * st.noise) && dl < -0.01 && dr > 0.01;      // a real look to both sides, well above the noise
+        if (real) {
+          const H = (-dl + dr) / 2, gLo = clampG(H / -dl, 0.6, ax === 'u' ? 2.2 : 2.5), gHi = clampG(H / dr, 0.6, ax === 'u' ? 2.2 : 2.5);
+          const kl = ax === 'u' ? 'gl' : 'gt', kh = ax === 'u' ? 'gr' : 'gb';
+          this.g[k][kl] = lerp(this.g[k][kl], gLo, 0.2); this.g[k][kh] = lerp(this.g[k][kh], gHi, 0.2);
+          const sym = Math.min(-dl, dr) / Math.max(-dl, dr);
+          sc[ax][i] = (range / st.noise) * Math.sqrt(sym);
+          det[k + ax] = { sym, snr: range / st.noise };
+        }
+      }
+    }
+    for (const ax of ['u', 'v']) {
+      const q = sc[ax].map((x) => x * x), t = q[0] + q[1];
+      if (t > 1e-9) { const target = q.map((x) => x / t); this.w[ax] = [lerp(this.w[ax][0], target[0], 0.25), lerp(this.w[ax][1], target[1], 0.25)]; }
+    }
+    if (!this.ready && this.u.R.length >= 150) this.ready = true;
+    const d = det.Ru && det.Lu;
+    this.info = d ? ('eyes: right ' + Math.round(this.w.u[0] * 100) + '% (symmetry ' + det.Ru.sym.toFixed(2) + ', S/N ' + det.Ru.snr.toFixed(0) + ')  left ' + Math.round(this.w.u[1] * 100) + '% (symmetry ' + det.Lu.sym.toFixed(2) + ', S/N ' + det.Lu.snr.toFixed(0) + ')') : 'eyes: learning (look around the screen)';
+  }
+  map(uR, uL, vR, vL) {
+    if (!this.ready || ![uR, uL, vR, vL].every(isFinite)) return null;
+    let au = 0, wu = 0, av = 0, wv = 0;
+    const raw = { R: [uR, vR], L: [uL, vL] };
+    for (let i = 0; i < 2; i++) {
+      const k = i === 0 ? 'R' : 'L', g = this.g[k];
+      const xu = raw[k][0] - this.c[k].u, xv = raw[k][1] - this.c[k].v;
+      au += this.w.u[i] * (0.5 + (xu < 0 ? g.gl : g.gr) * xu); wu += this.w.u[i];
+      av += this.w.v[i] * (0.5 + (xv < 0 ? g.gt : g.gb) * xv); wv += this.w.v[i];
+    }
+    return { u: au / wu, v: av / wv };
+  }
+}
+
+const DUAL0 = () => ({ on: false, c: { R: { u: 0, v: 0 }, L: { u: 0, v: 0 } }, g: { R: { gl: 1, gr: 1, gt: 1, gb: 1 }, L: { gl: 1, gr: 1, gt: 1, gb: 1 } }, w: { u: [0.5, 0.5], v: [0.5, 0.5] }, info: '' });
+const RC = { fuse: new EyeFuse(), fuseOn: true, dual: DUAL0(), fu: new OneEuroJS(), fv: new OneEuroJS(), curve: 1, guide: [], buf: [], heat: new Float32Array(48 * 27), trail: [], kyaw: 0, kpitch: 0, gx: 1, gy: 1, gl: 1, gr: 1, gt: 1, gb: 1, sx: 0, sy: 0, center: true,
+  med: { u: 0.5, v: 0.5 }, yawRef: 0, pitchRef: 0, fix: null, leakBuf: [], lastTable: 0, lastMed: 0, cur: null };
+const reachCv = $('reach');
+const rcx = reachCv.getContext('2d');
+const scrCm = () => {
+  const sw = parseFloat($('scrW').value) || 34;
+  const ar = (screen.width > 0 && screen.height > 0) ? screen.height / screen.width : 9 / 16;
+  return [sw, sw * ar];
+};
+function sizeReach() {
+  const c = scrCm();
+  if (rcIsFull()) { const d = Math.min(2, window.devicePixelRatio || 1); reachCv.width = Math.max(320, Math.round(window.innerWidth * d)); reachCv.height = Math.max(180, Math.round(window.innerHeight * d)); }
+  else { reachCv.width = 720; reachCv.height = Math.round(720 * c[1] / c[0]); }
+}
+const rcIsFull = () => document.fullscreenElement === $('reachWrap') || $('reachWrap').classList.contains('pseudoFull');
+// Touch devices: the screen is a phone, not a 34 cm laptop. ~63 CSS px per cm is typical; edit the box if yours differs.
+if (matchMedia('(pointer: coarse)').matches && screen.width > 0 && parseFloat($('scrW').value) === 34) {
+  $('scrW').value = Math.max(5, Math.min(30, Math.round(Math.min(screen.width, screen.height) / 63 * 10) / 10 * (screen.width <= screen.height ? 1 : 1))).toFixed(1);
+  $('dist').value = 35;
+}
+sizeReach();
+$('scrW').addEventListener('change', sizeReach);
+$('scrDiag').addEventListener('input', () => {
+  const dgl = parseFloat($('scrDiag').value);
+  if (!(dgl > 5)) return;
+  const w = screen.width > 0 ? screen.width : 16, h = screen.height > 0 ? screen.height : 9;
+  $('scrW').value = (dgl * 2.54 * w / Math.hypot(w, h)).toFixed(1);
+  sizeReach();
+});
+const pct = (arr, q) => {
+  if (!arr.length) return 0.5;
+  const b = arr.slice().sort((a, c) => a - c);
+  return b[Math.min(b.length - 1, Math.max(0, Math.floor(b.length * q)))];
+};
+const phU = (s) => s.gu + RC.kyaw * (s.yaw - RC.yawRef);          // physical gaze after cancelling the head's share
+const phV = (s) => s.gv + RC.kpitch * (s.pitch - RC.pitchRef);
+// Per-eye mapping (glasses bend the image differently for each eye): each eye has its own centre and per-side gains, and the two are blended by how
+// strong and how symmetric each eye's response was when fitted.
+function dualMap(s, axis) {
+  const hu = RC.kyaw * (s.yaw - RC.yawRef), hv = RC.kpitch * (s.pitch - RC.pitchRef);
+  const m = RC.fuse.map(s.uR + hu, s.uL + hu, s.vR + hv, s.vL + hv);
+  return m ? (axis === 'u' ? m.u + RC.sx : m.v + RC.sy) : NaN;
+}
+const dualOK = (s, P) => P === RC && RC.fuseOn && RC.fuse.ready && isFinite(s.uR) && isFinite(s.uL);
+const outUp = (s, P) => {
+  if (dualOK(s, P)) { const d = dualMap(s, 'u'); if (isFinite(d)) return d; } const x = phU(s) - (P.center ? RC.med.u : 0.5); return 0.5 + P.gx * (x < 0 ? (P.gl || 1) : (P.gr || 1)) * x + P.sx; };
+const outVp = (s, P) => {
+  if (dualOK(s, P)) { const d = dualMap(s, 'v'); if (isFinite(d)) return d; } const y = phV(s) - (P.center ? RC.med.v : 0.5); return 0.5 + P.gy * (y < 0 ? (P.gt || 1) : (P.gb || 1)) * y + P.sy; };
+const outU = (s) => outUp(s, RC);
+const outV = (s) => outVp(s, RC);
+const slope = (xs, ys) => {                                          // least-squares slope of ys against xs, and the spread of xs
+  const n = xs.length; if (n < 8) return null;
+  const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxx = 0, sxy = 0;
+  for (let i = 0; i < n; i++) { sxx += (xs[i] - mx) * (xs[i] - mx); sxy += (xs[i] - mx) * (ys[i] - my); }
+  return { slope: sxx > 1e-12 ? sxy / sxx : 0, sd: Math.sqrt(sxx / n) };
+};
+
+function mkSample(f) {
+  const g = f.geoL;
+  if (!g || !g.ok || !(f.closure < 0.2)) return null;
+  const R = f.eyes.R, L = f.eyes.L;
+  return { t: f.t, gu: g.u, gv: g.v, uR: g.eu ? g.eu[0] : NaN, uL: g.eu ? g.eu[1] : NaN, vR: g.ev ? g.ev[0] : NaN, vL: g.ev ? g.ev[1] : NaN, yaw: f.yaw, pitch: f.pitch, lx: (R.limbN[0] + L.limbN[0]) / 2, ly: (R.limbN[1] + L.limbN[1]) / 2,
+    ew: (R.eyeW + L.eyeW) / 2, ap: ((R.bt.y - R.tp.y) + (L.bt.y - L.tp.y)) / 2, rad: (R.rad + L.rad) / 2, gyaw: g.yaw, gpitch: g.pitch, px: g.px };
+}
+function reachFrame(f) {
+  try { coachFrame(f); } catch (e) {}
+  const s = mkSample(f);
+  if (!s) return;
+  const g = f.geoL;
+  RC.buf.push(s); if (RC.buf.length > 900) RC.buf.shift();
+  { const hu = RC.kyaw * (s.yaw - RC.yawRef), hv = RC.kpitch * (s.pitch - RC.pitchRef); RC.fuse.push(s.uR + hu, s.uL + hu, s.vR + hv, s.vL + hv, s.t); }
+  if (f.t - RC.lastMed > 500 && RC.buf.length > 20) {
+    RC.lastMed = f.t;
+    RC.yawRef = pct(RC.buf.map((b) => b.yaw), 0.5); RC.pitchRef = pct(RC.buf.map((b) => b.pitch), 0.5);
+    RC.med.u = pct(RC.buf.map(phU), 0.5); RC.med.v = pct(RC.buf.map(phV), 0.5);
+  }
+  const rawU = outU(s), rawV = outV(s);
+  const shape = (x) => { const d = (x - 0.5) * 2; return 0.5 + 0.5 * Math.sign(d) * Math.pow(Math.abs(d), RC.curve); };    // centre boost
+  const u = RC.fu.f(shape(rawU), f.t / 1000), v = RC.fv.f(shape(rawV), f.t / 1000);
+  RC.cur = { u: u, v: v, s: s };
+  for (let i = 0; i < RC.heat.length; i++) RC.heat[i] *= 0.9996;
+  if (u >= 0 && u < 1 && v >= 0 && v < 1) RC.heat[Math.floor(v * 27) * 48 + Math.floor(u * 48)] += 1;
+  RC.trail.push([u, v]); if (RC.trail.length > 36) RC.trail.shift();
+  RC.leakBuf.push([f.t, u, v, f.yaw, f.pitch]);
+  while (RC.leakBuf.length && f.t - RC.leakBuf[0][0] > 4000) RC.leakBuf.shift();
+  if (RC.fix) { RC.fix.samples.push([g.u, g.v, f.yaw, f.pitch]); if (!RC.fix.manual && f.t - RC.fix.t0 > 6000) finishHeadFix(); }
+  drawReach(); updLive(); if (BALL.on) ballDraw();
+  if (f.t - RC.lastTable > 250) { RC.lastTable = f.t; updReachTable(); }
+}
+
+function drawReach() {
+  const c = scrCm(), sw = c[0], sh = c[1];
+  const W = 720, H = Math.round(720 * sh / sw);                                   // logical size: everything below is drawn in these units
+  rcx.setTransform(reachCv.width / W, 0, 0, reachCv.height / H, 0, 0);
+  const line = (x1, y1, x2, y2) => { rcx.beginPath(); rcx.moveTo(x1, y1); rcx.lineTo(x2, y2); rcx.stroke(); };
+  rcx.setLineDash([]);
+  rcx.fillStyle = '#0b0f15'; rcx.fillRect(0, 0, W, H);
+  // coverage heat
+  let mx = 1; for (let i = 0; i < RC.heat.length; i++) if (RC.heat[i] > mx) mx = RC.heat[i];
+  const cw = W / 48, ch = H / 27;
+  for (let y = 0; y < 27; y++) for (let x = 0; x < 48; x++) {
+    const v = RC.heat[y * 48 + x];
+    if (v > 0.05) { rcx.fillStyle = 'rgba(77,210,255,' + Math.min(0.85, Math.sqrt(v / mx) * 0.85).toFixed(3) + ')'; rcx.fillRect(x * cw, y * ch, cw + 0.5, ch + 0.5); }
+  }
+  // grid: every 10% of the screen, centre lines, and cm ticks
+  rcx.lineWidth = 1; rcx.strokeStyle = 'rgba(255,255,255,0.09)';
+  for (let i = 1; i < 10; i++) { line(i * W / 10, 0, i * W / 10, H); line(0, i * H / 10, W, i * H / 10); }
+  rcx.strokeStyle = 'rgba(255,255,255,0.28)'; line(W / 2, 0, W / 2, H); line(0, H / 2, W, H / 2);
+  rcx.fillStyle = 'rgba(255,255,255,0.55)'; rcx.font = '11px system-ui';
+  for (let cm = 5; cm < sw; cm += 5) { const x = cm / sw * W; line(x, 0, x, 6); rcx.fillText(cm + ' cm', x + 3, 17); }
+  for (let cm = 5; cm < sh; cm += 5) { const y = cm / sh * H; line(0, y, 6, y); rcx.fillText(cm + '', 8, y + 4); }
+  // this browser window, to scale
+  if (screen.width > 0) {
+    rcx.setLineDash([3, 4]); rcx.strokeStyle = 'rgba(180,140,255,0.8)'; rcx.lineWidth = 1.5;
+    rcx.strokeRect(window.screenX / screen.width * W, window.screenY / screen.height * H, window.outerWidth / screen.width * W, window.outerHeight / screen.height * H);
+    rcx.setLineDash([]); rcx.fillStyle = 'rgba(180,140,255,0.9)'; rcx.fillText('this window', Math.max(4, window.screenX / screen.width * W + 4), Math.max(30, window.screenY / screen.height * H + 14));
+  }
+  // extents and the parts of the screen never reached
+  if (RC.buf.length > 30) {
+    const U = RC.buf.map(outU), V = RC.buf.map(outV);
+    const u3 = pct(U, 0.03), u97 = pct(U, 0.97), v3 = pct(V, 0.03), v97 = pct(V, 0.97);
+    const cl = (x) => Math.max(0, Math.min(1, x));
+    const a = cl(u3), b = cl(u97), t = cl(v3), d = cl(v97);
+    rcx.fillStyle = 'rgba(255,90,77,0.16)';
+    rcx.fillRect(0, 0, a * W, H); rcx.fillRect(b * W, 0, (1 - b) * W, H);
+    rcx.fillRect(a * W, 0, (b - a) * W, t * H); rcx.fillRect(a * W, d * H, (b - a) * W, (1 - d) * H);
+    rcx.setLineDash([8, 5]); rcx.strokeStyle = '#ffc24d'; rcx.lineWidth = 2;
+    rcx.strokeRect(u3 * W, v3 * H, (u97 - u3) * W, (v97 - v3) * H);
+    rcx.setLineDash([]); rcx.font = 'bold 13px system-ui'; rcx.fillStyle = '#ff9b91';
+    const lab = (txt, x, y) => { const w = rcx.measureText(txt).width; rcx.fillText(txt, Math.max(4, Math.min(W - w - 4, x - w / 2)), y); };
+    if (a > 0.04) lab((a * sw).toFixed(1) + ' cm short', a * W / 2, H / 2 - 8);
+    if (1 - b > 0.04) lab(((1 - b) * sw).toFixed(1) + ' cm short', (b + (1 - b) / 2) * W, H / 2 - 8);
+    if (t > 0.06) lab((t * sh).toFixed(1) + ' cm short', (a + b) / 2 * W, t * H / 2 + 5);
+    if (1 - d > 0.06) lab(((1 - d) * sh).toFixed(1) + ' cm short', (a + b) / 2 * W, (d + (1 - d) / 2) * H + 5);
+  }
+  // where the + in the middle of this map physically is on the screen: the gaze should land there when you look at it
+  if (screen.width > 0) {
+    const r = reachCv.getBoundingClientRect();
+    const chrome = Math.max(0, window.outerHeight - window.innerHeight);
+    const tx = (window.screenX + r.left + r.width / 2) / screen.width, ty = (window.screenY + chrome + r.top + r.height / 2) / screen.height;
+    rcx.strokeStyle = '#3ddc84'; rcx.lineWidth = 2; rcx.beginPath(); rcx.arc(tx * W, ty * H, 13, 0, 6.3); rcx.stroke();
+    rcx.strokeStyle = '#fff'; rcx.lineWidth = 2; line(W / 2 - 12, H / 2, W / 2 + 12, H / 2); line(W / 2, H / 2 - 12, W / 2, H / 2 + 12);
+  }
+  // trail and live dot
+  if (RC.trail.length > 1) {
+    rcx.strokeStyle = 'rgba(61,220,132,0.5)'; rcx.lineWidth = 2; rcx.beginPath();
+    RC.trail.forEach((p, i) => { const x = Math.max(0, Math.min(1, p[0])) * W, y = Math.max(0, Math.min(1, p[1])) * H; if (i) rcx.lineTo(x, y); else rcx.moveTo(x, y); });
+    rcx.stroke();
+  }
+  if (RC.cur) {
+    const off = RC.cur.u < 0 || RC.cur.u > 1 || RC.cur.v < 0 || RC.cur.v > 1;
+    const x = Math.max(0, Math.min(1, RC.cur.u)) * W, y = Math.max(0, Math.min(1, RC.cur.v)) * H;
+    rcx.fillStyle = off ? '#ff5a4d' : '#3ddc84'; rcx.beginPath(); rcx.arc(x, y, 8, 0, 6.3); rcx.fill();
+    rcx.strokeStyle = '#fff'; rcx.lineWidth = 2; rcx.stroke();
+  }
+  rcx.strokeStyle = '#4a5b7a'; rcx.lineWidth = 3; rcx.strokeRect(1.5, 1.5, W - 3, H - 3);
+}
+
+const camDist = (diamPx) => ((vid.videoWidth || 1280) / 2) / Math.tan(((parseFloat($('hfov').value) || 66) * Math.PI / 180) / 2) * 1.17 / Math.max(diamPx, 1);
+function updReachTable() {
+  const c = scrCm(), sw = c[0], sh = c[1];
+  const tb = document.querySelector('#rcTable tbody');
+  if (RC.buf.length < 30) { tb.innerHTML = '<tr><td colspan="6" class="note">Looking for your eyes... then look around the screen edges, moving only your eyes.</td></tr>'; return; }
+  const U = RC.buf.map(outU), V = RC.buf.map(outV);
+  const u3 = pct(U, 0.03), u97 = pct(U, 0.97), v3 = pct(V, 0.03), v97 = pct(V, 0.97);
+  const medLx = pct(RC.buf.map((s) => s.lx), 0.5), medLy = pct(RC.buf.map((s) => s.ly), 0.5);
+  const avg = (a) => a.length ? a.reduce((p, q) => p + q, 0) / a.length : 0;
+  const yawDeg = (s) => s.yaw * 57.3, pitDeg = (s) => s.pitch * 57.3;
+  const row = (name, short, cmShort, pick, axis) => {
+    const sel = RC.buf.filter(pick);
+    const ew = avg(sel.map((s) => s.ew)), ap = avg(sel.map((s) => s.ap));
+    const dpx = axis === 'x' ? (avg(sel.map((s) => s.lx)) - medLx) * ew : (avg(sel.map((s) => s.ly)) - medLy) * ap;
+    const ga = axis === 'x' ? avg(sel.map((s) => s.gyaw)) : avg(sel.map((s) => s.gpitch));
+    const ha = axis === 'x' ? avg(sel.map(yawDeg)) : avg(sel.map(pitDeg));
+    const need = short > 0.05 ? (0.44 / Math.max(0.5 - (0.5 - short), 0.001)) : 1;      // 0.44 = reach from the centre to the 6% line
+    const needTxt = short <= 0.06 ? 'OK' : 'x' + Math.min(99, 0.44 / Math.max(0.5 - short, 0.02)).toFixed(1) + ' more';
+    const cls = short <= 0.10 ? 'good' : (short <= 0.25 ? 'meh' : 'bad');
+    return '<tr><td><b>' + name + '</b></td><td class="num">' + (short * 100).toFixed(0) + '% in</td><td class="num ' + cls + '">' + cmShort.toFixed(1) + ' cm (' + (short * 100).toFixed(0) + '%)</td>' +
+      '<td class="num">' + (dpx >= 0 ? '+' : '') + dpx.toFixed(2) + ' px</td><td class="num">' + ga.toFixed(0) + '&deg; / ' + ha.toFixed(0) + '&deg;</td><td class="num ' + cls + '">' + needTxt + '</td></tr>';
+  };
+  const sL = Math.max(0, u3), sR = Math.max(0, 1 - u97), sU = Math.max(0, v3), sD = Math.max(0, 1 - v97);
+  tb.innerHTML = row('Left', sL, sL * sw, (s) => outU(s) <= u3, 'x') + row('Right', sR, sR * sw, (s) => outU(s) >= u97, 'x') +
+    row('Up', sU, sU * sh, (s) => outV(s) <= v3, 'y') + row('Down', sD, sD * sh, (s) => outV(s) >= v97, 'y');
+  // resolution: what one pixel of iris is worth on THIS screen, and how noisy the pixel is right now
+  const rcRecent = RC.buf.slice(-60);
+  if (rcRecent.length > 20 && rcRecent[rcRecent.length - 1].px) {
+    const dd = (a) => { const d = []; for (let i = 1; i < a.length; i++) d.push(a[i] - a[i - 1]); const m = d.reduce((p, q) => p + q, 0) / d.length; return Math.sqrt(d.reduce((p, q) => p + (q - m) * (q - m), 0) / d.length) / Math.SQRT2; };
+    const nx = dd(rcRecent.map((q) => q.lx * q.ew)), ny = dd(rcRecent.map((q) => q.ly * q.ap));
+    const px = rcRecent[rcRecent.length - 1].px;
+    const cmx = px.du * RC.gx * sw, cmy = px.dv * RC.gy * sh;
+    $('rcRes').innerHTML = '<b>Resolution:</b> one pixel of iris movement = <b>' + cmx.toFixed(1) + ' cm</b> across (' + (px.du * RC.gx * 100).toFixed(0) + '% of the screen width) and <b>' + cmy.toFixed(1) + ' cm</b> up/down (' + (px.dv * RC.gy * 100).toFixed(0) + '% of the height). ' +
+      'Measured noise right now: +/-' + nx.toFixed(2) + ' px across (about +/-' + (nx * cmx).toFixed(1) + ' cm), +/-' + ny.toFixed(2) + ' px up/down (about +/-' + (ny * cmy).toFixed(1) + ' cm). ' +
+      'So movements smaller than about <b>' + Math.max(2 * nx * cmx, 0.1).toFixed(1) + ' cm</b> across and <b>' + Math.max(2 * ny * cmy, 0.1).toFixed(1) + ' cm</b> up/down cannot be told apart from noise. More iris pixels (1080p, sit closer) shrink all of these.';
+  }
+  const wCov = Math.max(0, Math.min(1, u97) - Math.max(0, u3)), hCov = Math.max(0, Math.min(1, v97) - Math.max(0, v3));
+  const ok = wCov > 0.84 && hCov > 0.84;
+  const vd = $('rcVerdict');
+  vd.className = 'big ' + (ok ? 'good' : (wCov > 0.5 && hCov > 0.4 ? 'meh' : 'bad'));
+  vd.textContent = 'Your gaze covers ' + (wCov * 100).toFixed(0) + '% of the screen width and ' + (hCov * 100).toFixed(0) + '% of the height' +
+    (ok ? ': the whole screen is reachable.' : '. The red bands are never reached.') + (RC.cur ? '   iris ' + (RC.cur.s.rad * 2).toFixed(1) + ' px wide, you are about ' + camDist(RC.cur.s.rad * 2).toFixed(0) + ' cm from the camera' + (RC.cur.s.rad * 2 < 16 ? ' (far: sit closer, 55 cm gives 21 px)' : '') : '') +
+    ((c[0] < 40 && screen.width >= 1920) ? '   Screen width is set to ' + c[0] + ' cm, which is a laptop: type your monitor diagonal above.' : '');
+  // head follow: with your eyes still, turning the head should not move the dot
+  const lb = RC.leakBuf, ys = lb.map((p) => p[3]), ps = lb.map((p) => p[4]);
+  const sy = slope(ys, lb.map((p) => p[1])), sp = slope(ps, lb.map((p) => p[2]));
+  let txt = '';
+  if (sy && sy.sd > 0.03) txt += 'Head follow, left/right: turning your head 10° moves the dot ' + (sy.slope * 0.1745 * 100).toFixed(0) + '% of the screen width.  ';
+  if (sp && sp.sd > 0.03) txt += 'Up/down: nodding 10° moves it ' + (sp.slope * 0.1745 * 100).toFixed(0) + '% of the height.  ';
+  const medPitch = pct(RC.buf.map((b) => b.pitch), 0.5) * 57.3;
+  if (Math.abs(medPitch) > 15) {
+    vd.textContent += '   Your head is tilted ' + Math.abs(medPitch).toFixed(0) + ' degrees (the camera is looking ' + (medPitch < 0 ? 'up at' : 'down on') + ' your face). That squints the eyes and flattens up/down movement: hold the camera at eye level.';
+  }
+  if (sy && sy.sd > 0.03 && Math.abs(sy.slope * 0.1745) > 0.15) {
+    vd.className = 'big bad';
+    vd.textContent += '   WARNING: the dot follows your head (' + (sy.slope * 0.1745 * 100).toFixed(0) + '% of the width per 10 degrees of head turn), so the coverage above is mostly your HEAD moving, not your eyes. Press "Stop head-follow" first.';
+  }
+  $('rcLeak').textContent = txt || 'Head follow: turn or nod your head while keeping your eyes on one point to measure it (or press Stop head-follow).';
+}
+
+function finishHeadFix() {
+  const sm = RC.fix.samples; RC.fix = null;
+  const ys = sm.map((p) => p[2]), ps = sm.map((p) => p[3]);
+  const sy = slope(ys, sm.map((p) => p[0])), sp = slope(ps, sm.map((p) => p[1]));
+  const was = [RC.kyaw, RC.kpitch]; let msg = '';
+  if (sy && sy.sd > 0.03) { RC.kyaw = Math.max(-4, Math.min(4, -sy.slope)); msg += 'left/right follow was ' + (sy.slope * 0.1745 * 100).toFixed(0) + '% per 10°, now cancelled. '; } else msg += 'turn your head left and right more (under 2° of movement). ';
+  if (sp && sp.sd > 0.03) { RC.kpitch = Math.max(-4, Math.min(4, -sp.slope)); msg += 'up/down follow was ' + (sp.slope * 0.1745 * 100).toFixed(0) + '% per 10°, now cancelled.'; } else msg += 'nod up and down more.';
+  syncRcSliders(); $('rcMsg').textContent = msg;
+  $('rcFix').textContent = 'Stop head-follow (6 s)';
+}
+function syncRcSliders() {
+  const set = (id, v) => { $(id).value = v; $(id + 'V').textContent = Number(v).toFixed(2); };
+  set('rcYaw', RC.kyaw); set('rcPitch', RC.kpitch); set('rcGx', RC.gx); set('rcGy', RC.gy); set('rcSx', RC.sx); set('rcSy', RC.sy);
+  $('rcCenter').checked = RC.center;
+}
+function computeFit() {
+  if (RC.buf.length < 60) return null;
+  const us = RC.buf.map(phU), vs = RC.buf.map(phV);
+  const u3 = pct(us, 0.03), u97 = pct(us, 0.97), v3 = pct(vs, 0.03), v97 = pct(vs, 0.97);
+  const P = { center: true, gx: Math.max(0.3, Math.min(12, 0.88 / Math.max(u97 - u3, 0.003))), gy: RC.gy, sx: 0, sy: 0 };
+  P.sx = -P.gx * ((u3 + u97) / 2 - RC.med.u);
+  if (v97 - v3 > 0.004) { P.gy = Math.max(0.3, Math.min(12, 0.88 / (v97 - v3))); P.sy = -P.gy * ((v3 + v97) / 2 - RC.med.v); }
+  return P;
+}
+function fitReach() {
+  const P = computeFit();
+  if (!P) { $('rcMsg').textContent = 'Look around the edges of your screen first (a few seconds), then press this.'; return; }
+  RC.center = true; RC.gx = P.gx; RC.gy = P.gy; RC.sx = P.sx; RC.sy = P.sy;
+  syncRcSliders();
+  RC.heat.fill(0);
+  $('rcMsg').textContent = 'Fitted: across gain x' + RC.gx.toFixed(2) + ', up/down gain x' + RC.gy.toFixed(2) + '. (A big gain means the pupil barely moves for the screen it has to cover: noise is amplified by the same factor.)';
+}
+
+// ---- guided run: a dot, full screen, "look here". Records where the gaze landed for each known dot position.
+const GUIDE_POINTS = [['centre', 0.5, 0.5], ['left edge', 0.04, 0.5], ['right edge', 0.96, 0.5], ['top edge', 0.5, 0.07], ['bottom edge', 0.5, 0.93], ['centre again', 0.5, 0.5]];
+function physTarget(fx, fy) {
+  if (document.fullscreenElement || !(screen.width > 0)) return [fx, fy];
+  const chrome = Math.max(0, window.outerHeight - window.innerHeight);
+  return [(window.screenX + fx * window.innerWidth) / screen.width, (window.screenY + chrome + fy * window.innerHeight) / screen.height];
+}
+async function headStep() {
+  RC.fix = { t0: performance.now(), samples: [], manual: true };
+  place(0.5, 0.5);
+  const t0 = performance.now();
+  for (;;) {
+    const el = performance.now() - t0, sm = RC.fix.samples;
+    const rg = (i) => sm.length > 5 ? (Math.max.apply(null, sm.map((p) => p[i])) - Math.min.apply(null, sm.map((p) => p[i]))) * 57.3 : 0;
+    const yr = rg(2), pr = rg(3);
+    const okYaw = yr >= 18, okPit = pr >= 8;
+    smsg.textContent = 'KEEP LOOKING AT THE DOT. Slowly turn your head left and right (' + yr.toFixed(0) + ' of 18 degrees), then nod up and down (' + pr.toFixed(0) + ' of 8)';
+    sprog.style.width = Math.min(100, Math.min(yr / 18, 1) * 50 + Math.min(pr / 8, 1) * 50) + '%';
+    if ((okYaw && okPit && el > 4000) || el > 14000) break;
+    await sleep(80);
+  }
+  finishHeadFix();
+}
+async function guidedRun() {
+  setBusy(true); $('rcGuide').disabled = true;
+  RC.guide = [];
+  await enterStage();
+  try {
+    await holdOn(0.5, 0.5, 700, 2200, 'LOOK HERE   (keep your head still)');
+    await headStep();
+    for (const p of GUIDE_POINTS) {
+      const smp = await holdOn(p[1], p[2], 900, 1500, 'LOOK HERE');
+      RC.guide.push({ name: p[0], fx: p[1], fy: p[2], phys: physTarget(p[1], p[2]), s: smp.map(mkSample).filter(Boolean) });
+    }
+  } finally { await leaveStage(); setBusy(false); $('rcGuide').disabled = false; }
+  showGuide();
+}
+function guideRows(P) {
+  const c = scrCm(), sw = c[0], sh = c[1], rows = [];
+  for (const r of (RC.guide || [])) {
+    if (r.s.length < 5) { rows.push({ name: r.name, none: true }); continue; }
+    const mu = pct(r.s.map((x) => outUp(x, P)), 0.5), mv = pct(r.s.map((x) => outVp(x, P)), 0.5);
+    const dx = (mu - r.phys[0]) * sw, dy = (mv - r.phys[1]) * sh;
+    rows.push({ name: r.name, tu: r.phys[0], tv: r.phys[1], mu: mu, mv: mv, dxcm: dx, dycm: dy, dist: Math.hypot(dx, dy) });
+  }
+  return rows;
+}
+function showGuide() {
+  const c = scrCm(), sw = c[0], sh = c[1];
+  const now = guideRows(RC), fit = computeFit(), after = fit ? guideRows(fit) : null, dfit = computeDotFit(), afterD = dfit ? guideRows(dfit) : null;
+  const cls = (d) => d <= 2.5 ? 'good' : (d <= 6 ? 'meh' : 'bad');
+  let h = '<table><thead><tr><th>dot</th><th>it was at</th><th>your gaze read</th><th>off by</th><th>after "Fit range"</th><th>if fitted to these dots</th></tr></thead><tbody>';
+  let tot = 0, n = 0, totA = 0;
+  now.forEach((r, i) => {
+    if (r.none) { h += '<tr><td>' + r.name + '</td><td colspan="5" class="note">no eye data (blinks or lost face)</td></tr>'; return; }
+    const a = after && !after[i].none ? after[i] : null;
+    tot += r.dist; n++; if (a) totA += a.dist;
+    h += '<tr><td><b>' + r.name + '</b></td><td class="num">' + (r.tu * 100).toFixed(0) + '%, ' + (r.tv * 100).toFixed(0) + '%</td><td class="num">' + (r.mu * 100).toFixed(0) + '%, ' + (r.mv * 100).toFixed(0) + '%</td>' +
+      '<td class="num ' + cls(r.dist) + '">' + r.dist.toFixed(1) + ' cm  (' + (r.dxcm >= 0 ? 'right ' : 'left ') + Math.abs(r.dxcm).toFixed(1) + ', ' + (r.dycm >= 0 ? 'low ' : 'high ') + Math.abs(r.dycm).toFixed(1) + ')</td>' +
+      '<td class="num ' + (a ? cls(a.dist) : '') + '">' + (a ? a.dist.toFixed(1) + ' cm' : '-') + '</td>' +
+      '<td class="num ' + (afterD && !afterD[i].none ? cls(afterD[i].dist) : '') + '">' + (afterD && !afterD[i].none ? afterD[i].dist.toFixed(1) + ' cm' : '-') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  if (n) h += '<div class="big" style="margin-top:6px">Average error: <b>' + (tot / n).toFixed(1) + ' cm</b> (' + (tot / n / sw * 100).toFixed(0) + '% of the screen width)' + (after ? '; after Fit range about <b>' + (totA / n).toFixed(1) + ' cm</b>' : '') + (afterD ? '; if fitted to these dots about <b>' + (afterD.filter((q) => !q.none).reduce((p, q) => p + q.dist, 0) / n).toFixed(1) + ' cm</b>' : '') + '</div>';
+  $('rcGuideOut').innerHTML = h;
+  $('rcFitDots').disabled = !dfit;
+  updReachTable();
+  $('rcMsg').textContent = 'Done. Press "Fit range to screen" to apply the fit, then "Guide me" again to see the real improvement. Use Copy results JSON to send me the numbers.';
+}
+function computeDotFit() {
+  const rows = (RC.guide || []).filter((r) => r.s.length >= 5);
+  if (rows.length < 4) return null;
+  const avg = (a) => a.reduce((p, q) => p + q, 0) / a.length;
+  const lsq = (a, b) => { const ma = avg(a), mb = avg(b); let sxx = 0, sxy = 0; for (let i = 0; i < a.length; i++) { sxx += (a[i] - ma) * (a[i] - ma); sxy += (a[i] - ma) * (b[i] - mb); } const g = sxx > 1e-9 ? sxy / sxx : 1; return [g, mb - g * ma]; };
+  const gx = lsq(rows.map((r) => pct(r.s.map(phU), 0.5)), rows.map((r) => r.phys[0]));
+  const gy = lsq(rows.map((r) => pct(r.s.map(phV), 0.5)), rows.map((r) => r.phys[1]));
+  const cl = (g) => Math.max(0.3, Math.min(12, g));
+  const Gx = cl(gx[0]), Gy = cl(gy[0]);
+  return { center: false, gx: Gx, gy: Gy, sx: gx[1] - 0.5 + 0.5 * Gx, sy: gy[1] - 0.5 + 0.5 * Gy };
+}
+$('rcFitDots').onclick = () => {
+  const P = computeDotFit();
+  if (!P) { $('rcMsg').textContent = 'Run "Guide me" first.'; return; }
+  RC.center = false; RC.gx = P.gx; RC.gy = P.gy; RC.sx = Math.max(-1, Math.min(1, P.sx)); RC.sy = Math.max(-1, Math.min(1, P.sy));
+  syncRcSliders(); RC.heat.fill(0);
+  $('rcMsg').textContent = 'Fitted to the dots: gain across x' + RC.gx.toFixed(2) + ', up/down x' + RC.gy.toFixed(2) + '. Press Guide me again to see the real result. These two gains are what the physical model is missing on your setup.';
+};
+$('rcGuide').onclick = guidedRun;
+
+for (const id of ['rcYaw', 'rcPitch', 'rcGx', 'rcGy', 'rcSx', 'rcSy']) {
+  $(id).addEventListener('input', () => {
+    RC.kyaw = parseFloat($('rcYaw').value); RC.kpitch = parseFloat($('rcPitch').value); RC.gx = parseFloat($('rcGx').value); RC.gy = parseFloat($('rcGy').value);
+    RC.sx = parseFloat($('rcSx').value); RC.sy = parseFloat($('rcSy').value); syncRcSliders();
+  });
+}
+$('rcCenter').addEventListener('change', () => { RC.center = $('rcCenter').checked; });
+$('rcCurve').addEventListener('input', () => { RC.curve = parseFloat($('rcCurve').value); $('rcCurveV').textContent = RC.curve.toFixed(2); });
+$('rcSmooth').addEventListener('input', () => { const v = parseFloat($('rcSmooth').value); RC.fu.minC = RC.fv.minC = v; $('rcSmoothV').textContent = v.toFixed(1); });
+$('rcFit').onclick = fitReach;
+$('rcFix').onclick = () => { RC.fix = { t0: performance.now(), samples: [] }; $('rcMsg').textContent = 'Keep your eyes on the + in the middle of the map. Slowly turn your head left and right, then nod up and down, for 6 seconds.'; $('rcFix').textContent = 'measuring...'; };
+$('rcClear').onclick = () => { RC.buf.length = 0; RC.heat.fill(0); RC.trail.length = 0; RC.leakBuf.length = 0; $('rcMsg').textContent = 'Cleared. Look around the edges of the screen.'; };
+$('rcReset').onclick = () => { RC.curve = 1; $('rcCurve').value = 1; $('rcCurveV').textContent = '1.00'; RC.kyaw = RC.kpitch = RC.sx = RC.sy = 0; RC.gx = RC.gy = RC.gl = RC.gr = RC.gt = RC.gb = 1; RC.center = true; syncRcSliders(); $('rcMsg').textContent = 'Sliders reset to the physical model.'; };
+// ---------------------------------------------------------------- head coach: gently guides the head into the position that gave the best coverage.
+// Tilting the head back (e.g. to look through the lower part of progressive lenses) squints the eyes and shrinks the visible iris when looking down.
+const CO = { ref: null, buf: [], base: [], text: '', ok: false, okSince: 0, lastDraw: 0, items: [] };
+function coachFrame(f) {
+  if (!f || !f.eyes || !f.eyes.R || !f.eyes.L || !f.eyes.R.eyeW) return;
+  const R = f.eyes.R, L = f.eyes.L;
+  const open = ((R.bt.y - R.tp.y) / R.eyeW + (L.bt.y - L.tp.y) / L.eyeW) / 2;
+  if (!isFinite(open) || f.closure > 0.2) return;
+  CO.buf.push({ t: f.t, pit: f.pitch * 57.3, yaw: -f.yaw * 57.3, rol: -(f.roll || 0) * 57.3, open: open });
+  while (CO.buf.length && f.t - CO.buf[0].t > 1200) CO.buf.shift();
+  CO.base.push(open); if (CO.base.length > 900) CO.base.shift();
+  if (f.t - CO.lastDraw < 200 || CO.buf.length < 4) return;
+  CO.lastDraw = f.t;
+  coachEval(); coachDraw();
+}
+function coachMed() {
+  const m = (k) => pct(CO.buf.map((b) => b[k]), 0.5);
+  return { pit: m('pit'), yaw: m('yaw'), rol: m('rol'), open: m('open') };
+}
+function coachEval() {
+  const c = coachMed(), r = CO.ref, tight = !!r;
+  const ref = r || { pit: 0, yaw: 0, rol: 0, open: pct(CO.base, 0.85) };
+  const tol = tight ? { pit: 4, yaw: 5, rol: 4 } : { pit: 8, yaw: 9, rol: 7 };
+  const dp = c.pit - ref.pit, dy = c.yaw - ref.yaw, dr = c.rol - ref.rol;
+  const baseOpen = r ? r.open : pct(CO.base, 0.85), oratio = baseOpen > 0 ? c.open / baseOpen : 1;
+  const items = [
+    { n: 'chin', v: dp, tol: tol.pit, u: '°' }, { n: 'turn', v: dy, tol: tol.yaw, u: '°' }, { n: 'tilt', v: dr, tol: tol.rol, u: '°' },
+    { n: 'eyes open', v: (oratio - 1) * 100, tol: 16, u: '%', one: true }
+  ];
+  CO.items = items;
+  const bad = [];
+  if (dp < -tol.pit) bad.push(['pit', 'Your head is tilted back a little. Bring your chin down slightly and let your eyes do the looking down: it keeps your eyelids from covering your eyes.']);
+  else if (dp > tol.pit) bad.push(['pit', 'Your chin is dropped. Lift it a little, so your face looks straight at the screen.']);
+  if (dy > tol.yaw) bad.push(['yaw', 'Your head is turned to your right. Turn back a little toward the middle of the screen.']);
+  else if (dy < -tol.yaw) bad.push(['yaw', 'Your head is turned to your left. Turn back a little toward the middle of the screen.']);
+  if (Math.abs(dr) > tol.rol) bad.push(['rol', 'Your head is leaning sideways. Level it gently.']);
+  if (oratio < 0.8) bad.push(['open', 'Your eyes are narrowing. Ease your head forward and relax your forehead so your eyes open a little more.']);
+  CO.ok = !bad.length;
+  CO.text = CO.ok ? ('Good position. Hold it here' + (tight ? ' (matches your remembered position).' : '.')) : bad[0][1];
+  if (CO.ok) { if (!CO.okSince) CO.okSince = performance.now(); } else CO.okSince = 0;
+}
+function coachDraw() {
+  const msg = $('coachMsg'); if (!msg) return;
+  msg.textContent = CO.text; msg.style.color = CO.ok ? 'var(--green)' : 'var(--amber)';
+  const bars = $('coachBars');
+  bars.innerHTML = CO.items.map((i) => {
+    const good = i.one ? i.v > -20 : Math.abs(i.v) <= i.tol;
+    return '<span style="padding:2px 8px;border-radius:10px;border:1px solid var(--line, #444);font-size:13px;color:' + (good ? 'var(--green)' : 'var(--amber)') + '">' + i.n + ' ' + (i.v >= 0 ? '+' : '') + i.v.toFixed(0) + i.u + '</span>';
+  }).join('');
+  if (typeof smsg !== 'undefined' && CO.stageActive) smsg.textContent = CO.ok ? 'GOOD. HOLD STILL...' : CO.text;
+}
+$('coachSave').onclick = () => {
+  if (CO.buf.length < 4) { $('coachMsg').textContent = 'Start the camera first.'; return; }
+  const c = coachMed(); CO.ref = { pit: c.pit, yaw: c.yaw, rol: c.rol, open: c.open };
+  coachEval(); coachDraw(); $('coachMsg').textContent = 'Remembered. From now on I will guide you back to this position.';
+};
+$('coachClear').onclick = () => { CO.ref = null; coachEval(); coachDraw(); };
+// Before a Guide-me run: show the coaching text on the full screen until the head is where it should be (or 12 s have passed).
+async function alignStep() {
+  const t0 = performance.now();
+  CO.stageActive = true; CO.okSince = 0; place(0.5, 0.5);
+  try {
+    for (;;) {
+      const el = performance.now() - t0;
+      const held = CO.okSince ? performance.now() - CO.okSince : 0;
+      sprog.style.width = Math.min(100, held / 12) + '%';
+      if (CO.buf.length < 4) smsg.textContent = 'LOOK AT THE DOT. I cannot see your face yet.';
+      if (held > 1200 || el > 12000 || (el > 3500 && CO.buf.length < 4)) break;
+      await sleep(80);
+    }
+  } finally { CO.stageActive = false; }
+}
+// ---------------------------------------------------------------- hardware profile: measured screen / camera / tuning, remembered per device
+const PROF_KEY = 'eyelab.profile';
+const devKey = () => (screen.width || 0) + 'x' + (screen.height || 0) + '@' + (window.devicePixelRatio || 1);
+function profileNow() {
+  return { v: 1, dev: devKey(), scrW: parseFloat($('scrW').value), dist: parseFloat($('dist').value), hfov: parseFloat($('hfov').value), campos: $('campos').value, res: $('res').value,
+    kyaw: RC.kyaw, kpitch: RC.kpitch, gx: RC.gx, gy: RC.gy, gl: RC.gl, gr: RC.gr, gt: RC.gt, gb: RC.gb, dual: RC.dual, sx: RC.sx, sy: RC.sy, center: RC.center, curve: RC.curve, smooth: RC.fu.minC, pose: CO.ref };
+}
+let profLast = '';
+function saveProfile() {
+  try { const o = profileNow(); const j = JSON.stringify(o); if (j !== profLast) { profLast = j; o.savedAt = Date.now(); localStorage.setItem(PROF_KEY, JSON.stringify(o)); $('profNote').textContent = 'profile saved on this device (the games use it)'; } } catch (e) {}
+}
+function loadProfile() {
+  try {
+    const o = JSON.parse(localStorage.getItem(PROF_KEY) || 'null');
+    if (!o || o.v !== 1 || o.dev !== devKey()) return false;
+    const num = (id, v) => { if (isFinite(v)) $(id).value = v; };
+    num('scrW', o.scrW); num('dist', o.dist); num('hfov', o.hfov); if (o.campos) $('campos').value = o.campos; if (o.res && !stream) $('res').value = o.res;
+    for (const k of ['kyaw', 'kpitch', 'gx', 'gy', 'gl', 'gr', 'gt', 'gb', 'sx', 'sy']) if (isFinite(o[k])) RC[k] = o[k];
+    if (o.dual && o.dual.c && o.dual.g && o.dual.w) RC.dual = o.dual;
+    if (typeof o.center === 'boolean') RC.center = o.center;
+    if (isFinite(o.curve)) { RC.curve = o.curve; $('rcCurve').value = o.curve; $('rcCurveV').textContent = o.curve.toFixed(2); }
+    if (isFinite(o.smooth)) { RC.fu.minC = RC.fv.minC = o.smooth; $('rcSmooth').value = o.smooth; $('rcSmoothV').textContent = o.smooth.toFixed(1); }
+    if (o.pose && isFinite(o.pose.pit)) CO.ref = o.pose;
+    syncRcSliders(); sizeReach();
+    $('profNote').textContent = 'loaded your saved profile for this device';
+    profLast = JSON.stringify(profileNow());
+    return true;
+  } catch (e) { return false; }
+}
+loadProfile();
+setInterval(saveProfile, 2000);
+
+// field of view from the iris: width in px at a known distance
+$('btnFov').onclick = () => {
+  const B = RC.buf.slice(-120);
+  if (B.length < 20 || !vid.videoWidth) { $('profNote').textContent = 'Start the camera and look at the screen first.'; return; }
+  const diam = pct(B.map((b) => b.rad * 2), 0.5), d = parseFloat($('dist').value);
+  if (!(diam > 4) || !(d > 15)) { $('profNote').textContent = 'No iris reading or a bad distance.'; return; }
+  const fpx = diam * d / 1.17;                                  // iris diameter 11.7 mm
+  const fov = Math.max(45, Math.min(110, 2 * Math.atan(vid.videoWidth / 2 / fpx) * 180 / Math.PI));
+  $('hfov').value = fov.toFixed(0);
+  $('profNote').textContent = 'field of view fitted to ' + fov.toFixed(0) + ' degrees (iris ' + diam.toFixed(1) + ' px at ' + d + ' cm). Only valid if you really sat ' + d + ' cm from the screen.';
+};
+// real screen width from a credit card (85.6 mm)
+$('btnCard').onclick = () => { $('cardPanel').style.display = 'flex'; };
+$('cardSlider').oninput = () => { const w = parseFloat($('cardSlider').value); $('cardBox').style.width = w + 'px'; $('cardBox').style.height = (w * 53.98 / 85.6) + 'px'; };
+$('cardNo').onclick = () => { $('cardPanel').style.display = 'none'; };
+$('cardOk').onclick = () => {
+  const w = parseFloat($('cardSlider').value), sw = screen.width > 0 ? screen.width : window.innerWidth;
+  const cssPxPerCm = w / 8.56, width = Math.max(4, Math.min(150, sw / cssPxPerCm));
+  $('scrW').value = (Math.round(width * 10) / 10).toFixed(1); sizeReach();
+  $('cardPanel').style.display = 'none';
+  $('profNote').textContent = 'screen is ' + $('scrW').value + ' cm wide';
+};
+// ---------------------------------------------------------------- ball demo: a tennis-ball sized circle that follows the gaze, full screen
+const BALL = { on: false, trail: [], last: 0 };
+const TENNIS_CM = 6.7;
+function ballPx(u, v) {
+  if (document.fullscreenElement) return [u * window.innerWidth, v * window.innerHeight];
+  const chrome = Math.max(0, window.outerHeight - window.innerHeight);
+  return [u * (screen.width || window.innerWidth) - (window.screenX || 0), v * (screen.height || window.innerHeight) - ((window.screenY || 0) + chrome)];
+}
+async function ballEnter() {
+  $('ballStage').style.display = 'block';
+  BALL.on = true; BALL.trail.length = 0;
+  try { if ($('ballStage').requestFullscreen) await $('ballStage').requestFullscreen(); } catch (e) {}
+  $('ballMsg').textContent = '';
+  if (!running) { $('ballMsg').textContent = 'starting the camera...'; try { await startCam(); } catch (e) { $('ballMsg').textContent = 'camera error: ' + (e.message || e); return; } $('ballMsg').textContent = ''; }
+}
+async function ballExit() {
+  BALL.on = false; $('ballStage').style.display = 'none';
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (e) {}
+}
+// Fit each side on its own: look at the centre, then the left, right, top and bottom edges (head still). Sets a separate gain for each side so
+// the ball reaches every edge, whichever way your eyes rotate less.
+function fitDual(C, SS) {
+  const med = (a) => a.length ? pct(a, 0.5) : NaN;
+  const sdv = (a) => { if (a.length < 3) return NaN; const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length); };
+  const val = (q, k, axis) => (axis === 'u' ? (k === 'R' ? q.uR : q.uL) + RC.kyaw * (q.yaw - RC.yawRef) : (k === 'R' ? q.vR : q.vL) + RC.kpitch * (q.pitch - RC.pitchRef));
+  const col = (S, k, axis) => (S || []).map((q) => val(q, k, axis)).filter(isFinite);
+  const D = DUAL0(), score = { u: [0, 0], v: [0, 0] }, det = {};
+  ['R', 'L'].forEach((k, i) => {
+    const cu = med(col(C, k, 'u')), cv = med(col(C, k, 'v'));
+    if (!isFinite(cu) || !isFinite(cv)) { return; }
+    D.c[k].u = cu; D.c[k].v = cv;
+    const nu = Math.max(sdv(col(C, k, 'u')) || 0.003, 0.002), nv = Math.max(sdv(col(C, k, 'v')) || 0.003, 0.002);
+    const dl = med(col(SS.gl, k, 'u')) - cu, dr = med(col(SS.gr, k, 'u')) - cu, dt = med(col(SS.gt, k, 'v')) - cv, db = med(col(SS.gb, k, 'v')) - cv;
+    const gain = (want, d, base, sign) => (isFinite(d) && d * sign > 0.004) ? Math.max(0.4, Math.min(8, want / (base * d))) : 1;
+    D.g[k] = { gl: gain(-0.46, dl, RC.gx, -1), gr: gain(0.46, dr, RC.gx, 1), gt: gain(-0.45, dt, RC.gy, -1), gb: gain(0.45, db, RC.gy, 1) };
+    const sym = (a, b) => (isFinite(a) && isFinite(b) && a < 0 && b > 0) ? Math.min(-a, b) / Math.max(-a, b) : 0.05;
+    const symU = sym(dl, dr), symV = sym(dt, db);
+    score.u[i] = isFinite(dl) && isFinite(dr) ? (Math.abs(dr - dl) / nu) * symU : 0;
+    score.v[i] = isFinite(dt) && isFinite(db) ? (Math.abs(db - dt) / nv) * symV : 0;
+    det[k] = { symU, symV, snrU: isFinite(dl) && isFinite(dr) ? Math.abs(dr - dl) / nu : 0, snrV: isFinite(dt) && isFinite(db) ? Math.abs(db - dt) / nv : 0 };
+  });
+  const norm = (a) => { const q = a.map((x) => x * x), t = q[0] + q[1]; return t > 1e-9 ? q.map((x) => x / t) : [0.5, 0.5]; };
+  D.w.u = norm(score.u); D.w.v = norm(score.v);
+  if (score.v[0] + score.v[1] < 1e-6) D.w.v = D.w.u.slice();
+  D.on = !!(det.R && det.L);
+  D.info = D.on ? ('Eyes weighted: right eye ' + Math.round(D.w.u[0] * 100) + '% (symmetry ' + det.R.symU.toFixed(2) + ', signal/noise ' + det.R.snrU.toFixed(0) + '), left eye ' + Math.round(D.w.u[1] * 100) + '% (symmetry ' + det.L.symU.toFixed(2) + ', signal/noise ' + det.L.snrU.toFixed(0) + ')') : '';
+  RC.dual = D;
+}
+async function ballEdges() {
+  if (BALL.busy || !RC.cur) { $('ballMsg').textContent = 'I cannot see your face yet.'; return; }
+  BALL.busy = true;
+  const tg = $('ballTarget'), msg = $('ballMsg');
+  const take = async (name, fx, fy, ms) => {
+    const px = ballPx(fx, fy); tg.style.display = 'block'; tg.style.left = px[0] + 'px'; tg.style.top = px[1] + 'px';
+    msg.textContent = 'LOOK AT THE RING: ' + name + ' (keep your head still)';
+    const t0 = performance.now(); await sleep(ms);
+    const S = RC.buf.filter((q) => q.t >= t0 + 1000);
+    return S;
+  };
+  try {
+    RC.gl = RC.gr = RC.gt = RC.gb = 1; RC.sx = RC.sy = 0; RC.center = true;
+    const C = await take('CENTRE', 0.5, 0.5, 2400);
+    if (C.length < 8) { msg.textContent = 'not enough eye data at the centre, try again'; return; }
+    RC.med.u = pct(C.map(phU), 0.5); RC.med.v = pct(C.map(phV), 0.5);
+    const out = {}, SS = { C: C };
+    const side = async (name, fx, fy, key, axis, sign) => {
+      const S = await take(name, fx, fy, 2600);
+      SS[key] = S;
+      if (S.length < 8) { out[key] = null; return; }
+      const d = pct(S.map(axis === 'u' ? phU : phV), 0.5) - (axis === 'u' ? RC.med.u : RC.med.v);
+      const want = (axis === 'u' ? fx : fy) - 0.5, g = axis === 'u' ? RC.gx : RC.gy;
+      if (d * sign > 0.004) RC[key] = Math.max(0.4, Math.min(8, want / (g * d))); else out[key] = null;
+      out[key] = out[key] === null ? null : RC[key];
+    };
+    RC.dual.on = false;
+    await side('LEFT edge', 0.04, 0.5, 'gl', 'u', -1);
+    await side('RIGHT edge', 0.96, 0.5, 'gr', 'u', 1);
+    await side('TOP edge', 0.5, 0.05, 'gt', 'v', -1);
+    await side('BOTTOM edge', 0.5, 0.95, 'gb', 'v', 1);
+    fitDual(C, SS);
+    RC.fu.x = null; RC.fv.x = null;
+    const f = (v) => v === null ? 'no data' : 'x' + v.toFixed(2);
+    msg.textContent = (RC.dual.info ? RC.dual.info + '\n' : '') + 'Fitted. left ' + f(out.gl) + '   right ' + f(out.gr) + '   top ' + f(out.gt) + '   bottom ' + f(out.gb) + '   (a high number = your eyes move little that way)';
+    setTimeout(() => { if (!BALL.busy) msg.textContent = ''; }, 6000);
+  } finally { tg.style.display = 'none'; BALL.busy = false; setTimeout(() => { if (!BALL.busy && /^LOOK/.test(msg.textContent)) msg.textContent = ''; }, 500); }
+}
+function ballRecentre() {
+  RC.buf = RC.buf.slice(-25);
+  if (RC.buf.length) { RC.med.u = pct(RC.buf.map(phU), 0.5); RC.med.v = pct(RC.buf.map(phV), 0.5); }
+  RC.center = true; RC.sx = 0; RC.sy = 0; RC.fu.x = null; RC.fv.x = null;
+  if (RC.dual.on && RC.buf.length > 8) {
+    const val = (q, k, axis) => (axis === 'u' ? (k === 'R' ? q.uR : q.uL) + RC.kyaw * (q.yaw - RC.yawRef) : (k === 'R' ? q.vR : q.vL) + RC.kpitch * (q.pitch - RC.pitchRef));
+    for (const k of ['R', 'L']) for (const ax of ['u', 'v']) { const a = RC.buf.map((q) => val(q, k, ax)).filter(isFinite); if (a.length > 5) RC.dual.c[k][ax] = pct(a, 0.5); }
+  }
+  syncRcSliders();
+}
+function ballDraw() {
+  if (!RC.cur) { $('ballMsg').textContent = running ? 'I cannot see your face yet. Look at the screen.' : ''; return; }
+  $('ballMsg').textContent = '';
+  const c = scrCm(), pxPerCm = (document.fullscreenElement ? window.innerWidth : (screen.width || window.innerWidth)) / c[0];
+  const d = TENNIS_CM * pxPerCm, p = ballPx(RC.cur.u, RC.cur.v);
+  const b = $('ball'); b.style.width = b.style.height = d + 'px';
+  b.style.transform = 'translate(' + (p[0] - d / 2) + 'px,' + (p[1] - d / 2) + 'px)';
+  BALL.trail.push(p); if (BALL.trail.length > 30) BALL.trail.shift();
+  const now = performance.now();
+  if (now - BALL.last < 200) return;
+  BALL.last = now;
+  const xs = BALL.trail.map((q) => q[0]), ys = BALL.trail.map((q) => q[1]);
+  const sd = (a) => { const m = a.reduce((x, y) => x + y, 0) / a.length; return Math.sqrt(a.reduce((x, y) => x + (y - m) * (y - m), 0) / a.length); };
+  const jit = BALL.trail.length > 8 ? Math.hypot(sd(xs), sd(ys)) / pxPerCm : 0;
+  const s = RC.cur.s;
+  $('ballHud').textContent = 'ball ' + TENNIS_CM + ' cm   screen ' + c[0].toFixed(0) + ' cm wide   iris ' + (s.rad * 2).toFixed(1) + ' px   ' + fpsEma.toFixed(0) + ' frames/s\n' +
+    (RC.fuseOn && RC.fuse.ready ? RC.fuse.info + '\n' : (RC.fuseOn ? 'eyes: learning (look around the screen)\n' : 'single blend\n')) + 'side gains L ' + RC.gl.toFixed(2) + '  R ' + RC.gr.toFixed(2) + '  T ' + RC.gt.toFixed(2) + '  B ' + RC.gb.toFixed(2) + '   jitter ' + jit.toFixed(1) + ' cm   head ' + (s.yaw * 57.3).toFixed(0) + '/' + (s.pitch * 57.3).toFixed(0) + ' deg   gain ' + RC.gx.toFixed(2) + ' x ' + RC.gy.toFixed(2) + '   head cancel ' + RC.kyaw.toFixed(2) + ' / ' + RC.kpitch.toFixed(2) + '   smoothing ' + RC.fu.minC.toFixed(1);
+}
+$('rcBall').onclick = ballEnter;
+document.addEventListener('fullscreenchange', () => { if (BALL.on && !document.fullscreenElement) ballExit(); });
+window.addEventListener('keydown', (e) => {
+  if (!BALL.on) return;
+  const k = e.key;
+  if (k === 'Escape') { ballExit(); return; }
+  if (k === ' ' || k === 'c' || k === 'C') { ballRecentre(); e.preventDefault(); return; }
+  if (k === 'd' || k === 'D') { RC.fuseOn = !RC.fuseOn; RC.fu.x = null; RC.fv.x = null; e.preventDefault(); return; }
+  if (k === 'q' || k === 'Q') { RC.gl = Math.min(8, RC.gl * 1.06); e.preventDefault(); return; }
+  if (k === 'w' || k === 'W') { RC.gl = Math.max(0.4, RC.gl / 1.06); e.preventDefault(); return; }
+  if (k === 'e' || k === 'E') { RC.gr = Math.max(0.4, RC.gr / 1.06); e.preventDefault(); return; }
+  if (k === 'r' || k === 'R') { RC.gr = Math.min(8, RC.gr * 1.06); e.preventDefault(); return; }
+  const st = 0.01;
+  if (k === 'ArrowLeft') RC.sx -= st; else if (k === 'ArrowRight') RC.sx += st; else if (k === 'ArrowUp') RC.sy -= st; else if (k === 'ArrowDown') RC.sy += st;
+  else if (k === '[') { RC.gx /= 1.06; RC.gy /= 1.06; } else if (k === ']') { RC.gx *= 1.06; RC.gy *= 1.06; }
+  else if (k === ',') { RC.fu.minC = RC.fv.minC = Math.max(0.3, RC.fu.minC / 1.25); } else if (k === '.') { RC.fu.minC = RC.fv.minC = Math.min(12, RC.fu.minC * 1.25); }
+  else if (k === 'h' || k === 'H') { if (RC.kyaw || RC.kpitch) { BALL.kk = [RC.kyaw, RC.kpitch]; RC.kyaw = RC.kpitch = 0; } else if (BALL.kk) { RC.kyaw = BALL.kk[0]; RC.kpitch = BALL.kk[1]; } }
+  else return;
+  syncRcSliders(); e.preventDefault();
+});
+async function rcEnterFull() {
+  const w = $('reachWrap');
+  try { if (w.requestFullscreen) await w.requestFullscreen(); else if (w.webkitRequestFullscreen) await w.webkitRequestFullscreen(); else throw new Error('no element fullscreen'); }
+  catch (e) { w.classList.add('pseudoFull'); }
+  sizeReach(); drawReach();
+}
+async function rcExitFull() {
+  $('reachWrap').classList.remove('pseudoFull');
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (e) {}
+  sizeReach(); drawReach();
+}
+$('rcFull').onclick = rcEnterFull;
+$('rcFsExit').onclick = rcExitFull;
+$('rcFsFit').onclick = fitReach;
+$('rcFsClear').onclick = () => $('rcClear').click();
+document.addEventListener('fullscreenchange', () => { sizeReach(); drawReach(); });
+window.addEventListener('resize', () => { if (rcIsFull()) { sizeReach(); drawReach(); } });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('reachWrap').classList.contains('pseudoFull')) rcExitFull(); });
+function updLive() {
+  if (!rcIsFull() || !RC.cur) return;
+  const c = scrCm(), u = RC.cur.u, v = RC.cur.v, s = RC.cur.s;
+  const inside = u >= 0 && u <= 1 && v >= 0 && v <= 1;
+  $('rcLive').innerHTML = '<span style="color:' + (inside ? '#3ddc84' : '#ff5a4d') + '">gaze ' + (u * 100).toFixed(0) + '%, ' + (v * 100).toFixed(0) + '%</span> &nbsp; ' +
+    (Math.max(0, Math.min(1, u)) * c[0]).toFixed(1) + ' cm from the left, ' + (Math.max(0, Math.min(1, v)) * c[1]).toFixed(1) + ' cm from the top' +
+    '<br><span style="color:var(--dim);font-weight:400">iris ' + (s.rad * 2).toFixed(1) + ' px &nbsp; head ' + (s.yaw * 57.3).toFixed(0) + '&deg; / ' + (s.pitch * 57.3).toFixed(0) + '&deg;' + (inside ? '' : ' &nbsp; <b style="color:#ff5a4d">outside the screen</b>') + '</span>';
+}
+drawReach();
+
+// ---- one-click report of everything on this card (paste it into the chat)
+function reachReport() {
+  const c = scrCm(), sw = c[0], sh = c[1], B = RC.buf;
+  const r2 = (x) => Math.round(x * 1000) / 1000;
+  const P = (arr) => arr.length ? { p3: r2(pct(arr, 0.03)), p50: r2(pct(arr, 0.5)), p97: r2(pct(arr, 0.97)) } : null;
+  const rep = { when: new Date().toISOString(), samples: B.length,
+    screen: { px: [screen.width, screen.height], cm: [sw, r2(sh)], dpr: window.devicePixelRatio, window: [window.screenX, window.screenY, window.outerWidth, window.outerHeight] },
+    camera: { video: [vid.videoWidth, vid.videoHeight], fps: r2(fpsEma || 0), irisPx: B.length ? r2(B[B.length - 1].rad * 2) : null, fov: $('hfov').value, camAt: $('campos').value, dist: $('dist').value },
+    sliders: { headYaw: r2(RC.kyaw), headPitch: r2(RC.kpitch), gainX: r2(RC.gx), gainY: r2(RC.gy), shiftX: r2(RC.sx), shiftY: r2(RC.sy), centreOnMedian: RC.center },
+    physicalGaze: B.length ? { u: P(B.map((s) => s.gu)), v: P(B.map((s) => s.gv)) } : null,
+    outputGaze: B.length ? { u: P(B.map(outU)), v: P(B.map(outV)) } : null,
+    eyeInBox: B.length ? { lx: P(B.map((s) => s.lx)), ly: P(B.map((s) => s.ly)) } : null,
+    head: B.length ? { yawDeg: P(B.map((s) => s.yaw * 57.3)), pitchDeg: P(B.map((s) => s.pitch * 57.3)) } : null,
+    guided: (RC.guide || []).map((r) => { const q = guideRows(RC).find((x) => x.name === r.name) || {}; return { dot: r.name, atPct: r.phys.map((v) => r2(v * 100)), readPct: q.none ? null : [r2(q.mu * 100), r2(q.mv * 100)], offCm: q.none ? null : r2(q.dist), samples: r.s.length }; }),
+    performance: RC.perf ? { accuracyRmsCm: r2(RC.perf.rms), model: RC.perf.best, looRmsAxisCm: r2(RC.perf.models.axis.looRms), looRmsAffineCm: r2(RC.perf.models.affine.looRms),
+      steadyCm: [r2(RC.perf.steadyX), r2(RC.perf.steadyY)], noisePx: r2(RC.perf.noisePx), fps: r2(RC.perf.fps), t63ms: RC.perf.t63 === null ? null : Math.round(RC.perf.t63), t90ms: RC.perf.t90 === null ? null : Math.round(RC.perf.t90),
+      jumps: RC.perf.jumps, targetDiameterCm: r2(RC.perf.targetDiam), zones: [RC.perf.zonesAcross, RC.perf.zonesDown], dwellMs: RC.perf.dwellMs, cmPerPx: RC.perf.cmPerPx,
+      perDot: RC.perf.models[RC.perf.best].loo.map((q) => ({ dot: q.name, offCm: r2(q.dist), dxCm: r2(q.dx), dyCm: r2(q.dy) })) } : null,
+    verdict: $('rcVerdict').textContent, leak: $('rcLeak').textContent, message: $('rcMsg').textContent, directions: {} };
+  if (B.length > 30) {
+    const U = B.map(outU), V = B.map(outV), u3 = pct(U, 0.03), u97 = pct(U, 0.97), v3 = pct(V, 0.03), v97 = pct(V, 0.97);
+    const medLx = pct(B.map((s) => s.lx), 0.5), medLy = pct(B.map((s) => s.ly), 0.5);
+    const avg = (a) => a.length ? a.reduce((p, q) => p + q, 0) / a.length : 0;
+    const one = (name, short, cm, pick, axis) => {
+      const sel = B.filter(pick); const ew = avg(sel.map((s) => s.ew)), ap = avg(sel.map((s) => s.ap));
+      rep.directions[name] = { reachPctFromEdge: r2(short * 100), cmShort: r2(cm), irisPxMoved: r2(axis === 'x' ? (avg(sel.map((s) => s.lx)) - medLx) * ew : (avg(sel.map((s) => s.ly)) - medLy) * ap),
+        gazeAngleDeg: r2(axis === 'x' ? avg(sel.map((s) => s.gyaw)) : avg(sel.map((s) => s.gpitch))), headAngleDeg: r2(axis === 'x' ? avg(sel.map((s) => s.yaw * 57.3)) : avg(sel.map((s) => s.pitch * 57.3))) };
+    };
+    one('left', Math.max(0, u3), Math.max(0, u3) * sw, (s) => outU(s) <= u3, 'x'); one('right', Math.max(0, 1 - u97), Math.max(0, 1 - u97) * sw, (s) => outU(s) >= u97, 'x');
+    one('up', Math.max(0, v3), Math.max(0, v3) * sh, (s) => outV(s) <= v3, 'y'); one('down', Math.max(0, 1 - v97), Math.max(0, 1 - v97) * sh, (s) => outV(s) >= v97, 'y');
+  }
+  return rep;
+}
+window.__eyelabReach = reachReport;
+$('rcCopy').onclick = async () => {
+  const txt = JSON.stringify(reachReport(), null, 1);
+  try { await navigator.clipboard.writeText(txt); $('rcMsg').textContent = 'Copied. Paste it into the chat.'; }
+  catch (e) { $('rcMsg').innerHTML = 'Could not reach the clipboard. Select this text and copy it:<br><textarea readonly style="width:100%;height:160px;background:#0b0f15;color:#e8edf5;border:1px solid #2a3342;border-radius:6px;font-size:11px">' + txt.replace(/</g, '&lt;') + '</textarea>'; }
+};
+
+// ---------------------------------------------------------------- performance measurement (what to design around)
+// A 10-dot run: centre, four edges, four corners, centre again. Everything is judged against where each dot REALLY was on the
+// physical screen. The honest number is the cross-checked one: fit on all dots but one, predict the one left out.
+const GUIDE_POINTS2 = [['centre', 0.5, 0.5], ['left edge', 0.04, 0.5], ['right edge', 0.96, 0.5], ['top edge', 0.5, 0.07], ['bottom edge', 0.5, 0.93],
+  ['top-left', 0.06, 0.08], ['top-right', 0.94, 0.08], ['bottom-left', 0.06, 0.92], ['bottom-right', 0.94, 0.92], ['centre again', 0.5, 0.5]];
+const DOT_MS = 2300, HOLD_FROM = 900;
+async function guideDot(fx, fy, ms) {
+  place(fx, fy); smsg.textContent = 'LOOK HERE'; sprog.style.width = '0%';
+  const t0 = performance.now(), fr = [];
+  modeCollect = (f) => { const s = mkSample(f); if (s) { s.tt = performance.now() - t0; fr.push(s); } };
+  while (performance.now() - t0 < ms) { sprog.style.width = ((performance.now() - t0) / ms * 100) + '%'; await sleep(40); }
+  modeCollect = null; sprog.style.width = '100%';
+  return fr;
+}
+async function guidedRun2() {
+  setBusy(true); $('rcGuide').disabled = true;
+  RC.guide = []; RC.perf = null;
+  await enterStage();
+  try {
+    await alignStep();
+    await headStep();
+    let prev = [0.5, 0.5];
+    for (const p of GUIDE_POINTS2) {
+      const fr = await guideDot(p[1], p[2], DOT_MS);
+      RC.guide.push({ name: p[0], fx: p[1], fy: p[2], phys: physTarget(p[1], p[2]), prev: prev, s: fr.filter((x) => x.tt >= HOLD_FROM), all: fr });
+      prev = [p[1], p[2]];
+    }
+  } finally { await leaveStage(); setBusy(false); $('rcGuide').disabled = false; }
+  showGuide2();
+}
+// tiny linear algebra: least squares for y = X b (b has 1..3 entries) through the normal equations
+function lstsq(rows, ys) {
+  const n = rows[0].length, A = Array.from({ length: n }, () => new Array(n + 1).fill(0));
+  rows.forEach((r, k) => { for (let i = 0; i < n; i++) { for (let j = 0; j < n; j++) A[i][j] += r[i] * r[j]; A[i][n] += r[i] * ys[k]; } });
+  for (let i = 0; i < n; i++) A[i][i] += 1e-9;
+  for (let i = 0; i < n; i++) {
+    let m = i; for (let r = i + 1; r < n; r++) if (Math.abs(A[r][i]) > Math.abs(A[m][i])) m = r;
+    [A[i], A[m]] = [A[m], A[i]];
+    const d = A[i][i] || 1e-12;
+    for (let j = i; j <= n; j++) A[i][j] /= d;
+    for (let r = 0; r < n; r++) if (r !== i) { const f = A[r][i]; for (let j = i; j <= n; j++) A[r][j] -= f * A[i][j]; }
+  }
+  return A.map((r) => r[n]);
+}
+// model 'axis': x' = a*x + b ; y' = c*y + d.   model 'affine': x' = a*x + b*y + c ; y' = d*x + e*y + f   (x, y = physical gaze after head cancel)
+function fitModel(kind, X, Y, TX, TY, idx) {
+  if (kind === 'axis') {
+    const mx = lstsq(idx.map((i) => [X[i], 1]), idx.map((i) => TX[i])), my = lstsq(idx.map((i) => [Y[i], 1]), idx.map((i) => TY[i]));
+    return { kind, p: [mx, my] };
+  }
+  const mx = lstsq(idx.map((i) => [X[i], Y[i], 1]), idx.map((i) => TX[i])), my = lstsq(idx.map((i) => [X[i], Y[i], 1]), idx.map((i) => TY[i]));
+  return { kind, p: [mx, my] };
+}
+const predModel = (m, x, y) => m.kind === 'axis' ? [m.p[0][0] * x + m.p[0][1], m.p[1][0] * y + m.p[1][1]] : [m.p[0][0] * x + m.p[0][1] * y + m.p[0][2], m.p[1][0] * x + m.p[1][1] * y + m.p[1][2]];
+const med = (a) => pct(a, 0.5);
+const sdOf = (a) => { if (a.length < 3) return 0; const m = a.reduce((p, q) => p + q, 0) / a.length; return Math.sqrt(a.reduce((p, q) => p + (q - m) * (q - m), 0) / a.length); };
+
+function perfReport() {
+  const G = (RC.guide || []).filter((r) => r.s.length >= 5);
+  if (G.length < 6) return null;
+  const c = scrCm(), sw = c[0], sh = c[1];
+  const X = G.map((r) => med(r.s.map(phU))), Y = G.map((r) => med(r.s.map(phV))), TX = G.map((r) => r.phys[0]), TY = G.map((r) => r.phys[1]);
+  const all = G.map((_, i) => i);
+  const out = { points: G.length, models: {} };
+  for (const kind of ['axis', 'affine']) {
+    const full = fitModel(kind, X, Y, TX, TY, all);
+    const inS = [], loo = [];
+    G.forEach((r, i) => {
+      const [px, py] = predModel(full, X[i], Y[i]);
+      inS.push(Math.hypot((px - TX[i]) * sw, (py - TY[i]) * sh));
+      const m = fitModel(kind, X, Y, TX, TY, all.filter((j) => j !== i));
+      const [qx, qy] = predModel(m, X[i], Y[i]);
+      loo.push({ name: r.name, dist: Math.hypot((qx - TX[i]) * sw, (qy - TY[i]) * sh), dx: (qx - TX[i]) * sw, dy: (qy - TY[i]) * sh });
+    });
+    const rms = (a) => Math.sqrt(a.reduce((p, q) => p + q * q, 0) / a.length);
+    out.models[kind] = { full, inSampleRms: rms(inS), looRms: rms(loo.map((q) => q.dist)), loo };
+  }
+  const best = out.models.affine.looRms < out.models.axis.looRms ? 'affine' : 'axis';
+  out.best = best; const bm = out.models[best];
+  // steadiness: how much the mapped gaze wobbles while you look at ONE dot (cm)
+  const sx = [], sy = [], px = [];
+  G.forEach((r) => {
+    const pr = r.s.map((s) => predModel(bm.full, phU(s), phV(s)));
+    sx.push(sdOf(pr.map((q) => q[0])) * sw); sy.push(sdOf(pr.map((q) => q[1])) * sh);
+    const ds = []; for (let i = 1; i < r.s.length; i++) ds.push((r.s[i].lx * r.s[i].ew) - (r.s[i - 1].lx * r.s[i - 1].ew)); px.push(sdOf(ds) / Math.SQRT2);
+  });
+  out.steadyX = med(sx); out.steadyY = med(sy); out.noisePx = med(px);
+  // frame interval
+  const dts = []; G.forEach((r) => { for (let i = 1; i < r.all.length; i++) dts.push(r.all[i].t - r.all[i - 1].t); });
+  out.frameMs = dts.length ? med(dts) : 0; out.fps = out.frameMs > 0 ? 1000 / out.frameMs : 0;
+  // response: after the dot jumps, how long until the mapped gaze has covered 63% / 90% of the jump (cm space)
+  const t63 = [], t90 = [];
+  G.forEach((r) => {
+    const J = [(r.phys[0] - r.prev[0]) * sw, (r.phys[1] - r.prev[1]) * sh], L2 = J[0] * J[0] + J[1] * J[1];
+    if (Math.sqrt(L2) < 0.25 * Math.min(sw, sh)) return;
+    const prog = r.all.map((s) => { const q = predModel(bm.full, phU(s), phV(s)); return { t: s.tt, p: ((q[0] - r.prev[0]) * sw * J[0] + (q[1] - r.prev[1]) * sh * J[1]) / L2 }; });
+    const sm = prog.map((q, i) => ({ t: q.t, p: med(prog.slice(Math.max(0, i - 1), i + 2).map((z) => z.p)) }));
+    const first = (lvl) => { for (let i = 0; i < sm.length - 1; i++) if (sm[i].p >= lvl && sm[i + 1].p >= lvl * 0.8) return sm[i].t; return null; };
+    const a = first(0.63), b = first(0.9);
+    if (a !== null) t63.push(a); if (b !== null) t90.push(b);
+  });
+  out.t63 = t63.length ? med(t63) : null; out.t90 = t90.length ? med(t90) : null; out.jumps = t63.length;
+  // what that means for a design
+  const rms = bm.looRms, r90 = 1.52 * Math.max(rms, 0.3), diam = Math.max(2 * r90, 1.0);        // never promise better than 1 cm
+  out.rms = rms; out.r90 = r90; out.targetDiam = diam;
+  out.zonesAcross = Math.max(1, Math.min(16, Math.floor(sw / diam))); out.zonesDown = Math.max(1, Math.min(9, Math.floor(sh / diam)));
+  out.dwellMs = Math.round((out.t90 !== null ? out.t90 : 600) + 4 * out.frameMs);
+  const px1 = RC.cur && RC.cur.s && RC.cur.s.px ? RC.cur.s.px : null;
+  out.cmPerPx = px1 ? { across: px1.du * sw, up: px1.dv * sh } : null;
+  RC.perf = out;
+  return out;
+}
+function showGuide2() {
+  const c = scrCm(), sw = c[0], sh = c[1], P = perfReport();
+  const cls = (d) => d <= 2.5 ? 'good' : (d <= 6 ? 'meh' : 'bad');
+  let h = '';
+  if (!P) { $('rcGuideOut').innerHTML = '<div class="note">Not enough eye data (blinks or lost face). Try again with better light.</div>'; return; }
+  const bm = P.models[P.best], raw = guideRows(RC);
+  h += '<table><thead><tr><th>dot</th><th>it was at</th><th>read (now)</th><th>off by (now)</th><th>expected on a new spot<br>(cross-checked)</th></tr></thead><tbody>';
+  const G = (RC.guide || []).filter((r) => r.s.length >= 5);
+  G.forEach((r, i) => {
+    const q = raw.find((x) => x.name === r.name && !x.none), l = bm.loo[i];
+    h += '<tr><td><b>' + r.name + '</b></td><td class="num">' + (r.phys[0] * 100).toFixed(0) + '%, ' + (r.phys[1] * 100).toFixed(0) + '%</td><td class="num">' + (q ? (q.mu * 100).toFixed(0) + '%, ' + (q.mv * 100).toFixed(0) + '%' : '-') + '</td>' +
+      '<td class="num ' + (q ? cls(q.dist) : '') + '">' + (q ? q.dist.toFixed(1) + ' cm' : '-') + '</td><td class="num ' + cls(l.dist) + '">' + l.dist.toFixed(1) + ' cm</td></tr>';
+  });
+  h += '</tbody></table>';
+  const fmt = (v, d) => v === null || v === undefined ? 'n/a' : v.toFixed(d);
+  const grid = P.zonesAcross + ' x ' + P.zonesDown;
+  h += '<div style="margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:#0b0f15">' +
+    '<div class="big"><b>Expected performance: design around this</b></div>' +
+    '<table style="margin-top:6px"><tbody>' +
+    '<tr><td>Accuracy to expect</td><td class="num"><b>+/-' + P.rms.toFixed(1) + ' cm</b> (' + (P.rms / sw * 100).toFixed(0) + '% of the width, ' + (P.rms / sh * 100).toFixed(0) + '% of the height), measured on positions it was not fitted to (' + P.best + ' fit, ' + P.points + ' dots; the simpler fit scored ' + (P.best === 'axis' ? P.models.affine : P.models.axis).looRms.toFixed(1) + ' cm)</td></tr>' +
+    '<tr><td>Steadiness (wobble while you hold one spot)</td><td class="num">+/-' + P.steadyX.toFixed(1) + ' cm across, +/-' + P.steadyY.toFixed(1) + ' cm up/down (iris noise ' + P.noisePx.toFixed(2) + ' px)</td></tr>' +
+    '<tr><td>Response to a jump of your eyes</td><td class="num">63% of the way in ' + fmt(P.t63, 0) + ' ms, 90% in ' + fmt(P.t90, 0) + ' ms (' + P.jumps + ' jumps, camera ' + P.fps.toFixed(0) + ' frames/s)</td></tr>' +
+    '<tr><td>Smallest target that gets hit 9 times in 10</td><td class="num"><b>' + P.targetDiam.toFixed(1) + ' cm across</b> (' + (P.targetDiam / sw * 100).toFixed(0) + '% of the width)</td></tr>' +
+    '<tr><td>Zones you can tell apart reliably</td><td class="num"><b>' + grid + '</b> (' + P.zonesAcross + ' across, ' + P.zonesDown + ' down)</td></tr>' +
+    '<tr><td>Hold time to confirm a choice</td><td class="num"><b>at least ' + P.dwellMs + ' ms</b> (the response time plus 4 frames)</td></tr>' +
+    (P.cmPerPx ? '<tr><td>What limits it</td><td class="num">1 px of iris = ' + P.cmPerPx.across.toFixed(1) + ' cm across, ' + P.cmPerPx.up.toFixed(1) + ' cm up/down on your screen</td></tr>' : '') +
+    '</tbody></table>' +
+    (P.fps < 20 ? '<div class="note" style="color:var(--amber)">The camera delivers about ' + P.fps.toFixed(0) + ' frames/s (its auto-exposure is slowing it in dim light). Tick "fast exposure" at the top (needs good light) for about 30: faster response and less noise after averaging.</div>' : '') +
+    '<div class="note">Rule of thumb: use these as zones (left / right / up / down / centre cells), not as a pointer. Anything smaller than the target size above is a guess. Press <b>Fit to the dots</b> to apply the fit here, then run Guide me again to check.</div></div>';
+  $('rcGuideOut').innerHTML = h;
+  $('rcFitDots').disabled = false;
+  updReachTable();
+  $('rcMsg').textContent = 'Done. The numbers above are what to design around. Use Copy results JSON to send them to me.';
+}
+$('rcGuide').onclick = guidedRun2;
+RC.guideFn = guidedRun2;
+
+window.__eyelabGeo = (f, mm, l) => geoGaze(f, mm, l);
+window.__eyelabPx = (f, mm) => pxStep(f, mm);
+window.__eyelabCoach = { CO, coachEval, coachDraw, coachFrame };
+window.__eyelabFuse = { EyeFuse };
+window.__eyelabBall = { fitDual, dualMap, BALL, ballDraw, ballEnter, ballExit, ballRecentre, ballPx };
+window.__eyelabProfile = { profileNow, saveProfile, loadProfile, PROF_KEY };
+window.__eyelabCam = { stopCam, startCam, get stream() { return stream; }, set stream(v) { stream = v; }, get running() { return running; }, set running(v) { running = v; }, vid };
+window.__eyelabTest = { perfReport, showGuide2, RC, computeDotFit, guideRows, computeFit, showGuide, mkSample, reachFrame, fitReach, finishHeadFix, updReachTable,  pushTrace, drawMap, drawMonitor, traceHist, extHist, fitHeadComp, applyHeadComp, calib, corrected };
+drawMonitor(null);
+drawMap();
+// Phones and tablets: a small screen, held close. (Desktop defaults: 34 cm wide screen, 55 cm away.)
+if (matchMedia('(pointer: coarse)').matches) {
+  $('scrW').value = (screen.width / 63).toFixed(1);   // ~63 CSS px per cm on phones, current orientation
+  $('dist').value = 30;
+  $('res').value = '1280x720';
+}
+async function loadModelRetry() {
+  for (let i = 0; i < 4; i++) {
+    try { await loadModel(); return; }
+    catch (e) { $('status').textContent = 'tracker failed to load (' + (e.message || e) + '), retrying...'; await sleep(1500 * (i + 1)); }
+  }
+  throw new Error('could not load the tracker from the internet: check your connection and reload');
+}
+modelPromise = loadModelRetry().catch((e) => { $('status').style.color = 'var(--red)'; $('status').textContent = e.message || String(e); });
+</script>
+</body>
+</html>

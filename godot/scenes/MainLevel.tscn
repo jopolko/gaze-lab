@@ -1,0 +1,85 @@
+[gd_scene load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://scripts/MainLevel.gd" id="1_level"]
+[ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://scripts/HitNotifierUI.gd" id="3_hit"]
+[ext_resource type="Script" path="res://scripts/Hud.gd" id="4_hud"]
+[ext_resource type="Script" path="res://scripts/AudioHooks.gd" id="5_audio"]
+[ext_resource type="Script" path="res://scripts/SkillTreeUI.gd" id="6_skill"]
+
+[sub_resource type="ProceduralSkyMaterial" id="Sky_mat"]
+sky_top_color = Color(0.25, 0.55, 0.95, 1)
+sky_horizon_color = Color(0.85, 0.92, 1, 1)
+ground_bottom_color = Color(0.5, 0.6, 0.7, 1)
+ground_horizon_color = Color(0.85, 0.92, 1, 1)
+
+[sub_resource type="Sky" id="Sky_1"]
+sky_material = SubResource("Sky_mat")
+
+[sub_resource type="Environment" id="Env_1"]
+background_mode = 2
+sky = SubResource("Sky_1")
+ambient_light_source = 3
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="MainLevel" type="Node3D"]
+script = ExtResource("1_level")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_1")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+position = Vector3(0, 10, 0)
+rotation_degrees = Vector3(-50, -30, 0)
+shadow_enabled = true
+directional_shadow_max_distance = 80.0
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
+
+[node name="Geometry" type="Node3D" parent="NavigationRegion3D"]
+
+[node name="Decor" type="Node3D" parent="."]
+
+[node name="Props" type="Node3D" parent="."]
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="PlayerSpawn" type="Marker3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 22)
+
+[node name="Player" parent="." instance=ExtResource("2_player")]
+
+[node name="AudioHooks" type="Node" parent="."]
+script = ExtResource("5_audio")
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="HitNotifierUI" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_hit")
+
+[node name="Hud" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_hud")
+
+[node name="SkillTreeUI" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("6_skill")
