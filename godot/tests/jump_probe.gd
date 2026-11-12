@@ -19,7 +19,7 @@ func _ready() -> void:
 	rig.view_fp = false
 	rig.set_physics_process(false)
 	rig._restart()
-	for j in range(rig._next_j, 30):
+	for j in range(rig._next_j, 60):
 		rig._gen_segment(j)
 	var kk: Dictionary = {}
 	var kdict: Dictionary = {}
@@ -34,17 +34,18 @@ func _ready() -> void:
 	rig.avoid_enabled = false
 	var dt := 1.0 / 60.0
 	for spd in [36.0, 50.0]:
-		for rise in [0.4, 0.7, 1.0, 1.4, 1.8, 2.4]:
-			kdict["rise"] = rise
+		for chg in [false, true]:
 			var kx: float = kk["x"]
 			var kz: float = kk["z"]
-			rig.spos = Vector3(kx, rig.terrain_h(kx, kz + 30.0), kz + 30.0)
+			rig.spos = Vector3(kx, rig.terrain_h(kx, kz + 16.0), kz + 16.0)
 			rig._gh_prev = rig.spos.y
 			rig.vel = Vector2(0.0, -spd)
+			rig.vy = -spd * 0.34
 			rig.heading = 0.0
 			rig.hurt_t = 0.0
 			rig.grounded = true
 			rig._finished = false
+			rig.trick_charge_override = chg
 			var c0 := rig.crashes
 			var air_t := 0.0
 			var peak := 0.0
@@ -62,6 +63,7 @@ func _ready() -> void:
 				elif was_air and rig.grounded:
 					d1 = rig.spos.z
 					break
-			print("speed %.0f rise %.1f: air %.2f s, peak %.1f m, flew %.0f m, crashes %d %s" % [spd, rise, air_t, peak, d0 - d1, rig.crashes - c0, str(rig.crash_log.slice(maxi(rig.crash_log.size() - 1, 0)))])
+			print("speed %.0f charge %s: air %.2f s, peak %.1f m, flew %.0f m, crashes %d" % [spd, str(chg), air_t, peak, d0 - d1, rig.crashes - c0])
 			rig.hurt_t = 0.0
+	rig.trick_charge_override = false
 	get_tree().quit()

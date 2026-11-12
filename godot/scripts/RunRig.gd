@@ -17,7 +17,7 @@ const FINISH_Z := -4200.0
 const PULL_RAMP := 3500.0            # metres until the hill is at full pull
 const AIM_LINGER := 0.22             # seconds your eyes must stay on an opening before it latches
 const AIM_MIN_DIST := 14.0
-const AIM_MAX_DIST := 190.0
+const AIM_MAX_DIST := 125.0
 const START_CALM := 2                # the first segments are open snow
 const MIN_SPEED := 14.0
 
@@ -66,7 +66,23 @@ func setup(p_player: PlayerController) -> void:
 # --------------------------------------------------------------------------
 func terrain_h(x: float, z: float) -> float:
 	var u := maxf(-z, 0.0)
-	return super.terrain_h(x, z) - 0.00002 * u * u
+	var h := z * SLOPE - 0.00002 * u * u
+	h += 0.9 * sin(z * 0.031 + 1.3) * cos(x * 0.045) + 0.5 * sin(z * 0.011 - x * 0.02)          # swells, much gentler than the lane game's: a bump must never launch you by accident
+	h += 0.6 * sin(z * 0.045 + x * 0.025 + 0.7) * sin(x * 0.03 - z * 0.02)
+	var ax := absf(x) - W_HALF
+	if ax > 0.0:
+		h += 0.0085 * ax * ax
+	for k in _kickers:
+		var kz: float = k["z"]
+		if z > kz + 1.0 or z < kz - float(k["len"]) - 1.0:
+			continue
+		var uu := (kz - z) / float(k["len"])
+		if uu < 0.0 or uu >= 1.0:
+			continue
+		var half: float = float(k["w"]) * 0.5
+		var lat := 1.0 - smoothstep(half - 2.0, half, absf(x - float(k["x"])))
+		h += float(k["rise"]) * uu * lat
+	return h
 
 
 func _course_diff(z0: float) -> float:
@@ -84,10 +100,11 @@ func progress() -> float:
 func _gen_segment(j: int) -> void:
 	var z0 := -ROW_GAP * float(j)
 	var d := _course_diff(z0)
+	var post_air := _force_far_next
 	var rz := z0 - _rng.randf_range(50.0, 60.0) if _force_far_next else z0 - _rng.randf_range(26.0, 60.0)
 	_force_far_next = false
 	# now and then a segment has no barrier at all: an air segment, with an epic kicker at the top and room to land
-	var air_seg := j > START_CALM and not _last_air and rz > FINISH_Z + 260.0 and _rng.randf() < 0.14
+	var air_seg := j > START_CALM and not _last_air and rz > FINISH_Z + 260.0 and (j == 3 or _rng.randf() < 0.2)
 	_last_air = air_seg
 	var has_row := j >= START_CALM and rz > FINISH_Z + 40.0 and not air_seg
 	var row: Dictionary = {"j": j, "z": rz, "z0": z0, "gaps": [], "obs": PackedFloat32Array(), "banks": [], "nodes": [],
@@ -102,7 +119,7 @@ func _gen_segment(j: int) -> void:
 	var prev_x := _good_x
 	var prev_rz := _last_rz
 	if has_row:
-		var shift := clampf((_last_rz - rz) * 0.30, 8.0, 36.0)          # the safe opening moves at most a third of the distance since the last barrier: always reachable
+		var shift := clampf((_last_rz - rz) * 0.30, 8.0, 14.0 if post_air else 36.0)          # after a jump you land close to where you left the line: the next gate is not far off it          # the safe opening moves at most a third of the distance since the last barrier: always reachable
 		_last_rz = rz
 		_good_x = clampf(_good_x + _rng.randf_range(-1.0, 1.0) * shift * (0.6 + 0.4 * d), -42.0, 42.0)
 		var gaps: Array = row["gaps"]
@@ -136,7 +153,7 @@ func _gen_segment(j: int) -> void:
 	row["pz"] = prev_rz
 	# scattered singles between this barrier and the one before it; the straight line from the last safe opening to this one stays clear
 	if has_row:
-		var n_single := int(minf(prev_rz - rz, ROW_GAP * 1.3) / ROW_GAP * (4.0 + 6.0 * d)) + 1          # after an air segment the span is long: no more singles than a normal one has
+		var n_single := int(minf(prev_rz - rz, ROW_GAP * 1.3) / ROW_GAP * (2.5 + 4.0 * d)) + 1          # after an air segment the span is long: no more singles than a normal one has
 		for i in n_single:
 			var sz := _rng.randf_range(rz + 9.0, minf(prev_rz - 9.0, -30.0))
 			var sx := _rng.randf_range(-W_HALF + 3.0, W_HALF - 3.0)
@@ -1024,7 +1041,7 @@ func _update_buff_aim(delta: float) -> void:
 			if b["taken"] or float(b.get("arm", 0.0)) > 0.0:
 				continue
 			var dz := spos.z - float(b["z"])
-			if dz < 8.0 or dz > 130.0 or absf(float(b["x"]) - spos.x) > 0.34 * dz + 4.0:
+			if dz < 8.0 or dz > 95.0 or absf(float(b["x"]) - spos.x) > 0.34 * dz + 4.0:
 				continue
 			var wp := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.7 + float(b.get("lift", 0.0)), float(b["z"]))
 			if cam.is_position_behind(wp):
@@ -1110,7 +1127,7 @@ var wrong_gates: int = 0             # barriers passed through a gate other than
 
 
 ## Smallest sideways shift (m) that clears every lone tree/rock closer than max_t seconds ahead, and the time to the nearest of them.
-func _free_shift(max_t: float, sp: float, above: float) -> Vector2:
+func _free_shift(max_t: float, sp: float, above: float, skip_wall: bool = false) -> Vector2:
 	var cs := PackedFloat32Array()
 	var rs := PackedFloat32Array()
 	var tmin := 9.0
@@ -1128,6 +1145,8 @@ func _free_shift(max_t: float, sp: float, above: float) -> Vector2:
 			var orad := obs[i + 2]
 			var okind := obs[i + 3]
 			i += 4
+			if skip_wall and rj["has_row"] and absf(oz - rzz) < 7.0:
+				continue                                         # the long look-ahead is for lone trees and rocks; a barrier is for the gate you chose
 			var dz := spos.z - oz
 			if dz < -1.5 or dz > look:
 				continue
@@ -1245,9 +1264,9 @@ func _guard_path(delta: float, s_in: float) -> float:
 	if avoid_enabled:
 		var sp := maxf(-vel.y, 6.0)
 		var above := spos.y - terrain_h(spos.x, spos.z)
-		var far := _free_shift(clampf(55.0 / sp, 1.0, 1.6), sp, above)
+		var far := _free_shift(clampf(95.0 / sp, 1.6, 2.4), sp, above, true)
 		if absf(far.x) > 0.001:
-			av = clampf(far.x / 6.0, -0.9, 0.9)
+			av = clampf(far.x / 5.0, -0.9, 0.9)
 			_swerve_idle = 0.0
 			if not _swerving:
 				_swerving = true
@@ -1417,6 +1436,7 @@ func _physics_process(delta: float) -> void:
 	_collect_buffs()
 	_update_eye_actions(delta)
 	_update_pads()
+	_update_ramps(delta)
 	_update_balls(delta)
 	_update_tricks(delta, key, pk)
 	_animate_buffs()
@@ -1604,6 +1624,9 @@ func _restart() -> void:
 	_trk_comment_t = 0.0
 	ridiculous = 0
 	_kickers.clear()
+	_ramp_charge = 0.0
+	_ramp_prev_z = 0.0
+	pops_done = 0
 	_air_zones.clear()
 	_force_far_next = false
 	_last_air = false
@@ -1873,6 +1896,39 @@ func _ball_hit(b: Dictionary) -> void:
 # Boost pads (chevrons on the snow, usually just before a kicker) and epic kickers: a taller ramp with a pad and two pickups in the air.
 # --------------------------------------------------------------------------
 var pads_hit: int = 0
+var _ramp_charge: float = 0.0
+var _ramp_prev_z: float = 0.0
+var pops_done: int = 0
+var trick_charge_override: bool = false
+
+
+## On a ramp, tuck (chin down, or S) to charge; the pop at the lip is bigger the longer you held it. Or just ride the pads and let the ramp do the work.
+func _update_ramps(delta: float) -> void:
+	var on_ramp := false
+	var crossed := false
+	for k in _kickers:
+		var kz: float = k["z"]
+		var lipz: float = kz - float(k["len"])
+		if absf(spos.x - float(k["x"])) < float(k["w"]) * 0.5:
+			if spos.z < kz + 4.0 and spos.z > lipz - 1.0:
+				on_ramp = true
+			if _ramp_prev_z > lipz and spos.z <= lipz:
+				crossed = true
+	_ramp_prev_z = spos.z
+	var tucking_in := nod_p < -0.10 or trick_charge_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)
+	if on_ramp and grounded and tucking_in:
+		_ramp_charge = minf(_ramp_charge + delta / 0.9, 1.0)
+	elif not crossed:
+		_ramp_charge = move_toward(_ramp_charge, 0.0, delta * (0.6 if on_ramp else 2.5))
+	if crossed:
+		if _ramp_charge > 0.15:
+			vy += 3.0 * _ramp_charge
+			pops_done += 1
+			_toast("CHARGED POP!" if _ramp_charge > 0.7 else "POP!", Color(1.0, 0.85, 0.4))
+			_burst(spos + Vector3(0, 0.5, 0), Color(1.0, 0.85, 0.4), 30 + int(40.0 * _ramp_charge), 10.0, 0.7, 1.0, Vector3(0, 1, 0.4), 50.0, -4.0)
+			Game.sfx(&"boing")
+			_fov_punch = 4.0 + 5.0 * _ramp_charge
+		_ramp_charge = 0.0
 
 
 func _make_pad(row: Dictionary, x: float, z: float, epic: bool) -> void:
@@ -2024,8 +2080,8 @@ func _build_tip() -> void:
 #   flip   snap your chin up (or W): a backflip
 # You always land: the landing straightens the board to the nearest half turn, so a trick never costs you a crash. Doing more than one at once multiplies the points.
 # --------------------------------------------------------------------------
-const KICK_LEN := 16.0
-const KICK_W := 16.0
+const KICK_LEN := 26.0
+const KICK_W := 18.0
 var kickers_built: int = 0
 var kick_log: Array = []
 var epics_built: int = 0
@@ -2066,8 +2122,8 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 	var span := (prev_rz - rz) if has_row else ROW_GAP
 	if has_row and span < 78.0:
 		return
-	if not has_row and j != 1 and not air:
-		return
+	if not air:
+		return                                              # ramps are big and sit in air segments only: no small lumps to hit by accident
 	if has_row and _rng.randf() > 0.7:
 		return
 	var d := _course_diff(z0)
@@ -2093,7 +2149,7 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 			continue
 		var cxl: float = path_x(row, kz) if has_row else (_good_x if air else 0.0)
 		var side := 1.0 if _rng.randf() < 0.5 else -1.0
-		var koff := _rng.randf_range(9.0, 13.0) if air else _rng.randf_range(14.0, 19.0)
+		var koff := _rng.randf_range(4.0, 8.0) if air else _rng.randf_range(14.0, 19.0)
 		var kx := cxl + side * koff
 		if absf(kx) > 40.0:
 			kx = cxl - side * koff
@@ -2106,9 +2162,7 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 					ok = false
 		if not ok:
 			continue
-		var rise := _rng.randf_range(0.95, 1.05) * (1.2 - 0.025 * (17.0 * d - 2.0))          # measured (tests/jump_probe): about a second in the air and 40 m of flight at any speed
-		if epic:
-			rise *= 1.5
+		var rise := _rng.randf_range(0.95, 1.05) * 3.3 * (36.0 / (34.0 + 17.0 * d))          # a ramp rising this fast over its length throws you about 1.3 s into the air and 50-70 m down the slope at any speed (tests/jump_probe); a charged pop adds up to 3 m/s
 		_kickers.append({"x": kx, "z": kz, "len": KICK_LEN, "w": KICK_W, "rise": rise, "epic": epic})
 		kick_log.append("%.0f/%.0f%s" % [kz, kx, "E" if epic else ""])
 		row["kick"] = {"x": kx, "z": kz, "lip": lipz, "epic": epic}
@@ -2135,8 +2189,11 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 			(row["nodes"] as Array).append(pn)
 			var flag := _mi(pn, _quad(1.4 if not epic else 2.2), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, pole.height * 0.42, 0.0))
 			flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		if epic or _rng.randf() < 0.45:
-			_make_pad(row, kx, kz + 14.0, epic)
+		var pad_n := 0
+		for pz in [kz + 10.0, kz - KICK_LEN * 0.5, lipz + 4.0]:
+			if (pad_n == 0 and pz == lipz + 4.0) or _rng.randf() < 0.65:
+				_make_pad(row, kx, pz, true)
+				pad_n += 1
 		if epic or _rng.randf() < 0.8:
 			var trail: Array = [Vector2(kx, kz + 18.0), Vector2(kx, kz + 10.0), Vector2(kx, kz + 2.0)]
 			_spawn_buff(row, _pick_buff(true), kx, lipz - 9.0, trail, "air", 2.4)
@@ -2554,6 +2611,13 @@ func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
 
 
 func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
+	if _ramp_charge > 0.02:
+		var bw := 180.0 * k
+		var bx := s.x * 0.5 - bw * 0.5
+		var by := s.y * 0.8
+		_hud.draw_rect(Rect2(bx, by, bw, 14.0 * k), Color(0.05, 0.1, 0.2, 0.6))
+		_hud.draw_rect(Rect2(bx, by, bw * _ramp_charge, 14.0 * k), Color(1.0, 0.7 + 0.25 * _ramp_charge, 0.2, 0.95))
+		_ctext(font, by - 8.0 * k, "CHARGING: pop at the lip" if _ramp_charge < 0.95 else "FULL CHARGE!", 22, Color(1, 1, 1, 0.9))
 	if _trk_text_t > 0.0 and _trk_text != "":
 		var a := clampf(_trk_text_t / 0.5, 0.0, 1.0)
 		var big := _trk_text_t > 0.3 and not _in_air
@@ -2625,7 +2689,7 @@ func _update_aim(delta: float) -> void:
 		if sc.is_empty():
 			continue
 		var c: Vector2 = sc["c"]
-		var tol := maxf(float(sc["hw"]) * 1.15, 0.12 * vs.x)
+		var tol := maxf(float(sc["hw"]) * 1.15, 0.12 * vs.x * clampf(68.0 / maxf(cam.fov, 40.0), 0.55, 1.0))          # a wider view packs the gates closer together on screen: look more precisely
 		var dd := absf(c.x - cx) / tol
 		if is_same(g, _aim):
 			dd *= 0.7
@@ -2735,7 +2799,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-FINISH_Z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "pads": pads_hit, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
