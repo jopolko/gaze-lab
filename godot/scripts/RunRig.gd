@@ -1679,7 +1679,7 @@ func _restart() -> void:
 const FOOD_NAME := {"boost": "BURGER", "shield": "ICE CREAM", "mult": "CANDY", "donut": "DONUT"}
 var wide_override: bool = false
 var squint_override: bool = false
-var eat_enabled: bool = true               # false: every pickup is taken by touching it (tests, or players who cannot use the eyes this way)
+var eat_enabled: bool = false              # false (the default): every pickup is taken by touching it. true: you must open your eyes wide to eat (experimental, needs a reliable tracker)
 var foods_bounced: int = 0
 var foods_lost: int = 0
 var _wide_last: float = -10.0
@@ -1709,10 +1709,12 @@ func _braced() -> bool:
 func _update_eye_actions(delta: float) -> void:
 	if _wide_now():
 		_wide_last = _age
-	_squinting_now = _squint_now() and not _balls.is_empty()          # a squint only means something while a snowball is about: a stray one costs nothing
+	var sq := _squint_now()
+	var tk := nod_p < -0.10                                              # ducking your chin braces too: it is the one signal that is always reliable
+	_squinting_now = (sq or tk) and not _balls.is_empty()               # only means something while a snowball is about: a stray one costs nothing
 	if _squinting_now:
 		_squint_last = _age
-		if grounded and not _finished:
+		if sq and grounded and not _finished:
 			vel *= 1.0 - 0.12 * delta                 # squinting costs speed: you are hunched up and half blind
 
 
@@ -1816,7 +1818,7 @@ func _spawn_ball() -> void:
 	Game.sfx(&"whoosh")
 	if not _ball_hint:
 		_ball_hint = true
-		_toast("Carve away, outrun it, or SQUINT to brace", Color(0.85, 0.95, 1.0))
+		_toast("Carve away, outrun it, or duck your chin / squint to brace", Color(0.85, 0.95, 1.0))
 
 
 func _update_balls(delta: float) -> void:
@@ -2603,7 +2605,7 @@ func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
 		var sp2 := cam.unproject_position(wp)
 		var dist := maxf(spos.z - float(b2["z"]), 0.0)
 		var near := dist < 30.0
-		var t2 := "SQUINT!" if near and not _braced() else ("BRACED" if near else "SNOWBALL")
+		var t2 := "DUCK / SQUINT!" if near and not _braced() else ("BRACED" if near else "SNOWBALL")
 		var c2 := Color(1.0, 0.55, 0.4) if near and not _braced() else Color(0.8, 0.95, 1.0)
 		var w2 := font.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, int(24.0 * k)).x
 		_text(font, sp2 + Vector2(-w2 * 0.5, 0.0), t2, 24, c2)

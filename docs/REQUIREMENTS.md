@@ -36,9 +36,9 @@ Everything asked for, with its status, so nothing gets lost. `[x]` built and tes
 - [~] First-person runs still crash more than third-person in simulation: obstacles hiding gates from eye level. Needs another pass.
 
 ## Downhill: pickups and hazards
-- [x] Pickups are food, eaten by opening your eyes wide: burger (boost), ice cream (shield), candy (double points), donut (points).
-- [x] Missed food bounces away once like rubber and waits for a second try.
-- [x] Snowballs: squint to brace, or carve away, or outrun; a hit costs about 40% speed, a shove, and your flow chain, never a crash.
+- [x] Pickups are food (burger boost, ice cream shield, candy double points, donut points), taken on contact. The wide-eyes eating rule is optional (`eat_enabled`, off) because wide-eye detection did not work on your camera.
+- [~] Missed food bouncing away like rubber exists but only applies if eating by wide eyes is switched on.
+- [x] Snowballs: duck your chin or squint to brace (squint did not work on your camera, chin is the reliable one), or carve away, or outrun; a hit costs about 40% speed, a shove, and your flow chain, never a crash.
 - [x] Boost pads, also a burger boost; temporary speed boosts exist.
 - [x] Dopamine: sparkles, flash, screen shake, a hop or spin of the rider, per-type effects and sounds, prettier items.
 - [ ] Real 3D food models (planned: free CC0 pack, to be swapped in later).

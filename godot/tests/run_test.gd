@@ -725,6 +725,7 @@ func _ready() -> void:
 	rig.set_physics_process(false)
 	rig._restart()
 	rig.balls_enabled = false
+	rig.eat_enabled = true               # the wide-eyed eating rule is optional now; these checks cover it
 	var foods_ok := true
 	for ft in ["boost", "shield", "mult", "donut"]:
 		var fi: Dictionary = rig._make_item(ft)
@@ -787,6 +788,7 @@ func _ready() -> void:
 			(bq["n"] as Node).queue_free()
 	rig._balls.clear()
 
+	rig.eat_enabled = false
 	# ---- snowballs: hit, brace, dodge, outrun
 	var sb_modes := ["nothing", "squint", "sidestep", "outrun"]
 	var sb_res := {}
