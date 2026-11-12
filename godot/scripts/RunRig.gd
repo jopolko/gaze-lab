@@ -84,10 +84,14 @@ func progress() -> float:
 func _gen_segment(j: int) -> void:
 	var z0 := -ROW_GAP * float(j)
 	var d := _course_diff(z0)
-	var rz := z0 - _rng.randf_range(26.0, 60.0)
-	var has_row := j >= START_CALM and rz > FINISH_Z + 40.0
+	var rz := z0 - _rng.randf_range(50.0, 60.0) if _force_far_next else z0 - _rng.randf_range(26.0, 60.0)
+	_force_far_next = false
+	# now and then a segment has no barrier at all: an air segment, with an epic kicker at the top and room to land
+	var air_seg := j > START_CALM and not _last_air and rz > FINISH_Z + 260.0 and _rng.randf() < 0.14
+	_last_air = air_seg
+	var has_row := j >= START_CALM and rz > FINISH_Z + 40.0 and not air_seg
 	var row: Dictionary = {"j": j, "z": rz, "z0": z0, "gaps": [], "obs": PackedFloat32Array(), "banks": [], "nodes": [],
-		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "layout": "none"}
+		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "pads": [], "layout": "none"}
 	var cones: Array[Transform3D] = []
 	var cone_cols := PackedColorArray()
 	var trunks: Array[Transform3D] = []
@@ -132,17 +136,23 @@ func _gen_segment(j: int) -> void:
 	row["pz"] = prev_rz
 	# scattered singles between this barrier and the one before it; the straight line from the last safe opening to this one stays clear
 	if has_row:
-		var n_single := int(float(prev_rz - rz) / ROW_GAP * (4.0 + 6.0 * d)) + 1
+		var n_single := int(minf(prev_rz - rz, ROW_GAP * 1.3) / ROW_GAP * (4.0 + 6.0 * d)) + 1          # after an air segment the span is long: no more singles than a normal one has
 		for i in n_single:
 			var sz := _rng.randf_range(rz + 9.0, minf(prev_rz - 9.0, -30.0))
 			var sx := _rng.randf_range(-W_HALF + 3.0, W_HALF - 3.0)
 			if absf(sx - path_x(row, sz)) < 9.0:
 				continue
+			var in_air_zone := false
+			for az in _air_zones:
+				if sz < float(az["z0"]) and sz > float(az["z1"]) and absf(sx - float(az["x"])) < 16.0:
+					in_air_zone = true
+			if in_air_zone:
+				continue
 			if _rng.randf() < 0.35:
 				_add_rock(rocks, rock_cols, obs, sx, sz, _rng.randf_range(1.0, 1.6), Color(0.55, 0.58, 0.64), _rng.randf_range(0.9, 1.3))
 			else:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, sx, sz, _rng.randf_range(0.8, 1.3), true)
-	_place_kicker(row, obs, prev_rz, rz, z0, has_row, j)
+	_place_kicker(row, obs, prev_rz, rz, z0, has_row, j, air_seg)
 	if has_row:
 		_place_buffs(row, d, prev_rz, rz)
 	# forest and boulders on both sides (visual only)
@@ -287,7 +297,7 @@ func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz
 const BOOST_S := 3.0
 const MULT_S := 10.0
 const SPEED_CAP := 57.0              # a boost never pushes you past this (the hill alone reaches about 51 m/s)
-const BUFF_COL := {"boost": Color(1.0, 0.55, 0.1), "shield": Color(0.3, 0.85, 1.0), "mult": Color(0.95, 0.4, 1.0), "orb": Color(1.0, 0.9, 0.45)}
+const BUFF_COL := {"boost": Color(1.0, 0.55, 0.1), "shield": Color(0.3, 0.85, 1.0), "mult": Color(0.95, 0.4, 1.0), "donut": Color(1.0, 0.45, 0.7), "orb": Color(1.0, 0.9, 0.45)}
 
 var shield: int = 0
 var _boost_t: float = 0.0
@@ -311,8 +321,8 @@ var _buff_mat: Dictionary = {}
 func _pick_buff(iso: bool) -> String:
 	var r := _rng.randf()
 	if iso:
-		return "mult" if r < 0.4 else ("shield" if r < 0.85 else "boost")
-	return "boost" if r < 0.34 else ("shield" if r < 0.62 else "mult")
+		return "mult" if r < 0.3 else ("shield" if r < 0.65 else ("boost" if r < 0.85 else "donut"))
+	return "boost" if r < 0.3 else ("shield" if r < 0.52 else ("mult" if r < 0.8 else "donut"))
 
 
 func _clear_of_obs(obs: PackedFloat32Array, x: float, z: float, m: float) -> bool:
@@ -442,58 +452,97 @@ func _sparkler(parent: Node3D, col: Color, radius: float, n: int) -> CPUParticle
 ##   boost   orange double-cone crystal with a white-hot core and orbiting sparks
 ##   shield  two crossed cyan rings round a glass bubble
 ##   mult    a magenta-gold gem with a floating x2
+func _food_mat(col: Color, glow: float = 0.35) -> StandardMaterial3D:
+	var key := "food_%s_%.2f" % [col.to_html(false), glow]
+	if _fxm.has(key):
+		return _fxm[key]
+	var m := StandardMaterial3D.new()
+	m.albedo_color = col
+	m.roughness = 0.5
+	m.emission_enabled = true
+	m.emission = col
+	m.emission_energy_multiplier = glow
+	_fxm[key] = m
+	return m
+
+
+func _fm(parent: Node3D, mesh: Mesh, col: Color, pos: Vector3, sc: Vector3 = Vector3.ONE) -> MeshInstance3D:
+	var n := _mi(parent, mesh, _food_mat(col), pos)
+	n.scale = sc
+	return n
+
+
+func _cyl(r: float, h: float) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.top_radius = r
+	c.bottom_radius = r
+	c.height = h
+	c.radial_segments = 16
+	c.rings = 1
+	return c
+
+
+## One pickup, built from simple shapes and lit like a treat. Everything edible is eaten by opening your eyes wide.
+##   boost   BURGER      a stack of bun, patty, cheese, lettuce, tomato, sesame bun
+##   shield  ICE CREAM   a waffle cone with two scoops and a cherry
+##   mult    CANDY       a wrapped sweet with twisted ends
+##   donut   DONUT       pink frosting and sprinkles
 func _make_item(t: String) -> Dictionary:
 	var col: Color = BUFF_COL[t]
 	var root := Node3D.new()
 	var spin := Node3D.new()
 	root.add_child(spin)
-	var halo := _mi(root, _quad(6.2), _fx_mat("halo", Color(col.r, col.g, col.b, 0.85)))
-	var pool := _mi(root, _quad(7.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.55)), Vector3(0, -1.5, 0))
+	var halo := _mi(root, _quad(6.2), _fx_mat("halo", Color(col.r, col.g, col.b, 0.8)))
+	var pool := _mi(root, _quad(7.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.55)), Vector3(0, -1.6, 0))
 	pool.rotation.x = -PI * 0.5
-	var extra: Array = []
+	var body := Node3D.new()
+	spin.add_child(body)
+	body.scale = Vector3(1.3, 1.3, 1.3)
 	match t:
 		"boost":
-			var up := _cone(0.78, 1.25)
-			up.material_override = _fx_mat("solid", col, 2.2)
-			up.position = Vector3(0, 0.62, 0)
-			spin.add_child(up)
-			var dn := _cone(0.78, 1.25, true)
-			dn.material_override = _fx_mat("solid", Color(1.0, 0.8, 0.25), 2.0)
-			dn.position = Vector3(0, -0.62, 0)
-			spin.add_child(dn)
-			_mi(spin, _sphere_mesh(0.42), _fx_mat("solid", Color(1, 0.97, 0.8), 3.0))
-			for i in 3:
-				var orb := _mi(spin, _sphere_mesh(0.16), _fx_mat("solid", Color(1, 0.9, 0.5), 2.5))
-				orb.position = Vector3(cos(float(i) * TAU / 3.0) * 1.35, 0.0, sin(float(i) * TAU / 3.0) * 1.35)
+			_fm(body, _sphere_mesh(1.0), Color(0.93, 0.62, 0.28), Vector3(0, -0.62, 0), Vector3(1.0, 0.42, 1.0))
+			_fm(body, _cyl(1.02, 0.3), Color(0.36, 0.18, 0.09), Vector3(0, -0.22, 0))
+			var ch := _fm(body, BoxMesh.new(), Color(1.0, 0.82, 0.15), Vector3(0, -0.02, 0))
+			(ch.mesh as BoxMesh).size = Vector3(1.95, 0.07, 1.95)
+			ch.rotation.y = 0.785
+			_fm(body, _cyl(1.08, 0.1), Color(0.35, 0.8, 0.25), Vector3(0, 0.1, 0))
+			_fm(body, _cyl(0.95, 0.15), Color(0.9, 0.2, 0.15), Vector3(0, 0.23, 0))
+			_fm(body, _sphere_mesh(1.05), Color(0.95, 0.6, 0.22), Vector3(0, 0.42, 0), Vector3(1.0, 0.62, 1.0))
+			for i in 7:
+				var a := float(i) * TAU / 7.0
+				_fm(body, _sphere_mesh(0.07), Color(1.0, 0.97, 0.85), Vector3(cos(a) * 0.5, 0.82 - 0.05 * float(i % 2), sin(a) * 0.5), Vector3(1.0, 0.6, 1.0))
 		"shield":
-			var r1 := _mi(spin, _torus(0.88, 1.32), _fx_mat("solid", col, 2.0))
-			var r2 := _mi(spin, _torus(0.88, 1.32), _fx_mat("solid", Color(0.7, 0.95, 1.0), 2.0))
-			r2.rotation.z = PI * 0.5
-			var r3 := _mi(spin, _torus(0.62, 0.9), _fx_mat("solid", Color(0.55, 0.9, 1.0), 2.0))
-			r3.rotation.x = PI * 0.5
-			_mi(spin, _sphere_mesh(1.05), _fx_mat("add", Color(col.r, col.g, col.b, 0.22)))
-			_mi(spin, _sphere_mesh(0.3), _fx_mat("solid", Color(0.9, 1.0, 1.0), 3.0))
-			extra = [r1, r2, r3]
+			var cone := _cone(0.62, 1.6, true)
+			cone.material_override = _food_mat(Color(0.86, 0.6, 0.3))
+			cone.position = Vector3(0, -0.7, 0)
+			body.add_child(cone)
+			_fm(body, _sphere_mesh(0.7), Color(1.0, 0.55, 0.75), Vector3(0, 0.3, 0))
+			_fm(body, _sphere_mesh(0.62), Color(0.8, 0.95, 1.0), Vector3(0, 0.95, 0))
+			_fm(body, _sphere_mesh(0.18), Color(0.9, 0.1, 0.15), Vector3(0.05, 1.5, 0.0))
+			_fm(body, _sphere_mesh(0.2), Color(1.0, 0.55, 0.75), Vector3(0.6, 0.0, 0.1), Vector3(0.8, 1.3, 0.8))
+		"mult":
+			_fm(body, _sphere_mesh(0.7), Color(0.95, 0.25, 0.75), Vector3.ZERO, Vector3(1.3, 0.85, 0.85))
+			for sx in [-1.0, 1.0]:
+				var tw := _cone(0.5, 0.9)
+				tw.material_override = _food_mat(Color(1.0, 0.85, 0.25))
+				tw.position = Vector3(float(sx) * 1.25, 0.0, 0.0)
+				tw.rotation.z = -float(sx) * PI * 0.5
+				body.add_child(tw)
+			var ring := _mi(body, _torus(0.62, 0.74), _food_mat(Color(1, 1, 1), 0.5))
+			ring.rotation.z = PI * 0.5
+			ring.scale = Vector3(1.0, 1.0, 1.0)
 		_:
-			var g1 := _mi(spin, BoxMesh.new(), _fx_mat("solid", col, 2.0))
-			(g1.mesh as BoxMesh).size = Vector3(1.15, 1.15, 1.15)
-			g1.rotation = Vector3(0.6, 0.0, 0.78)
-			var g2 := _mi(spin, BoxMesh.new(), _fx_mat("solid", Color(1.0, 0.82, 0.3), 2.0))
-			(g2.mesh as BoxMesh).size = Vector3(0.8, 0.8, 0.8)
-			g2.rotation = Vector3(0.78, 0.6, 0.0)
-			var lab := Label3D.new()
-			lab.text = "x2"
-			lab.font_size = 96
-			lab.pixel_size = 0.016
-			lab.outline_size = 18
-			lab.modulate = Color(1.0, 0.95, 0.6)
-			lab.outline_modulate = Color(0.45, 0.05, 0.5)
-			lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-			lab.no_depth_test = true
-			lab.position = Vector3(0, 1.75, 0)
-			root.add_child(lab)
-	var sp := _sparkler(root, Color(col.r * 0.5 + 0.5, col.g * 0.5 + 0.5, col.b * 0.5 + 0.5, 1.0), 1.5, 10)
-	return {"root": root, "spin": spin, "halo": halo, "sp": sp, "extra": extra}
+			body.rotation.x = 1.0
+			_fm(body, _torus(0.4, 1.0), Color(0.9, 0.65, 0.35), Vector3.ZERO)
+			_fm(body, _torus(0.42, 0.96), Color(0.98, 0.4, 0.66), Vector3(0, 0.12, 0), Vector3(1.0, 0.6, 1.0))
+			var sc: Array = [Color(1, 1, 0.3), Color(0.3, 0.9, 1.0), Color(1, 1, 1), Color(0.5, 1.0, 0.4)]
+			for i in 12:
+				var a2 := float(i) * TAU / 12.0
+				var sp2 := _fm(body, BoxMesh.new(), sc[i % 4], Vector3(cos(a2) * 0.7, 0.3, sin(a2) * 0.7))
+				(sp2.mesh as BoxMesh).size = Vector3(0.22, 0.06, 0.07)
+				sp2.rotation.y = -a2 + float(i) * 0.9
+	var sp := _sparkler(root, Color(col.r * 0.5 + 0.5, col.g * 0.5 + 0.5, col.b * 0.5 + 0.5, 1.0), 1.6, 10)
+	return {"root": root, "spin": spin, "halo": halo, "sp": sp, "extra": []}
 
 
 var _quad_meshes: Dictionary = {}
@@ -741,6 +790,12 @@ func _buff_pop(b: Dictionary, shown: String) -> void:
 			_ring(pos + Vector3(0, -1.6, 0), col, 13.0, 0.75, false)
 			_start_hop(1.35, 0.8, TAU, 0.0, false)
 			_shake = maxf(_shake, 0.25)
+		"donut":
+			_burst(pos, Color(1.0, 0.45, 0.7), 56, 10.0, 1.2, 1.2, Vector3.UP, 180.0, -8.0)
+			_burst(pos, Color(1.0, 0.95, 0.4), 30, 9.0, 1.2, 0.9, Vector3.UP, 180.0, -8.0)
+			_ring(pos, col, 8.0, 0.5, true)
+			_start_hop(1.0, 0.6, TAU, 0.0, false)
+			_shake = maxf(_shake, 0.2)
 		_:
 			_burst(pos, Color(1.0, 0.85, 0.3), 56, 11.0, 1.3, 1.3, Vector3.UP, 180.0, -9.0)
 			_burst(pos, Color(0.95, 0.35, 1.0), 56, 11.0, 1.3, 1.3, Vector3.UP, 180.0, -9.0)
@@ -858,17 +913,22 @@ func _take_buff(b: Dictionary) -> void:
 			vel += fwd * 6.0
 			if vel.length() > maxf(SPEED_CAP, sp0):
 				vel = vel.normalized() * maxf(SPEED_CAP, sp0)
-			_toast("BOOST", BUFF_COL["boost"])
+			_toast("BURGER BOOST!", BUFF_COL["boost"])
 			Game.sfx(&"buff_boost")
 		"shield":
 			shield = 1
-			_toast("SHIELD", BUFF_COL["shield"])
+			_toast("ICE SHIELD!", BUFF_COL["shield"])
 			Game.sfx(&"buff_shield")
 		"mult":
 			_mult_t = MULT_S
 			shown = "x2"
-			_toast("DOUBLE POINTS", BUFF_COL["mult"])
+			_toast("SUGAR RUSH x2!", BUFF_COL["mult"])
 			Game.sfx(&"buff_mult")
+		"donut":
+			shown = "+%d" % (220 * (2 if _mult_t > 0.0 else 1))
+			_gain(160)
+			_toast("DONUT!", BUFF_COL["donut"])
+			Game.sfx(&"loot")
 	_buff_pop(b, shown)
 	if is_same(_buff_tgt, b):
 		_buff_tgt = {}
@@ -897,9 +957,9 @@ func _collect_buffs() -> void:
 				continue
 			if b.get("kind", "") == "air":
 				if absf(float(b["z"]) - spos.z) < 3.8 and absf(float(b["x"]) - spos.x) < 4.2 and above > 0.8 and absf(float(b["y"]) - spos.y) < 3.6:
-					_take_buff(b)
+					_eat_or_bounce(b)
 			elif absf(float(b["z"]) - spos.z) < 3.2 and absf(float(b["x"]) - spos.x) < 3.6 and above < 6.0:
-				_take_buff(b)
+				_eat_or_bounce(b)
 
 
 func _animate_buffs() -> void:
@@ -910,6 +970,8 @@ func _animate_buffs() -> void:
 		for b in r["buffs"]:
 			var n: Variant = b["n"]
 			if b["taken"] or not is_instance_valid(n):
+				continue
+			if b.get("moving", false):
 				continue
 			var nn := n as Node3D
 			var ph := float(b["ph"])
@@ -959,7 +1021,7 @@ func _update_buff_aim(delta: float) -> void:
 	for k in _rows:
 		var r: Dictionary = _rows[k]
 		for b in r["buffs"]:
-			if b["taken"]:
+			if b["taken"] or float(b.get("arm", 0.0)) > 0.0:
 				continue
 			var dz := spos.z - float(b["z"])
 			if dz < 8.0 or dz > 130.0 or absf(float(b["x"]) - spos.x) > 0.34 * dz + 4.0:
@@ -1352,6 +1414,9 @@ func _physics_process(delta: float) -> void:
 	_gh_prev = gh
 	_collide()
 	_collect_buffs()
+	_update_eye_actions(delta)
+	_update_pads()
+	_update_balls(delta)
 	_update_tricks(delta, key, pk)
 	_animate_buffs()
 	_update_rows()
@@ -1533,6 +1598,26 @@ func _restart() -> void:
 	_buff_cand_t = 0.0
 	_buff_w = 0.0
 	_kickers.clear()
+	_air_zones.clear()
+	_force_far_next = false
+	_last_air = false
+	air_segments = 0
+	for bb in _balls:
+		if is_instance_valid(bb["n"]):
+			(bb["n"] as Node).queue_free()
+	_balls.clear()
+	_next_ball_z = -420.0
+	snow_spawned = 0
+	snow_braced = 0
+	snow_hit = 0
+	snow_dodged = 0
+	foods_bounced = 0
+	foods_lost = 0
+	pads_hit = 0
+	epics_built = 0
+	_wide_last = -10.0
+	_squint_last = -10.0
+	_fx_rng.seed = _run_seed + 99
 	kickers_built = 0
 	tricks_landed = 0
 	trick_score = 0
@@ -1555,6 +1640,278 @@ func _restart() -> void:
 		_next_j += 1
 	_place_camera(1.0, true)
 	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
+
+
+# --------------------------------------------------------------------------
+# Eyes as buttons. LOOK steers and chooses. OPEN WIDE (or hold SPACE) eats a food as you reach it. SQUINT (or hold SHIFT) braces against a snowball.
+# A food you drive past without eating it bounces away like rubber, once, and waits for a second try; miss that and it pops.
+# Opening wide a moment early counts (0.5 s), because the tracker is a little late.
+# --------------------------------------------------------------------------
+const FOOD_NAME := {"boost": "BURGER", "shield": "ICE CREAM", "mult": "CANDY", "donut": "DONUT"}
+var wide_override: bool = false
+var squint_override: bool = false
+var eat_enabled: bool = true               # false: every pickup is taken by touching it (tests, or players who cannot use the eyes this way)
+var foods_bounced: int = 0
+var foods_lost: int = 0
+var _wide_last: float = -10.0
+var _squint_last: float = -10.0
+var _squinting_now: bool = false
+var _squint_vis: float = 0.0
+var _eat_hint: bool = false
+var _fx_rng := RandomNumberGenerator.new()
+
+
+func _wide_now() -> bool:
+	return wide_override or Input.is_key_pressed(KEY_SPACE) or (_eye_on and GazeProvider.wide_held())
+
+
+func _squint_now() -> bool:
+	return squint_override or Input.is_key_pressed(KEY_SHIFT) or (_eye_on and GazeProvider.squint_held())
+
+
+func _can_eat() -> bool:
+	return (not eat_enabled) or wide_override or _age - _wide_last < 0.5
+
+
+func _braced() -> bool:
+	return squint_override or _age - _squint_last < 0.45
+
+
+func _update_eye_actions(delta: float) -> void:
+	if _wide_now():
+		_wide_last = _age
+	_squinting_now = _squint_now()
+	if _squinting_now:
+		_squint_last = _age
+		if grounded and not _finished:
+			vel *= 1.0 - 0.12 * delta                 # squinting costs speed: you are hunched up and half blind
+
+
+func _eat_or_bounce(b: Dictionary) -> void:
+	if float(b.get("arm", 0.0)) > 0.0:
+		return
+	if _can_eat():
+		_take_buff(b)
+	else:
+		_bounce_food(b)
+
+
+func _food_pos(b: Dictionary) -> Vector3:
+	var n: Variant = b["n"]
+	if is_instance_valid(n):
+		return (n as Node3D).global_position
+	return Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.9, float(b["z"]))
+
+
+func _bounce_food(b: Dictionary) -> void:
+	var n: Variant = b["n"]
+	var col: Color = BUFF_COL[b["t"]]
+	var p0 := _food_pos(b)
+	if b.get("bounced", false):
+		b["taken"] = true
+		foods_lost += 1
+		if is_instance_valid(n):
+			(n as Node3D).visible = false
+		_burst(p0, col, 34, 7.0, 0.7, 0.9)
+		Game.sfx(&"squeak")
+		return
+	b["bounced"] = true
+	foods_bounced += 1
+	var nx := clampf(spos.x + vel.x * 0.25 + _fx_rng.randf_range(-7.0, 7.0), -40.0, 40.0)
+	var nz := spos.z - 32.0 - _fx_rng.randf_range(0.0, 12.0)
+	var ny := terrain_h(nx, nz) + 1.9
+	b["x"] = nx
+	b["z"] = nz
+	b["arm"] = 0.8
+	b["moving"] = true
+	b["lift"] = 0.0
+	b["kind"] = "bounced"
+	_burst(p0, col, 18, 6.0, 0.5, 0.7)
+	Game.sfx(&"boing")
+	if is_instance_valid(n):
+		var nn := n as Node3D
+		var s0 := nn.global_position
+		var tw := create_tween()
+		tw.tween_method(func(u: float) -> void:
+			if is_instance_valid(nn):
+				nn.global_position = Vector3(lerpf(s0.x, nx, u), lerpf(s0.y, ny, u) + sin(PI * u) * 9.0, lerpf(s0.z, nz, u)), 0.0, 1.0, 0.8)
+		tw.tween_callback(func() -> void:
+			b["arm"] = 0.0
+			b["moving"] = false
+			b["y"] = ny)
+	else:
+		b["arm"] = 0.0
+		b["moving"] = false
+
+
+# --------------------------------------------------------------------------
+# Snowballs: one rolls in from the side now and then, aimed at where you will be in about 2.6 s. Three ways through:
+#   carve away   steer out of its line (or behind it)       no cost
+#   outrun it    be across its line first (a burger helps)  no cost
+#   squint       brace: it shatters on you                  a little speed, no shove, the chain keeps; and you are blind and slow while you squint
+# Do nothing and it hits: 40% of your speed gone, a shove the way it was rolling, your flow chain reset. An ice cream shield absorbs it too.
+# --------------------------------------------------------------------------
+const BALL_R := 3.0
+var balls_enabled: bool = true
+var _balls: Array = []
+var _next_ball_z: float = -420.0
+var snow_spawned: int = 0
+var snow_braced: int = 0
+var snow_hit: int = 0
+var snow_dodged: int = 0
+var _ball_hint: bool = false
+
+
+func _spawn_ball() -> void:
+	var d := _course_diff(spos.z)
+	var T := 2.6
+	var sp := maxf(-vel.y, 24.0)
+	var px := clampf(spos.x + vel.x * T, -38.0, 38.0)
+	var pz := spos.z - sp * T
+	var vb := 12.0 + 6.0 * d
+	var side := 1.0 if px < 0.0 else -1.0
+	var sx := clampf(px + side * 44.0, -(W_HALF - 4.0), W_HALF - 4.0)
+	var sz := pz + vb * T
+	var vx := (px - sx) / T
+	var n := Node3D.new()
+	_mi(n, _sphere_mesh(BALL_R), _fx_mat("solid", Color(0.95, 0.97, 1.0), 0.9))
+	for i in 5:
+		var a := float(i) * 1.7
+		_mi(n, _sphere_mesh(1.1), _fx_mat("solid", Color(0.88, 0.93, 1.0), 0.8), Vector3(cos(a), sin(a * 1.3), sin(a)) * 2.4)
+	add_child(n)
+	n.global_position = Vector3(sx, terrain_h(sx, sz) + BALL_R, sz)
+	_balls.append({"n": n, "x": sx, "z": sz, "vx": vx, "vz": -vb, "t": 0.0, "done": false})
+	snow_spawned += 1
+	_next_ball_z = spos.z - _fx_rng.randf_range(150.0, 230.0) * lerpf(1.0, 0.7, d)
+	_toast("SNOWBALL!", Color(0.85, 0.95, 1.0))
+	Game.sfx(&"whoosh")
+	if not _ball_hint:
+		_ball_hint = true
+		_toast("Carve away, outrun it, or SQUINT to brace", Color(0.85, 0.95, 1.0))
+
+
+func _update_balls(delta: float) -> void:
+	if balls_enabled and not _finished and _balls.is_empty() and spos.z < _next_ball_z and spos.z > FINISH_Z + 260.0:
+		_spawn_ball()
+	for i in range(_balls.size() - 1, -1, -1):
+		var b: Dictionary = _balls[i]
+		b["t"] = float(b["t"]) + delta
+		b["x"] = float(b["x"]) + float(b["vx"]) * delta
+		b["z"] = float(b["z"]) + float(b["vz"]) * delta
+		var n: Variant = b["n"]
+		var bx := float(b["x"])
+		var bz := float(b["z"])
+		if float(b["t"]) < 0.9 and float(b["vx"]) != 0.0:
+			# the first moments: keep the roll timed to where you will be (the hill speeds you up more than a guess can say). After that it is fixed, so a late boost or a sidestep still beats it.
+			var tl := absf((spos.x + vel.x * 1.5 - bx) / float(b["vx"]))
+			tl = clampf(tl, 0.6, 4.0)
+			var want_vz := (spos.z + vel.y * tl - bz) / tl
+			b["vz"] = lerpf(float(b["vz"]), clampf(want_vz, -34.0, -8.0), 0.15)
+		if is_instance_valid(n):
+			var nn := n as Node3D
+			nn.global_position = Vector3(bx, terrain_h(bx, bz) + BALL_R, bz)
+			nn.rotate_x(float(b["vz"]) * delta / BALL_R)
+			nn.rotate_z(-float(b["vx"]) * delta / BALL_R)
+		if not b["done"]:
+			var dx := spos.x - bx
+			var dz := spos.z - bz
+			var above := spos.y - terrain_h(spos.x, spos.z)
+			if dx * dx + dz * dz < (BALL_R + 1.1) * (BALL_R + 1.1) and above < BALL_R + 1.0:
+				_ball_hit(b)
+			elif bz > spos.z + 6.0:
+				b["done"] = true
+				snow_dodged += 1
+				_gain(60)
+				_toast("DODGED", Color(0.7, 1.0, 0.8))
+		if bz > spos.z + 70.0 or float(b["t"]) > 14.0 or b.get("gone", false):
+			if is_instance_valid(n):
+				(n as Node).queue_free()
+			_balls.remove_at(i)
+
+
+func _ball_hit(b: Dictionary) -> void:
+	b["done"] = true
+	var pos := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + BALL_R, float(b["z"]))
+	if _braced():
+		snow_braced += 1
+		vel *= 0.9
+		_gain(80)
+		_toast("BRACED!", Color(0.6, 0.9, 1.0))
+		_shake = maxf(_shake, 0.5)
+		_flash = 0.3
+	elif shield > 0:
+		shield = 0
+		_toast("ICE SHIELD TOOK IT", BUFF_COL["shield"])
+		_shake = maxf(_shake, 0.5)
+		_flash = 0.3
+	else:
+		snow_hit += 1
+		vel *= 0.6
+		vel.x += signf(float(b["vx"])) * 9.0
+		hurt_t = maxf(hurt_t, 0.5)
+		chain = 0
+		groove = 1.0
+		_shake = 0.9
+		_flash = 0.5
+		_toast("SNOWBALL HIT", Color(1.0, 0.5, 0.4))
+	_burst(pos, Color(0.95, 0.98, 1.0), 90, 15.0, 1.0, 2.2, Vector3.UP, 180.0, -9.0)
+	_ring(pos, Color(0.85, 0.95, 1.0), 10.0, 0.5, true)
+	Game.sfx(&"boom")
+	var n: Variant = b["n"]
+	if is_instance_valid(n):
+		(n as Node3D).visible = false
+	b["gone"] = true
+
+
+# --------------------------------------------------------------------------
+# Boost pads (chevrons on the snow, usually just before a kicker) and epic kickers: a taller ramp with a pad and two pickups in the air.
+# --------------------------------------------------------------------------
+var pads_hit: int = 0
+
+
+func _make_pad(row: Dictionary, x: float, z: float, epic: bool) -> void:
+	var col := Color(1.0, 0.55, 0.1) if not epic else Color(1.0, 0.25, 0.55)
+	var mat := _fx_mat("solid", col, 2.6)
+	var holder := Node3D.new()
+	add_child(holder)
+	for i in 3:
+		var cz := z - float(i) * 2.2
+		var gy := _grad(x, cz).y
+		for sx in [-1.0, 1.0]:
+			var bm := BoxMesh.new()
+			bm.size = Vector3(2.4, 0.08, 0.45)
+			var m := _mi(holder, bm, mat, Vector3(x + float(sx) * 1.0, terrain_h(x + float(sx) * 1.0, cz) + 0.2, cz))
+			m.rotation = Vector3(-atan(gy), float(sx) * 0.55, 0.0)
+	var pool := _mi(holder, _quad(8.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.5)), Vector3(x, terrain_h(x, z - 2.2) + 0.15, z - 2.2))
+	pool.rotation.x = -PI * 0.5 - atan(_grad(x, z - 2.2).y)
+	(row["nodes"] as Array).append(holder)
+	(row["pads"] as Array).append({"x": x, "z": z, "used": false, "epic": epic})
+
+
+func _update_pads() -> void:
+	if _finished or not grounded:
+		return
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if absf(float(r["z"]) - spos.z) > 130.0:
+			continue
+		for p in r["pads"]:
+			if p["used"]:
+				continue
+			if absf(float(p["z"]) - 2.2 - spos.z) < 3.4 and absf(float(p["x"]) - spos.x) < 3.2:
+				p["used"] = true
+				pads_hit += 1
+				_boost_t = maxf(_boost_t, 1.8)
+				var fwd := Vector2(sin(heading), -cos(heading))
+				var sp0 := vel.length()
+				vel += fwd * 5.0
+				if vel.length() > maxf(SPEED_CAP, sp0):
+					vel = vel.normalized() * maxf(SPEED_CAP, sp0)
+				_fov_punch = 7.0
+				_shake = maxf(_shake, 0.25)
+				_burst(spos + Vector3(0, 0.6, 0), Color(1.0, 0.6, 0.2), 40, 12.0, 0.6, 0.9, Vector3(0, 0.3, 1.0), 40.0, -3.0)
+				Game.sfx(&"buff_boost")
+				_toast("LAUNCH PAD" if p["epic"] else "BOOST PAD", Color(1.0, 0.7, 0.3))
 
 
 # --------------------------------------------------------------------------
@@ -1665,6 +2022,12 @@ const KICK_LEN := 16.0
 const KICK_W := 16.0
 var kickers_built: int = 0
 var kick_log: Array = []
+var epics_built: int = 0
+var _force_far_next: bool = false
+var _last_air: bool = false
+var air_segments: int = 0
+var _air_zones: Array = []
+var _air_epic: bool = false
 var tricks_landed: int = 0
 var trick_score: int = 0
 var best_trick: String = ""
@@ -1693,61 +2056,86 @@ func _land(impact: float, gh: float, gvy: float) -> void:
 	super._land(minf(impact, 15.0), gh, gvy)
 
 
-func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz: float, z0: float, has_row: bool, j: int) -> void:
+func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz: float, z0: float, has_row: bool, j: int, air: bool = false) -> void:
 	var span := (prev_rz - rz) if has_row else ROW_GAP
 	if has_row and span < 78.0:
 		return
-	if not has_row and j != 1:
+	if not has_row and j != 1 and not air:
 		return
 	if has_row and _rng.randf() > 0.7:
 		return
+	var d := _course_diff(z0)
+	var first := has_row and prev_rz > -1.0
+	var epic := air or (has_row and first and _rng.randf() < 0.6)
 	var prev_obs := PackedFloat32Array()
 	if _rows.has(j - 1):
 		prev_obs = (_rows[j - 1] as Dictionary)["obs"]
-	for attempt in 6:
-		var kz: float = (prev_rz - span * _rng.randf_range(0.10, 0.19)) if has_row else (z0 - _rng.randf_range(18.0, 34.0))
-		if has_row and prev_rz > -1.0:
-			kz = rz + _rng.randf_range(90.0, 120.0)          # the first barrier: the ramp comes well after the start, when you are up to speed
+	for attempt in 8:
+		if attempt == 4:
+			epic = false                                    # no room for an epic one here: a plain kicker will do
+		var kz: float
+		if air:
+			kz = z0 - 6.0
+		elif first:
+			kz = rz + (_rng.randf_range(125.0, 150.0) if epic else _rng.randf_range(90.0, 120.0))          # the first barrier: the ramp comes well after the start
+		elif has_row:
+			kz = prev_rz - span * _rng.randf_range(0.10, 0.19)
+		else:
+			kz = z0 - _rng.randf_range(18.0, 34.0)
 		var lipz := kz - KICK_LEN
-		if has_row and lipz < rz + 50.0 + 12.0 * _course_diff(z0):
+		if has_row and lipz < rz + (88.0 if epic else 50.0 + 12.0 * d):
 			continue
-		var cxl: float = path_x(row, kz) if has_row else 0.0
+		var cxl: float = path_x(row, kz) if has_row else (_good_x if air else 0.0)
 		var side := 1.0 if _rng.randf() < 0.5 else -1.0
-		var kx := cxl + side * _rng.randf_range(14.0, 19.0)
+		var koff := _rng.randf_range(9.0, 13.0) if air else _rng.randf_range(14.0, 19.0)
+		var kx := cxl + side * koff
 		if absf(kx) > 40.0:
-			kx = cxl - side * _rng.randf_range(14.0, 19.0)
+			kx = cxl - side * koff
 		if absf(kx) > 40.0:
 			continue
 		var ok := true
-		for zz in [kz, lipz, lipz - 12.0, lipz - 26.0]:
+		for zz in [kz, lipz, lipz - 12.0, lipz - 26.0, lipz - 40.0 if epic else lipz - 26.0]:
 			for xx in [kx - 8.0, kx, kx + 8.0]:
 				if not _clear_of_obs(obs, xx, zz, 4.0) or not _clear_of_obs(prev_obs, xx, zz, 4.0):
 					ok = false
 		if not ok:
 			continue
-		kick_log.append("%.0f/%.0f" % [kz, kx])
-		_kickers.append({"x": kx, "z": kz, "len": KICK_LEN, "w": KICK_W, "rise": _rng.randf_range(0.95, 1.05) * (1.2 - 0.025 * (17.0 * _course_diff(z0) - 2.0))})          # measured (tests/jump_probe): about a second in the air and 40 m of flight at any speed, so the faster the hill the lower the ramp
-		row["kick"] = {"x": kx, "z": kz, "lip": lipz}
+		var rise := _rng.randf_range(0.95, 1.05) * (1.2 - 0.025 * (17.0 * d - 2.0))          # measured (tests/jump_probe): about a second in the air and 40 m of flight at any speed
+		if epic:
+			rise *= 1.5
+		_kickers.append({"x": kx, "z": kz, "len": KICK_LEN, "w": KICK_W, "rise": rise, "epic": epic})
+		kick_log.append("%.0f/%.0f%s" % [kz, kx, "E" if epic else ""])
+		row["kick"] = {"x": kx, "z": kz, "lip": lipz, "epic": epic}
 		kickers_built += 1
-		# a bright lip and two flags so the ramp reads from a distance
+		if epic:
+			epics_built += 1
+		if air:
+			air_segments += 1
+			_force_far_next = true                          # the barrier after an air segment starts well below the landing
+			_air_zones.append({"z0": kz + 4.0, "z1": lipz - 105.0, "x": kx})
+		var lc := Color(1.0, 0.6, 0.15) if not epic else Color(1.0, 0.3, 0.6)
 		var lipm := BoxMesh.new()
 		lipm.size = Vector3(KICK_W - 2.0, 0.12, 0.5)
-		var lp := _mi(self, lipm, _fx_mat("solid", Color(1.0, 0.6, 0.15), 1.6), Vector3(kx, terrain_h(kx, lipz + 0.8) + 0.12, lipz + 0.8))
+		var lp := _mi(self, lipm, _fx_mat("solid", lc, 1.6), Vector3(kx, terrain_h(kx, lipz + 0.8) + 0.12, lipz + 0.8))
 		(row["nodes"] as Array).append(lp)
 		for sx in [-1.0, 1.0]:
 			var pole := CylinderMesh.new()
 			pole.top_radius = 0.07
 			pole.bottom_radius = 0.09
-			pole.height = 3.2
+			pole.height = 3.2 if not epic else 4.6
 			pole.radial_segments = 5
 			var px: float = kx + float(sx) * (KICK_W * 0.5 - 0.6)
-			var pn := _mi(self, pole, _fx_mat("solid", Color(1.0, 0.6, 0.15), 1.4), Vector3(px, terrain_h(px, lipz + 1.0) + 1.6, lipz + 1.0))
+			var pn := _mi(self, pole, _fx_mat("solid", lc, 1.4), Vector3(px, terrain_h(px, lipz + 1.0) + pole.height * 0.5, lipz + 1.0))
 			(row["nodes"] as Array).append(pn)
-			var flag := _mi(pn, _quad(1.2), _fx_mat("halo", Color(1.0, 0.7, 0.2, 0.9)), Vector3(0.0, 1.35, 0.0))
+			var flag := _mi(pn, _quad(1.4 if not epic else 2.2), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, pole.height * 0.42, 0.0))
 			flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		if _rng.randf() < 0.8:
+		if epic or _rng.randf() < 0.45:
+			_make_pad(row, kx, kz + 14.0, epic)
+		if epic or _rng.randf() < 0.8:
 			var trail: Array = [Vector2(kx, kz + 18.0), Vector2(kx, kz + 10.0), Vector2(kx, kz + 2.0)]
 			_spawn_buff(row, _pick_buff(true), kx, lipz - 9.0, trail, "air", 2.4)
+			if epic:
+				_spawn_buff(row, _pick_buff(true), kx, lipz - 26.0, [], "air", 3.4)
 		return
 
 
@@ -1769,6 +2157,13 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 			_trk_flip_goal = 0.0
 			_trk_grab_t = 0.0
 			_air_peak = 0.0
+			_air_epic = false
+			for ke in _kickers:
+				if bool(ke.get("epic", false)) and spos.z <= float(ke["z"]) and float(ke["z"]) - spos.z < 40.0 and absf(spos.x - float(ke["x"])) < 12.0:
+					_air_epic = true
+			if _air_epic:
+				_toast("EPIC JUMP!", Color(1.0, 0.45, 0.7))
+				_fov_punch = 6.0
 			if not _trk_hint and alt > 0.8:
 				_trk_hint = true
 				_toast("In the air: look left or right to spin", Color(0.9, 0.95, 1.0))
@@ -1850,7 +2245,11 @@ func _land_tricks() -> void:
 		return
 	var mult := 1.0 + 0.5 * float(maxi(kinds - 1, 0))
 	pts = int(float(pts) * mult)
+	if _air_epic:
+		pts = int(float(pts) * 1.6)
 	var name := " + ".join(_trick_parts())
+	if _air_epic:
+		name = "EPIC " + name
 	tricks_landed += 1
 	trick_score += pts
 	if best_trick == "" or pts > int(best_trick.get_slice("|", 1)):
@@ -1869,6 +2268,57 @@ func _land_tricks() -> void:
 	_burst(gp, Color(1.0, 0.9, 0.5), 40, 10.0, 0.9, 1.0)
 	_ring(Vector3(spos.x, spos.y + 0.3, spos.z), Color(1.0, 0.85, 0.4), 9.0, 0.5, false)
 	Game.sfx(&"buff_mult")
+
+
+func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
+	# squinting: the top and bottom of the view close in, like narrowed eyes
+	_squint_vis = lerpf(_squint_vis, 1.0 if _squinting_now else 0.0, 0.25)
+	if _squint_vis > 0.02:
+		var bh := s.y * 0.14 * _squint_vis
+		_hud.draw_rect(Rect2(0.0, 0.0, s.x, bh), Color(0.02, 0.03, 0.08, 0.88))
+		_hud.draw_rect(Rect2(0.0, s.y - bh, s.x, bh), Color(0.02, 0.03, 0.08, 0.88))
+	# the nearest food you can still reach: what to do with your eyes
+	if eat_enabled and not _finished:
+		var best: Dictionary = {}
+		var bd := 1.0e9
+		for kk in _rows:
+			var r: Dictionary = _rows[kk]
+			if absf(float(r["z"]) - spos.z) > 130.0:
+				continue
+			for b in r["buffs"]:
+				if b["taken"] or float(b.get("arm", 0.0)) > 0.0:
+					continue
+				var dz := spos.z - float(b["z"])
+				if dz < 3.0 or dz > 36.0 or absf(float(b["x"]) - spos.x) > 0.3 * dz + 4.0:
+					continue
+				if dz < bd:
+					bd = dz
+					best = b
+		if not best.is_empty():
+			var bp := _food_pos(best) + Vector3(0, 2.8, 0)
+			if not cam.is_position_behind(bp):
+				var sc := cam.unproject_position(bp)
+				var can := _can_eat()
+				var txt := "CHOMP!" if can else "OPEN WIDE"
+				var col := Color(0.5, 1.0, 0.6) if can else Color(1.0, 0.9, 0.4)
+				var pulse := 1.0 + 0.12 * sin(_age * 10.0)
+				var w := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(24.0 * k * pulse)).x
+				_text(font, sc + Vector2(-w * 0.5, 0.0), txt, int(24.0 * pulse), col)
+	# snowballs: where they are and what to do
+	for b2 in _balls:
+		if b2["done"]:
+			continue
+		var wp := Vector3(float(b2["x"]), terrain_h(float(b2["x"]), float(b2["z"])) + BALL_R + 3.0, float(b2["z"]))
+		if cam.is_position_behind(wp):
+			continue
+		var sp2 := cam.unproject_position(wp)
+		var dist := maxf(spos.z - float(b2["z"]), 0.0)
+		var near := dist < 30.0
+		var t2 := "SQUINT!" if near and not _braced() else ("BRACED" if near else "SNOWBALL")
+		var c2 := Color(1.0, 0.55, 0.4) if near and not _braced() else Color(0.8, 0.95, 1.0)
+		var w2 := font.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, int(24.0 * k)).x
+		_text(font, sp2 + Vector2(-w2 * 0.5, 0.0), t2, 24, c2)
+		_hud.draw_arc(sp2 + Vector2(0, 40.0 * k), 22.0 * k, 0.0, TAU, 24, Color(c2.r, c2.g, c2.b, 0.8), 3.0 * k)
 
 
 func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
@@ -2040,7 +2490,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-FINISH_Z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "tricks": {"landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "pads": pads_hit, "epicKickers": epics_built, "tricks": {"landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
@@ -2087,6 +2537,7 @@ func _draw_hud_inner() -> void:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(1.0, 1.0, 1.0, 0.3 * _flash))
 	_draw_pops(font, s, k)
 	_draw_tricks(font, s, k)
+	_draw_eyes_hud(font, s, k)
 	# speed lines at the edge of the screen: the faster you go, the more of them
 	var sp_f := clampf((vel.length() - 26.0) / 40.0, 0.0, 1.0)
 	if sp_f > 0.02:

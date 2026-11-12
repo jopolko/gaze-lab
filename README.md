@@ -34,7 +34,7 @@ Your eyes are not a mouse replacement here. They are the *decision* channel:
 
 | | Mode | How you play |
 |---|---|---|
-| <img src="godot/shots/lanes/lanes_centre.png" width="220"> | **Downhill** (`?level=downhill`; the older three-lane version is `?level=lanes`) | A snow run down a procedural mountain, in first or third person (V). Eyes choose the gate; the board does the carving; kickers and tricks, pickups,  speed builds from 34 to 51 m/s. |
+| <img src="godot/shots/lanes/lanes_centre.png" width="220"> | **Downhill** (`?level=downhill`; the older three-lane version is `?level=lanes`) | A snow run down a procedural mountain, in first or third person (V). Eyes choose the gate; the board does the carving; kickers and epic jumps with spin, grab and flip tricks. **Open your eyes wide to eat** the food pickups (burger boost, ice cream shield, candy double points, donut), **squint to brace** against rolling snowballs, or carve away from them. Speed builds from 34 to 51 m/s. |
 | <img src="godot/shots/peek_1_3.png" width="220"> | **Peek & Blast** (`?level=peek`) | Lean your head to peek out from cover; look to aim; tomato-throwing baddies hide behind round cover. |
 | <img src="godot/shots/flight_blast.png" width="220"> | **Nod Flight** (`?level=flight`) | Chin down gathers energy, snap your chin up to blast through walls, lean to steer. |
 

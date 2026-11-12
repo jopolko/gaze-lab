@@ -172,6 +172,14 @@ var _direct_t: float = 0.0
 var _dfx := OneEuro.new()
 var _dfy := OneEuro.new()
 var coach := HeadCoach.new()          # head-pose coach: learns your good pose from the camera image, no dots
+## Eyes narrowed / opened wide, against your own usual opening (HeadCoach.open_base), smoothed over about a tenth of a second.
+const SQUINT_BELOW := 0.80
+const WIDE_ABOVE := 1.08
+const LID_HOLD := 0.18                # seconds a squint / wide look must last (a blink is shorter)
+var eye_open_fast: float = 1.0
+var _sq_since: float = -1.0
+var _wide_since: float = -1.0
+var _lid_seen: float = -10.0
 var _geo_raw: Vector2 = Vector2(0.5, 0.5)
 var _limb_msec: int = -100000
 var limb_rad: float = 0.0            # iris radius in camera pixels (how many pixels the eye gets: more is better)
@@ -317,6 +325,7 @@ func ingest(d: Dictionary) -> void:
 						var pp: Array = d["pp"]
 						coach.seed(float(pp[0]), float(pp[1]), float(pp[2]))
 					coach.add(rad_to_deg(head_rpy.y), -rad_to_deg(head_rpy.x), -rad_to_deg(head_rpy.z), lid_open, _now())
+					_track_lids(lid_open)
 		_geo_limb = d.has("glimb") and int(d["glimb"]) == 1
 		if _frame_fresh and d.has("lx") and d.has("ly") and d["lx"] != null and d["ly"] != null:
 			_limb_buf.append(Vector2(float(d["lx"]), float(d["ly"])))
@@ -410,6 +419,32 @@ func recentre() -> void:
 # --------------------------------------------------------------------------
 # Internals
 # --------------------------------------------------------------------------
+func _track_lids(lid_open: float) -> void:
+	if coach.open_base <= 0.001:
+		return
+	eye_open_fast = lerpf(eye_open_fast, lid_open / coach.open_base, 0.5)
+	var t := _now()
+	_lid_seen = t
+	if eye_open_fast < SQUINT_BELOW and eye_open_fast > 0.3:
+		if _sq_since < 0.0:
+			_sq_since = t
+	else:
+		_sq_since = -1.0
+	if eye_open_fast > WIDE_ABOVE:
+		if _wide_since < 0.0:
+			_wide_since = t
+	else:
+		_wide_since = -1.0
+
+
+func squint_held() -> bool:
+	return _sq_since >= 0.0 and _now() - _sq_since >= LID_HOLD and _now() - _lid_seen < 0.6
+
+
+func wide_held() -> bool:
+	return _wide_since >= 0.0 and _now() - _wide_since >= LID_HOLD and _now() - _lid_seen < 0.6
+
+
 func _now() -> float:
 	return Time.get_ticks_msec() / 1000.0
 
