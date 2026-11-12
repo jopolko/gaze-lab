@@ -37,9 +37,21 @@ Your eyes are not a mouse replacement here. They are the *decision* channel:
 | <img src="godot/shots/lanes/lanes_centre.png" width="220"> | **Carve** / **Downhill** (`?level=carve`, `?level=downhill`) | A snow run down a procedural mountain. Eyes choose the gate; the board does the carving; speed builds from 34 to 51 m/s. |
 | <img src="godot/shots/peek_1_3.png" width="220"> | **Peek & Blast** (`?level=peek`) | Lean your head to peek out from cover; look to aim; tomato-throwing baddies hide behind round cover. |
 | <img src="godot/shots/flight_blast.png" width="220"> | **Nod Flight** (`?level=flight`) | Chin down gathers energy, snap your chin up to blast through walls, lean to steer. |
-| | **Eye arena** (`?level=eyes`) | The original hands-free demo: gaze locks on targets, a blink fires, a wink swaps guns. |
 
 No camera? Every mode falls back to mouse and touch, with the pointer standing in for your eyes.
+
+## EyeLab
+
+<img src="eyelab/screenshot.png" alt="EyeLab: screen-reach map, 3D head and gaze monitor, calibration and accuracy tests" width="860">
+
+**[EyeLab](https://joshuaopolko.com/gaze-lab/eyelab/)** is the tracking workbench behind the games: a single static page, no build step.
+Use it to see exactly what the tracker sees and to tune it for your face, screen and camera.
+
+- **Screen reach map:** a to-scale map of the screen that shows whether your gaze covers all of it.
+- **3D head and gaze monitor:** a mirrored head cube with a nose line, plus a gaze arrow combining head and eyes.
+- **Tests:** noise, accuracy, head-sweep drift and a live gaze-dot calibration, with copy-as-JSON results.
+- **Ball demo:** a full-screen game for trying out your gaze.
+- **Per-eye calibration and weighting**, which help with glasses.
 
 ## How the tracking works
 
