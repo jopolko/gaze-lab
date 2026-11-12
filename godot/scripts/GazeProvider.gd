@@ -173,8 +173,8 @@ var _dfx := OneEuro.new()
 var _dfy := OneEuro.new()
 var coach := HeadCoach.new()          # head-pose coach: learns your good pose from the camera image, no dots
 ## Eyes narrowed / opened wide, against your own usual opening (HeadCoach.open_base), smoothed over about a tenth of a second.
-const SQUINT_BELOW := 0.80
-const WIDE_ABOVE := 1.08
+const SQUINT_BELOW := 0.78
+const WIDE_ABOVE := 1.12
 const LID_HOLD := 0.18                # seconds a squint / wide look must last (a blink is shorter)
 var eye_open_fast: float = 1.0
 ## Cross-eyed: both irises turn toward the nose, against each eye's own slow baseline.
@@ -427,18 +427,39 @@ func recentre() -> void:
 # --------------------------------------------------------------------------
 # Internals
 # --------------------------------------------------------------------------
+## The usual opening is YOUR median over the last ~8 s of play, not a high percentile: someone who always squints a little (glasses, a low camera) must not be
+## read as squinting all the time. A squint is 22% narrower than your recent normal, wide is 12% wider. A squint that never lets up for 3 s is the new normal.
+var _lid_hist: Array = []
+
+
+func lid_baseline() -> float:
+	if _lid_hist.size() < 12:
+		return 0.0
+	var v: Array = []
+	for p in _lid_hist:
+		v.append(float(p[1]))
+	v.sort()
+	return float(v[v.size() / 2])
+
+
 func _track_lids(lid_open: float) -> void:
-	if coach.open_base <= 0.001:
+	if not is_finite(lid_open) or lid_open <= 0.0:
 		return
-	eye_open_fast = lerpf(eye_open_fast, lid_open / coach.open_base, 0.5)
 	var t := _now()
 	_lid_seen = t
-	if eye_open_fast < SQUINT_BELOW and eye_open_fast > 0.3:
+	_lid_hist.append([t, lid_open])
+	while not _lid_hist.is_empty() and t - float(_lid_hist[0][0]) > 8.0:
+		_lid_hist.remove_at(0)
+	var base := lid_baseline()
+	if base <= 0.001:
+		return
+	eye_open_fast = lerpf(eye_open_fast, lid_open / base, 0.5)
+	if eye_open_fast < SQUINT_BELOW and eye_open_fast > 0.3 and (_sq_since < 0.0 or t - _sq_since < 3.0):
 		if _sq_since < 0.0:
 			_sq_since = t
 	else:
 		_sq_since = -1.0
-	if eye_open_fast > WIDE_ABOVE:
+	if eye_open_fast > WIDE_ABOVE and (_wide_since < 0.0 or t - _wide_since < 3.0):
 		if _wide_since < 0.0:
 			_wide_since = t
 	else:

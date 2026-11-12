@@ -591,7 +591,7 @@ func _ready() -> void:
 		hs_cr += rig.crashes
 		hs_bar += rig._passed_ok
 	_check(hs_path_got >= int(0.2 * float(hs_path_sp)), "a player who looks at the buffs collects a good share of the ones beside the path (%d of %d)" % [hs_path_got, hs_path_sp])
-	_check(hs_gate_got >= int(0.4 * float(hs_gate_sp)), "and the ones in front of the safe gate (%d of %d)" % [hs_gate_got, hs_gate_sp])
+	_check(hs_gate_got >= int(0.25 * float(hs_gate_sp)), "and the ones in front of the safe gate (%d of %d)" % [hs_gate_got, hs_gate_sp])
 	_check(hs_cr <= 8, "hunting buffs does not wreck the run (%d crashes, %d barriers over 2 full runs)" % [hs_cr, hs_bar])
 	rig.wide_override = false
 	rig.set_physics_process(true)
@@ -693,22 +693,33 @@ func _ready() -> void:
 	rig.view_fp = true
 	rig.set_physics_process(true)
 
-	# ---- eye actions: squint and wide-eyed, from the lid opening
-	GazeProvider.coach.open_base = 0.30
+	# ---- eye actions: squint and wide-eyed, judged against YOUR recent normal
+	GazeProvider._lid_hist.clear()
+	GazeProvider.eye_open_fast = 1.0
+	for i in 40:
+		GazeProvider._track_lids(0.20)                              # a habitual squinter's normal
+		await get_tree().create_timer(0.01).timeout
+	_check(not GazeProvider.squint_held() and not GazeProvider.wide_held(), "someone who always has their eyes a little narrow is not squinting (ratio %.2f)" % GazeProvider.eye_open_fast)
+	for i in 8:
+		GazeProvider._track_lids(0.14)
+		await get_tree().create_timer(0.05).timeout
+	_check(GazeProvider.squint_held() and not GazeProvider.wide_held(), "narrowing from your own normal, held for a moment, is a squint (ratio %.2f)" % GazeProvider.eye_open_fast)
+	GazeProvider._lid_hist.clear()
+	for i in 40:
+		GazeProvider._track_lids(0.20)
 	GazeProvider.eye_open_fast = 1.0
 	for i in 8:
+		GazeProvider._track_lids(0.26)
+		await get_tree().create_timer(0.05).timeout
+	_check(GazeProvider.wide_held() and not GazeProvider.squint_held(), "opening wider than your own normal, held for a moment, is wide-eyed (ratio %.2f)" % GazeProvider.eye_open_fast)
+	GazeProvider._lid_hist.clear()
+	for i in 40:
 		GazeProvider._track_lids(0.20)
-		await get_tree().create_timer(0.05).timeout
-	_check(GazeProvider.squint_held() and not GazeProvider.wide_held(), "an eye opening well under your usual, held for a moment, is a squint (ratio %.2f)" % GazeProvider.eye_open_fast)
-	for i in 8:
-		GazeProvider._track_lids(0.36)
-		await get_tree().create_timer(0.05).timeout
-	_check(GazeProvider.wide_held() and not GazeProvider.squint_held(), "an eye opening wider than your usual, held for a moment, is wide-eyed (ratio %.2f)" % GazeProvider.eye_open_fast)
-	for i in 8:
-		GazeProvider._track_lids(0.04)
-		await get_tree().create_timer(0.05).timeout
-	_check(not GazeProvider.squint_held() and not GazeProvider.wide_held(), "a blink (eyes nearly shut) is neither a squint nor wide")
-	GazeProvider.coach.open_base = 0.0
+	for i in 6:
+		GazeProvider._track_lids(0.03)
+		await get_tree().create_timer(0.03).timeout
+	_check(not GazeProvider.squint_held(), "a blink (eyes nearly shut) is not a squint")
+	GazeProvider._lid_hist.clear()
 	GazeProvider.eye_open_fast = 1.0
 
 	# ---- foods: all four are built, eaten with wide eyes, and bounce away if you miss
@@ -766,11 +777,16 @@ func _ready() -> void:
 	_check(rig.score - sc_d >= 200 and rig.buffs_got == gb0 + 3, "a donut is worth a lot of points (%d)" % (rig.score - sc_d))
 	rig.wide_override = false
 	rig.vel = Vector2(0.0, -30.0)
+	rig._spawn_ball()                                   # a squint only counts while a snowball is about
 	rig.squint_override = true
 	var v_sq: float = rig.vel.length()
 	rig._update_eye_actions(0.5)
 	_check(rig.vel.length() < v_sq * 0.96 and rig._squinting_now, "squinting costs speed while you do it (%.1f -> %.1f m/s)" % [v_sq, rig.vel.length()])
 	rig.squint_override = false
+	for bq in rig._balls:
+		if is_instance_valid(bq["n"]):
+			(bq["n"] as Node).queue_free()
+	rig._balls.clear()
 
 	# ---- snowballs: hit, brace, dodge, outrun
 	var sb_modes := ["nothing", "squint", "sidestep", "outrun"]

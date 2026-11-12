@@ -1686,7 +1686,7 @@ func _braced() -> bool:
 func _update_eye_actions(delta: float) -> void:
 	if _wide_now():
 		_wide_last = _age
-	_squinting_now = _squint_now()
+	_squinting_now = _squint_now() and not _balls.is_empty()          # a squint only means something while a snowball is about: a stray one costs nothing
 	if _squinting_now:
 		_squint_last = _age
 		if grounded and not _finished:
