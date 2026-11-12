@@ -160,6 +160,11 @@ var _last_frame_n: int = -1          # camera frame number of the last packet: t
 var _frame_fresh: bool = true
 var _geo_limb: bool = false          # the geometry gaze is built from the precise limbus centres
 var bias := EyeBias.new()
+var face: Dictionary = {"jaw": 0.0, "brows": 0.0, "smile": 0.0, "tongue": -1.0, "puff": 0.0, "frown": 0.0, "bdown": 0.0, "ewide": 0.0, "esq": 0.0, "pucker": 0.0, "sneer": 0.0}   # blendshapes, lightly smoothed (tongue -1 = this tracker cannot see it)
+var face_override: Dictionary = {}        # tests: kind -> true
+var pm := PhoneMotion.new()               # phone sensors: removes tilt-following from the iris reading, holds the gaze through a bump, buzzes the hand
+var pm_on: bool = true                    # ?nopm turns the stabiliser off to compare
+var _eih_frozen_t: float = 0.0
 var eye_w := Vector2(-1.0, -1.0)         # automatic per-eye weights (right, left); (-1, -1) until learned
 var direct: Vector2 = Vector2(0.5, 0.5)     # the geometry gaze straight from the tracker, only lightly smoothed: the same signal EyeLab shows (no median, no offset learning)
 var direct_ok: bool = false
@@ -237,6 +242,8 @@ func _ready() -> void:
 			_head_sign.x = -1.0
 		if q.contains("flippitch"):
 			_head_sign.y = -1.0
+		if q.contains("nopm"):
+			pm_on = false
 		if q.contains("headw="):
 			head_weight = clampf(float(q.split("headw=")[1].split("&")[0]), 0.0, 1.0)
 	_dfx.min_cutoff = 2.0
@@ -309,6 +316,13 @@ func ingest(d: Dictionary) -> void:
 	var bl := float(d.get("blink_l", both))
 	var br := float(d.get("blink_r", both))
 	_gestures(bl, br, float(d.get("mouth", 0.0)), float(d.get("brows", 0.0)), _now())
+	face["jaw"] = lerpf(float(face["jaw"]), float(d.get("mouth", 0.0)), 0.5)
+	face["brows"] = lerpf(float(face["brows"]), float(d.get("brows", 0.0)), 0.5)
+	for fk in ["smile", "puff", "frown", "bdown", "ewide", "esq", "pucker", "sneer"]:
+		if d.has(fk):
+			face[fk] = lerpf(float(face[fk]), float(d[fk]), 0.5)
+	if d.has("tongue"):
+		face["tongue"] = lerpf(float(face["tongue"]), float(d["tongue"]), 0.5) if float(d["tongue"]) >= 0.0 else -1.0
 	# Eyelids closing makes the iris reading garbage: hold the last gaze through a blink.
 	# Judged against each eye's own open level (it varies a lot: glasses, camera angle).
 	if maxf(dbg_l, dbg_r) < 0.22 and d.has("x"):
@@ -340,7 +354,14 @@ func ingest(d: Dictionary) -> void:
 			var tn2 := _now()
 			var edt := clampf(tn2 - _eih_t, 0.005, 0.5)
 			_eih_t = tn2
-			eih = Vector2(_efx.filter(float(d["lx"]), edt), _efy.filter(float(d["ly"]), edt))
+			var ev := Vector2(float(d["lx"]), float(d["ly"]))
+			if pm_on and pm.active:
+				ev = pm.correct(ev)
+			if pm_on and pm.holding() and eih_ok and _eih_frozen_t < 0.4:
+				_eih_frozen_t += edt                   # a bump or a re-grip: keep the last reading for a moment (never longer than 0.4 s)
+			else:
+				_eih_frozen_t = 0.0
+				eih = Vector2(_efx.filter(ev.x, edt), _efy.filter(ev.y, edt))
 			eih_ok = true
 			if _limb_buf.size() > 5:
 				_limb_buf.remove_at(0)
@@ -453,6 +474,10 @@ func _track_lids(lid_open: float) -> void:
 	var base := lid_baseline()
 	if base <= 0.001:
 		return
+	if pm_on and pm.settling():
+		_sq_since = -1.0                                   # the grip is changing; the lid baseline has not caught up yet
+		_wide_since = -1.0
+		return
 	eye_open_fast = lerpf(eye_open_fast, lid_open / base, 0.5)
 	if eye_open_fast < SQUINT_BELOW and eye_open_fast > 0.3 and (_sq_since < 0.0 or t - _sq_since < 3.0):
 		if _sq_since < 0.0:
@@ -483,6 +508,37 @@ func _track_conv(xr: float, xl: float) -> void:
 
 func cross_eyed() -> bool:
 	return _cross_since >= 0.0 and _now() - _cross_since >= LID_HOLD and _now() - _lid_seen < 0.6
+
+
+## Is the player pulling this face right now? (Thresholds are for the raw blendshape scores, which run a little low for most people.)
+func face_is(kind: String) -> bool:
+	if face_override.get(kind, false):
+		return true
+	var f := face
+	match kind:
+		"tongue":
+			if float(f["tongue"]) >= 0.0:
+				return float(f["tongue"]) > 0.3
+			return float(f["jaw"]) > 0.5 and float(f["smile"]) < 0.25          # no tongue sensor: a wide open mouth stands in for it
+		"smile":
+			return float(f["smile"]) > 0.5
+		"shock":
+			return float(f["jaw"]) > 0.35 and float(f["brows"]) > 0.4 and float(f["ewide"]) > 0.25
+		"pain":
+			return float(f["bdown"]) > 0.4 and float(f["esq"]) > 0.3
+		"wide":
+			return wide_held() or float(f["ewide"]) > 0.65
+		"cross":
+			return cross_eyed()
+		"squint":
+			return squint_held()
+		"puff":
+			return float(f["puff"]) > 0.4
+		"kiss":
+			return float(f["pucker"]) > 0.5
+		"sneer":
+			return float(f["sneer"]) > 0.45
+	return false
 
 
 func squint_held() -> bool:
@@ -551,6 +607,7 @@ func _process(delta: float) -> void:
 			confidence = 1.0
 		Backend.UDP, Backend.CAMERA:
 			if backend == Backend.CAMERA:
+				pm.poll(rd)
 				_poll_camera(rd)
 				if cal_index >= 0:
 					_calibrate_tick(rd)

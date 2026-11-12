@@ -362,6 +362,9 @@ class EyeFuse {
       x: gx, y: gy, bx: bx, by: by, f: feats, gu: gg.ok ? gg.u : undefined, gv: gg.ok ? gg.v : undefined, hyaw: yaw, hpitch: pitch, hroll: roll, gyaw: gg.ok ? gg.gyaw : undefined, gpitch: gg.ok ? gg.gpitch : undefined, conf: 1.0,
       blink_l: g('eyeBlinkLeft'), blink_r: g('eyeBlinkRight'),
       mouth: g('jawOpen'), brows: g('browInnerUp'),
+      smile: (g('mouthSmileLeft') + g('mouthSmileRight')) * 0.5, tongue: (bs.tongueOut !== undefined ? bs.tongueOut : -1), puff: g('cheekPuff'),
+      frown: (g('mouthFrownLeft') + g('mouthFrownRight')) * 0.5, bdown: (g('browDownLeft') + g('browDownRight')) * 0.5,
+      ewide: (g('eyeWideLeft') + g('eyeWideRight')) * 0.5, esq: (g('eyeSquintLeft') + g('eyeSquintRight')) * 0.5, pucker: g('mouthPucker'), sneer: (g('noseSneerLeft') + g('noseSneerRight')) * 0.5,
       nx: 1.0 - L[1].x, ny: L[1].y, fw: Math.abs(L[454].x - L[234].x)
     };
     const pts = [];

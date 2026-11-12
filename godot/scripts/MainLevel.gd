@@ -83,7 +83,13 @@ func _ready() -> void:
 	add_child(gaze)
 	$UI.add_child(TouchControls.new())
 	if Game.demo_mode:
-		$UI.add_child(EyeDemoIntro.new())
+		if start_level == 11:
+			$UI.add_child(DownhillMenu.new())
+		else:
+			$UI.add_child(EyeDemoIntro.new())
+		Game.dh_started.connect(func(c: Dictionary) -> void:
+			if _dh is RunRig:
+				(_dh as RunRig).apply_menu(c, self))
 	player.died.connect(_on_player_died)
 	load_level(start_level)
 
@@ -208,6 +214,8 @@ func _on_player_died() -> void:
 
 func _apply_environment(cfg: Dictionary) -> void:
 	var env := world_env.environment
+	if env.sky.has_meta("orig_sky"):
+		env.sky.sky_material = env.sky.get_meta("orig_sky")            # a theme may have put its own sky in: back to the plain one before the level sets its colours
 	var sky := env.sky.sky_material as ProceduralSkyMaterial
 	sky.sky_top_color = cfg["sky_top"]
 	sky.sky_horizon_color = cfg["sky_horizon"]

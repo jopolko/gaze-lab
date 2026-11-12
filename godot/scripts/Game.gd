@@ -10,6 +10,7 @@ signal banner_requested(text: String, color: Color, seconds: float)
 signal player_hurt(amount: float)
 signal boss_changed(boss_name: String, hp: float, max_hp: float)
 signal level_requested(index: int)
+signal dh_started(cfg: Dictionary)          # the Downhill menu: go, with these settings
 signal sfx_requested(sfx: StringName, world_pos: Vector3)
 signal chaos_changed(score: int)
 signal pad_changed(using_gamepad: bool)

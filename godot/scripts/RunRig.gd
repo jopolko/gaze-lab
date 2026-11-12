@@ -49,6 +49,10 @@ func setup(p_player: PlayerController) -> void:
 	name = "RunRig"
 	_load_view_pref()
 	_read_params()
+	if OS.has_feature("web"):
+		var pv := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('pmview') || ''"))
+		if pv != "":
+			pm_view = clampf(float(pv), -1.0, 1.0)
 	_zone_scale = 1.8                    # the trim from the raw look is looser: full lock at about +-19% of the screen, not +-10%
 	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
 	if OS.has_feature("web"):
@@ -384,11 +388,22 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 		(row["nodes"] as Array).append(root)
 		var mat := _fx_mat("solid", col, 2.4)
 		var cm := CylinderMesh.new()
-		cm.top_radius = 0.1
-		cm.bottom_radius = 0.14
-		cm.height = 16.0
+		cm.top_radius = 0.3
+		cm.bottom_radius = 0.45
+		cm.height = 22.0
 		cm.radial_segments = 6
-		_mi(root, cm, _fx_mat("add", Color(col.r, col.g, col.b, 0.35)), Vector3(0, -8.0, 0))
+		_mi(root, cm, _fx_mat("add", Color(col.r, col.g, col.b, 0.45)), Vector3(0, -8.0, 0))
+		# a tall post on each side of the opening, so a gap is visible over the trees and from the side
+		var gw: float = float(g.get("w", 10.0))
+		for psx in [-1.0, 1.0]:
+			var post := CylinderMesh.new()
+			post.top_radius = 0.28
+			post.bottom_radius = 0.36
+			post.height = 9.0
+			post.radial_segments = 6
+			var ppx: float = gx + float(psx) * gw * 0.5
+			var pn2 := _mi(self, post, mat, Vector3(ppx, terrain_h(ppx, rz) + 4.5, rz))
+			(row["nodes"] as Array).append(pn2)
 		match zn:
 			"rush":
 				for vi in 2:
@@ -438,6 +453,8 @@ func _build_corridor(row: Dictionary, zone: String, halfw: float, prev_rz: float
 		var cx := path_x(row, z)
 		for sd in [-1.0, 1.0]:
 			var x: float = cx + float(sd) * halfw + _rng.randf_range(-0.5, 0.5)
+			if z < rz + 48.0 and _near_gap(row, x, 5.0):
+				continue                                          # the walls open up in front of every gate, so a way out is never hidden behind a tree
 			if absf(x) < W_HALF - 1.0:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, z + _rng.randf_range(-0.6, 0.6), _rng.randf_range(0.9, 1.3), true)
 		z -= 3.7
@@ -454,20 +471,74 @@ func _build_corridor(row: Dictionary, zone: String, halfw: float, prev_rz: float
 				hx += 3.7
 
 
+func _near_gap(row: Dictionary, x: float, pad: float) -> bool:
+	for g in row["gaps"]:
+		if absf(x - float(g["x"])) < float(g["w"]) * 0.5 + pad:
+			return true
+	return false
+
+
+## Lost in a corridor? Glowing breadcrumbs lead from the board to the nearest opening of the next barrier.
+func _update_crumbs(delta: float) -> void:
+	var row: Dictionary = {}
+	var bz := -1.0e9
+	for j in _rows:
+		var r: Dictionary = _rows[j]
+		if r["has_row"] and float(r["z"]) < spos.z - 12.0 and float(r["z"]) > bz and float(r["z"]) > spos.z - 160.0:
+			bz = float(r["z"])
+			row = r
+	var gap := {}
+	var gd := 1.0e9
+	if not row.is_empty() and not _in_air:
+		for g in row["gaps"]:
+			if absf(float(g["x"]) - spos.x) < gd:
+				gd = absf(float(g["x"]) - spos.x)
+				gap = g
+	var lost := not gap.is_empty() and gd > 11.0
+	_crumb_a = move_toward(_crumb_a, 1.0 if lost else 0.0, delta * 2.5)
+	if _crumbs.is_empty():
+		var dm := CylinderMesh.new()
+		dm.top_radius = 0.9
+		dm.bottom_radius = 0.9
+		dm.height = 0.08
+		var cmat := _fx_mat("add", Color(1.0, 1.0, 1.0, 0.8))
+		for ci in 14:
+			var cn := _mi(self, dm, cmat)
+			cn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			cn.visible = false
+			_crumbs.append(cn)
+	for ci2 in _crumbs.size():
+		var cn2: MeshInstance3D = _crumbs[ci2]
+		if _crumb_a <= 0.02 or gap.is_empty():
+			cn2.visible = false
+			continue
+		var u := float(ci2 + 1) / float(_crumbs.size())
+		var cz := lerpf(spos.z - 6.0, bz, u)
+		var cx := lerpf(spos.x, float(gap["x"]), u * u * (3.0 - 2.0 * u))
+		cn2.visible = true
+		cn2.global_position = Vector3(cx, terrain_h(cx, cz) + 0.3, cz)
+		var wave := 0.5 + 0.5 * sin(_age * 7.0 - float(ci2) * 0.9)
+		cn2.scale = Vector3.ONE * (0.5 + 0.9 * wave) * _crumb_a
+
+
 func _update_mist(z_end: float) -> void:
 	if _mist == null:
 		_mist = MeshInstance3D.new()
 		var q := QuadMesh.new()
 		q.size = Vector2(560.0, 160.0)
 		_mist.mesh = q
-		var m := StandardMaterial3D.new()
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		m.albedo_color = Color(0.93, 0.96, 1.0, 0.97)
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		var sh := Shader.new()
+		sh.code = "shader_type spatial;
+render_mode unshaded, cull_disabled;
+uniform vec4 tint : source_color = vec4(0.93, 0.96, 1.0, 0.97);
+void fragment() { ALBEDO = tint.rgb; ALPHA = tint.a * smoothstep(0.22, 0.62, UV.y); }
+"
+		var m := ShaderMaterial.new()
+		m.shader = sh
 		_mist.material_override = m
 		_mist.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(_mist)
+	(_mist.material_override as ShaderMaterial).set_shader_parameter("tint", mist_color)
 	_mist.global_position = Vector3(0.0, terrain_h(0.0, z_end) + 50.0, z_end)
 
 
@@ -1239,14 +1310,14 @@ func _view_juice() -> void:
 	var ts := _trk_spin if _in_air else _trk_vis_spin
 	var tf := _trk_flip if _in_air else _trk_vis_flip
 	var grabbing := _in_air and (nod_p < -0.10 or trick_grab_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
-	if not view_fp:
+	if not _fp_now():
 		if _in_air or absf(ts) > 0.01 or absf(tf) > 0.01:
 			_sled.rotate_object_local(Vector3.RIGHT, tf + (0.3 if grabbing else 0.0))
 			_sled.rotate_object_local(Vector3.UP, ts)
-	_sled.visible = _sled.visible and not view_fp
+	_sled.visible = _sled.visible and not _fp_now()
 	if _tip_pivot != null:
-		_tip_pivot.visible = view_fp and (hurt_t <= 0.0 or int(_age * 14.0) % 2 == 0)
-		if view_fp:
+		_tip_pivot.visible = _fp_now() and (hurt_t <= 0.0 or int(_age * 14.0) % 2 == 0)
+		if _fp_now():
 			# Everything eases toward where it should be, so the board seems to glide and slide on the snow instead of snapping: it lags a turn, skids a little sideways
 			# when you carve hard, and hums softly with speed.
 			var dt := get_process_delta_time()
@@ -1808,6 +1879,7 @@ func _physics_process(delta: float) -> void:
 	_pf_phys = _pf(_pf_phys, pf0)
 
 
+var pm_view: float = 0.0                                   # ?pmview=0.3 : phone tilt gently turns the view (experimental, sign may need flipping with a negative value)
 var ghost := false                                       # tests only: ride through obstacles
 
 
@@ -1859,10 +1931,12 @@ func _hit_fx(kind: float, ox: float, oz: float, orad: float, speed: float) -> vo
 		_burst(p, Color(0.42, 0.28, 0.14), int(20.0 * k), 6.0, 0.8, 0.7, Vector3.UP, 120.0, -6.0)
 		_burst(p + Vector3(0, 1.4, 0), Color(1, 1, 1), int(40.0 * k), 5.0, 1.3, 1.5, Vector3.UP, 100.0, -2.5)
 		Game.sfx(&"thwack")
+		GazeProvider.pm.buzz([35])
 		_shake = maxf(_shake, 0.5)
 	else:
 		var p2 := Vector3(ox, gy + orad, oz)
 		Game.sfx(&"gong")
+		GazeProvider.pm.buzz([40, 50, 25, 50, 15, 50, 8])              # rings out and fades, like the bell
 		_burst(p2, Color(0.8, 0.9, 1.0), 26, 9.0, 0.6, 0.6, Vector3.UP, 180.0, -7.0)
 		_ring(p2, Color(0.8, 0.92, 1.0), 7.0, 0.8, true)
 		get_tree().create_timer(0.18).timeout.connect(func() -> void: _ring(p2, Color(0.8, 0.92, 1.0), 9.0, 0.9, true))
@@ -1905,6 +1979,7 @@ func _ring_bell(ox: float, oz: float, orad: float) -> void:
 func _crash(msg: String, ctx: String = "") -> void:
 	if hurt_t > 0.0 or _finished:
 		return
+	GazeProvider.pm.buzz([90, 40, 60])
 	if shield > 0:
 		shield = 0
 		hurt_t = 0.8
@@ -2053,6 +2128,9 @@ func _restart() -> void:
 	_buff_cand_t = 0.0
 	_buff_w = 0.0
 	_pitch.clear()
+	face_kind = ""
+	_cine_k = 0.0
+	_cine_on = false
 	_pending_zone = ""
 	_pending_bend = 0.0
 	_gate_open = true
@@ -2475,6 +2553,7 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	if not view_fp:
 		super._place_camera(delta, snap)
 		_fit_fov()
+		_cine_apply(delta)
 		return
 	var sp := vel.length()
 	var vdir := vel / sp if sp > 1.0 else Vector2(0.0, -1.0)
@@ -2490,12 +2569,16 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	if (ahead - eye).length() > 0.5:
 		cam.look_at(ahead, Vector3.UP)
 	cam.basis = cam.basis * Basis(Vector3(0, 0, 1), -steer * 0.10 - _trk_cam_roll) * Basis(Vector3(1, 0, 0), _trk_cam_pitch)
+	if pm_view > 0.0 and GazeProvider.pm.active:
+		var pmt := GazeProvider.pm
+		cam.basis = cam.basis * Basis(Vector3(0, 1, 0), deg_to_rad(clampf(-pmt.tilt_x * pm_view, -5.0, 5.0))) * Basis(Vector3(1, 0, 0), deg_to_rad(clampf(-(pmt.tilt_y - 70.0) * pm_view * 0.5, -4.0, 4.0)))
 	_shake = maxf(_shake - 1.6 * delta, 0.0)
 	cam.h_offset = randf_range(-1.0, 1.0) * _shake * 0.3
 	cam.v_offset = randf_range(-1.0, 1.0) * _shake * 0.3
 	_fov_punch = maxf(_fov_punch - 24.0 * delta, 0.0)
 	cam.fov = clampf(80.0 + (sp - 18.0) * 0.6, 78.0, 108.0) + _fov_punch
 	_fit_fov()
+	_cine_apply(delta)
 
 
 ## The view model: just the tip of the board at the bottom of the screen. It swings with the board's heading (so you can see where it points relative to
@@ -2538,6 +2621,11 @@ func _build_tip() -> void:
 #   flip   snap your chin up (or W): a backflip
 # You always land: the landing straightens the board to the nearest half turn, so a trick never costs you a crash. Doing more than one at once multiplies the points.
 # --------------------------------------------------------------------------
+var mist_color: Color = Color(0.93, 0.96, 1.0, 0.97)       # what hides the stretch that is not built yet: the theme sets it
+var _crumbs: Array = []
+var _crumb_a: float = 0.0
+var sky_rise: float = 2.2
+var sky_drag: float = 0.28                                   # how much steeper than a plain kicker the air-stretch ramps are
 const KICK_LEN := 26.0
 const KICK_W := 18.0
 var kickers_built: int = 0
@@ -2573,6 +2661,7 @@ var _air_peak: float = 0.0
 
 ## A hard landing costs speed but never wipes you out: the hill is steep and a landing is rarely your fault (a bump, a ramp you chose).
 func _land(impact: float, gh: float, gvy: float) -> void:
+	GazeProvider.pm.buzz([clampi(int(impact * 4.0), 15, 70)])
 	super._land(minf(impact, 15.0), gh, gvy)
 
 
@@ -2621,6 +2710,8 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 		if not ok:
 			continue
 		var rise := _rng.randf_range(0.95, 1.05) * 3.3 * (36.0 / (34.0 + 17.0 * d))          # a ramp rising this fast over its length throws you about 1.3 s into the air and 50-70 m down the slope at any speed (tests/jump_probe); a charged pop adds up to 3 m/s
+		if air:
+			rise *= sky_rise                                   # air stretches throw you at the sky
 		_kickers.append({"x": kx, "z": kz, "len": KICK_LEN, "w": KICK_W, "rise": rise, "epic": epic})
 		kick_log.append("%.0f/%.0f%s" % [kz, kx, "E" if epic else ""])
 		row["kick"] = {"x": kx, "z": kz, "lip": lipz, "epic": epic}
@@ -2648,8 +2739,8 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 			var flag := _mi(pn, _quad(1.4 if not epic else 2.2), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, pole.height * 0.42, 0.0))
 			flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var pad_n := 0
-		for pz in [kz + 10.0, kz - KICK_LEN * 0.5, lipz + 4.0]:
-			if (pad_n == 0 and pz == lipz + 4.0) or _rng.randf() < 0.65:
+		for pz in ([kz + 26.0, kz + 10.0, kz - KICK_LEN * 0.5, lipz + 4.0] if air else [kz + 10.0, kz - KICK_LEN * 0.5, lipz + 4.0]):
+			if air or (pad_n == 0 and pz == lipz + 4.0) or _rng.randf() < 0.65:
 				_make_pad(row, kx, pz, true)
 				pad_n += 1
 		if epic or _rng.randf() < 0.8:
@@ -2658,6 +2749,145 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 			if epic:
 				_spawn_buff(row, _pick_buff(true), kx, lipz - 26.0, [], "air", 3.4)
 		return
+
+
+# --------------------------------------------------------------------------
+# Up in the sky: face challenges and the cinematic cutaway
+# --------------------------------------------------------------------------
+## Every face the game can ask for: the prompt, what the move is called, and what it pays.
+const FACES := {
+	"tongue": {"say": "STICK OUT YOUR TONGUE!", "name": "THE BLEH", "pts": 260},
+	"smile": {"say": "MANIACAL SMILE!!", "name": "THE JOKER", "pts": 260},
+	"shock": {"say": "LOOK SHOCKED!", "name": "THE HOME ALONE", "pts": 280},
+	"pain": {"say": "LOOK IN PAIN!", "name": "THE OUCHIE", "pts": 280},
+	"wide": {"say": "EYES WIDE OPEN!", "name": "THE OWL", "pts": 240},
+	"cross": {"say": "CROSS YOUR EYES!", "name": "THE CROSS-EYED CRUSADER", "pts": 280},
+	"squint": {"say": "SQUINT LIKE A PIRATE!", "name": "THE PIRATE", "pts": 220},
+	"puff": {"say": "PUFF YOUR CHEEKS!", "name": "THE HAMSTER", "pts": 260},
+	"kiss": {"say": "BLOW A KISS!", "name": "THE SMOOCH", "pts": 240},
+	"sneer": {"say": "SNEER AT THE MOUNTAIN!", "name": "THE VILLAIN", "pts": 240},
+	"crazy": {"say": "CRAZY EYES!!", "name": "THE LOOSE MARBLES", "pts": 280},
+	"shake": {"say": "SHAKE YOUR HEAD!", "name": "THE WET DOG", "pts": 240},
+}
+const FACE_OPENERS := ["MAKE A FACE!", "QUICK, A FACE!", "THE CROWD WANTS A FACE!", "SURPRISE FACE TIME!", "FACE! NOW!", "THE CAMERAS ARE ON YOU!"]
+const FACE_WINDOW := 2.6
+
+var face_enabled: bool = true
+var face_kind: String = ""             # the face being asked for ("" = none)
+var face_t: float = 0.0                # seconds left to pull it
+var face_hold: float = 0.0
+var face_open: String = ""
+var face_done: int = 0
+var face_seen: Dictionary = {}
+var face_override: String = ""         # tests: pretend the player is pulling this face
+var _face_next: float = 0.7            # air time at which the next prompt appears
+var _face_last: String = ""
+var _cine_k: float = 0.0
+var _cine_on: bool = false
+var _cine_t: float = 0.0
+var _cine_side: float = 1.0
+var cine_enabled: bool = true
+var cines: int = 0
+
+
+## The menu's choices, applied just before the run starts (and the course rebuilt from them).
+func apply_menu(c: Dictionary, level: MainLevel) -> void:
+	var zones: Dictionary = (c.get("zones", {}) as Dictionary).duplicate()
+	var km := float(c.get("length_km", 4.2))
+	params["seed"] = int(c.get("seed", 424242))
+	apply_params({"length": 0.0 if bool(c.get("endless", false)) else km * 1000.0, "diff": float(c.get("diff", 1.0)), "zones": zones})
+	face_enabled = bool(c.get("faces", true))
+	cine_enabled = bool(c.get("cine", true))
+	GazeProvider.pm_on = bool(c.get("phone", true))
+	GazeProvider.pm.haptics_on = bool(c.get("haptics", true))
+	ThemeFX.apply_to_level(level, self, String(c.get("theme", "alpine")), float(c.get("intensity", 0.8)))
+	_run_no = 0
+	_restart()
+
+
+func _fp_now() -> bool:
+	return view_fp and _cine_k < 0.5
+
+
+func _face_now(kind: String) -> bool:
+	if face_override == kind or Input.is_key_pressed(KEY_G):
+		return true
+	match kind:
+		"crazy":
+			return crazy_override or Input.is_key_pressed(KEY_Z) or _crazy_eyes_now()
+		"shake":
+			return head_shake_override or Input.is_key_pressed(KEY_H) or _head_shake_now()
+	return GazeProvider.face_is(kind)
+
+
+func _face_pick() -> String:
+	var ids: Array = FACES.keys()
+	ids.erase(_face_last)
+	return String(ids[_fx_rng.randi() % ids.size()])
+
+
+## In the air: now and then the game demands a face. Pull it for a moment for a big bonus; ignore it and nothing is lost.
+func _face_tick(delta: float, alt: float) -> void:
+	var rd := delta / maxf(Engine.time_scale, 0.05)
+	if face_kind == "":
+		if _air_time >= _face_next and alt > 3.0 and not _air_moves.has("slam"):
+			face_kind = _face_pick()
+			_face_last = face_kind
+			face_t = FACE_WINDOW
+			face_hold = 0.0
+			face_open = FACE_OPENERS[_fx_rng.randi() % FACE_OPENERS.size()]
+			_trk_burst_t = 0.4
+			Game.sfx(&"bell")
+			_fov_punch = maxf(_fov_punch, 4.0)
+		return
+	face_t -= rd
+	var ok := _face_now(face_kind)
+	face_hold = face_hold + rd if ok else maxf(face_hold - rd * 2.0, 0.0)
+	if face_hold >= 0.3:
+		var id := "face_" + face_kind
+		face_done += 1
+		face_seen[face_kind] = int(face_seen.get(face_kind, 0)) + 1
+		_add_move(id)
+		face_kind = ""
+		_face_next = _air_time + 1.6
+		_burst(Vector3(spos.x, spos.y + 1.6, spos.z), Color(1.0, 0.85, 0.3), 50, 9.0, 1.0, 1.0)
+	elif face_t <= 0.0:
+		face_kind = ""
+		_face_next = _air_time + 1.8
+		_trk_text = "...nothing?"
+		_trk_text_t = 0.8
+
+
+## A hero shot: when you are far up, the camera swings out to a low angle on the rider (slow motion helps) and comes back before the ground does.
+func _cine_apply(delta: float) -> void:
+	var rd := delta / maxf(Engine.time_scale, 0.05)
+	var alt := spos.y - terrain_h(spos.x, spos.z)
+	var want := cine_enabled and _in_air and hurt_t <= 0.0 and not _finished and (_air_peak >= 7.0 and alt > 5.0 and (_air_time > 0.5)) and not (vy < 0.0 and alt < 7.0)
+	if want and not _cine_on:
+		cines += 1
+		_cine_side = 1.0 if _fx_rng.randf() < 0.5 else -1.0
+		_cine_t = 0.0
+	_cine_on = want
+	if _cine_on:
+		_cine_t += rd
+	_cine_k = move_toward(_cine_k, 1.0 if want else 0.0, rd * 3.0)
+	if _cine_k <= 0.001:
+		return
+	var a := _cine_side * (0.9 + _cine_t * 0.45)
+	var pos := Vector3(spos.x + sin(a) * 10.5, spos.y + 0.6 + sin(_cine_t * 0.8) * 0.8, spos.z + cos(a) * 10.5 * 0.8 - 2.0)
+	pos.y = maxf(pos.y, terrain_h(pos.x, pos.z) + 1.5)
+	var tgt := Vector3(spos.x, spos.y + 0.9, spos.z)
+	var ease_k := _cine_k * _cine_k * (3.0 - 2.0 * _cine_k)
+	var p0 := cam.global_position
+	var b0 := cam.global_transform.basis.get_rotation_quaternion()
+	cam.global_position = p0.lerp(pos, ease_k)
+	var look_b := Basis.looking_at((tgt - pos).normalized(), Vector3.UP)
+	cam.global_transform.basis = Basis(b0.slerp(look_b.get_rotation_quaternion(), ease_k))
+	cam.fov = lerpf(cam.fov, 62.0, ease_k)
+	if _cine_on and Engine.time_scale >= 0.99 and _slowmo_t <= 0.0:
+		Engine.time_scale = 0.6                       # the director holds the moment
+	elif not _cine_on and Engine.time_scale < 0.99 and _slowmo_t <= 0.0:
+		Engine.time_scale = 1.0
 
 
 func _tricks_look(key: float, pk: Vector3) -> float:
@@ -2744,6 +2974,10 @@ func _add_move(id: String) -> void:
 		return
 	_air_moves.append(id)
 	var nm := ""
+	if id.begins_with("face_") and FACES.has(id.substr(5)):
+		nm = String(FACES[id.substr(5)]["name"])
+		Game.sfx(&"honk" if _fx_rng.randf() < 0.5 else &"boing")
+		_toast("+%d  %s" % [int(FACES[id.substr(5)]["pts"]), nm], Color(1.0, 0.85, 0.3))
 	match id:
 		"shake":
 			nm = _pick(SHAKE_NAMES)
@@ -2858,6 +3092,8 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 			_air_time = 0.0
 			_air_moves.clear()
 			_move_name.clear()
+			face_kind = ""
+			_face_next = 0.8
 			_chaos_pts = 0
 			_slam_fell = false
 			_air_epic = false
@@ -2872,6 +3108,8 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 				_toast("In the air: look aside to spin, chin down to grab, shake your head, cross your eyes...", Color(0.9, 0.95, 1.0))
 		_air_peak = maxf(_air_peak, alt)
 		_air_time += delta
+		if _air_epic and alt > 4.0 and not _finished:
+			vel *= exp(-sky_drag * delta)                       # high up the air is thick: you hang there and drift, and the landing stays inside the cleared run-out
 		var look := _tricks_look(key, pk)
 		var landing := alt < 2.0 and vy < 0.0
 		var target := 0.0
@@ -2898,12 +3136,18 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 				_add_move("crazy")
 			if alt > 2.0 and (slam_override or Input.is_key_pressed(KEY_F) or nod_v < -1.6):
 				_add_move("slam")
+		if face_enabled and alt > 1.0:
+			_face_tick(delta, alt)
 		var parts := _trick_parts(false)
 		if not parts.is_empty() and _trk_text_t < 0.3:
 			_trk_text = " + ".join(parts)
 			_trk_text_t = 0.25
 	elif _in_air:
 		_in_air = false
+		face_kind = ""
+		_cine_on = false
+		if Engine.time_scale < 0.99 and _slowmo_t <= 0.0:
+			Engine.time_scale = 1.0
 		if _slowmo_t > 0.0:
 			_slowmo_t = 0.0
 			Engine.time_scale = 1.0
@@ -2964,7 +3208,7 @@ func _land_tricks() -> void:
 		pts += 40 * gr
 		kinds += 1
 	for mv in _air_moves:
-		pts += int(MOVE_PTS.get(mv, 100))
+		pts += int(FACES[String(mv).substr(5)]["pts"]) if (String(mv).begins_with("face_") and FACES.has(String(mv).substr(5))) else int(MOVE_PTS.get(mv, 100))
 		kinds += 1
 	if _air_peak > 2.5:
 		pts += 30
@@ -3076,6 +3320,18 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 		_hud.draw_rect(Rect2(bx, by, bw, 14.0 * k), Color(0.05, 0.1, 0.2, 0.6))
 		_hud.draw_rect(Rect2(bx, by, bw * _ramp_charge, 14.0 * k), Color(1.0, 0.7 + 0.25 * _ramp_charge, 0.2, 0.95))
 		_ctext(font, by - 8.0 * k, "CHARGING: pop at the lip" if _ramp_charge < 0.95 else "FULL CHARGE!", 22, Color(1, 1, 1, 0.9))
+	if face_kind != "":
+		var fk2 := _hud_scale()
+		var pulse := 1.0 + 0.06 * sin(_age * 14.0)
+		var py := s.y * 0.22
+		_hud.draw_rect(Rect2(0.0, py - 44.0 * fk2, s.x, 140.0 * fk2), Color(0.6, 0.1, 0.45, 0.35))
+		_ctext(font, py, face_open, int(26.0 * pulse), Color(1.0, 1.0, 1.0, 0.95))
+		_ctext(font, py + 50.0 * fk2, String(FACES[face_kind]["say"]), int(46.0 * pulse), Color(1.0, 0.92, 0.3, 1.0))
+		var fw := 260.0 * fk2
+		var fx := s.x * 0.5 - fw * 0.5
+		_hud.draw_rect(Rect2(fx, py + 66.0 * fk2, fw, 10.0 * fk2), Color(0.05, 0.05, 0.1, 0.6))
+		_hud.draw_rect(Rect2(fx, py + 66.0 * fk2, fw * clampf(face_t / FACE_WINDOW, 0.0, 1.0), 10.0 * fk2), Color(1.0, 0.8, 0.2, 0.95))
+		_hud.draw_rect(Rect2(fx, py + 66.0 * fk2, fw * clampf(face_hold / 0.3, 0.0, 1.0), 10.0 * fk2), Color(0.3, 1.0, 0.5, 0.95))
 	if _trk_text_t > 0.0 and _trk_text != "":
 		var a := clampf(_trk_text_t / 0.5, 0.0, 1.0)
 		var big := _trk_text_t > 0.3 and not _in_air
@@ -3104,6 +3360,7 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 func _update_focus(delta: float) -> void:
 	var pf0 := Time.get_ticks_usec()
 	super._update_focus(delta)
+	_update_crumbs(delta)
 	_update_aim(delta)
 	_update_buff_aim(delta)
 	_trace_tick(delta)
@@ -3261,7 +3518,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-finish_z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "seed": _run_seed, "preset": PRESET_ORDER[_preset_i], "zone": _cur_zone, "zonesSeen": zones_seen, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "faces": {"asked": face_done, "seen": face_seen, "cines": cines}, "phone": {"active": GazeProvider.pm.active, "shake": snappedf(GazeProvider.pm.shake, 0.01), "lap": snappedf(GazeProvider.pm.lap, 0.01), "removedPct": snappedf(GazeProvider.pm.removed_pct, 0.1), "learned": snappedf(GazeProvider.pm.learned, 0.01), "tiltX": snappedf(GazeProvider.pm.tilt_x, 0.1), "tiltY": snappedf(GazeProvider.pm.tilt_y, 0.1)}, "seed": _run_seed, "preset": PRESET_ORDER[_preset_i], "zone": _cur_zone, "zonesSeen": zones_seen, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r

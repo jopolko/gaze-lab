@@ -232,6 +232,7 @@ var _mtn: MeshInstance3D
 var _m_bank: BoxMesh
 var _m_post: CylinderMesh
 var _m_bar: BoxMesh
+var _veg_theme: Material                  # a theme's finish for trees and rocks (null = the plain vertex-colour one)
 var _m_veg: StandardMaterial3D
 var _m_ground: Material
 var _kind_mat: Dictionary = {}
@@ -562,7 +563,7 @@ func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedCo
 		mm.set_instance_color(i, cols[i])
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
-	inst.material_override = mat if mat != null else _m_veg
+	inst.material_override = mat if mat != null else (_veg_theme if _veg_theme != null else _m_veg)
 	inst.extra_cull_margin = 40.0
 	add_child(inst)
 	(row["nodes"] as Array).append(inst)

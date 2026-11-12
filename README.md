@@ -34,7 +34,7 @@ Your eyes are not a mouse replacement here. They are the *decision* channel:
 
 | | Mode | How you play |
 |---|---|---|
-| <img src="godot/shots/lanes/lanes_centre.png" width="220"> | **Downhill** (`?level=downhill`; the older three-lane version is `?level=lanes`) | A snow run down a procedural mountain, in first or third person (V). Eyes choose the gate; the board does the carving; kickers and epic jumps with spin, grab and flip tricks. **Open your eyes wide to eat** the food pickups (burger boost, ice cream shield, candy double points, donut), **squint to brace** against rolling snowballs, or carve away from them. Speed builds from 34 to 51 m/s. |
+| <img src="godot/shots/lanes/lanes_centre.png" width="220"> | **Downhill** (`?level=downhill`; the older three-lane version is `?level=lanes`) | A snow run down a procedural mountain, in first or third person (V). Eyes choose the gate; the board does the carving; kickers and epic jumps with spin, grab and flip tricks. **Open your eyes wide to eat** the food pickups (burger boost, ice cream shield, candy double points, donut), **squint to brace** against rolling snowballs, or carve away from them. Speed builds from 34 to 51 m/s. **Each gate leads somewhere different** (steep rush, meadow, tunnel, bend, sky ramp), the world is built as you go, and a pre-run screen sets the look (alpine, psychedelic, digital, synthwave), difficulty, length (or endless), seed and the mix of zones. Sky ramps throw you up for face challenges (tongue, shock, maniacal smile...). Phone motion sensors steady the tracking. |
 | <img src="godot/shots/peek_1_3.png" width="220"> | **Peek & Blast** (`?level=peek`) | Lean your head to peek out from cover; look to aim; tomato-throwing baddies hide behind round cover. |
 | <img src="godot/shots/flight_blast.png" width="220"> | **Nod Flight** (`?level=flight`) | Chin down gathers energy, snap your chin up to blast through walls, lean to steer. |
 
@@ -106,11 +106,8 @@ Use Chrome on a desktop or laptop with a webcam. Wear the glasses you actually w
 
 1. Install [Godot 4.7](https://godotengine.org/) and open the `godot/` folder.
 2. Press **F5** (main scene `scenes/MainLevel.tscn`). Mouse and keyboard work without a camera.
-3. Run the headless tests, for example:
-   ```bash
-   godot --headless --path godot res://tests/carve_test.tscn
-   godot --headless --path godot res://tests/trace_test.tscn
-   ```
+3. Run the headless tests: `godot --headless --path godot res://tests/run_test.tscn`
+   (URL options for a run: `?theme=psychedelic&preset=canyon&seed=123&len=0&diff=1.2&zones=rush:2,tunnel:1`; key N cycles presets).
 4. Web export: `godot --headless --path godot --export-release Web build/web/index.html`
    (needs the web export templates). Serve the output over `localhost` or HTTPS, since camera access requires it.
 

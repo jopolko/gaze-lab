@@ -174,6 +174,10 @@ func _refresh() -> void:
 func _pick(idx: int) -> void:
 	if idx != _current_mode():
 		Game.level_requested.emit(idx)      # MainLevel loads it synchronously (and sets the mode flags)
+	if idx == 11:
+		get_parent().add_child(DownhillMenu.new())      # the main game has its own, fuller start screen
+		queue_free()
+		return
 	_refresh()
 
 

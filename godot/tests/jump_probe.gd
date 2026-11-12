@@ -18,6 +18,8 @@ func _ready() -> void:
 	var rig: RunRig = level._dh as RunRig
 	rig.view_fp = false
 	rig.set_physics_process(false)
+	rig.sky_rise = float(OS.get_environment("SKY")) if OS.get_environment("SKY") != "" else 3.0
+	rig.apply_params({"zones": {"air": 9.0, "rush": 1.0, "flat": 0.0, "tunnel": 0.0, "bend": 0.0}})
 	rig._restart()
 	for j in range(rig._next_j, 60):
 		rig._gen_segment(j)
@@ -37,7 +39,7 @@ func _ready() -> void:
 		for chg in [false, true]:
 			var kx: float = kk["x"]
 			var kz: float = kk["z"]
-			rig.spos = Vector3(kx, rig.terrain_h(kx, kz + 16.0), kz + 16.0)
+			rig.spos = Vector3(kx, rig.terrain_h(kx, kz + 40.0), kz + 40.0)
 			rig._gh_prev = rig.spos.y
 			rig.vel = Vector2(0.0, -spd)
 			rig.vy = -spd * 0.34
@@ -52,7 +54,7 @@ func _ready() -> void:
 			var d0 := 0.0
 			var d1 := 0.0
 			var was_air := false
-			for i in 400:
+			for i in 900:
 				rig._physics_process(dt)
 				if not rig.grounded and rig.spos.z < float(kk["lip"]) + 6.0:
 					if not was_air:
