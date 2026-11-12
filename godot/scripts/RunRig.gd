@@ -2072,16 +2072,29 @@ func _build_tip() -> void:
 	_tip_pivot = Node3D.new()
 	cam.add_child(_tip_pivot)
 	_tip_pivot.position = Vector3(0.0, -1.15, 0.0)
+	var blue := _flat_mat(Color(0.15, 0.3, 0.75))
+	# a rounded board: a flat body with a half-round nose (a flattened cylinder), the nose turned up a little
 	var body := BoxMesh.new()
-	body.size = Vector3(0.8, 0.09, 0.82)                 # short, squat and wide: only the front of the board shows, low at the bottom of the view
-	var b := _mi(_tip_pivot, body, _flat_mat(Color(0.15, 0.3, 0.75)), Vector3(0.0, 0.0, -1.05))
-	var nose := BoxMesh.new()
-	nose.size = Vector3(0.8, 0.06, 0.16)
-	var n := _mi(_tip_pivot, nose, _flat_mat(Color(0.97, 0.97, 1.0)), Vector3(0.0, 0.05, -1.5))
-	n.rotation.x = 0.35
+	body.size = Vector3(0.8, 0.09, 0.5)
+	var b := _mi(_tip_pivot, body, blue, Vector3(0.0, 0.0, -0.9))
+	var cap := CylinderMesh.new()
+	cap.top_radius = 0.4
+	cap.bottom_radius = 0.4
+	cap.height = 0.09
+	cap.radial_segments = 28
+	cap.rings = 1
+	var c := _mi(_tip_pivot, cap, blue, Vector3(0.0, 0.0, -1.15))
+	c.rotation.x = 0.12
+	var rim := TorusMesh.new()
+	rim.inner_radius = 0.36
+	rim.outer_radius = 0.42
+	rim.rings = 28
+	rim.ring_segments = 6
+	var r := _mi(_tip_pivot, rim, _flat_mat(Color(0.97, 0.97, 1.0)), Vector3(0.0, 0.05, -1.15))
+	r.rotation.x = 0.12
 	var stripe := BoxMesh.new()
-	stripe.size = Vector3(0.07, 0.1, 0.6)
-	_mi(_tip_pivot, stripe, _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(0.0, 0.03, -1.1))
+	stripe.size = Vector3(0.07, 0.1, 0.55)
+	_mi(_tip_pivot, stripe, _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(0.0, 0.03, -1.0))
 	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
