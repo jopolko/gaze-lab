@@ -79,6 +79,10 @@ Everything runs **on-device in the browser**. The video never leaves the page.
 - **Honest numbers.** On a laptop with an onboard GPU the tracker runs at roughly 10 to 13 frames a second with about 200 ms of
   latency. The control law is built around that: eyes pick the target, the game does the precise steering.
 
+Want the details? **[docs/TECHNIQUES.md](docs/TECHNIQUES.md)** explains every technique used to get usable eye control out of an
+ordinary webcam and an onboard GPU: workers and crops, limbus-ring iris fits, per-eye fusion, calibration-free learning,
+the "eyes decide, the board steers" control law, and the tests that keep it honest.
+
 ## Repo layout
 
 ```

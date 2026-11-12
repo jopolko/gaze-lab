@@ -86,7 +86,7 @@ func _gen_segment(j: int) -> void:
 	var rz := z0 - _rng.randf_range(26.0, 60.0)
 	var has_row := j >= START_CALM and rz > FINISH_Z + 40.0
 	var row: Dictionary = {"j": j, "z": rz, "z0": z0, "gaps": [], "obs": PackedFloat32Array(), "banks": [], "nodes": [],
-		"passed": false, "crash": false, "has_row": has_row}
+		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "layout": "none"}
 	var cones: Array[Transform3D] = []
 	var cone_cols := PackedColorArray()
 	var trunks: Array[Transform3D] = []
@@ -104,20 +104,8 @@ func _gen_segment(j: int) -> void:
 		var g0 := _mk_gap(_good_x, lerpf(17.0, 10.0, d) * _rng.randf_range(0.92, 1.1), "open", true)
 		g0["lane"] = -1
 		gaps.append(g0)
-		var extra := (1 if _rng.randf() < 0.55 + 0.3 * d else 0) + (1 if d > 0.5 and _rng.randf() < 0.5 else 0)
-		for e in extra:
-			for attempt in 10:
-				var ex := _rng.randf_range(-46.0, 46.0)
-				var ew := lerpf(15.0, 9.0, d) * _rng.randf_range(0.9, 1.1)
-				var ok := true
-				for g in gaps:
-					if absf(ex - float(g["x"])) < (float(g["w"]) + ew) * 0.5 + 9.0:
-						ok = false
-				if ok:
-					var ge := _mk_gap(ex, ew, "open", false)
-					ge["lane"] = -1
-					gaps.append(ge)
-					break
+		g0["iso"] = false
+		_layout_gaps(row, gaps, d, prev_x, prev_rz, rz)
 		# the barrier: a line of trees, a boulder band or a mix, two staggered rows, skipping the openings
 		var style := _rng.randi() % 3
 		var p_rock: float = [0.12, 0.8, 0.4][style]
@@ -153,6 +141,8 @@ func _gen_segment(j: int) -> void:
 				_add_rock(rocks, rock_cols, obs, sx, sz, _rng.randf_range(1.0, 1.6), Color(0.55, 0.58, 0.64), _rng.randf_range(0.9, 1.3))
 			else:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, sx, sz, _rng.randf_range(0.8, 1.3), true)
+	if has_row:
+		_place_buffs(row, d, prev_rz, rz)
 	# forest and boulders on both sides (visual only)
 	for side in [-1.0, 1.0]:
 		for i in 22:
@@ -204,6 +194,401 @@ func _make_finish(row: Dictionary) -> void:
 		add_child(seg)
 		seg.global_position = Vector3(bx, terrain_h(bx, FINISH_Z) + 12.4, FINISH_Z)
 		(row["nodes"] as Array).append(seg)
+
+
+# --------------------------------------------------------------------------
+# Gate layouts: a barrier is one of several shapes, so reading the slope pays off.
+#   scatter  the safe gate plus 0-2 gates at random places (the original)
+#   pair     two gates a carve apart
+#   trio     three gates evenly spaced across the slope
+#   decoy    the safe gate plus one isolated, narrower gate far to the side that carries a better buff
+# The safe gate never moves faster than a carve can follow; an isolated gate is only placed where it can be reached from the last barrier.
+# --------------------------------------------------------------------------
+func _gate_w(d: float) -> float:
+	return lerpf(15.0, 9.0, d) * _rng.randf_range(0.92, 1.1)
+
+
+func _add_gate(gaps: Array, x: float, w: float, iso: bool) -> void:
+	var ge := _mk_gap(x, w, "open", false)
+	ge["lane"] = -1
+	ge["iso"] = iso
+	gaps.append(ge)
+
+
+func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz: float, rz: float) -> void:
+	var gx := _good_x
+	var roll := _rng.randf()
+	var layout := "scatter"
+	if roll >= 0.26:
+		layout = "pair" if roll < 0.48 else ("trio" if roll < 0.74 else "decoy")
+	if layout == "trio":
+		var sp := _rng.randf_range(27.0, 32.0)
+		# evenly spaced, with the safe gate at either end or in the middle, whichever keeps all three on the slope
+		var steps: Array = [-1.0, 1.0]
+		if gx + sp > 46.0:
+			steps = [-1.0, -2.0]
+		elif gx - sp < -46.0:
+			steps = [1.0, 2.0]
+		for sg in steps:
+			var ex: float = gx + float(sg) * sp
+			if absf(ex) <= 46.0:
+				_add_gate(gaps, ex, _gate_w(d), false)
+		if gaps.size() < 3:
+			layout = "pair"
+	if layout == "pair" and gaps.size() < 2:
+		var side := 1.0 if _rng.randf() < 0.5 else -1.0
+		var ex2 := gx + side * _rng.randf_range(24.0, 30.0)
+		if absf(ex2) > 46.0:
+			ex2 = gx - side * _rng.randf_range(24.0, 30.0)
+		if absf(ex2) <= 46.0:
+			_add_gate(gaps, ex2, _gate_w(d), false)
+		else:
+			layout = "scatter"
+	if layout == "decoy":
+		var pref := 1.0 if prev_x >= gx else -1.0              # off toward where you came from: far from the safe gate, still within a carve's reach
+		if absf(prev_x - gx) < 6.0 and _rng.randf() < 0.5:
+			pref = -pref
+		var placed := false
+		for sd in [pref, -pref]:
+			var ex3 := clampf(gx + float(sd) * _rng.randf_range(26.0, 34.0), -46.0, 46.0)
+			if absf(ex3 - gx) >= 24.0 and absf(ex3 - prev_x) <= 0.33 * (prev_rz - rz):
+				_add_gate(gaps, ex3, lerpf(13.0, 8.0, d) * _rng.randf_range(0.92, 1.1), true)
+				placed = true
+				break
+		if not placed:
+			layout = "scatter"
+	if layout == "scatter":
+		var extra := (1 if _rng.randf() < 0.55 + 0.3 * d else 0) + (1 if d > 0.5 and _rng.randf() < 0.5 else 0)
+		for e in extra:
+			for attempt in 10:
+				var ex4 := _rng.randf_range(-46.0, 46.0)
+				var ew := _gate_w(d)
+				var ok := true
+				for g in gaps:
+					if absf(ex4 - float(g["x"])) < (float(g["w"]) + ew) * 0.5 + 9.0:
+						ok = false
+				if ok:
+					_add_gate(gaps, ex4, ew, false)
+					break
+	row["layout"] = layout
+
+
+# --------------------------------------------------------------------------
+# Buffs: the things worth looking at.
+#   boost   a burst of speed and less drag for a few seconds (faster is harder to steer)
+#   shield  absorbs the next crash
+#   mult    double points for 10 s
+# They sit in two kinds of place: in front of an opening (always the isolated one, sometimes the others), on a short lead-in trail of
+# small orbs; and out beside the safe line between two barriers, on a curved trail, so you have to want it and look there.
+# Look at one for a moment and the board leans toward it (like an opening); the avoidance still keeps you off the trees.
+# --------------------------------------------------------------------------
+const BOOST_S := 3.0
+const MULT_S := 10.0
+const SPEED_CAP := 57.0              # a boost never pushes you past this (the hill alone reaches about 51 m/s)
+const BUFF_COL := {"boost": Color(1.0, 0.55, 0.1), "shield": Color(0.3, 0.85, 1.0), "mult": Color(0.95, 0.4, 1.0), "orb": Color(1.0, 0.9, 0.45)}
+
+var shield: int = 0
+var _boost_t: float = 0.0
+var _mult_t: float = 0.0
+var buffs_spawned: int = 0
+var buffs_got: int = 0
+var buff_log: Dictionary = {}
+var spawned_kind: Dictionary = {}
+var got_kind: Dictionary = {}
+var orbs_got: int = 0
+var _buff_tgt: Dictionary = {}
+var _buff_cand: Dictionary = {}
+var _buff_cand_t: float = 0.0
+var _buff_w: float = 0.0
+var _buff_want: float = 0.0
+var _buff_assist: bool = true
+var _buff_mesh: Dictionary = {}
+var _buff_mat: Dictionary = {}
+
+
+func _pick_buff(iso: bool) -> String:
+	var r := _rng.randf()
+	if iso:
+		return "mult" if r < 0.4 else ("shield" if r < 0.85 else "boost")
+	return "boost" if r < 0.34 else ("shield" if r < 0.62 else "mult")
+
+
+func _clear_of_obs(obs: PackedFloat32Array, x: float, z: float, m: float) -> bool:
+	var i := 0
+	while i < obs.size():
+		var dx := obs[i] - x
+		var dz := obs[i + 1] - z
+		var rr := obs[i + 2] + m
+		if dx * dx + dz * dz < rr * rr:
+			return false
+		i += 4
+	return true
+
+
+func _buff_assets(t: String) -> void:
+	if _buff_mesh.has(t):
+		return
+	var m: Mesh
+	match t:
+		"boost":
+			var s := SphereMesh.new()
+			s.radius = 1.0
+			s.height = 2.0
+			s.radial_segments = 14
+			s.rings = 7
+			m = s
+		"shield":
+			var tm := TorusMesh.new()
+			tm.inner_radius = 0.7
+			tm.outer_radius = 1.35
+			m = tm
+		"mult":
+			var bm := BoxMesh.new()
+			bm.size = Vector3(1.5, 1.5, 1.5)
+			m = bm
+		"beacon":
+			var cm := CylinderMesh.new()
+			cm.top_radius = 0.1
+			cm.bottom_radius = 0.16
+			cm.height = 9.0
+			cm.radial_segments = 6
+			m = cm
+		_:
+			var os := SphereMesh.new()
+			os.radius = 0.5
+			os.height = 1.0
+			os.radial_segments = 8
+			os.rings = 4
+			m = os
+	_buff_mesh[t] = m
+	for key in BUFF_COL:
+		if _buff_mat.has(key):
+			continue
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = BUFF_COL[key]
+		mat.emission_enabled = true
+		mat.emission = BUFF_COL[key]
+		mat.emission_energy_multiplier = 1.8
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_buff_mat[key] = mat
+		var bmat := StandardMaterial3D.new()
+		bmat.albedo_color = Color(BUFF_COL[key].r, BUFF_COL[key].g, BUFF_COL[key].b, 0.35)
+		bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		bmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		_buff_mat["beacon_" + str(key)] = bmat
+
+
+func _spawn_orb(row: Dictionary, x: float, z: float, t: String) -> Node3D:
+	_buff_assets(t)
+	var n := MeshInstance3D.new()
+	n.mesh = _buff_mesh[t]
+	n.material_override = _buff_mat[t]
+	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(n)
+	n.global_position = Vector3(x, terrain_h(x, z) + (1.7 if t != "orb" else 1.3), z)
+	(row["nodes"] as Array).append(n)
+	return n
+
+
+## A buff with a lead-in trail of small orbs (x, z pairs, ordered from far to near).
+func _spawn_buff(row: Dictionary, t: String, x: float, z: float, trail: Array, kind: String) -> void:
+	var bn := _spawn_orb(row, x, z, t)
+	_buff_assets("beacon")
+	var bc := MeshInstance3D.new()
+	bc.mesh = _buff_mesh["beacon"]
+	bc.material_override = _buff_mat["beacon_" + t]
+	bc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bn.add_child(bc)
+	bc.position = Vector3(0.0, 4.6, 0.0)
+	var orbs: Array = []
+	for p in trail:
+		var pv: Vector2 = p
+		orbs.append({"n": _spawn_orb(row, pv.x, pv.y, "orb"), "x": pv.x, "z": pv.y, "taken": false})
+	(row["buffs"] as Array).append({"t": t, "x": x, "z": z, "taken": false, "n": bn, "y": bn.position.y, "ph": _rng.randf() * TAU, "orbs": orbs, "kind": kind})
+	buffs_spawned += 1
+	spawned_kind[kind] = int(spawned_kind.get(kind, 0)) + 1
+
+
+func _place_buffs(row: Dictionary, d: float, prev_rz: float, rz: float) -> void:
+	var gaps: Array = row["gaps"]
+	var obs: PackedFloat32Array = row["obs"]
+	# in front of an opening
+	for g in gaps:
+		var iso: bool = g.get("iso", false)
+		var p := 1.0 if iso else (0.22 if g["good"] else 0.16)
+		if _rng.randf() >= p:
+			continue
+		var gx: float = g["x"]
+		var bz := rz + _rng.randf_range(10.0, 14.0)
+		if not _clear_of_obs(obs, gx, bz, 4.0):
+			bz += 5.0
+			if not _clear_of_obs(obs, gx, bz, 4.0):
+				continue
+		var trail: Array = []
+		for i in 3:
+			trail.append(Vector2(gx, rz + 29.0 - 6.0 * float(i)))
+		g["buff"] = true
+		_spawn_buff(row, _pick_buff(iso), gx, bz, trail, "safe" if g["good"] else "gate")
+	# beside the safe line, between two barriers: you have to look there and want it
+	var span := prev_rz - rz
+	if span >= 80.0 and (int(row["j"]) == START_CALM or _rng.randf() < 0.5):
+		for attempt in 6:
+			var zb := prev_rz - span * _rng.randf_range(0.42, 0.58)          # mid-way: time to pick it out after the last barrier and to get back before the next
+			var bx0 := path_x(row, zb)
+			var off := _rng.randf_range(8.0, 13.0) * (1.0 if _rng.randf() < 0.5 else -1.0)
+			if absf(bx0 + off) > 42.0:
+				off = -off
+			var bx := bx0 + off
+			if absf(bx) > 42.0 or not _clear_of_obs(obs, bx, zb, 4.5):
+				continue
+			var tz := zb + 26.0
+			var sx := path_x(row, tz)
+			var trail2: Array = []
+			for i in 4:
+				var u := float(i + 1) / 5.0
+				var s := u * u * (3.0 - 2.0 * u)
+				var px := lerpf(sx, bx, s)
+				var pz := zb + 26.0 * (1.0 - u)
+				if _clear_of_obs(obs, px, pz, 2.5):
+					trail2.append(Vector2(px, pz))
+			_spawn_buff(row, "boost" if int(row["j"]) == START_CALM else _pick_buff(false), bx, zb, trail2, "path")
+			break
+
+
+func _gain(pts: int) -> void:
+	score += pts * (2 if _mult_t > 0.0 else 1)
+
+
+func _tick_buffs(delta: float) -> void:
+	_boost_t = maxf(_boost_t - delta, 0.0)
+	_mult_t = maxf(_mult_t - delta, 0.0)
+
+
+func _take_buff(b: Dictionary) -> void:
+	b["taken"] = true
+	var n: Variant = b["n"]
+	if is_instance_valid(n):
+		(n as Node3D).visible = false
+	buffs_got += 1
+	var t: String = b["t"]
+	buff_log[t] = int(buff_log.get(t, 0)) + 1
+	var kd: String = b.get("kind", "path")
+	got_kind[kd] = int(got_kind.get(kd, 0)) + 1
+	_gain(60)
+	_flash = 0.25
+	Game.sfx(&"coin")
+	match t:
+		"boost":
+			_boost_t = BOOST_S
+			var fwd := Vector2(sin(heading), -cos(heading))
+			var sp0 := vel.length()
+			vel += fwd * 6.0
+			if vel.length() > maxf(SPEED_CAP, sp0):
+				vel = vel.normalized() * maxf(SPEED_CAP, sp0)
+			_toast("BOOST", BUFF_COL["boost"])
+		"shield":
+			shield = 1
+			_toast("SHIELD", BUFF_COL["shield"])
+		"mult":
+			_mult_t = MULT_S
+			_toast("DOUBLE POINTS", BUFF_COL["mult"])
+	if is_same(_buff_tgt, b):
+		_buff_tgt = {}
+
+
+func _collect_buffs() -> void:
+	if _finished:
+		return
+	var above := spos.y - terrain_h(spos.x, spos.z)
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if absf(float(r["z"]) - spos.z) > 150.0:
+			continue
+		for b in r["buffs"]:
+			for o in b["orbs"]:
+				if not o["taken"] and absf(float(o["z"]) - spos.z) < 2.4 and absf(float(o["x"]) - spos.x) < 2.6 and above < 5.0:
+					o["taken"] = true
+					var on: Variant = o["n"]
+					if is_instance_valid(on):
+						(on as Node3D).visible = false
+					orbs_got += 1
+					_gain(int(10.0 * groove))
+			if b["taken"]:
+				continue
+			if absf(float(b["z"]) - spos.z) < 3.2 and absf(float(b["x"]) - spos.x) < 3.6 and above < 6.0:
+				_take_buff(b)
+
+
+func _animate_buffs() -> void:
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if absf(float(r["z"]) - spos.z) > 210.0:
+			continue
+		for b in r["buffs"]:
+			var n: Variant = b["n"]
+			if b["taken"] or not is_instance_valid(n):
+				continue
+			var nn := n as Node3D
+			nn.position.y = float(b["y"]) + sin(_age * 2.4 + float(b["ph"])) * 0.35
+			nn.rotation.y = _age * 1.8 + float(b["ph"])
+
+
+## Looking at a buff for a moment leans the board toward it: the same dwell as an opening, with a wide look tolerance.
+func _update_buff_aim(delta: float) -> void:
+	var live := _eye_on and not _finished and aim_enabled and _buff_assist and not _paused and not (trace_on and _tr_phase != 3)
+	if not live:
+		_buff_tgt = {}
+		_buff_cand = {}
+		_buff_cand_t = 0.0
+		_buff_w = move_toward(_buff_w, 0.0, 6.0 * delta)
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var cx := _aim_cx if _aim_cx >= 0.0 else _cursor_px.x
+	var best: Dictionary = {}
+	var best_d := 1.0e9
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		for b in r["buffs"]:
+			if b["taken"]:
+				continue
+			var dz := spos.z - float(b["z"])
+			if dz < 8.0 or dz > 130.0 or absf(float(b["x"]) - spos.x) > 0.34 * dz + 4.0:
+				continue
+			var wp := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.7, float(b["z"]))
+			if cam.is_position_behind(wp):
+				continue
+			var dd := absf(cam.unproject_position(wp).x - cx) / (0.1 * vs.x)
+			if is_same(b, _buff_tgt):
+				dd *= 0.7
+			if dd < best_d:
+				best_d = dd
+				best = b
+	if not best.is_empty() and best_d < 1.0:
+		if is_same(best, _buff_tgt):
+			_buff_cand = {}
+			_buff_cand_t = 0.0
+		elif is_same(best, _buff_cand):
+			_buff_cand_t += delta
+			if _buff_cand_t >= AIM_LINGER:
+				_buff_tgt = best
+				_buff_cand = {}
+				_buff_cand_t = 0.0
+		else:
+			_buff_cand = best
+			_buff_cand_t = 0.0
+	else:
+		_buff_cand = {}
+		_buff_cand_t = 0.0
+		if best_d > 1.6:
+			_buff_tgt = {}
+	if not _buff_tgt.is_empty() and spos.z - float(_buff_tgt["z"]) < 2.0:
+		_buff_tgt = {}                                   # passed it (taken or missed)
+	if _buff_tgt.is_empty():
+		_buff_w = move_toward(_buff_w, 0.0, 6.0 * delta)
+	else:
+		_buff_w = move_toward(_buff_w, 1.0, 4.0 * delta)
+		_buff_want = clampf((float(_buff_tgt["x"]) - (spos.x + vel.x * 0.45)) / 12.0, -0.9, 0.9)
 
 
 # --------------------------------------------------------------------------
@@ -377,10 +762,13 @@ func _guard_path(delta: float, s_in: float) -> float:
 			w = maxf(carve_assist * _assist_conf() * _aim_w, u)
 		_wall_w = w
 		var want := clampf((float(tgt["x"]) - (spos.x + vel.x * 0.45)) / 12.0, -0.9, 0.9)
-		add += w * want * (1.0 - 0.6 * absf(s_in))
+		var yield_to_buff := _buff_w * clampf((bd - (wall_near + 8.0)) / 10.0, 0.0, 1.0)       # a buff you are looking at wins until the barrier is close
+		add += w * want * (1.0 - 0.6 * absf(s_in)) * (1.0 - 0.85 * yield_to_buff)
 		gate_done = true
 	if not gate_done:
 		add += carve_assist * _assist_conf() * _aim_w * _aim_want * (1.0 - 0.6 * absf(s_in))
+	if _buff_w > 0.0 and not _buff_tgt.is_empty():
+		add += _buff_w * _buff_want * (1.0 - 0.6 * absf(s_in))
 	# 2) a lone tree or rock on the way: swerve by just what is needed
 	var av := 0.0
 	if avoid_enabled:
@@ -466,6 +854,7 @@ func _physics_process(delta: float) -> void:
 	var pk := GazeProvider.peek_offset(delta)
 	var key := (1.0 if Input.is_key_pressed(KEY_D) else 0.0) - (1.0 if Input.is_key_pressed(KEY_A) else 0.0)
 	hurt_t = maxf(hurt_t - delta, 0.0)
+	_tick_buffs(delta)
 	_eye_on = _eye_mode()
 	_clock += delta
 	if _finished:
@@ -504,7 +893,9 @@ func _physics_process(delta: float) -> void:
 			vel += fwd * (MIN_SPEED - spd) * 1.2 * delta        # never stalls: always pushes the way the board points, never along a sideways or backward slide
 		vel += -G * g / (1.0 + g.length_squared()) * delta
 		var sp := vel.length()
-		var drag := DRAG * (0.55 if tucking else 1.0) * lerpf(1.0, 0.5, prog)          # less drag the further you go: the hill keeps pulling harder
+		var drag := DRAG * (0.55 if tucking else 1.0) * lerpf(1.0, 0.5, prog) * (0.3 if _boost_t > 0.0 else 1.0)          # less drag the further you go: the hill keeps pulling harder
+		if _boost_t > 0.0 and spd < SPEED_CAP:
+			vel += fwd * 7.0 * delta                                  # a boost pushes along where the board points
 		var fr := 0.22 + (3.0 if _finished else 0.0)
 		if _finished:
 			vel *= exp(-1.3 * delta)
@@ -551,6 +942,8 @@ func _physics_process(delta: float) -> void:
 			_land(maxf(gvy - vy, 0.0), gh, gvy)
 	_gh_prev = gh
 	_collide()
+	_collect_buffs()
+	_animate_buffs()
 	_update_rows()
 	if not _finished and spos.z <= FINISH_Z:
 		_finish()
@@ -600,6 +993,14 @@ func _collide() -> void:
 func _crash(msg: String, ctx: String = "") -> void:
 	if hurt_t > 0.0 or _finished:
 		return
+	if shield > 0:
+		shield = 0
+		hurt_t = 0.8
+		_flash = 0.35
+		_shake = 0.5
+		_toast("SHIELD BROKE", BUFF_COL["shield"])
+		Game.sfx(&"hurt")
+		return
 	crashes += 1
 	_clean = false
 	crash_log.append("%s at z=%.0f x=%.1f v=%.1f %s" % [msg, spos.z, spos.x, vel.length(), ctx])
@@ -635,7 +1036,7 @@ func _update_rows() -> void:
 			# with the eyes on, the points are for the gate you chose with them; the board's own pick (or a wrong one) carries you through but is worth little
 			var eg: Dictionary = r.get("eyes_gap", {})
 			if _eye_on and gate_assist and not autopilot and not is_same(eg, chosen):
-				score += 10
+				_gain(10)
 				chain = 0
 				groove = 1.0
 				if eg.is_empty():
@@ -653,7 +1054,7 @@ func _update_rows() -> void:
 			chain += 1
 			groove = 1.0 + 0.25 * minf(float(chain), 8.0)
 			best_flow = maxf(best_flow, groove)
-			score += int(float(pts) * groove)
+			_gain(int(float(pts) * groove))
 			Game.sfx(&"coin")
 
 
@@ -705,6 +1106,19 @@ func _restart() -> void:
 	_aim_w = 0.0
 	swerves = 0
 	wrong_gates = 0
+	shield = 0
+	_boost_t = 0.0
+	_mult_t = 0.0
+	buffs_spawned = 0
+	buffs_got = 0
+	buff_log = {}
+	spawned_kind = {}
+	got_kind = {}
+	orbs_got = 0
+	_buff_tgt = {}
+	_buff_cand = {}
+	_buff_cand_t = 0.0
+	_buff_w = 0.0
 	_swerving = false
 	_wall_gap = {}
 	_wall_row_j = -999
@@ -722,6 +1136,7 @@ func _update_focus(delta: float) -> void:
 	var pf0 := Time.get_ticks_usec()
 	super._update_focus(delta)
 	_update_aim(delta)
+	_update_buff_aim(delta)
 	_trace_tick(delta)
 	_pf_focus = _pf(_pf_focus, pf0)
 
@@ -857,7 +1272,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-FINISH_Z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
@@ -913,6 +1328,20 @@ func _draw_hud_inner() -> void:
 					if not csc.is_empty():
 						var cc: Vector2 = csc["c"]
 						_hud.draw_arc(cc, 16.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_cand_t / AIM_LINGER, 0.0, 1.0), 24, Color(1.0, 1.0, 1.0, 0.85), 3.5 * k)
+	# the buff you are looking at: a dwell arc while it is being picked, a ring once it has you
+	for bb in [_buff_cand, _buff_tgt]:
+		var bd2: Dictionary = bb
+		if bd2.is_empty() or bd2["taken"]:
+			continue
+		var bp := Vector3(float(bd2["x"]), terrain_h(float(bd2["x"]), float(bd2["z"])) + 2.4, float(bd2["z"]))
+		if cam.is_position_behind(bp):
+			continue
+		var bs := cam.unproject_position(bp)
+		var bcol: Color = BUFF_COL[bd2["t"]]
+		if is_same(bd2, _buff_tgt):
+			_hud.draw_arc(bs, 22.0 * k, 0.0, TAU, 28, Color(bcol.r, bcol.g, bcol.b, 0.35 + 0.5 * _buff_w), 4.0 * k)
+		else:
+			_hud.draw_arc(bs, 22.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_buff_cand_t / AIM_LINGER, 0.0, 1.0), 24, Color(1.0, 1.0, 1.0, 0.85), 3.5 * k)
 	# gaze reticle
 	if _eye_on and not _paused:
 		var cur_px := _cursor_px if _cursor_px != Vector2.ZERO else _gaze_px
@@ -929,6 +1358,15 @@ func _draw_hud_inner() -> void:
 	_hud.draw_rect(Rect2(bx, m, bw * progress(), 10.0 * k), Color(1.0, 0.85, 0.35, 0.95))
 	_hud.draw_rect(Rect2(bx + bw - 3.0 * k, m - 4.0 * k, 3.0 * k, 18.0 * k), Color(1, 1, 1, 0.9))
 	_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 34, Color(1, 1, 1))
+	var by := m + 52.0 * k
+	if _boost_t > 0.0:
+		_text(font, Vector2(m, by), "BOOST %.1f" % _boost_t, 20, BUFF_COL["boost"])
+		by += 26.0 * k
+	if _mult_t > 0.0:
+		_text(font, Vector2(m, by), "x2 POINTS %.1f" % _mult_t, 20, BUFF_COL["mult"])
+		by += 26.0 * k
+	if shield > 0:
+		_text(font, Vector2(m, by), "SHIELD", 20, BUFF_COL["shield"])
 	var eye_txt := "EYES OFF"
 	if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 		eye_txt = "EYES"

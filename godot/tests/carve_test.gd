@@ -86,6 +86,94 @@ func _ready() -> void:
 			finish_row = j
 	_check(finish_row >= 0 and not (rig._rows[finish_row]["nodes"] as Array).is_empty(), "a finish line is built (segment %d)" % finish_row)
 
+	# ---- gate layouts and buffs
+	var lay := {}
+	var even_ok := true
+	var iso_n := 0
+	var iso_buffed := 0
+	var iso_reach := true
+	var iso_narrow := true
+	var rows_b := 0
+	var buff_n := 0
+	var all_clear := true
+	var path_off_ok := true
+	var path_n := 0
+	for jb in range(CarveRig.START_CALM, 50):
+		var rb: Dictionary = rig._rows[jb]
+		if not rb["has_row"]:
+			continue
+		rows_b += 1
+		lay[rb["layout"]] = int(lay.get(rb["layout"], 0)) + 1
+		var xs: Array = []
+		var good_w := 0.0
+		for gb in rb["gaps"]:
+			xs.append(float(gb["x"]))
+			if gb["good"]:
+				good_w = float(gb["w"])
+			if gb.get("iso", false):
+				iso_n += 1
+				if gb.get("buff", false):
+					iso_buffed += 1
+				if absf(float(gb["x"]) - float(rb["px"])) > 0.33 * (float(rb["pz"]) - float(rb["z"])) + 0.01:
+					iso_reach = false
+				if float(gb["w"]) > 13.0 * 1.1 + 0.01:
+					iso_narrow = false
+		if rb["layout"] == "trio":
+			xs.sort()
+			if xs.size() != 3 or absf((float(xs[1]) - float(xs[0])) - (float(xs[2]) - float(xs[1]))) > 0.01:
+				even_ok = false
+		for bf in rb["buffs"]:
+			buff_n += 1
+			if not rig._clear_of_obs(rb["obs"], float(bf["x"]), float(bf["z"]), 3.0):
+				all_clear = false
+			if bf["kind"] == "path":
+				path_n += 1
+				var offp := absf(float(bf["x"]) - rig.path_x(rb, float(bf["z"])))
+				if offp < 7.9 or offp > 13.1:
+					path_off_ok = false
+	_check(lay.size() == 4 and int(lay.get("pair", 0)) >= 3 and int(lay.get("trio", 0)) >= 3 and int(lay.get("decoy", 0)) >= 3 and int(lay.get("scatter", 0)) >= 3, "all four gate layouts appear (%s)" % str(lay))
+	_check(even_ok, "a trio of gates is evenly spaced")
+	_check(iso_n >= 3 and iso_buffed == iso_n, "every isolated gate carries a buff (%d of %d)" % [iso_buffed, iso_n])
+	_check(iso_reach and iso_narrow, "an isolated gate is narrower and reachable from the last barrier")
+	var per_row := float(buff_n) / float(maxi(rows_b, 1))
+	_check(per_row >= 0.6 and per_row <= 2.0, "buffs are semi-frequent (%.2f per barrier, %d beside the path)" % [per_row, path_n])
+	_check(all_clear, "no buff sits on a tree or rock")
+	_check(path_n >= 6 and path_off_ok, "path buffs sit 8-13 m off the safe line (%d)" % path_n)
+
+	# ---- buff effects
+	rig._restart()
+	var fb := func(t: String) -> Dictionary: return {"t": t, "x": 0.0, "z": 0.0, "taken": false, "n": null, "orbs": [], "kind": "path"}
+	var spd0 := rig.vel.length()
+	rig._take_buff(fb.call("boost"))
+	_check(rig._boost_t > 2.9 and rig.vel.length() > spd0 + 4.0 and rig.buffs_got == 1, "a boost kicks the speed up and runs for a few seconds")
+	var shield_hold := rig.crashes
+	rig.shield = 1
+	rig.hurt_t = 0.0
+	rig._crash("TEST")
+	_check(rig.crashes == shield_hold and rig.shield == 0 and rig.hurt_t > 0.0, "a shield absorbs the next crash and is used up")
+	rig.hurt_t = 0.0
+	rig._crash("TEST")
+	_check(rig.crashes == shield_hold + 1, "and the one after that counts")
+	rig._restart()
+	rig._gain(100)
+	rig._take_buff(fb.call("mult"))
+	var sc_a := rig.score
+	rig._gain(100)
+	_check(rig._mult_t > 9.0 and rig.score - sc_a == 200, "double points doubles what you earn")
+	rig._tick_buffs(11.0)
+	_check(rig._mult_t == 0.0 and rig._boost_t == 0.0, "buffs run out")
+	# boosted vs plain: same state, 1.5 s later the boosted board is faster
+	var vend := []
+	for boosted in [false, true]:
+		rig._restart()
+		rig.set_physics_process(false)
+		if boosted:
+			rig._take_buff(fb.call("boost"))
+		for i in 90:
+			rig._physics_process(1.0 / 60.0)
+		vend.append(rig.vel.length())
+	_check(float(vend[1]) > float(vend[0]) + 3.0, "a boosted board is faster 1.5 s later (%.1f vs %.1f m/s)" % [vend[1], vend[0]])
+
 	# ---- a full run with the autopilot: no crash, it speeds up, the finish line ends it
 	rig._restart()
 	rig.autopilot = true
@@ -166,6 +254,7 @@ func _ready() -> void:
 	var min_d := 99.0
 	var max_dev := 0.0
 	var st := 0
+	rig.gate_assist = false          # this one is about the single tree, not about which gate the barrier ahead pulls toward
 	while rig.spos.z > tree_z - 6.0 and st < 600:
 		st += 1
 		rig._physics_process(dt)
@@ -173,6 +262,7 @@ func _ready() -> void:
 		max_dev = maxf(max_dev, absf(rig.spos.x))
 	_check(rig.crashes == c0 and min_d >= 2.0, "a tree dead ahead is avoided (closest %.1f m, %d crashes)" % [min_d, rig.crashes - c0])
 	_check(max_dev < 6.0 and rig.swerves >= 1, "and it swerves only as much as needed (%.1f m sideways, %d swerve)" % [max_dev, rig.swerves])
+	rig.gate_assist = true
 
 	# a wall: aim the board at the thickest part of the barrier; it must go through a gate, not into the trees
 	var wx := 0.0
@@ -406,6 +496,93 @@ func _ready() -> void:
 			print("    crash: ", cl)
 	print("human totals over 3 runs each: clean eyes %d crashes, %d barriers   |   30%% wrong picks %d crashes, %d barriers" % [tot_cr[0.0], tot_bar[0.0], tot_cr[0.3], tot_bar[0.3]])
 	_check(tot_cr[0.0] <= 3 and tot_cr[0.3] <= 8, "a full 4200 m run with late, noisy, sometimes wrong gate choices stays nearly crash free (%d / %d crashes over 3 runs each)" % [tot_cr[0.0], tot_cr[0.3]])
+
+	# ---- a player who hunts the buffs with their eyes: looks at the nearest buff in reach (path buffs, and the ones in front of the safe gate), else the safe gate
+	var hs_path_sp := 0
+	var hs_path_got := 0
+	var hs_gate_sp := 0
+	var hs_gate_got := 0
+	var hs_cr := 0
+	var hs_bar := 0
+	for hcase2 in 2:
+		rig.set_physics_process(false)
+		rig.aim_enabled = true
+		rig._restart()
+		await get_tree().process_frame
+		rig.vel = Vector2(0.0, -16.0)
+		var vrng := RandomNumberGenerator.new()
+		vrng.seed = 31 + hcase2
+		var vlate: Dictionary = {}
+		var vheld := 0.5
+		var vcur := 0.5
+		var vq: Array = []
+		var vsteps := 0
+		while not rig._finished and vsteps < 16000:
+			vsteps += 1
+			var vtarget := 0.5
+			var vbest := 1.0e9
+			var vrow: Dictionary = {}
+			for kk4 in rig._rows:
+				var r4: Dictionary = rig._rows[kk4]
+				if not r4["has_row"] or r4["passed"]:
+					continue
+				var d4: float = rig.spos.z - float(r4["z"])
+				if d4 < 3.0 or d4 > 190.0:
+					continue
+				if vrow.is_empty() or float(r4["z"]) > float(vrow["z"]):
+					vrow = r4
+			if not vrow.is_empty():
+				var j4: int = int(vrow["j"])
+				if not vlate.has(j4):
+					vlate[j4] = vrng.randf_range(45.0, 120.0)
+				if rig.spos.z - float(vrow["z"]) <= float(vlate[j4]):
+					for g4 in vrow["gaps"]:
+						if g4["good"]:
+							var sc4: Dictionary = rig._gap_screen(vrow, g4)
+							if not sc4.is_empty():
+								vtarget = float(sc4["c"].x) / vsz.x
+			for kk5 in rig._rows:
+				var r5: Dictionary = rig._rows[kk5]
+				var good5 := 0.0
+				for g5 in r5["gaps"]:
+					if g5["good"]:
+						good5 = float(g5["x"])
+				for b5 in r5["buffs"]:
+					if b5["taken"]:
+						continue
+					var dz5: float = rig.spos.z - float(b5["z"])
+					if dz5 < 14.0 or dz5 > 95.0 or absf(float(b5["x"]) - rig.spos.x) > 0.3 * dz5 + 3.0:
+						continue
+					if b5["kind"] == "gate":
+						continue                                 # in front of a gate this player did not choose
+					if dz5 < vbest:
+						vbest = dz5
+						var wp5 := Vector3(float(b5["x"]), rig.terrain_h(float(b5["x"]), float(b5["z"])) + 1.7, float(b5["z"]))
+						if not rig.cam.is_position_behind(wp5):
+							vtarget = rig.cam.unproject_position(wp5).x / vsz.x
+			if vsteps % 4 == 0:
+				vheld = vtarget + vrng.randfn(0.0, 0.07)
+			vq.append(vheld)
+			if vq.size() > 9:
+				vcur = lerpf(vcur, float(vq.pop_front()), 1.0 - exp(-(1.0 / 60.0) / 0.07))
+			rig._cursor_px = Vector2(vcur * vsz.x, 0.45 * vsz.y)
+			rig._steer_gaze = clampf((vcur - 0.5) / (rig._steer_scale * rig._zone_scale), -1.0, 1.0)
+			rig._update_aim(1.0 / 60.0)
+			rig._update_buff_aim(1.0 / 60.0)
+			rig._physics_process(1.0 / 60.0)
+			rig._place_camera(1.0 / 60.0, false)
+		print("buff hunter run %d: path %d/%d, safe-gate %d/%d, other-gate %d/%d, orbs %d, crashes %d, %s, score %d" % [hcase2, int(rig.got_kind.get("path", 0)), int(rig.spawned_kind.get("path", 0)), int(rig.got_kind.get("safe", 0)), int(rig.spawned_kind.get("safe", 0)), int(rig.got_kind.get("gate", 0)), int(rig.spawned_kind.get("gate", 0)), rig.orbs_got, rig.crashes, str(rig.buff_log), rig.score])
+		for cl2 in rig.crash_log:
+			print("    crash: ", cl2)
+		hs_path_sp += int(rig.spawned_kind.get("path", 0))
+		hs_path_got += int(rig.got_kind.get("path", 0))
+		hs_gate_sp += int(rig.spawned_kind.get("safe", 0))
+		hs_gate_got += int(rig.got_kind.get("safe", 0))
+		hs_cr += rig.crashes
+		hs_bar += rig._passed_ok
+	_check(hs_path_got >= int(0.35 * float(hs_path_sp)), "a player who looks at the buffs collects a good share of the ones beside the path (%d of %d)" % [hs_path_got, hs_path_sp])
+	_check(hs_gate_got >= int(0.5 * float(hs_gate_sp)), "and the ones in front of the safe gate (%d of %d)" % [hs_gate_got, hs_gate_sp])
+	_check(hs_cr <= 8, "hunting buffs does not wreck the run (%d crashes, %d barriers over 2 full runs)" % [hs_cr, hs_bar])
 	rig.set_physics_process(true)
 
 	# ---- leaving restores the player camera
