@@ -36,8 +36,8 @@ var peek_mode: bool = false
 var flight_mode: bool = false
 ## Downhill run (level 8). Also sets flight_mode so it shares the chin / lean input and touch layout.
 var downhill_mode: bool = false
-## Carve (level 11): the free-carving version of the downhill run. Also sets downhill_mode and flight_mode.
-var carve_mode: bool = false
+## Downhill (level 11): the free-run version, with trees, gates, pickups, jumps and tricks (the three-lane version is level 8, "Downhill Lanes"). Also sets downhill_mode and flight_mode.
+var run_mode: bool = false
 ## Ocular Trance (level 9): stare to charge, blink to release.
 var trance_mode: bool = false
 ## Gaze test (level 10): measures how precisely the eyes map to the screen.

@@ -15,7 +15,7 @@ func _frames(n: int) -> void:
 
 
 ## Runs a whole trace in simulated time. The cursor follows the dot `delay_s` late, scaled by `gain` about the middle, with a little noise.
-func _run(rig: CarveRig, delay_s: float, gain: float, noise: float) -> void:
+func _run(rig: RunRig, delay_s: float, gain: float, noise: float) -> void:
 	var dt := 1.0 / 60.0
 	var vs := get_viewport().get_visible_rect().size
 	var rng := RandomNumberGenerator.new()
@@ -48,7 +48,7 @@ func _ready() -> void:
 	Game.touch_mode = true
 	level.load_level(11)
 	await _frames(5)
-	var rig: CarveRig = level._dh as CarveRig
+	var rig: RunRig = level._dh as RunRig
 	rig.set_physics_process(false)
 
 	await _run(rig, 0.10, 1.0, 0.004)

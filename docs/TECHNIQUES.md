@@ -57,7 +57,7 @@ frame rate of both collapsed.
   horizontal axis. Otherwise a rolled head (17° in one test run) or a squint leaks vertical eye movement into the horizontal
   signal, as large as the usable signal itself.
 - **Iris inside the eye, not "where on screen".** Screen gaze mixes head turn into the answer (about half of a 10° head turn leaks
-  in). The control signal for the Carve level is the iris position *inside the eye opening*, a pure eye signal that only spans a
+  in). The control signal for the Downhill level is the iris position *inside the eye opening*, a pure eye signal that only spans a
   few percent of the eye width. A head turn with a still iris does nothing; a glance does.
 
 ## 4. No calibration: learn the person while they play

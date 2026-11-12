@@ -1,6 +1,6 @@
-class_name CarveRig
+class_name RunRig
 extends DownhillRig
-## CARVE: free carving down an open slope. No lanes, no gates, no markers: the course is natural (tree lines, boulder bands, scattered
+## DOWNHILL: free carving down an open slope. No lanes, no gates, no markers: the course is natural (tree lines, boulder bands, scattered
 ## trees and rocks) with openings you read and aim for. Reach the finish line without wiping out.
 ##
 ##   steering   continuous, from where you look (the iris inside the eye, see DownhillRig._eyes_only_offs): a look aside carves that way,
@@ -46,9 +46,10 @@ func setup(p_player: PlayerController) -> void:
 	lane_ctl = 2
 	lane_mode = true
 	super.setup(p_player)
-	name = "CarveRig"
+	name = "RunRig"
+	_load_view_pref()
 	_zone_scale = 1.8                    # the trim from the raw look is looser: full lock at about +-19% of the screen, not +-10%
-	_toast("Look where you want to carve", Color(0.9, 0.95, 1.0))
+	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
 	if OS.has_feature("web"):
 		_tr_auto = bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('trace')"))
 		var rsq := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('rs') || ''"))
@@ -141,6 +142,7 @@ func _gen_segment(j: int) -> void:
 				_add_rock(rocks, rock_cols, obs, sx, sz, _rng.randf_range(1.0, 1.6), Color(0.55, 0.58, 0.64), _rng.randf_range(0.9, 1.3))
 			else:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, sx, sz, _rng.randf_range(0.8, 1.3), true)
+	_place_kicker(row, obs, prev_rz, rz, z0, has_row, j)
 	if has_row:
 		_place_buffs(row, d, prev_rz, rz)
 	# forest and boulders on both sides (visual only)
@@ -325,87 +327,252 @@ func _clear_of_obs(obs: PackedFloat32Array, x: float, z: float, m: float) -> boo
 	return true
 
 
+var _glow_tex: GradientTexture2D
+var _fxm: Dictionary = {}
+
+
+func _glow_texture() -> GradientTexture2D:
+	if _glow_tex == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
+		g.colors = PackedColorArray([Color(1, 1, 1, 1.0), Color(1, 1, 1, 0.4), Color(1, 1, 1, 0.0)])
+		_glow_tex = GradientTexture2D.new()
+		_glow_tex.gradient = g
+		_glow_tex.fill = GradientTexture2D.FILL_RADIAL
+		_glow_tex.fill_from = Vector2(0.5, 0.5)
+		_glow_tex.fill_to = Vector2(1.0, 0.5)
+		_glow_tex.width = 128
+		_glow_tex.height = 128
+	return _glow_tex
+
+
+## Shared materials: "solid" glowing colour, "add" additive translucent, "halo" soft billboard glow, "spark" particle colour from vertex colours.
+func _fx_mat(kind: String, col: Color, energy: float = 1.8) -> StandardMaterial3D:
+	var key := "%s_%s_%.1f" % [kind, col.to_html(true), energy]
+	if _fxm.has(key):
+		return _fxm[key]
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = col
+	if kind == "solid":
+		m.emission_enabled = true
+		m.emission = col
+		m.emission_energy_multiplier = energy
+	else:
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if kind == "halo":
+			m.albedo_texture = _glow_texture()
+			m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+		elif kind == "ground":
+			m.albedo_texture = _glow_texture()
+		elif kind == "spark":
+			m.vertex_color_use_as_albedo = true
+	_fxm[key] = m
+	return m
+
+
+func _mi(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var n := MeshInstance3D.new()
+	n.mesh = mesh
+	n.material_override = mat
+	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(n)
+	n.position = pos
+	return n
+
+
+func _cone(r: float, h: float, down: bool = false) -> MeshInstance3D:
+	var c := CylinderMesh.new()
+	c.top_radius = 0.0
+	c.bottom_radius = r
+	c.height = h
+	c.radial_segments = 6
+	c.rings = 1
+	var n := MeshInstance3D.new()
+	n.mesh = c
+	if down:
+		n.rotation.x = PI
+	return n
+
+
+func _torus(inner: float, outer: float) -> TorusMesh:
+	var tm := TorusMesh.new()
+	tm.inner_radius = inner
+	tm.outer_radius = outer
+	tm.rings = 20
+	tm.ring_segments = 8
+	return tm
+
+
+## A small cloud of sparkles that stays around an item (turned on only when it is close, so far ones cost nothing).
+func _sparkler(parent: Node3D, col: Color, radius: float, n: int) -> CPUParticles3D:
+	var p := CPUParticles3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.07
+	sm.height = 0.14
+	sm.radial_segments = 5
+	sm.rings = 2
+	p.mesh = sm
+	p.material_override = _fx_mat("spark", Color(1, 1, 1, 1))
+	p.amount = n
+	p.lifetime = 1.3
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = radius
+	p.direction = Vector3.UP
+	p.spread = 60.0
+	p.initial_velocity_min = 0.2
+	p.initial_velocity_max = 0.9
+	p.gravity = Vector3(0, 0.6, 0)
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.5
+	p.color = col
+	var cr := Gradient.new()
+	cr.offsets = PackedFloat32Array([0.0, 0.2, 1.0])
+	cr.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+	p.color_ramp = cr
+	p.emitting = false
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(p)
+	return p
+
+
+## One pickup, built from simple shapes but lit like a treat: a spinning gem, a soft halo, a pool of light on the snow and a few sparkles.
+##   boost   orange double-cone crystal with a white-hot core and orbiting sparks
+##   shield  two crossed cyan rings round a glass bubble
+##   mult    a magenta-gold gem with a floating x2
+func _make_item(t: String) -> Dictionary:
+	var col: Color = BUFF_COL[t]
+	var root := Node3D.new()
+	var spin := Node3D.new()
+	root.add_child(spin)
+	var halo := _mi(root, _quad(6.2), _fx_mat("halo", Color(col.r, col.g, col.b, 0.85)))
+	var pool := _mi(root, _quad(7.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.55)), Vector3(0, -1.5, 0))
+	pool.rotation.x = -PI * 0.5
+	var extra: Array = []
+	match t:
+		"boost":
+			var up := _cone(0.78, 1.25)
+			up.material_override = _fx_mat("solid", col, 2.2)
+			up.position = Vector3(0, 0.62, 0)
+			spin.add_child(up)
+			var dn := _cone(0.78, 1.25, true)
+			dn.material_override = _fx_mat("solid", Color(1.0, 0.8, 0.25), 2.0)
+			dn.position = Vector3(0, -0.62, 0)
+			spin.add_child(dn)
+			_mi(spin, _sphere_mesh(0.42), _fx_mat("solid", Color(1, 0.97, 0.8), 3.0))
+			for i in 3:
+				var orb := _mi(spin, _sphere_mesh(0.16), _fx_mat("solid", Color(1, 0.9, 0.5), 2.5))
+				orb.position = Vector3(cos(float(i) * TAU / 3.0) * 1.35, 0.0, sin(float(i) * TAU / 3.0) * 1.35)
+		"shield":
+			var r1 := _mi(spin, _torus(0.88, 1.32), _fx_mat("solid", col, 2.0))
+			var r2 := _mi(spin, _torus(0.88, 1.32), _fx_mat("solid", Color(0.7, 0.95, 1.0), 2.0))
+			r2.rotation.z = PI * 0.5
+			var r3 := _mi(spin, _torus(0.62, 0.9), _fx_mat("solid", Color(0.55, 0.9, 1.0), 2.0))
+			r3.rotation.x = PI * 0.5
+			_mi(spin, _sphere_mesh(1.05), _fx_mat("add", Color(col.r, col.g, col.b, 0.22)))
+			_mi(spin, _sphere_mesh(0.3), _fx_mat("solid", Color(0.9, 1.0, 1.0), 3.0))
+			extra = [r1, r2, r3]
+		_:
+			var g1 := _mi(spin, BoxMesh.new(), _fx_mat("solid", col, 2.0))
+			(g1.mesh as BoxMesh).size = Vector3(1.15, 1.15, 1.15)
+			g1.rotation = Vector3(0.6, 0.0, 0.78)
+			var g2 := _mi(spin, BoxMesh.new(), _fx_mat("solid", Color(1.0, 0.82, 0.3), 2.0))
+			(g2.mesh as BoxMesh).size = Vector3(0.8, 0.8, 0.8)
+			g2.rotation = Vector3(0.78, 0.6, 0.0)
+			var lab := Label3D.new()
+			lab.text = "x2"
+			lab.font_size = 96
+			lab.pixel_size = 0.016
+			lab.outline_size = 18
+			lab.modulate = Color(1.0, 0.95, 0.6)
+			lab.outline_modulate = Color(0.45, 0.05, 0.5)
+			lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			lab.no_depth_test = true
+			lab.position = Vector3(0, 1.75, 0)
+			root.add_child(lab)
+	var sp := _sparkler(root, Color(col.r * 0.5 + 0.5, col.g * 0.5 + 0.5, col.b * 0.5 + 0.5, 1.0), 1.5, 10)
+	return {"root": root, "spin": spin, "halo": halo, "sp": sp, "extra": extra}
+
+
+var _quad_meshes: Dictionary = {}
+var _sph_meshes: Dictionary = {}
+
+
+func _quad(sz: float) -> QuadMesh:
+	if not _quad_meshes.has(sz):
+		var q := QuadMesh.new()
+		q.size = Vector2(sz, sz)
+		_quad_meshes[sz] = q
+	return _quad_meshes[sz]
+
+
+func _sphere_mesh(r: float) -> SphereMesh:
+	if not _sph_meshes.has(r):
+		var s := SphereMesh.new()
+		s.radius = r
+		s.height = r * 2.0
+		s.radial_segments = 12
+		s.rings = 6
+		_sph_meshes[r] = s
+	return _sph_meshes[r]
+
+
 func _buff_assets(t: String) -> void:
 	if _buff_mesh.has(t):
 		return
-	var m: Mesh
-	match t:
-		"boost":
-			var s := SphereMesh.new()
-			s.radius = 1.0
-			s.height = 2.0
-			s.radial_segments = 14
-			s.rings = 7
-			m = s
-		"shield":
-			var tm := TorusMesh.new()
-			tm.inner_radius = 0.7
-			tm.outer_radius = 1.35
-			m = tm
-		"mult":
-			var bm := BoxMesh.new()
-			bm.size = Vector3(1.5, 1.5, 1.5)
-			m = bm
-		"beacon":
-			var cm := CylinderMesh.new()
-			cm.top_radius = 0.1
-			cm.bottom_radius = 0.16
-			cm.height = 9.0
-			cm.radial_segments = 6
-			m = cm
-		_:
-			var os := SphereMesh.new()
-			os.radius = 0.5
-			os.height = 1.0
-			os.radial_segments = 8
-			os.rings = 4
-			m = os
-	_buff_mesh[t] = m
+	var os := SphereMesh.new()
+	os.radius = 0.5
+	os.height = 1.0
+	os.radial_segments = 8
+	os.rings = 4
+	_buff_mesh[t] = os
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.1
+	cm.bottom_radius = 0.16
+	cm.height = 9.0
+	cm.radial_segments = 6
+	_buff_mesh["beacon"] = cm
 	for key in BUFF_COL:
-		if _buff_mat.has(key):
-			continue
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = BUFF_COL[key]
-		mat.emission_enabled = true
-		mat.emission = BUFF_COL[key]
-		mat.emission_energy_multiplier = 1.8
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_buff_mat[key] = mat
-		var bmat := StandardMaterial3D.new()
-		bmat.albedo_color = Color(BUFF_COL[key].r, BUFF_COL[key].g, BUFF_COL[key].b, 0.35)
-		bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		bmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-		_buff_mat["beacon_" + str(key)] = bmat
+		if not _buff_mat.has(key):
+			var c: Color = BUFF_COL[key]
+			_buff_mat[key] = _fx_mat("solid", c, 2.0)
+			_buff_mat["beacon_" + str(key)] = _fx_mat("add", Color(c.r, c.g, c.b, 0.3))
 
 
 func _spawn_orb(row: Dictionary, x: float, z: float, t: String) -> Node3D:
-	_buff_assets(t)
+	_buff_assets("orb")
 	var n := MeshInstance3D.new()
-	n.mesh = _buff_mesh[t]
-	n.material_override = _buff_mat[t]
+	n.mesh = _buff_mesh["orb"]
+	n.material_override = _buff_mat["orb"]
 	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(n)
-	n.global_position = Vector3(x, terrain_h(x, z) + (1.7 if t != "orb" else 1.3), z)
+	n.global_position = Vector3(x, terrain_h(x, z) + 1.3, z)
 	(row["nodes"] as Array).append(n)
 	return n
 
 
 ## A buff with a lead-in trail of small orbs (x, z pairs, ordered from far to near).
-func _spawn_buff(row: Dictionary, t: String, x: float, z: float, trail: Array, kind: String) -> void:
-	var bn := _spawn_orb(row, x, z, t)
-	_buff_assets("beacon")
+func _spawn_buff(row: Dictionary, t: String, x: float, z: float, trail: Array, kind: String, lift: float = 0.0) -> void:
+	_buff_assets("orb")
+	var it := _make_item(t)
+	var bn: Node3D = it["root"]
+	add_child(bn)
+	bn.global_position = Vector3(x, terrain_h(x, z) + 1.9 + lift, z)
+	(row["nodes"] as Array).append(bn)
 	var bc := MeshInstance3D.new()
 	bc.mesh = _buff_mesh["beacon"]
 	bc.material_override = _buff_mat["beacon_" + t]
 	bc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	bn.add_child(bc)
-	bc.position = Vector3(0.0, 4.6, 0.0)
+	bc.position = Vector3(0.0, 5.4, 0.0)
 	var orbs: Array = []
 	for p in trail:
 		var pv: Vector2 = p
 		orbs.append({"n": _spawn_orb(row, pv.x, pv.y, "orb"), "x": pv.x, "z": pv.y, "taken": false})
-	(row["buffs"] as Array).append({"t": t, "x": x, "z": z, "taken": false, "n": bn, "y": bn.position.y, "ph": _rng.randf() * TAU, "orbs": orbs, "kind": kind})
+	(row["buffs"] as Array).append({"t": t, "x": x, "z": z, "taken": false, "n": bn, "y": bn.position.y, "ph": _rng.randf() * TAU, "orbs": orbs, "kind": kind, "lift": lift,
+		"spin": it["spin"], "halo": it["halo"], "sp": it["sp"], "extra": it["extra"]})
 	buffs_spawned += 1
 	spawned_kind[kind] = int(spawned_kind.get(kind, 0)) + 1
 
@@ -420,16 +587,22 @@ func _place_buffs(row: Dictionary, d: float, prev_rz: float, rz: float) -> void:
 		if _rng.randf() >= p:
 			continue
 		var gx: float = g["x"]
-		var bz := rz + _rng.randf_range(10.0, 14.0)
-		if not _clear_of_obs(obs, gx, bz, 4.0):
-			bz += 5.0
-			if not _clear_of_obs(obs, gx, bz, 4.0):
-				continue
+		var bz := 0.0
+		var bxx := gx
+		var found := false
+		for dzv in [12.0, 17.0, 9.0, 22.0]:
+			for dxv in [0.0, 3.0, -3.0]:
+				if not found and _clear_of_obs(obs, gx + dxv, rz + dzv, 4.0):
+					bz = rz + dzv
+					bxx = gx + dxv
+					found = true
+		if not found:
+			continue
 		var trail: Array = []
 		for i in 3:
 			trail.append(Vector2(gx, rz + 29.0 - 6.0 * float(i)))
 		g["buff"] = true
-		_spawn_buff(row, _pick_buff(iso), gx, bz, trail, "safe" if g["good"] else "gate")
+		_spawn_buff(row, _pick_buff(iso), bxx, bz, trail, "safe" if g["good"] else "gate")
 	# beside the safe line, between two barriers: you have to look there and want it
 	var span := prev_rz - rz
 	if span >= 80.0 and (int(row["j"]) == START_CALM or _rng.randf() < 0.5):
@@ -465,6 +638,205 @@ func _tick_buffs(delta: float) -> void:
 	_mult_t = maxf(_mult_t - delta, 0.0)
 
 
+var _hop_t: float = 1.0
+var _hop_dur: float = 0.6
+var _hop_h: float = 1.0
+var _hop_spin: float = 0.0
+var _hop_pitch: float = 0.0
+var _hop_return: bool = false
+var _pop_col: Color = Color.WHITE
+var _pop_a: float = 0.0
+var _hud_pops: Array = []
+var _bubble: MeshInstance3D
+var _trail_boost: CPUParticles3D
+var _trail_mult: CPUParticles3D
+
+
+func _start_hop(h: float, dur: float, spin: float, pitch: float, ret: bool) -> void:
+	_hop_t = 0.0
+	_hop_h = h
+	_hop_dur = dur
+	_hop_spin = spin
+	_hop_pitch = pitch
+	_hop_return = ret
+
+
+## An explosion of sparkles at pos. dir / spread shape it (180 = a ball), grav pulls the sparks down (negative) or floats them up.
+func _burst(pos: Vector3, col: Color, n: int, speed: float, life: float, size: float, dir: Vector3 = Vector3.UP, spread: float = 180.0, grav: float = -6.0) -> void:
+	var p := CPUParticles3D.new()
+	p.mesh = _sphere_mesh(0.1)
+	p.material_override = _fx_mat("spark", Color(1, 1, 1, 1))
+	p.one_shot = true
+	p.explosiveness = 1.0
+	p.amount = n
+	p.lifetime = life
+	p.direction = dir
+	p.spread = spread
+	p.initial_velocity_min = speed * 0.35
+	p.initial_velocity_max = speed
+	p.gravity = Vector3(0, grav, 0)
+	p.damping_min = 1.0
+	p.damping_max = 3.0
+	p.scale_amount_min = size * 0.5
+	p.scale_amount_max = size * 1.6
+	p.color = col
+	var cr := Gradient.new()
+	cr.offsets = PackedFloat32Array([0.0, 0.6, 1.0])
+	cr.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
+	p.color_ramp = cr
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	get_tree().create_timer(life + 0.4).timeout.connect(p.queue_free)
+
+
+## A ring of light that expands and fades: standing (facing the camera) or flat on the snow.
+func _ring(pos: Vector3, col: Color, r_end: float, dur: float, standing: bool) -> void:
+	var m := MeshInstance3D.new()
+	m.mesh = _torus(0.9, 1.0)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.albedo_color = Color(col.r, col.g, col.b, 0.95)
+	m.material_override = mat
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(m)
+	m.global_position = pos
+	if standing:
+		m.rotation.x = PI * 0.5
+	m.scale = Vector3.ONE * 0.3
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(m, "scale", Vector3.ONE * r_end, dur).set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mat, "albedo_color:a", 0.0, dur)
+	tw.chain().tween_callback(m.queue_free)
+
+
+## What a pickup feels like, one flavour each. Everything here is visual (sparkles, light, a hop of the rider); it never changes where the board goes.
+##   boost   orange fireworks + a forward streak, a nose-up pop, the field of view kicks wide
+##   shield  cool blue sparkle and two shock rings, a full graceful spin in the air
+##   mult    gold and magenta confetti, a half turn to face the camera and back
+func _buff_pop(b: Dictionary, shown: String) -> void:
+	var t: String = b["t"]
+	var col: Color = BUFF_COL[t]
+	var pos := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.9, float(b["z"]))
+	var fwd3 := Vector3(sin(heading), 0.25, -cos(heading))
+	_pop_col = col
+	_pop_a = 1.0
+	_hud_pops.append({"p": pos, "col": col, "t": 0.0, "text": shown})
+	match t:
+		"boost":
+			_burst(pos, Color(1.0, 0.6, 0.15), 70, 14.0, 0.9, 1.0)
+			_burst(pos, Color(1.0, 0.95, 0.6), 36, 24.0, 0.6, 0.8, fwd3, 20.0, -2.0)
+			_ring(pos, col, 7.0, 0.45, true)
+			_start_hop(1.0, 0.55, 0.0, 0.5, false)
+			_fov_punch = 9.0
+			_shake = maxf(_shake, 0.45)
+		"shield":
+			_burst(pos, col, 56, 9.0, 1.0, 1.0, Vector3.UP, 180.0, -3.0)
+			_burst(pos, Color(1, 1, 1), 26, 5.0, 1.2, 0.7, Vector3.UP, 180.0, 1.5)
+			_ring(pos, col, 9.0, 0.6, true)
+			_ring(pos + Vector3(0, -1.6, 0), col, 13.0, 0.75, false)
+			_start_hop(1.35, 0.8, TAU, 0.0, false)
+			_shake = maxf(_shake, 0.25)
+		_:
+			_burst(pos, Color(1.0, 0.85, 0.3), 56, 11.0, 1.3, 1.3, Vector3.UP, 180.0, -9.0)
+			_burst(pos, Color(0.95, 0.35, 1.0), 56, 11.0, 1.3, 1.3, Vector3.UP, 180.0, -9.0)
+			_ring(pos, Color(1.0, 0.85, 0.3), 8.0, 0.5, true)
+			_start_hop(1.15, 0.7, PI, 0.0, true)
+			_shake = maxf(_shake, 0.2)
+
+
+func _ensure_fx() -> void:
+	if _bubble != null or _sled == null:
+		return
+	_bubble = MeshInstance3D.new()
+	_bubble.mesh = _sphere_mesh(1.55)
+	_bubble.material_override = _fx_mat("add", Color(0.3, 0.85, 1.0, 0.2))
+	_bubble.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_bubble.visible = false
+	_sled.add_child(_bubble)
+	_bubble.position = Vector3(0, 1.0, 0)
+	_trail_boost = _sparkler(_sled, Color(1.0, 0.65, 0.2, 1.0), 0.35, 26)
+	_trail_boost.position = Vector3(0, 0.5, 1.0)
+	_trail_boost.direction = Vector3(0, 0.2, 1)
+	_trail_boost.spread = 18.0
+	_trail_boost.initial_velocity_min = 4.0
+	_trail_boost.initial_velocity_max = 9.0
+	_trail_boost.lifetime = 0.5
+	_trail_boost.gravity = Vector3.ZERO
+	_trail_boost.local_coords = false
+	_trail_mult = _sparkler(_sled, Color(1.0, 0.85, 0.35, 1.0), 0.9, 16)
+	_trail_mult.position = Vector3(0, 1.0, 0)
+	_trail_mult.local_coords = false
+	if _tip_pivot == null and cam != null:
+		_build_tip()
+
+
+func _juice(delta: float) -> void:
+	_ensure_fx()
+	_pop_a = maxf(_pop_a - 2.4 * delta, 0.0)
+	for pp in _hud_pops:
+		pp["t"] = float(pp["t"]) + delta
+	while not _hud_pops.is_empty() and float(_hud_pops[0]["t"]) > 0.85:
+		_hud_pops.remove_at(0)
+	if _bubble != null:
+		_bubble.visible = shield > 0
+		if shield > 0:
+			var s := 1.0 + 0.05 * sin(_age * 6.0)
+			_bubble.scale = Vector3(s, s, s)
+		_trail_boost.emitting = _boost_t > 0.0 and not _finished
+		_trail_mult.emitting = _mult_t > 0.0 and not _finished
+	if _hop_t < 1.0:
+		_hop_t = minf(_hop_t + delta / _hop_dur, 1.0)
+		var u := _hop_t
+		var y := _hop_h * 4.0 * u * (1.0 - u)
+		var spin := _hop_spin * (sin(PI * u) if _hop_return else smoothstep(0.0, 1.0, u))
+		_sled.global_position.y += y
+		_sled.rotate_object_local(Vector3.RIGHT, _hop_pitch * sin(PI * u))
+		_sled.rotate_object_local(Vector3.UP, spin)
+		var sq := 0.0
+		if u > 0.82:
+			sq = sin((u - 0.82) / 0.18 * PI) * 0.14
+		_sled.scale = Vector3(1.0 + sq * 0.6, 1.0 - sq, 1.0 + sq * 0.6)
+		_hop_vis_spin = spin
+		_hop_vis_pitch = _hop_pitch * sin(PI * u)
+	else:
+		_hop_vis_spin = 0.0
+		_hop_vis_pitch = 0.0
+	_view_juice()
+
+
+var _hop_vis_spin: float = 0.0
+var _hop_vis_pitch: float = 0.0
+
+
+func _view_juice() -> void:
+	_hop_cam = (_hop_h * 4.0 * _hop_t * (1.0 - _hop_t) * 0.5) if _hop_t < 1.0 else 0.0
+	var ts := _trk_spin if _in_air else _trk_vis_spin
+	var tf := _trk_flip if _in_air else _trk_vis_flip
+	var grabbing := _in_air and (nod_p < -0.10 or trick_grab_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN))
+	if not view_fp:
+		if _in_air or absf(ts) > 0.01 or absf(tf) > 0.01:
+			_sled.rotate_object_local(Vector3.RIGHT, tf + (0.3 if grabbing else 0.0))
+			_sled.rotate_object_local(Vector3.UP, ts)
+	_sled.visible = _sled.visible and not view_fp
+	if _tip_pivot != null:
+		_tip_pivot.visible = view_fp and (hurt_t <= 0.0 or int(_age * 14.0) % 2 == 0)
+		if view_fp:
+			var d := wrapf(heading - atan2(_cam_look.x, -_cam_look.y), -PI, PI)
+			var bob := 0.02 * sin(_age * 11.0) * clampf(vel.length() / 40.0, 0.0, 1.0) if grounded else 0.0
+			_tip_pivot.position = Vector3(0.0, -1.12 + bob - (0.1 if grabbing else 0.0), -0.2)
+			_tip_pivot.rotation = Vector3(tf + _hop_vis_pitch + (0.2 if grabbing else 0.0), -d + ts + _hop_vis_spin, -steer * 0.30)
+
+
+func _process(delta: float) -> void:
+	super._process(delta)
+	_juice(delta)
+
+
 func _take_buff(b: Dictionary) -> void:
 	b["taken"] = true
 	var n: Variant = b["n"]
@@ -475,9 +847,9 @@ func _take_buff(b: Dictionary) -> void:
 	buff_log[t] = int(buff_log.get(t, 0)) + 1
 	var kd: String = b.get("kind", "path")
 	got_kind[kd] = int(got_kind.get(kd, 0)) + 1
+	var shown := "+%d" % (60 * (2 if _mult_t > 0.0 else 1))
 	_gain(60)
 	_flash = 0.25
-	Game.sfx(&"coin")
 	match t:
 		"boost":
 			_boost_t = BOOST_S
@@ -487,12 +859,17 @@ func _take_buff(b: Dictionary) -> void:
 			if vel.length() > maxf(SPEED_CAP, sp0):
 				vel = vel.normalized() * maxf(SPEED_CAP, sp0)
 			_toast("BOOST", BUFF_COL["boost"])
+			Game.sfx(&"buff_boost")
 		"shield":
 			shield = 1
 			_toast("SHIELD", BUFF_COL["shield"])
+			Game.sfx(&"buff_shield")
 		"mult":
 			_mult_t = MULT_S
+			shown = "x2"
 			_toast("DOUBLE POINTS", BUFF_COL["mult"])
+			Game.sfx(&"buff_mult")
+	_buff_pop(b, shown)
 	if is_same(_buff_tgt, b):
 		_buff_tgt = {}
 
@@ -514,9 +891,14 @@ func _collect_buffs() -> void:
 						(on as Node3D).visible = false
 					orbs_got += 1
 					_gain(int(10.0 * groove))
+					if is_instance_valid(on):
+						_burst((on as Node3D).global_position, BUFF_COL["orb"], 6, 5.0, 0.45, 0.6)
 			if b["taken"]:
 				continue
-			if absf(float(b["z"]) - spos.z) < 3.2 and absf(float(b["x"]) - spos.x) < 3.6 and above < 6.0:
+			if b.get("kind", "") == "air":
+				if absf(float(b["z"]) - spos.z) < 3.8 and absf(float(b["x"]) - spos.x) < 4.2 and above > 0.8 and absf(float(b["y"]) - spos.y) < 3.6:
+					_take_buff(b)
+			elif absf(float(b["z"]) - spos.z) < 3.2 and absf(float(b["x"]) - spos.x) < 3.6 and above < 6.0:
 				_take_buff(b)
 
 
@@ -530,8 +912,35 @@ func _animate_buffs() -> void:
 			if b["taken"] or not is_instance_valid(n):
 				continue
 			var nn := n as Node3D
-			nn.position.y = float(b["y"]) + sin(_age * 2.4 + float(b["ph"])) * 0.35
-			nn.rotation.y = _age * 1.8 + float(b["ph"])
+			var ph := float(b["ph"])
+			nn.position.y = float(b["y"]) + sin(_age * 2.4 + ph) * 0.35
+			var sp: Variant = b.get("spin")
+			if sp is Node3D and is_instance_valid(sp):
+				(sp as Node3D).rotation.y = _age * (2.8 if b["t"] == "boost" else 1.7) + ph
+			var hl: Variant = b.get("halo")
+			if hl is Node3D and is_instance_valid(hl):
+				var hs := 1.0 + 0.12 * sin(_age * 3.4 + ph)
+				(hl as Node3D).scale = Vector3(hs, hs, hs)
+			var ex: Array = b.get("extra", [])
+			for ei in ex.size():
+				if is_instance_valid(ex[ei]):
+					var en := ex[ei] as Node3D
+					if ei == 0:
+						en.rotation.x = _age * 1.4 + ph
+					elif ei == 1:
+						en.rotation.y = _age * 1.9 + ph
+					else:
+						en.rotation.z = _age * 2.3 + ph
+			var spk: Variant = b.get("sp")
+			if spk is CPUParticles3D and is_instance_valid(spk):
+				(spk as CPUParticles3D).emitting = absf(float(b["z"]) - spos.z) < 150.0
+			var orbs: Array = b["orbs"]
+			for oi in orbs.size():
+				var o: Dictionary = orbs[oi]
+				var on: Variant = o["n"]
+				if not o["taken"] and is_instance_valid(on):
+					var sc := 0.85 + 0.35 * maxf(sin(_age * 7.0 - float(oi) * 0.9), 0.0)         # a pulse runs along the trail toward the pickup
+					(on as Node3D).scale = Vector3(sc, sc, sc)
 
 
 ## Looking at a buff for a moment leans the board toward it: the same dwell as an opening, with a wide look tolerance.
@@ -555,7 +964,7 @@ func _update_buff_aim(delta: float) -> void:
 			var dz := spos.z - float(b["z"])
 			if dz < 8.0 or dz > 130.0 or absf(float(b["x"]) - spos.x) > 0.34 * dz + 4.0:
 				continue
-			var wp := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.7, float(b["z"]))
+			var wp := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.7 + float(b.get("lift", 0.0)), float(b["z"]))
 			if cam.is_position_behind(wp):
 				continue
 			var dd := absf(cam.unproject_position(wp).x - cx) / (0.1 * vs.x)
@@ -943,6 +1352,7 @@ func _physics_process(delta: float) -> void:
 	_gh_prev = gh
 	_collide()
 	_collect_buffs()
+	_update_tricks(delta, key, pk)
 	_animate_buffs()
 	_update_rows()
 	if not _finished and spos.z <= FINISH_Z:
@@ -999,6 +1409,9 @@ func _crash(msg: String, ctx: String = "") -> void:
 		_flash = 0.35
 		_shake = 0.5
 		_toast("SHIELD BROKE", BUFF_COL["shield"])
+		var bp := spos + Vector3(0, 1.2, 0)
+		_burst(bp, BUFF_COL["shield"], 44, 12.0, 0.8, 1.0)
+		_ring(bp, BUFF_COL["shield"], 8.0, 0.4, true)
 		Game.sfx(&"hurt")
 		return
 	crashes += 1
@@ -1119,6 +1532,21 @@ func _restart() -> void:
 	_buff_cand = {}
 	_buff_cand_t = 0.0
 	_buff_w = 0.0
+	_kickers.clear()
+	kickers_built = 0
+	tricks_landed = 0
+	trick_score = 0
+	best_trick = ""
+	_in_air = false
+	_trk_spin = 0.0
+	_trk_flip = 0.0
+	_trk_flip_goal = 0.0
+	_trk_vis_spin = 0.0
+	_trk_vis_flip = 0.0
+	_trk_text_t = 0.0
+	_hop_t = 1.0
+	_pop_a = 0.0
+	_hud_pops.clear()
 	_swerving = false
 	_wall_gap = {}
 	_wall_row_j = -999
@@ -1126,7 +1554,331 @@ func _restart() -> void:
 		_gen_segment(_next_j)
 		_next_j += 1
 	_place_camera(1.0, true)
-	_toast("Look where you want to carve", Color(0.9, 0.95, 1.0))
+	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
+
+
+# --------------------------------------------------------------------------
+# View: first person (default, like a snowboarding game: only the tip of the board shows, which is also the best view for eye tracking, because the
+# gates are where you look) or third person (shows the rider, so tricks and pickup hops can be seen). V or the VIEW label toggles it.
+# --------------------------------------------------------------------------
+var view_fp: bool = true
+var _tip_pivot: Node3D
+var _cam_look: Vector2 = Vector2(0.0, -1.0)
+var _hop_cam: float = 0.0
+var _view_msec: int = 0
+const VIEW_CFG := "user://carve_view.cfg"
+
+
+func _load_view_pref() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(VIEW_CFG) == OK:
+		view_fp = bool(cf.get_value("carve", "fp", true))
+	if OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('view') || ''"))
+		if q == "3p" or q == "3":
+			view_fp = false
+		elif q == "1p" or q == "1":
+			view_fp = true
+
+
+func _toggle_view() -> void:
+	view_fp = not view_fp
+	var cf := ConfigFile.new()
+	cf.set_value("carve", "fp", view_fp)
+	cf.save(VIEW_CFG)
+	_place_camera(0.016, true)
+	_toast("FIRST PERSON" if view_fp else "THIRD PERSON", Color(0.9, 0.95, 1.0))
+
+
+func _view_rect() -> Rect2:
+	var s := get_viewport().get_visible_rect().size
+	var k := _hud_scale()
+	return Rect2(s.x - 24.0 * k - 56.0 * k, 24.0 * k + 30.0 * k + 46.0 * k, 56.0 * k, 30.0 * k)
+
+
+## A phone held upright is a tall, narrow window: keep the HORIZONTAL field of view (so the gates are still in sight) instead of the vertical one.
+func _fit_fov() -> void:
+	var vs := get_viewport().get_visible_rect().size
+	if vs.y > vs.x * 1.05:
+		cam.keep_aspect = Camera3D.KEEP_WIDTH
+		cam.fov = clampf(78.0 + (vel.length() - 18.0) * 0.5, 76.0, 96.0) + _fov_punch
+	else:
+		cam.keep_aspect = Camera3D.KEEP_HEIGHT
+
+
+func _place_camera(delta: float, snap: bool = false) -> void:
+	if not view_fp:
+		super._place_camera(delta, snap)
+		_fit_fov()
+		return
+	var sp := vel.length()
+	var vdir := vel / sp if sp > 1.0 else Vector2(0.0, -1.0)
+	var hd := Vector2(sin(heading), -cos(heading))
+	var want := (vdir * 0.5 + hd * 0.5).normalized()
+	_cam_look = want if snap else _cam_look.lerp(want, 1.0 - exp(-7.0 * delta)).normalized()
+	_cdir = _cam_look
+	var eye := Vector3(spos.x, spos.y + 1.72 + _hop_cam, spos.z) - Vector3(_cam_look.x, 0.0, _cam_look.y) * 0.25
+	eye.y = maxf(eye.y, terrain_h(eye.x, eye.z) + 1.2)
+	cam.global_position = eye
+	var ahead := spos + Vector3(_cam_look.x, 0.0, _cam_look.y) * 18.0
+	ahead.y = terrain_h(ahead.x, ahead.z) + 1.4 + _hop_cam * 0.5
+	if (ahead - eye).length() > 0.5:
+		cam.look_at(ahead, Vector3.UP)
+	cam.basis = cam.basis * Basis(Vector3(0, 0, 1), -steer * 0.10 - _trk_cam_roll) * Basis(Vector3(1, 0, 0), _trk_cam_pitch)
+	_shake = maxf(_shake - 1.6 * delta, 0.0)
+	cam.h_offset = randf_range(-1.0, 1.0) * _shake * 0.3
+	cam.v_offset = randf_range(-1.0, 1.0) * _shake * 0.3
+	_fov_punch = maxf(_fov_punch - 24.0 * delta, 0.0)
+	cam.fov = clampf(80.0 + (sp - 18.0) * 0.6, 78.0, 108.0) + _fov_punch
+	_fit_fov()
+
+
+## The view model: just the tip of the board at the bottom of the screen. It swings with the board's heading (so you can see where it points relative to
+## where you are going), leans into a turn, bobs on the snow and carries the tricks.
+func _build_tip() -> void:
+	_tip_pivot = Node3D.new()
+	cam.add_child(_tip_pivot)
+	_tip_pivot.position = Vector3(0.0, -1.2, -0.25)
+	var body := BoxMesh.new()
+	body.size = Vector3(0.46, 0.06, 1.7)
+	var bm := _flat_mat(Color(0.15, 0.3, 0.75))
+	var b := _mi(_tip_pivot, body, bm, Vector3(0.0, 0.0, -0.85))
+	var nose := BoxMesh.new()
+	nose.size = Vector3(0.46, 0.05, 0.34)
+	var n := _mi(_tip_pivot, nose, _flat_mat(Color(0.97, 0.97, 1.0)), Vector3(0.0, 0.09, -1.78))
+	n.rotation.x = 0.32
+	var stripe := BoxMesh.new()
+	stripe.size = Vector3(0.05, 0.07, 1.5)
+	_mi(_tip_pivot, stripe, _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(0.0, 0.04, -0.85))
+	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+# --------------------------------------------------------------------------
+# Jumps and tricks. A kicker (a ramp of snow) sits beside the safe line now and then, usually with a pickup floating above its lip: look at it, ride it,
+# and in the air:
+#   spin   look hard left or right (or A / D): each half turn counts (180, 360, 540 ...)
+#   grab   chin down (or S): hold it for bonus points
+#   flip   snap your chin up (or W): a backflip
+# You always land: the landing straightens the board to the nearest half turn, so a trick never costs you a crash. Doing more than one at once multiplies the points.
+# --------------------------------------------------------------------------
+const KICK_LEN := 16.0
+const KICK_W := 16.0
+var kickers_built: int = 0
+var kick_log: Array = []
+var tricks_landed: int = 0
+var trick_score: int = 0
+var best_trick: String = ""
+var trick_look_override: float = 0.0           # tests: stand-in for the look
+var trick_grab_override: bool = false
+var trick_flip_override: bool = false
+var _in_air: bool = false
+var _trk_spin: float = 0.0
+var _trk_spin_v: float = 0.0
+var _trk_flip: float = 0.0
+var _trk_flip_goal: float = 0.0
+var _trk_grab_t: float = 0.0
+var _trk_vis_spin: float = 0.0
+var _trk_vis_flip: float = 0.0
+var _trk_cam_roll: float = 0.0
+var _trk_cam_pitch: float = 0.0
+var _trk_text: String = ""
+var _trk_text_t: float = 0.0
+var _trk_hint: bool = false
+var _flip_key_prev: bool = false
+var _air_peak: float = 0.0
+
+
+## A hard landing costs speed but never wipes you out: the hill is steep and a landing is rarely your fault (a bump, a ramp you chose).
+func _land(impact: float, gh: float, gvy: float) -> void:
+	super._land(minf(impact, 15.0), gh, gvy)
+
+
+func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz: float, z0: float, has_row: bool, j: int) -> void:
+	var span := (prev_rz - rz) if has_row else ROW_GAP
+	if has_row and span < 78.0:
+		return
+	if not has_row and j != 1:
+		return
+	if has_row and _rng.randf() > 0.7:
+		return
+	var prev_obs := PackedFloat32Array()
+	if _rows.has(j - 1):
+		prev_obs = (_rows[j - 1] as Dictionary)["obs"]
+	for attempt in 6:
+		var kz: float = (prev_rz - span * _rng.randf_range(0.10, 0.19)) if has_row else (z0 - _rng.randf_range(18.0, 34.0))
+		if has_row and prev_rz > -1.0:
+			kz = rz + _rng.randf_range(90.0, 120.0)          # the first barrier: the ramp comes well after the start, when you are up to speed
+		var lipz := kz - KICK_LEN
+		if has_row and lipz < rz + 50.0 + 12.0 * _course_diff(z0):
+			continue
+		var cxl: float = path_x(row, kz) if has_row else 0.0
+		var side := 1.0 if _rng.randf() < 0.5 else -1.0
+		var kx := cxl + side * _rng.randf_range(14.0, 19.0)
+		if absf(kx) > 40.0:
+			kx = cxl - side * _rng.randf_range(14.0, 19.0)
+		if absf(kx) > 40.0:
+			continue
+		var ok := true
+		for zz in [kz, lipz, lipz - 12.0, lipz - 26.0]:
+			for xx in [kx - 8.0, kx, kx + 8.0]:
+				if not _clear_of_obs(obs, xx, zz, 4.0) or not _clear_of_obs(prev_obs, xx, zz, 4.0):
+					ok = false
+		if not ok:
+			continue
+		kick_log.append("%.0f/%.0f" % [kz, kx])
+		_kickers.append({"x": kx, "z": kz, "len": KICK_LEN, "w": KICK_W, "rise": _rng.randf_range(0.95, 1.05) * (1.2 - 0.025 * (17.0 * _course_diff(z0) - 2.0))})          # measured (tests/jump_probe): about a second in the air and 40 m of flight at any speed, so the faster the hill the lower the ramp
+		row["kick"] = {"x": kx, "z": kz, "lip": lipz}
+		kickers_built += 1
+		# a bright lip and two flags so the ramp reads from a distance
+		var lipm := BoxMesh.new()
+		lipm.size = Vector3(KICK_W - 2.0, 0.12, 0.5)
+		var lp := _mi(self, lipm, _fx_mat("solid", Color(1.0, 0.6, 0.15), 1.6), Vector3(kx, terrain_h(kx, lipz + 0.8) + 0.12, lipz + 0.8))
+		(row["nodes"] as Array).append(lp)
+		for sx in [-1.0, 1.0]:
+			var pole := CylinderMesh.new()
+			pole.top_radius = 0.07
+			pole.bottom_radius = 0.09
+			pole.height = 3.2
+			pole.radial_segments = 5
+			var px: float = kx + float(sx) * (KICK_W * 0.5 - 0.6)
+			var pn := _mi(self, pole, _fx_mat("solid", Color(1.0, 0.6, 0.15), 1.4), Vector3(px, terrain_h(px, lipz + 1.0) + 1.6, lipz + 1.0))
+			(row["nodes"] as Array).append(pn)
+			var flag := _mi(pn, _quad(1.2), _fx_mat("halo", Color(1.0, 0.7, 0.2, 0.9)), Vector3(0.0, 1.35, 0.0))
+			flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if _rng.randf() < 0.8:
+			var trail: Array = [Vector2(kx, kz + 18.0), Vector2(kx, kz + 10.0), Vector2(kx, kz + 2.0)]
+			_spawn_buff(row, _pick_buff(true), kx, lipz - 9.0, trail, "air", 2.4)
+		return
+
+
+func _tricks_look(key: float, pk: Vector3) -> float:
+	var look := key + (_steer_gaze if _eye_on else clampf(pk.x / 1.8, -1.0, 1.0))
+	return clampf(look + trick_look_override, -1.5, 1.5)
+
+
+func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
+	_trk_text_t = maxf(_trk_text_t - delta, 0.0)
+	var alt := spos.y - terrain_h(spos.x, spos.z)
+	var air := (not grounded) and alt > 0.6 and air_t > 0.1 and not _finished and hurt_t <= 0.0
+	if air:
+		if not _in_air:
+			_in_air = true
+			_trk_spin = 0.0
+			_trk_spin_v = 0.0
+			_trk_flip = 0.0
+			_trk_flip_goal = 0.0
+			_trk_grab_t = 0.0
+			_air_peak = 0.0
+			if not _trk_hint and alt > 0.8:
+				_trk_hint = true
+				_toast("In the air: look left or right to spin", Color(0.9, 0.95, 1.0))
+		_air_peak = maxf(_air_peak, alt)
+		var look := _tricks_look(key, pk)
+		var landing := alt < 2.0 and vy < 0.0
+		var target := 0.0
+		if absf(look) > 0.45 and not landing:
+			target = signf(look) * TAU * 0.85
+		_trk_spin_v = lerpf(_trk_spin_v, target, 1.0 - exp(-8.0 * delta))
+		_trk_spin += _trk_spin_v * delta
+		if landing:
+			_trk_spin = lerpf(_trk_spin, roundf(_trk_spin / PI) * PI, 1.0 - exp(-12.0 * delta))
+		var grab := nod_p < -0.10 or trick_grab_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)
+		if grab:
+			_trk_grab_t += delta
+		var fk := nod_v > 1.1 or trick_flip_override or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)
+		if fk and not _flip_key_prev and alt > 1.2 and _trk_flip >= _trk_flip_goal - 0.2 and _trk_flip_goal < TAU * 2.0:
+			_trk_flip_goal += TAU
+		_flip_key_prev = fk
+		_trk_flip = move_toward(_trk_flip, _trk_flip_goal, TAU * (3.0 if landing else 1.7) * delta)
+		var parts := _trick_parts()
+		if not parts.is_empty():
+			_trk_text = " + ".join(parts)
+			_trk_text_t = 0.25
+	elif _in_air:
+		_in_air = false
+		if hurt_t > 0.0:
+			_trk_text = "BAILED"
+			_trk_text_t = 1.2
+		else:
+			_land_tricks()
+		_trk_vis_spin = _trk_spin - roundf(_trk_spin / TAU) * TAU
+		_trk_vis_flip = _trk_flip - roundf(_trk_flip / TAU) * TAU
+		_trk_spin = 0.0
+		_trk_flip = 0.0
+		_trk_flip_goal = 0.0
+		_trk_spin_v = 0.0
+	if not _in_air:
+		_trk_vis_spin = move_toward(_trk_vis_spin, 0.0, 14.0 * delta)
+		_trk_vis_flip = move_toward(_trk_vis_flip, 0.0, 14.0 * delta)
+	var ts := (_trk_spin if _in_air else _trk_vis_spin)
+	var tf := (_trk_flip if _in_air else _trk_vis_flip)
+	_trk_cam_roll = lerpf(_trk_cam_roll, sin(ts) * 0.16, 1.0 - exp(-14.0 * delta))
+	_trk_cam_pitch = lerpf(_trk_cam_pitch, sin(tf) * 0.3, 1.0 - exp(-14.0 * delta))
+
+
+func _trick_parts() -> Array:
+	var parts: Array = []
+	var n := int(roundf(absf(_trk_spin) / PI))
+	if n >= 1:
+		parts.append(str(n * 180))
+	var fl := int(floorf(_trk_flip / TAU + 0.25))
+	if fl >= 1:
+		parts.append("FLIP" if fl == 1 else "DOUBLE FLIP")
+	if _trk_grab_t >= 0.35:
+		parts.append("GRAB")
+	return parts
+
+
+func _land_tricks() -> void:
+	var n := int(roundf(absf(_trk_spin) / PI))
+	var fl := int(floorf(_trk_flip / TAU + 0.25))
+	var gr := mini(int(_trk_grab_t / 0.35), 5)
+	var pts := 0
+	var kinds := 0
+	if n >= 1:
+		pts += [0, 100, 250, 450, 700, 1000][mini(n, 5)]
+		kinds += 1
+	if fl >= 1:
+		pts += 220 * fl
+		kinds += 1
+	if gr >= 1:
+		pts += 40 * gr
+		kinds += 1
+	if _air_peak > 2.5:
+		pts += 30
+	if pts <= 30:
+		return
+	var mult := 1.0 + 0.5 * float(maxi(kinds - 1, 0))
+	pts = int(float(pts) * mult)
+	var name := " + ".join(_trick_parts())
+	tricks_landed += 1
+	trick_score += pts
+	if best_trick == "" or pts > int(best_trick.get_slice("|", 1)):
+		best_trick = "%s|%d" % [name, pts]
+	_gain(pts)
+	chain += 1
+	groove = 1.0 + 0.25 * minf(float(chain), 8.0)
+	best_flow = maxf(best_flow, groove)
+	_trk_text = "%s  +%d" % [name, pts] if name != "" else "AIR  +%d" % pts
+	_trk_text_t = 1.8
+	_flash = 0.3
+	_shake = maxf(_shake, 0.3)
+	_pop_col = Color(1.0, 0.85, 0.3)
+	_pop_a = 0.8
+	var gp := Vector3(spos.x, spos.y + 1.0, spos.z)
+	_burst(gp, Color(1.0, 0.9, 0.5), 40, 10.0, 0.9, 1.0)
+	_ring(Vector3(spos.x, spos.y + 0.3, spos.z), Color(1.0, 0.85, 0.4), 9.0, 0.5, false)
+	Game.sfx(&"buff_mult")
+
+
+func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
+	if _trk_text_t > 0.0 and _trk_text != "":
+		var a := clampf(_trk_text_t / 0.5, 0.0, 1.0)
+		var big := _trk_text_t > 0.3 and not _in_air
+		_ctext(font, s.y * (0.27 if big else 0.34), _trk_text, 46 if big else 30, Color(1.0, 0.88, 0.35, a))
+	var vr := _view_rect()
+	_hud.draw_rect(vr, Color(0.05, 0.12, 0.25, 0.5))
+	_text(font, vr.position + Vector2(6.0 * k, 21.0 * k), "1ST" if view_fp else "3RD", 18, Color(1, 1, 1, 0.9))
 
 
 # --------------------------------------------------------------------------
@@ -1219,6 +1971,22 @@ func _input(event: InputEvent) -> void:
 	if _pause_input(event):
 		get_viewport().set_input_as_handled()
 		return
+	if not _paused:
+		if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and (event as InputEventKey).keycode == KEY_V:
+			_toggle_view()
+			get_viewport().set_input_as_handled()
+			return
+		var vpos := Vector2.INF
+		if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			vpos = (event as InputEventMouseButton).position
+		elif event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+			vpos = (event as InputEventScreenTouch).position
+		if vpos.is_finite() and _view_rect().has_point(vpos):
+			if Time.get_ticks_msec() - _view_msec > 300:
+				_view_msec = Time.get_ticks_msec()
+				_toggle_view()
+			get_viewport().set_input_as_handled()
+			return
 	if not _paused and event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo:
 		var tk := (event as InputEventKey).keycode
 		if tk == KEY_T:
@@ -1272,7 +2040,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-FINISH_Z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "tricks": {"landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
@@ -1287,6 +2055,27 @@ func _draw_hud() -> void:
 	_pf_hud = _pf(_pf_hud, pf0)
 
 
+func _draw_pops(font: Font, s: Vector2, k: float) -> void:
+	if _pop_a > 0.0:
+		var c := _pop_col
+		for i in 7:
+			_hud.draw_rect(Rect2(Vector2.ZERO, s).grow(-float(i) * 10.0 * k), Color(c.r, c.g, c.b, _pop_a * (0.2 - 0.026 * float(i))), false, 12.0 * k)
+	for pp in _hud_pops:
+		var p3: Vector3 = pp["p"]
+		if cam.is_position_behind(p3):
+			continue
+		var sc := cam.unproject_position(p3)
+		var u := clampf(float(pp["t"]) / 0.8, 0.0, 1.0)
+		var e := 1.0 - pow(1.0 - u, 3.0)
+		var c2: Color = pp["col"]
+		_hud.draw_arc(sc, (14.0 + 120.0 * e) * k, 0.0, TAU, 32, Color(c2.r, c2.g, c2.b, 1.0 - u), 5.0 * k * (1.0 - u) + 1.0)
+		for ri in 10:
+			var ang := float(ri) * TAU / 10.0 + 0.3
+			var d := Vector2(cos(ang), sin(ang))
+			_hud.draw_line(sc + d * (20.0 + 90.0 * e) * k, sc + d * (30.0 + 150.0 * e) * k, Color(1.0, 1.0, 0.9, 1.0 - u), 3.0 * k * (1.0 - u) + 1.0)
+		_text(font, sc + Vector2(-24.0 * k, (-30.0 - 60.0 * e) * k), String(pp["text"]), 30, Color(c2.r * 0.4 + 0.6, c2.g * 0.4 + 0.6, c2.b * 0.4 + 0.6, 1.0 - u * u))
+
+
 func _draw_hud_inner() -> void:
 	var font := ThemeDB.fallback_font
 	var s := _hud.size
@@ -1296,6 +2085,8 @@ func _draw_hud_inner() -> void:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(1.0, 0.1, 0.1, 0.22 * clampf(hurt_t, 0.0, 1.0)))
 	if _flash > 0.0:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(1.0, 1.0, 1.0, 0.3 * _flash))
+	_draw_pops(font, s, k)
+	_draw_tricks(font, s, k)
 	# speed lines at the edge of the screen: the faster you go, the more of them
 	var sp_f := clampf((vel.length() - 26.0) / 40.0, 0.0, 1.0)
 	if sp_f > 0.02:
@@ -1419,7 +2210,7 @@ func _draw_hud_inner() -> void:
 # Start it from Pause -> TRACE TEST, with the T key, or by opening the page with &trace=1.
 #   1 FOLLOW: the dot sweeps back and forth, faster and faster (smooth following: scale, lag, wobble)
 #   2 JUMP:   the dot jumps to a new spot every 2 s (glance reaction, where you land, how steady you hold)
-#   3 CARVE:  the real game, steering with your eyes along a highlighted line (how far off the line, the steering lag)
+#   3 DOWNHILL:  the real game, steering with your eyes along a highlighted line (how far off the line, the steering lag)
 # The board drives itself in 1 and 2, so all you have to do is look.
 # --------------------------------------------------------------------------
 const TR_INTRO := 3.0
@@ -1816,7 +2607,7 @@ func _trace_finish() -> void:
 	# 2 JUMP
 	var js := _tr_jump_stats()
 	res["jump"] = {"reactMs": js["reactMs"], "worstMs": js["worstMs"], "landErr": snappedf(float(js["landErr"]), 0.001) if not is_nan(float(js["landErr"])) else -1.0, "overshoot": snappedf(float(js["overshoot"]), 0.001) if not is_nan(float(js["overshoot"])) else -1.0, "stillJitter": snappedf(float(js["stillJitter"]), 0.001) if not is_nan(float(js["stillJitter"])) else -1.0, "missed": js["missed"], "jumps": js["jumps"]}
-	# 3 CARVE
+	# 3 DOWNHILL
 	var s3: Array = _tr_samp[3]
 	var sum_off := 0.0
 	var within := 0
@@ -1876,7 +2667,7 @@ func _tr_build_lines() -> void:
 	L.append(["        lag %d ms   (slow sweep %d ms, fast sweep %d ms)" % [int(fo["lagMs"]), int(fo["lagSlowMs"]), int(fo["lagFastMs"])], _tr_grade(float(fo["lagMs"]), 150.0, 280.0), 16])
 	L.append(["JUMP    reaction %d ms (worst %d)   lands %.1f%% off   overshoot %.1f%%" % [int(jp["reactMs"]), int(jp["worstMs"]), float(jp["landErr"]) * 100.0, float(jp["overshoot"]) * 100.0], _tr_grade(float(jp["reactMs"]), 330.0, 520.0), 16])
 	L.append(["        held still: jitter %.1f%%   missed %d of %d jumps" % [float(jp["stillJitter"]) * 100.0, int(jp["missed"]), int(jp["jumps"])], _tr_grade(float(jp["stillJitter"]), 0.02, 0.04), 16])
-	L.append(["CARVE   %.1f m off the line, %d%% within 2.5 m   crashes %d   barriers %d" % [float(cv["offLineM"]), int(cv["withinPct"]), int(cv["crashes"]), int(cv["barriers"])], _tr_grade(float(cv["offLineM"]), 3.0, 6.0), 16])
+	L.append(["DOWNHILL   %.1f m off the line, %d%% within 2.5 m   crashes %d   barriers %d" % [float(cv["offLineM"]), int(cv["withinPct"]), int(cv["crashes"]), int(cv["barriers"])], _tr_grade(float(cv["offLineM"]), 3.0, 6.0), 16])
 	L.append(["        eyes on the line within %.1f%%   steering lag %d ms" % [float(cv["gazeOnLineErr"]) * 100.0, int(cv["steerLagMs"])], _tr_grade(float(cv["steerLagMs"]), 250.0, 450.0), 16])
 	L.append(["TRACKER %d frames/s (%d dropped)   latency %d ms   model %d ms   game %d/s   lost %d%%" % [int(float(tk["fps"])), int(tk["dropped"]), int(tk["latencyMs"]), int(tk["modelMs"]), int(tk["gameFps"]), int(tk["signalLostPct"])], _tr_grade(30.0 - float(tk["fps"]), 4.0, 10.0), 16])
 	var sg: Dictionary = _tr_res["signals"]
@@ -2027,6 +2818,6 @@ func _draw_trace(font: Font, s: Vector2, k: float) -> void:
 			title = "2 of 3  look at the dot each time it jumps"
 			left = TR_JUMPS - _tr_t
 		3:
-			title = "3 of 3  CARVE: steer with your eyes along the line"
+			title = "3 of 3  DOWNHILL: steer with your eyes along the line"
 			left = TR_CARVE - _tr_t
 	_ctext(font, m + 64.0 * k, "%s   %d s" % [title, int(ceilf(maxf(left, 0.0)))], 22, Color(0.8, 0.95, 1.0))

@@ -21,7 +21,7 @@ static func build(index: int, L: MainLevel) -> Dictionary:
 		8: return _downhill(L)
 		11:
 			var cc := _downhill(L)
-			cc["name"] = "Carve"
+			cc["name"] = "Downhill"
 			return cc
 		9: return _trance(L)
 		10: return _gaze_test(L)
@@ -122,7 +122,7 @@ static func _flight(_L: MainLevel) -> Dictionary:
 ## 8  DOWNHILL: just an environment. The DownhillRig builds its own terrain, forest walls and openings.
 static func _downhill(_L: MainLevel) -> Dictionary:
 	return {
-		"name": "Downhill", "half": 40.0, "spawn": Vector3(0, 0.1, 0),
+		"name": "Downhill Lanes", "half": 40.0, "spawn": Vector3(0, 0.1, 0),
 		"sky_top": Color(0.18, 0.42, 0.9), "sky_horizon": Color(0.98, 0.84, 0.72), "sky_ground": Color(0.8, 0.85, 0.95),
 		"fog": Color(0.78, 0.82, 0.95), "fog_density": 0.0012, "fog_sky": 0.05,
 		"ambient": 0.62, "ambient_color": Color(0.66, 0.75, 0.97), "exposure": 1.05,

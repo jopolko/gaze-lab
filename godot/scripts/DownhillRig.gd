@@ -2691,7 +2691,7 @@ func _draw_pause(font: Font, s: Vector2, k: float) -> void:
 	y += 34.0 * k
 	# buttons
 	var labels := [["resume", "RESUME"], ["ctl", "CONTROL: " + ["GATE", "SIDE", "STEER", "SEEK"][lane_ctl]], ["copy", "COPY REPORT"], ["reset", "RESET LEARNING"], ["head", "HEAD HELP: " + ("ON" if head_assist else "OFF")], ["sens_up", "MORE SENSITIVE"], ["sens_dn", "LESS SENSITIVE"], ["curve_up", "FINER CENTRE"], ["curve_dn", "FLATTER"], ["rate_up", "FASTER"], ["rate_dn", "SMOOTHER"], ["reach_up", "REACH +"], ["reach_dn", "REACH -"], ["smooth_up", "STEADIER"], ["smooth_dn", "SNAPPIER"], ["eyes", "EYES ONLY: " + ("ON" if eyes_only else "OFF")], ["flip", "REVERSE EYES"]]
-	if Game.carve_mode:
+	if Game.run_mode:
 		labels.append(["trace", "TRACE TEST"])
 		labels.append(["trace_off", "END TRACE"])
 	var bx := m

@@ -280,7 +280,7 @@ eyes are tracked but change nothing. Ideas agreed: eyes = fine control on top of
   the manual override; EYES ONLY on/off button. Tests: a 2% iris glance moves the target gate, a head turn with a still iris does not, noise never flips the sign, a reversed signal is corrected.
   Earlier bug found by the test: an unseeded covariance EMA flipped the sign spuriously and left the old reference (pinned full right). UNVERIFIED on a real camera (sign convention, glance size).
 
-## CARVE (level 11, `?level=carve`): free carving, no gates
+## DOWNHILL (level 11, `?level=downhill`; was called CARVE until 2026-11-12, now `RunRig` / `run_test`): free run. The older three-lane game is now "Downhill Lanes" (level 8, `?level=lanes`)
 
 Request: "Carve Snowboarding" feel. Free carving down an open slope; natural obstacles (trees, rocks) with openings to aim for; no gates until the
 finish; momentum, a pull that builds, tight smooth controls; finish without crashing.

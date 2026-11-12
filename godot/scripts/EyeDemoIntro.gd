@@ -12,11 +12,11 @@ const MODES := {
 	7: {"tab": "FLIGHT", "title": "NOD FLIGHT", "desc": "Nod to charge, blast and slam.",
 		"lines": ["CHIN DOWN  charge      SNAP UP  blast", "CHIN UP  float      SNAP DOWN  slam", "LEAN   steer"],
 		"nokeys": "No camera: W / S chin, arrows lean"},
-	8: {"tab": "DOWNHILL", "title": "DOWNHILL", "desc": "Your eyes set the line. Read the gates, beat the timing.",
+	8: {"tab": "LANES", "title": "DOWNHILL LANES", "desc": "Your eyes set the line. Read the gates, beat the timing.",
 		"lines": ["LOOK  at a gate to set your line", "LEAN  carve      CHIN  tuck, pop, brake", "Some gates open late or slam shut"],
 		"nokeys": "No camera: A / D lean, W / S chin, mouse = your eyes"},
-	11: {"tab": "CARVE", "title": "CARVE", "desc": "Free carving. Look where you want to go. Reach the finish without a wipeout.",
-		"lines": ["LOOK  aside to carve that way", "HOLD your look on an opening to lock it", "It gets faster the further you go"],
+	11: {"tab": "DOWNHILL", "title": "DOWNHILL", "desc": "Look where you want to go. Hit jumps for tricks, grab the pickups, reach the finish.",
+		"lines": ["LOOK  aside to steer that way", "HOLD your look on a gate to lock it", "In the air: look aside to spin, chin down to grab"],
 		"nokeys": "No camera: A / D carve, mouse = your eyes"},
 	9: {"tab": "TRANCE", "title": "OCULAR TRANCE", "desc": "Stare to charge. Blink to release.",
 		"lines": ["LOOK  at a glowing orb and hold it", "BLINK  to release the shockwave", "Strong motion effects: lower INTENSITY any time"],
@@ -144,7 +144,7 @@ func _current_mode() -> int:
 		return 10
 	if Game.trance_mode:
 		return 9
-	if Game.carve_mode:
+	if Game.run_mode:
 		return 11
 	if Game.downhill_mode:
 		return 8

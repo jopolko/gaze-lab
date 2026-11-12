@@ -55,9 +55,9 @@ func _ready() -> void:
 			start_level = 5
 		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=flight"):
 			start_level = 7
-		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=downhill"):
+		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=lanes"):
 			start_level = 8
-		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=carve"):
+		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=downhill"):
 			start_level = 11
 		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=trance"):
 			start_level = 9
@@ -67,7 +67,7 @@ func _ready() -> void:
 		Game.peek_mode = start_level == 6
 		Game.flight_mode = start_level == 7 or start_level == 8 or start_level == 11
 		Game.downhill_mode = start_level == 8 or start_level == 11
-		Game.carve_mode = start_level == 11
+		Game.run_mode = start_level == 11
 		Game.trance_mode = start_level == 9
 		Game.gaze_test_mode = start_level == 10
 		Game.level_requested.connect(load_level)      # the intro's mode picker
@@ -167,7 +167,7 @@ func load_level(idx: int) -> void:
 	Game.peek_mode = level_index == 6
 	Game.flight_mode = level_index == 7 or level_index == 8 or level_index == 11
 	Game.downhill_mode = level_index == 8 or level_index == 11
-	Game.carve_mode = level_index == 11
+	Game.run_mode = level_index == 11
 	Game.trance_mode = level_index == 9
 	Game.gaze_test_mode = level_index == 10
 	player.rail_lock = Game.peek_mode
@@ -531,7 +531,7 @@ func _start_flight() -> void:
 	player.visible = false
 	hud.visible = false
 	if Game.downhill_mode:
-		_dh = CarveRig.new() if Game.carve_mode else DownhillRig.new()
+		_dh = RunRig.new() if Game.run_mode else DownhillRig.new()
 		add_child(_dh)
 		_dh.setup(player)
 		return

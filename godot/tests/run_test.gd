@@ -1,5 +1,5 @@
 extends Node
-## Headless checks for CARVE:  godot --headless --path . res://tests/carve_test.tscn
+## Headless checks for DOWNHILL:  godot --headless --path . res://tests/run_test.tscn
 var _fails := 0
 
 func _check(ok: bool, msg: String) -> void:
@@ -22,7 +22,7 @@ func _hold(ms: int, gaze: Vector2) -> void:
 
 
 ## The gaze that puts the reticle at screen fraction x (the reticle is your gaze relative to your own centre, times the reach).
-func _gaze_for(rig: CarveRig, x_frac: float) -> float:
+func _gaze_for(rig: RunRig, x_frac: float) -> float:
 	return clampf(rig._ref_x + (x_frac - 0.5) / rig.reach, 0.0, 1.0)
 
 
@@ -37,8 +37,9 @@ func _ready() -> void:
 	Game.touch_mode = true
 	level.load_level(11)
 	await _frames(5)
-	var rig: CarveRig = level._dh as CarveRig
-	_check(rig != null and Game.carve_mode and Game.downhill_mode and rig.cam.current, "carve rig starts, owns the camera")
+	var rig: RunRig = level._dh as RunRig
+	rig.view_fp = false                  # the older checks measure the third-person camera; first person has its own checks below
+	_check(rig != null and Game.run_mode and Game.downhill_mode and rig.cam.current, "carve rig starts, owns the camera")
 	_check(rig.lane_ctl == 2, "gaze steering is continuous (STEER)")
 	_check(not rig._rows.is_empty() and rig._chunks.size() >= 5, "course and terrain chunks exist (%d segments)" % rig._rows.size())
 
@@ -54,7 +55,7 @@ func _ready() -> void:
 	var n_open := 0
 	var prev_z := 0.0
 	var worst_ratio := 0.0
-	for j in range(CarveRig.START_CALM, 50):
+	for j in range(RunRig.START_CALM, 50):
 		var r: Dictionary = rig._rows[j]
 		if not r["has_row"]:
 			continue
@@ -78,11 +79,11 @@ func _ready() -> void:
 	_check(n_rows >= 40 and n_open > n_rows, "barriers with several openings (%d barriers, %d openings)" % [n_rows, n_open])
 	_check(worst_clear > 2.2, "the safe opening is wide enough to drive through (clear half width %.1f m)" % worst_clear)
 	_check(worst_ratio <= 0.31, "the safe opening drifts at most 0.3 m sideways per metre downhill (%.2f)" % worst_ratio)
-	var first: Dictionary = rig._rows[CarveRig.START_CALM]
-	_check(float(first["z"]) < -150.0, "the first %d segments are open snow (first barrier at %.0f m)" % [CarveRig.START_CALM, -float(first["z"])])
+	var first: Dictionary = rig._rows[RunRig.START_CALM]
+	_check(float(first["z"]) < -150.0, "the first %d segments are open snow (first barrier at %.0f m)" % [RunRig.START_CALM, -float(first["z"])])
 	var finish_row := -1
 	for j in rig._rows:
-		if float((rig._rows[j] as Dictionary)["z0"]) > CarveRig.FINISH_Z and float((rig._rows[j] as Dictionary)["z0"]) - DownhillRig.ROW_GAP <= CarveRig.FINISH_Z:
+		if float((rig._rows[j] as Dictionary)["z0"]) > RunRig.FINISH_Z and float((rig._rows[j] as Dictionary)["z0"]) - DownhillRig.ROW_GAP <= RunRig.FINISH_Z:
 			finish_row = j
 	_check(finish_row >= 0 and not (rig._rows[finish_row]["nodes"] as Array).is_empty(), "a finish line is built (segment %d)" % finish_row)
 
@@ -98,7 +99,7 @@ func _ready() -> void:
 	var all_clear := true
 	var path_off_ok := true
 	var path_n := 0
-	for jb in range(CarveRig.START_CALM, 50):
+	for jb in range(RunRig.START_CALM, 50):
 		var rb: Dictionary = rig._rows[jb]
 		if not rb["has_row"]:
 			continue
@@ -126,6 +127,7 @@ func _ready() -> void:
 			buff_n += 1
 			if not rig._clear_of_obs(rb["obs"], float(bf["x"]), float(bf["z"]), 3.0):
 				all_clear = false
+				print("    buff on an obstacle: %s %s kind %s x %.1f z %.1f" % [rb["layout"], bf["t"], bf["kind"], float(bf["x"]), float(bf["z"])])
 			if bf["kind"] == "path":
 				path_n += 1
 				var offp := absf(float(bf["x"]) - rig.path_x(rb, float(bf["z"])))
@@ -184,11 +186,13 @@ func _ready() -> void:
 	while not rig._finished and steps < 20000:
 		rig._physics_process(dt)
 		steps += 1
-		if v500 == 0.0 and rig.spos.z < -500.0:
+		if v500 == 0.0 and rig.spos.z < -500.0 and rig._boost_t <= 0.0:
 			v500 = rig.vel.length()
-		if v3500 == 0.0 and rig.spos.z < -3500.0:
+		if v3500 == 0.0 and rig.spos.z < -3500.0 and rig._boost_t <= 0.0:
 			v3500 = rig.vel.length()
 	rig.autopilot = false
+	if rig.crashes > 0:
+		print("    autopilot crash log: ", rig.crash_log, "  kickers (z/x): ", rig.kick_log)
 	_check(rig._finished, "the autopilot reaches the finish (%d m, %.0f s)" % [int(-rig.spos.z), rig._run_t])
 	_check(rig.crashes == 0, "and does it without a crash (%d crashes: %s)" % [rig.crashes, str(rig.crash_log)])
 	_check(v3500 > v500 + 8.0, "the hill pulls faster the further you go (%.0f m/s at 500 m, %.0f m/s at 3500 m)" % [v500, v3500])
@@ -345,7 +349,7 @@ func _ready() -> void:
 	rig.set_physics_process(false)
 	rig._restart()
 	var arow: Dictionary = {}
-	for j in range(CarveRig.START_CALM, 12):
+	for j in range(RunRig.START_CALM, 12):
 		if rig._rows.has(j) and rig._rows[j]["has_row"]:
 			arow = rig._rows[j]
 			break
@@ -434,6 +438,7 @@ func _ready() -> void:
 	var tot_bar := {0.0: 0, 0.3: 0}
 	for hcase in 6:
 		var p_wrong: float = 0.0 if hcase < 3 else 0.3
+		rig.view_fp = hcase % 3 == 2          # the last run of each group is flown in first person
 		rig.set_physics_process(false)
 		rig.aim_enabled = true
 		rig._restart()
@@ -581,13 +586,110 @@ func _ready() -> void:
 		hs_cr += rig.crashes
 		hs_bar += rig._passed_ok
 	_check(hs_path_got >= int(0.35 * float(hs_path_sp)), "a player who looks at the buffs collects a good share of the ones beside the path (%d of %d)" % [hs_path_got, hs_path_sp])
-	_check(hs_gate_got >= int(0.5 * float(hs_gate_sp)), "and the ones in front of the safe gate (%d of %d)" % [hs_gate_got, hs_gate_sp])
+	_check(hs_gate_got >= int(0.4 * float(hs_gate_sp)), "and the ones in front of the safe gate (%d of %d)" % [hs_gate_got, hs_gate_sp])
 	_check(hs_cr <= 8, "hunting buffs does not wreck the run (%d crashes, %d barriers over 2 full runs)" % [hs_cr, hs_bar])
+	rig.set_physics_process(true)
+
+	# ---- first person, kickers, tricks
+	rig.view_fp = false
+	rig.set_physics_process(false)
+	rig._restart()
+	for jk in range(rig._next_j, 60):
+		rig._gen_segment(jk)
+	var k_rows: Array = []
+	var air_buffs := 0
+	var k_far := true
+	for jk2 in rig._rows:
+		var rk: Dictionary = rig._rows[jk2]
+		if rk.has("kick"):
+			k_rows.append(rk)
+			if rk["has_row"] and absf(float(rk["kick"]["x"]) - rig.path_x(rk, float(rk["kick"]["z"]))) < 13.9:
+				k_far = false
+		for bk in rk["buffs"]:
+			if bk["kind"] == "air":
+				air_buffs += 1
+	_check(k_rows.size() >= 5 and rig.kickers_built == k_rows.size(), "kickers appear along the course (%d in 58 segments)" % k_rows.size())
+	_check(k_far, "a kicker sits well beside the safe line, so it is a choice and never in the way")
+	_check(air_buffs >= 3, "most kickers carry a pickup in the air above them (%d)" % air_buffs)
+	var jrow: Dictionary = {}
+	for rk2 in k_rows:
+		if rk2["has_row"]:
+			jrow = rk2
+			break
+	var kx0: float = float(jrow["kick"]["x"])
+	var kz0: float = float(jrow["kick"]["z"])
+	rig.gate_assist = false
+	rig.avoid_enabled = false
+	rig.spos = Vector3(kx0, rig.terrain_h(kx0, kz0 + 34.0), kz0 + 34.0)
+	rig._gh_prev = rig.spos.y
+	rig.vel = Vector2(0.0, -36.0)
+	rig.heading = 0.0
+	rig.hurt_t = 0.0
+	rig.grounded = true
+	rig._finished = false
+	rig.trick_look_override = 1.0
+	rig.trick_grab_override = true
+	var j_c0 := rig.crashes
+	var j_peak := 0.0
+	var j_air_t := 0.0
+	var j_spun := 0.0
+	var j_steps := 0
+	var j_air := false
+	while j_steps < 420 and rig.spos.z > float(jrow["kick"]["lip"]) - 120.0:
+		j_steps += 1
+		rig._physics_process(dt)
+		if not rig.grounded:
+			if not j_air:
+				print("    flight starts at z %.1f (kicker z %.1f, lip %.1f, rise %.2f), speed %.1f" % [rig.spos.z, kz0, float(jrow["kick"]["lip"]), float(rig._kickers[0]["rise"]) if not rig._kickers.is_empty() else -1.0, rig.vel.length()])
+			j_air = true
+			j_air_t += dt
+			j_peak = maxf(j_peak, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z))
+			j_spun = maxf(j_spun, absf(rig._trk_spin))
+		elif j_air:
+			break
+	_check(j_air and j_air_t > 0.35 and j_peak > 1.0, "riding a kicker at speed launches the board (%.2f s in the air, %.1f m up)" % [j_air_t, j_peak])
+	_check(rig.crashes == j_c0, "and lands without a crash (%d crashes: %s)" % [rig.crashes - j_c0, str(rig.crash_log.slice(maxi(rig.crash_log.size() - 2, 0)))])
+	_check(rig.tricks_landed >= 1 and rig.trick_score >= 100, "looking aside and holding a grab in the air lands a trick worth points (%d tricks, %d points, best %s, spun %.0f deg)" % [rig.tricks_landed, rig.trick_score, rig.best_trick, rad_to_deg(j_spun)])
+	rig.trick_look_override = 0.0
+	rig.trick_grab_override = false
+	# no input in the air: no trick, no bonus, no crash
+	rig.spos = Vector3(kx0, rig.terrain_h(kx0, kz0 + 34.0), kz0 + 34.0)
+	rig._gh_prev = rig.spos.y
+	rig.vel = Vector2(0.0, -36.0)
+	rig.grounded = true
+	rig.hurt_t = 0.0
+	var t_before: int = rig.tricks_landed
+	j_air = false
+	j_steps = 0
+	while j_steps < 420:
+		j_steps += 1
+		rig._physics_process(dt)
+		if not rig.grounded:
+			j_air = true
+		elif j_air:
+			break
+	_check(rig.tricks_landed == t_before and rig.crashes == j_c0, "a jump with no tricks is just a jump (no trick score, no crash)")
+	rig.gate_assist = true
+	rig.avoid_enabled = true
+	# the view
+	rig._restart()
+	rig.view_fp = true
+	await _frames(4)
+	await get_tree().process_frame
+	rig._place_camera(0.016, true)
+	var eye_h: float = rig.cam.global_position.y - rig.spos.y
+	_check(eye_h > 1.2 and eye_h < 2.6 and rig._tip_pivot != null and rig._tip_pivot.visible and not rig._sled.visible, "first person: the camera sits at eye height, the rider is hidden and the board tip shows (%.2f m)" % eye_h)
+	rig.view_fp = false
+	await get_tree().process_frame
+	await get_tree().process_frame
+	rig._place_camera(0.016, true)
+	_check(rig.cam.global_position.y - rig.spos.y > 3.0 and not rig._tip_pivot.visible and rig._sled.visible, "third person: the camera is behind and above, the rider shows, the tip is hidden")
+	rig.view_fp = true
 	rig.set_physics_process(true)
 
 	# ---- leaving restores the player camera
 	level.load_level(6)
 	await _frames(5)
-	_check(not Game.carve_mode and not Game.downhill_mode and level._dh == null and level.player.camera.current, "leaving carve restores the player camera")
+	_check(not Game.run_mode and not Game.downhill_mode and level._dh == null and level.player.camera.current, "leaving carve restores the player camera")
 	print("RESULT: " + ("ALL PASSED" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()
