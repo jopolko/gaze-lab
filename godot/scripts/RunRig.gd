@@ -48,6 +48,7 @@ func setup(p_player: PlayerController) -> void:
 	super.setup(p_player)
 	name = "RunRig"
 	_load_view_pref()
+	_read_params()
 	_zone_scale = 1.8                    # the trim from the raw look is looser: full lock at about +-19% of the screen, not +-10%
 	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
 	if OS.has_feature("web"):
@@ -66,7 +67,7 @@ func setup(p_player: PlayerController) -> void:
 # --------------------------------------------------------------------------
 func terrain_h(x: float, z: float) -> float:
 	var u := maxf(-z, 0.0)
-	var h := z * SLOPE - 0.00002 * u * u
+	var h := _base_h(z) - 0.00002 * u * u
 	h += 0.9 * sin(z * 0.031 + 1.3) * cos(x * 0.045) + 0.5 * sin(z * 0.011 - x * 0.02)          # swells, much gentler than the lane game's: a bump must never launch you by accident
 	h += 0.6 * sin(z * 0.045 + x * 0.025 + 0.7) * sin(x * 0.03 - z * 0.02)
 	var ax := absf(x) - W_HALF
@@ -86,11 +87,14 @@ func terrain_h(x: float, z: float) -> float:
 
 
 func _course_diff(z0: float) -> float:
-	return clampf(0.12 + (-z0) / absf(FINISH_Z) * 0.88, 0.0, 1.0)
+	var ref := minf(absf(finish_z), 4200.0)
+	return clampf((0.12 + (-z0) / ref * 0.88) * diff_scale, 0.0, 1.0)
 
 
 func progress() -> float:
-	return clampf(-spos.z / absf(FINISH_Z), 0.0, 1.0)
+	if absf(finish_z) > 1.0e6:
+		return fposmod(-spos.z, 1000.0) / 1000.0          # endless: the bar fills every kilometre
+	return clampf(-spos.z / absf(finish_z), 0.0, 1.0)
 
 
 # --------------------------------------------------------------------------
@@ -104,11 +108,20 @@ func _gen_segment(j: int) -> void:
 	var rz := z0 - _rng.randf_range(50.0, 60.0) if _force_far_next else z0 - _rng.randf_range(26.0, 60.0)
 	_force_far_next = false
 	# now and then a segment has no barrier at all: an air segment, with an epic kicker at the top and room to land
-	var air_seg := j > START_CALM and not _last_air and rz > FINISH_Z + 260.0 and (j == 3 or _rng.randf() < 0.2)
+	var zone := _pending_zone if _pending_zone != "" else _pick_zone(j)
+	_pending_zone = ""
+	if j < 3 or not ZONES.has(zone) or (zone == "air" and (_last_air or rz < finish_z + 300.0)):
+		zone = "rush"
+	var zp: Dictionary = ZONES[zone]
+	_cur_zone = zone
+	_zone_w = float(zp["w"])
+	_push_pitch(z0, float(zp["m"]))
+	zones_seen[zone] = int(zones_seen.get(zone, 0)) + 1
+	var air_seg := zone == "air"
 	_last_air = air_seg
-	var has_row := j >= START_CALM and rz > FINISH_Z + 40.0 and not air_seg
+	var has_row := j >= START_CALM and rz > finish_z + 40.0 and not air_seg
 	var row: Dictionary = {"j": j, "z": rz, "z0": z0, "gaps": [], "obs": PackedFloat32Array(), "banks": [], "nodes": [],
-		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "pads": [], "layout": "none"}
+		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "pads": [], "layout": "none", "zone": zone}
 	var cones: Array[Transform3D] = []
 	var cone_cols := PackedColorArray()
 	var trunks: Array[Transform3D] = []
@@ -121,13 +134,19 @@ func _gen_segment(j: int) -> void:
 	if has_row:
 		var shift := clampf((_last_rz - rz) * 0.30, 8.0, 14.0 if post_air else 36.0)          # after a jump you land close to where you left the line: the next gate is not far off it          # the safe opening moves at most a third of the distance since the last barrier: always reachable
 		_last_rz = rz
-		_good_x = clampf(_good_x + _rng.randf_range(-1.0, 1.0) * shift * (0.6 + 0.4 * d), -42.0, 42.0)
+		if zone == "bend":
+			var bside := _pending_bend if _pending_bend != 0.0 else (1.0 if _good_x < 0.0 else -1.0)
+			_good_x = clampf(_good_x + bside * shift * 0.75, -42.0, 42.0)          # an abrupt turn: three quarters of what a carve can follow
+		else:
+			_good_x = clampf(_good_x + _rng.randf_range(-1.0, 1.0) * shift * (0.6 + 0.4 * d), -42.0, 42.0)
+		_pending_bend = 0.0
 		var gaps: Array = row["gaps"]
-		var g0 := _mk_gap(_good_x, lerpf(17.0, 10.0, d) * _rng.randf_range(0.92, 1.1), "open", true)
+		var g0 := _mk_gap(_good_x, lerpf(17.0, 10.0, d) * _rng.randf_range(0.92, 1.1) * _zone_w, "open", true)
 		g0["lane"] = -1
 		gaps.append(g0)
 		g0["iso"] = false
 		_layout_gaps(row, gaps, d, prev_x, prev_rz, rz)
+		_assign_leads(row, gaps, rz)
 		# the barrier: a line of trees, a boulder band or a mix, two staggered rows, skipping the openings
 		var style := _rng.randi() % 3
 		var p_rock: float = [0.12, 0.8, 0.4][style]
@@ -151,9 +170,12 @@ func _gen_segment(j: int) -> void:
 					_add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, lz + _rng.randf_range(-0.6, 0.6), _rng.randf_range(0.8, 1.25), true)
 	row["px"] = prev_x
 	row["pz"] = prev_rz
+	var halfw: float = float(zp["walls"])
+	if has_row and halfw > 0.0:
+		_build_corridor(row, zone, halfw, prev_rz, rz, cones, cone_cols, trunks, trunk_cols, obs)
 	# scattered singles between this barrier and the one before it; the straight line from the last safe opening to this one stays clear
 	if has_row:
-		var n_single := int(minf(prev_rz - rz, ROW_GAP * 1.3) / ROW_GAP * (2.5 + 4.0 * d)) + 1          # after an air segment the span is long: no more singles than a normal one has
+		var n_single := int(minf(prev_rz - rz, ROW_GAP * 1.3) / ROW_GAP * (2.5 + 4.0 * d) * float(zp["singles"])) + (1 if float(zp["singles"]) > 0.0 else 0)          # after an air segment the span is long: no more singles than a normal one has
 		for i in n_single:
 			var sz := _rng.randf_range(rz + 9.0, minf(prev_rz - 9.0, -30.0))
 			var sx := _rng.randf_range(-W_HALF + 3.0, W_HALF - 3.0)
@@ -172,6 +194,7 @@ func _gen_segment(j: int) -> void:
 	_place_kicker(row, obs, prev_rz, rz, z0, has_row, j, air_seg)
 	if has_row:
 		_place_buffs(row, d, prev_rz, rz)
+		_make_signs(row, rz)
 	# forest and boulders on both sides (visual only)
 	for side in [-1.0, 1.0]:
 		for i in 22:
@@ -196,10 +219,13 @@ func _gen_segment(j: int) -> void:
 	_add_mm(row, _m_cone, cones, cone_cols)
 	_add_mm(row, _m_trunk, trunks, trunk_cols)
 	_add_mm(row, _m_rock, rocks, rock_cols)
-	if z0 > FINISH_Z and z0 - ROW_GAP <= FINISH_Z:
+	if z0 > finish_z and z0 - ROW_GAP <= finish_z:
 		_make_finish(row)
 	_rows[j] = row
 	_chunks[j] = _build_chunk(j)
+	_update_mist(z0 - ROW_GAP)
+	if has_row and bool(params.get("lazy", true)):
+		_gate_open = false                                    # the next stretch is built when you go through this barrier
 
 
 ## The finish: two tall posts and a chequered bar across the whole run.
@@ -212,7 +238,7 @@ func _make_finish(row: Dictionary) -> void:
 		post.material_override = red
 		post.scale = Vector3(2.4, 2.4, 2.4)
 		add_child(post)
-		post.global_position = Vector3(px, terrain_h(px, FINISH_Z) + 6.0, FINISH_Z)
+		post.global_position = Vector3(px, terrain_h(px, finish_z) + 6.0, finish_z)
 		(row["nodes"] as Array).append(post)
 	for i in 12:
 		var bx := -22.0 + 4.0 * float(i)
@@ -221,8 +247,323 @@ func _make_finish(row: Dictionary) -> void:
 		seg.scale = Vector3(4.0, 1.8, 0.8)
 		seg.material_override = _flat_mat(Color(0.97, 0.97, 1.0) if i % 2 == 0 else Color(0.12, 0.12, 0.16))
 		add_child(seg)
-		seg.global_position = Vector3(bx, terrain_h(bx, FINISH_Z) + 12.4, FINISH_Z)
+		seg.global_position = Vector3(bx, terrain_h(bx, finish_z) + 12.4, finish_z)
 		(row["nodes"] as Array).append(seg)
+
+
+# --------------------------------------------------------------------------
+# ZONES: what lies beyond a gate. Every gate in a barrier leads somewhere different, and the next stretch of the course is only built once you have gone
+# through one (a bank of mist hides what is beyond until then). The signs above the gates tell you what each one leads to, so you can learn them:
+#   RUSH    steep and fast, a clear run, few trees.                  Good place to be hammered by a boost: a long straight to spend it on.
+#   MEADOW  gentle and slow, wide spread-out gates, many pickups.    A boost lifts you out of the slow stretch; candy and donuts to farm.
+#   TUNNEL  a lined corridor with narrow hoops to thread, no lone trees.   A shield is the sensible thing to carry in; a boost leaves no time to think.
+#   BEND    a sharp turn, lined with trees.                           A boost in front of the gate will pin you in the corner. Brake into it (tuck).
+#   AIR     a big ramp, room to fly, pads and pickups above the lip.  Boost into it for an epic jump.
+# --------------------------------------------------------------------------
+const ZONES := {
+	"rush": {"m": 1.45, "w": 1.0, "singles": 0.5, "walls": 0.0, "path_buff": 0.30, "col": Color(1.0, 0.3, 0.25), "name": "RUSH"},
+	"flat": {"m": 0.55, "w": 1.45, "singles": 1.1, "walls": 0.0, "path_buff": 0.85, "col": Color(0.4, 0.9, 0.5), "name": "MEADOW"},
+	"tunnel": {"m": 1.25, "w": 0.95, "singles": 0.0, "walls": 26.0, "path_buff": 0.12, "col": Color(0.7, 0.45, 1.0), "name": "TUNNEL"},
+	"bend": {"m": 1.0, "w": 1.0, "singles": 0.5, "walls": 30.0, "path_buff": 0.35, "col": Color(1.0, 0.85, 0.3), "name": "BEND"},
+	"air": {"m": 1.0, "w": 1.0, "singles": 0.0, "walls": 0.0, "path_buff": 0.0, "col": Color(1.0, 0.4, 0.7), "name": "AIR"},
+}
+## What a gate offers in front of it depends on what lies behind it, so the offer teaches you something: a burger is as likely in front of a BEND (a trap)
+## as in front of a RUSH (a reward).
+const FOOD_BY_ZONE := {
+	"rush": {"boost": 0.4, "shield": 0.15, "mult": 0.25, "donut": 0.2},
+	"flat": {"boost": 0.3, "shield": 0.1, "mult": 0.35, "donut": 0.25},
+	"tunnel": {"boost": 0.25, "shield": 0.4, "mult": 0.2, "donut": 0.15},
+	"bend": {"boost": 0.4, "shield": 0.3, "mult": 0.15, "donut": 0.15},
+	"air": {"boost": 0.2, "shield": 0.1, "mult": 0.45, "donut": 0.25},
+}
+const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 0.8, "air": 0.5}
+
+var _pitch: Array = []                  # the slope of the hill, stretch by stretch: [{z, h, s}]
+var _cur_zone: String = "rush"
+var _pending_zone: String = ""          # set by the gate you go through
+var _pending_bend: float = 0.0
+var _gate_open: bool = true             # false: the next stretch waits for you to go through the barrier ahead
+var _mist: MeshInstance3D
+var _zone_w: float = 1.0
+var zones_seen: Dictionary = {}
+var finish_z: float = FINISH_Z
+var diff_scale: float = 1.0
+var params: Dictionary = {"seed": 424242, "length": 4200, "diff": 1.0, "zones": {}, "lazy": true}
+
+
+func _base_h(z: float) -> float:
+	var n := _pitch.size()
+	if n == 0:
+		return z * SLOPE
+	var i := n - 1
+	while i > 0 and float(_pitch[i]["z"]) < z:
+		i -= 1
+	var e: Dictionary = _pitch[i]
+	return float(e["h"]) + (z - float(e["z"])) * float(e["s"])
+
+
+func _push_pitch(z: float, m: float) -> void:
+	_pitch.append({"z": z, "h": _base_h(z), "s": SLOPE * m})
+
+
+func _zone_weights() -> Dictionary:
+	var w: Dictionary = DEFAULT_ZONE_WEIGHTS.duplicate()
+	var pz: Dictionary = params.get("zones", {})
+	for k in pz:
+		w[k] = float(pz[k])
+	return w
+
+
+func _pick_zone_w(excl: Array, d: float) -> String:
+	var w := _zone_weights()
+	var total := 0.0
+	var wl: Dictionary = {}
+	for k in ZONES:
+		if excl.has(k):
+			continue
+		var x: float = float(w.get(k, 1.0))
+		if k == "bend" or k == "tunnel":
+			x *= 0.6 + 0.8 * d
+		elif k == "flat":
+			x *= 1.3 - 0.7 * d
+		wl[k] = maxf(x, 0.0)
+		total += wl[k]
+	if total <= 0.0:
+		return "rush"
+	var r := _rng.randf() * total
+	for k in wl:
+		r -= float(wl[k])
+		if r <= 0.0:
+			return String(k)
+	return "rush"
+
+
+func _pick_zone(j: int) -> String:
+	if j < 3:
+		return "rush"
+	var excl: Array = ["air"] if _last_air else []
+	return _pick_zone_w(excl, _course_diff(-ROW_GAP * float(j)))
+
+
+## Each gate of a barrier leads to a different kind of stretch (as far as there are kinds to go round).
+func _assign_leads(row: Dictionary, gaps: Array, rz: float) -> void:
+	var used: Array = []
+	var d := _course_diff(rz)
+	var allow_air := rz - 2.0 * ROW_GAP > finish_z + 300.0 and int(row["j"]) >= START_CALM
+	for g in gaps:
+		var excl: Array = used.duplicate()
+		if not allow_air:
+			excl.append("air")
+		var zn := _pick_zone_w(excl, d)
+		g["leads"] = zn
+		used.append(zn)
+		if zn == "bend":
+			g["bend"] = 1.0 if float(g["x"]) < 0.0 else -1.0          # the bend turns toward the middle of the slope
+
+
+func _pick_for_gate(zone: String) -> String:
+	var tbl: Dictionary = FOOD_BY_ZONE.get(zone, FOOD_BY_ZONE["rush"])
+	var r := _rng.randf()
+	for k in tbl:
+		r -= float(tbl[k])
+		if r <= 0.0:
+			return String(k)
+	return "boost"
+
+
+## The sign above a gate: a coloured beacon you can see from afar and a symbol for the kind of stretch it leads to.
+func _make_signs(row: Dictionary, rz: float) -> void:
+	for g in row["gaps"]:
+		var zn: String = g.get("leads", "rush")
+		var zp: Dictionary = ZONES[zn]
+		var col: Color = zp["col"]
+		var gx: float = g["x"]
+		var root := Node3D.new()
+		add_child(root)
+		root.global_position = Vector3(gx, terrain_h(gx, rz) + 9.5, rz + 0.5)
+		(row["nodes"] as Array).append(root)
+		var mat := _fx_mat("solid", col, 2.4)
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.1
+		cm.bottom_radius = 0.14
+		cm.height = 16.0
+		cm.radial_segments = 6
+		_mi(root, cm, _fx_mat("add", Color(col.r, col.g, col.b, 0.35)), Vector3(0, -8.0, 0))
+		match zn:
+			"rush":
+				for vi in 2:
+					for sx in [-1.0, 1.0]:
+						var bm := BoxMesh.new()
+						bm.size = Vector3(1.7, 0.38, 0.3)
+						var b := _mi(root, bm, mat, Vector3(float(sx) * 0.72, 0.5 - float(vi) * 1.15, 0.0))
+						b.rotation.z = -float(sx) * 0.55
+			"flat":
+				var tm := TorusMesh.new()
+				tm.inner_radius = 0.85
+				tm.outer_radius = 1.3
+				var t := _mi(root, tm, mat)
+				t.rotation.x = PI * 0.5
+				t.scale = Vector3(1.6, 1.0, 0.8)
+			"tunnel":
+				for ri in 2:
+					var tm2 := TorusMesh.new()
+					tm2.inner_radius = 0.9 - 0.45 * float(ri)
+					tm2.outer_radius = 1.35 - 0.6 * float(ri)
+					var t2 := _mi(root, tm2, mat)
+					t2.rotation.x = PI * 0.5
+			"bend":
+				var side: float = float(g.get("bend", 1.0))
+				var vb := BoxMesh.new()
+				vb.size = Vector3(0.38, 1.9, 0.3)
+				_mi(root, vb, mat, Vector3(0, -0.5, 0))
+				var hb := BoxMesh.new()
+				hb.size = Vector3(1.6, 0.38, 0.3)
+				_mi(root, hb, mat, Vector3(side * 0.8, 0.45, 0))
+				var ab := BoxMesh.new()
+				ab.size = Vector3(0.8, 0.38, 0.3)
+				var a := _mi(root, ab, mat, Vector3(side * 1.55, 0.25, 0))
+				a.rotation.z = -side * 0.8
+			_:
+				var pm := PrismMesh.new()
+				pm.size = Vector3(2.4, 1.5, 0.4)
+				_mi(root, pm, mat)
+		var halo := _mi(root, _quad(5.0), _fx_mat("halo", Color(col.r, col.g, col.b, 0.7)))
+		halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## A line of trees down both sides of the stretch (a corridor that follows the safe line), and in a tunnel two hoops to thread.
+func _build_corridor(row: Dictionary, zone: String, halfw: float, prev_rz: float, rz: float, cones: Array[Transform3D], cone_cols: PackedColorArray, trunks: Array[Transform3D], trunk_cols: PackedColorArray, obs: PackedFloat32Array) -> void:
+	var z := prev_rz - 8.0
+	while z > rz + 6.0:
+		var cx := path_x(row, z)
+		for sd in [-1.0, 1.0]:
+			var x: float = cx + float(sd) * halfw + _rng.randf_range(-0.5, 0.5)
+			if absf(x) < W_HALF - 1.0:
+				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, z + _rng.randf_range(-0.6, 0.6), _rng.randf_range(0.9, 1.3), true)
+		z -= 3.7
+	if zone == "tunnel":
+		for hk in [1, 2]:
+			var hz := rz + 26.0 * float(hk)
+			if hz > prev_rz - 24.0:
+				continue
+			var hc := path_x(row, hz) + _rng.randf_range(-3.0, 3.0)
+			var hx := path_x(row, hz) - halfw
+			while hx < path_x(row, hz) + halfw:
+				if absf(hx - hc) > 9.0 + 1.6 and absf(hx) < W_HALF - 1.0:
+					_add_tree(cones, cone_cols, trunks, trunk_cols, obs, hx, hz + _rng.randf_range(-0.5, 0.5), _rng.randf_range(0.9, 1.2), true)
+				hx += 3.7
+
+
+func _update_mist(z_end: float) -> void:
+	if _mist == null:
+		_mist = MeshInstance3D.new()
+		var q := QuadMesh.new()
+		q.size = Vector2(560.0, 160.0)
+		_mist.mesh = q
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.albedo_color = Color(0.93, 0.96, 1.0, 0.97)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_mist.material_override = m
+		_mist.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_mist)
+	_mist.global_position = Vector3(0.0, terrain_h(0.0, z_end) + 50.0, z_end)
+
+
+## Spread layout for a meadow: several wide gates across the whole slope.
+func _layout_spread(gaps: Array, gx: float, d: float, want: int) -> void:
+	var slots: Array = [-36.0, -12.0, 12.0, 36.0]
+	slots.shuffle()
+	var added := 0
+	for sx in slots:
+		if added >= want:
+			break
+		var ok := absf(float(sx) - gx) >= 18.0
+		for g in gaps:
+			if absf(float(sx) - float(g["x"])) < 18.0:
+				ok = false
+		if ok:
+			_add_gate(gaps, float(sx) + _rng.randf_range(-3.0, 3.0), _gate_w(d), false)
+			added += 1
+
+
+## A tunnel or a bend: the second gate sits close by, so the choice is quick.
+func _layout_near(gaps: Array, gx: float, d: float, lo: float, hi: float) -> void:
+	var side := 1.0 if _rng.randf() < 0.5 else -1.0
+	var ex := gx + side * _rng.randf_range(lo, hi)
+	if absf(ex) > 44.0:
+		ex = gx - side * _rng.randf_range(lo, hi)
+	if absf(ex) <= 44.0:
+		_add_gate(gaps, ex, _gate_w(d), false)
+
+
+# --------------------------------------------------------------------------
+# Parameters and presets. Every course is generated from these, so any setting makes a different run, and length 0 never ends.
+#   ?preset=alpine|meadow|canyon|chaos|endless   ?seed=123   ?len=0 (metres, 0 = endless)   ?diff=1.3   ?zones=rush:2,flat:0.5,tunnel:1,bend:1,air:0.5
+# N cycles the presets in the game.
+# --------------------------------------------------------------------------
+const PRESETS := {
+	"classic": {},
+	"alpine": {"zones": {"rush": 2.0, "flat": 0.4, "tunnel": 0.6, "bend": 0.6, "air": 0.8}, "diff": 1.1},
+	"meadow": {"zones": {"rush": 0.5, "flat": 2.0, "tunnel": 0.2, "bend": 0.3, "air": 0.6}, "diff": 0.7},
+	"canyon": {"zones": {"rush": 0.6, "flat": 0.3, "tunnel": 2.0, "bend": 1.8, "air": 0.3}, "diff": 1.2},
+	"chaos": {"zones": {"rush": 1.0, "flat": 0.6, "tunnel": 0.8, "bend": 0.8, "air": 2.0}, "diff": 1.3},
+	"endless": {"length": 0},
+}
+const PRESET_ORDER := ["classic", "alpine", "meadow", "canyon", "chaos", "endless"]
+
+
+func apply_params(d: Dictionary) -> void:
+	params = {"seed": int(params.get("seed", 424242)), "length": 4200, "diff": 1.0, "zones": {}, "lazy": true}
+	for k in d:
+		params[k] = d[k]
+	var ln := float(params.get("length", 4200))
+	finish_z = -ln if ln > 0.0 else -1.0e7
+	diff_scale = float(params.get("diff", 1.0))
+
+
+func apply_preset(name: String) -> void:
+	apply_params(PRESETS.get(name, {}))
+	_preset_i = maxi(PRESET_ORDER.find(name), 0)
+
+
+func cycle_preset() -> void:
+	_preset_i = (_preset_i + 1) % PRESET_ORDER.size()
+	var nm: String = PRESET_ORDER[_preset_i]
+	apply_preset(nm)
+	_restart()
+	_toast("COURSE: " + nm.to_upper(), Color(1.0, 0.9, 0.5))
+
+
+func _read_params() -> void:
+	if not OS.has_feature("web"):
+		return
+	var q := func(key: String) -> String:
+		return str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('%s') || ''" % key))
+	var d: Dictionary = {}
+	var pr: String = q.call("preset")
+	if PRESETS.has(pr):
+		d = (PRESETS[pr] as Dictionary).duplicate(true)
+		_preset_i = maxi(PRESET_ORDER.find(pr), 0)
+	var sd: String = q.call("seed")
+	if sd != "":
+		params["seed"] = int(sd)
+	var ln: String = q.call("len")
+	if ln != "":
+		d["length"] = float(ln)
+	var df: String = q.call("diff")
+	if df != "":
+		d["diff"] = clampf(float(df), 0.3, 2.0)
+	var zs: String = q.call("zones")
+	if zs != "":
+		var zd: Dictionary = {}
+		for part in zs.split(","):
+			var kv := part.split(":")
+			if kv.size() == 2 and ZONES.has(kv[0]):
+				zd[kv[0]] = float(kv[1])
+		d["zones"] = zd
+	apply_params(d)
 
 
 # --------------------------------------------------------------------------
@@ -234,7 +575,7 @@ func _make_finish(row: Dictionary) -> void:
 # The safe gate never moves faster than a carve can follow; an isolated gate is only placed where it can be reached from the last barrier.
 # --------------------------------------------------------------------------
 func _gate_w(d: float) -> float:
-	return lerpf(15.0, 9.0, d) * _rng.randf_range(0.92, 1.1)
+	return lerpf(15.0, 9.0, d) * _rng.randf_range(0.92, 1.1) * _zone_w
 
 
 func _add_gate(gaps: Array, x: float, w: float, iso: bool) -> void:
@@ -246,6 +587,14 @@ func _add_gate(gaps: Array, x: float, w: float, iso: bool) -> void:
 
 func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz: float, rz: float) -> void:
 	var gx := _good_x
+	if _cur_zone == "flat":
+		_layout_spread(gaps, gx, d, 2 + (1 if _rng.randf() < 0.5 else 0))
+		row["layout"] = "spread"
+		return
+	if _cur_zone == "tunnel" or _cur_zone == "bend":
+		_layout_near(gaps, gx, d, 9.0 if _cur_zone == "tunnel" else 12.0, 14.0 if _cur_zone == "tunnel" else 18.0)
+		row["layout"] = "near"
+		return
 	var roll := _rng.randf()
 	var layout := "scatter"
 	if roll >= 0.26:
@@ -668,10 +1017,10 @@ func _place_buffs(row: Dictionary, d: float, prev_rz: float, rz: float) -> void:
 		for i in 3:
 			trail.append(Vector2(gx, rz + 29.0 - 6.0 * float(i)))
 		g["buff"] = true
-		_spawn_buff(row, _pick_buff(iso), bxx, bz, trail, "safe" if g["good"] else "gate")
+		_spawn_buff(row, _pick_for_gate(String(g.get("leads", "rush"))), bxx, bz, trail, "safe" if g["good"] else "gate")
 	# beside the safe line, between two barriers: you have to look there and want it
 	var span := prev_rz - rz
-	if span >= 80.0 and (int(row["j"]) == START_CALM or _rng.randf() < 0.5):
+	if span >= 80.0 and (int(row["j"]) == START_CALM or _rng.randf() < float(ZONES[String(row.get("zone", "rush"))]["path_buff"])):
 		for attempt in 6:
 			var zb := prev_rz - span * _rng.randf_range(0.42, 0.58)          # mid-way: time to pick it out after the last barrier and to get back before the next
 			var bx0 := path_x(row, zb)
@@ -691,7 +1040,7 @@ func _place_buffs(row: Dictionary, d: float, prev_rz: float, rz: float) -> void:
 				var pz := zb + 26.0 * (1.0 - u)
 				if _clear_of_obs(obs, px, pz, 2.5):
 					trail2.append(Vector2(px, pz))
-			_spawn_buff(row, "boost" if int(row["j"]) == START_CALM else _pick_buff(false), bx, zb, trail2, "path")
+			_spawn_buff(row, "boost" if int(row["j"]) == START_CALM else _pick_for_gate(String(row.get("zone", "rush"))), bx, zb, trail2, "path")
 			break
 
 
@@ -1450,17 +1799,20 @@ func _physics_process(delta: float) -> void:
 	_update_tricks(delta, key, pk)
 	_animate_buffs()
 	_update_rows()
-	if not _finished and spos.z <= FINISH_Z:
+	if not _finished and spos.z <= finish_z:
 		_finish()
-	if int(float(_next_j) * ROW_GAP) < int(-spos.z + AHEAD):
+	if _gate_open and int(float(_next_j) * ROW_GAP) < int(-spos.z + AHEAD):
 		_gen_segment(_next_j)
 		_next_j += 1
 	_cleanup()
 	_pf_phys = _pf(_pf_phys, pf0)
 
 
+var ghost := false                                       # tests only: ride through obstacles
+
+
 func _collide() -> void:
-	if hurt_t > 0.0 or _finished:
+	if hurt_t > 0.0 or _finished or ghost:
 		return
 	var above := spos.y - terrain_h(spos.x, spos.z)
 	for jj in _rows:
@@ -1488,11 +1840,66 @@ func _collide() -> void:
 						spos.y = terrain_h(spos.x, spos.z)
 						_gh_prev = spos.y
 					vel = vel.slide(n) * 0.4
-					var wallhit: bool = rj["has_row"] and absf(oz - float(rj["z"])) < 7.0
-					_crash("TREE!" if okind < 0.5 else "ROCK!", "%s swerving %s wallPull %.2f latched %s speed %.0f sideways %.1f" % ["WALL" if wallhit else "SINGLE", str(_swerving), _wall_w, str(not _aim.is_empty()), v_pre.length(), v_pre.x])
+					var wallhit: bool = rj["has_row"] and (absf(oz - float(rj["z"])) < 7.0 or float(ZONES[String(rj.get("zone", "rush"))]["walls"]) > 0.0)          # a barrier, or the lined corridor of a tunnel or bend
+					_crash("TREE!" if okind < 0.5 else "ROCK!", "%s swerving %s wallPull %.2f latched %s speed %.0f sideways %.1f" % [("WALL:" if wallhit else "SINGLE:") + String(rj.get("zone", "?")), str(_swerving), _wall_w, str(not _aim.is_empty()), v_pre.length(), v_pre.x])
+					_hit_fx(okind, ox, oz, orad, v_pre.length())
 					if wallhit:
 						hurt_t = 2.2          # still inside the barrier band: enough grace to be carried out of it instead of into the next tree
 					return
+
+
+## What a collision looks and sounds like. A tree throws a puff of needles, bark and shaken-off snow. A rock RINGS: a gong, ripples in the air, and the rock itself
+## shivers like a struck bell.
+func _hit_fx(kind: float, ox: float, oz: float, orad: float, speed: float) -> void:
+	var gy := terrain_h(ox, oz)
+	if kind < 0.5:
+		var p := Vector3(ox, gy + 2.2, oz)
+		var k := clampf(speed / 40.0, 0.5, 1.4)
+		_burst(p, Color(0.1, 0.48, 0.2), int(46.0 * k), 8.0, 1.0, 0.8, Vector3.UP, 150.0, -4.0)
+		_burst(p, Color(0.42, 0.28, 0.14), int(20.0 * k), 6.0, 0.8, 0.7, Vector3.UP, 120.0, -6.0)
+		_burst(p + Vector3(0, 1.4, 0), Color(1, 1, 1), int(40.0 * k), 5.0, 1.3, 1.5, Vector3.UP, 100.0, -2.5)
+		Game.sfx(&"thwack")
+		_shake = maxf(_shake, 0.5)
+	else:
+		var p2 := Vector3(ox, gy + orad, oz)
+		Game.sfx(&"gong")
+		_burst(p2, Color(0.8, 0.9, 1.0), 26, 9.0, 0.6, 0.6, Vector3.UP, 180.0, -7.0)
+		_ring(p2, Color(0.8, 0.92, 1.0), 7.0, 0.8, true)
+		get_tree().create_timer(0.18).timeout.connect(func() -> void: _ring(p2, Color(0.8, 0.92, 1.0), 9.0, 0.9, true))
+		get_tree().create_timer(0.36).timeout.connect(func() -> void: _ring(p2, Color(0.8, 0.92, 1.0), 11.0, 1.0, true))
+		_ring_bell(ox, oz, orad)
+		_toast("DONNNG!", Color(0.85, 0.93, 1.0))
+		_shake = maxf(_shake, 0.6)
+
+
+## A glowing copy of the rock that wobbles and fades: the struck bell.
+func _ring_bell(ox: float, oz: float, orad: float) -> void:
+	if _m_rock == null:
+		return
+	var n := MeshInstance3D.new()
+	n.mesh = _m_rock
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.75, 0.82, 0.95)
+	mat.metallic = 0.9
+	mat.roughness = 0.25
+	mat.emission_enabled = true
+	mat.emission = Color(0.5, 0.65, 1.0)
+	mat.emission_energy_multiplier = 1.2
+	n.material_override = mat
+	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(n)
+	var sc := orad / 1.3
+	var base := Vector3(sc, sc * 1.1, sc)
+	n.global_position = Vector3(ox, terrain_h(ox, oz) + 0.7 * sc * 1.1, oz)
+	n.scale = base * 1.04
+	var tw := create_tween()
+	tw.tween_method(func(u: float) -> void:
+		if is_instance_valid(n):
+			var amp := (1.0 - u) * 0.09
+			var w := sin(u * 38.0)
+			n.scale = base * Vector3(1.04 + amp * w, 1.04 - amp * w * 0.7, 1.04 + amp * w)
+			mat.emission_energy_multiplier = 1.2 * (1.0 - u), 0.0, 1.0, 0.9)
+	tw.tween_callback(n.queue_free)
 
 
 func _crash(msg: String, ctx: String = "") -> void:
@@ -1538,6 +1945,22 @@ func _update_rows() -> void:
 			for g in r["gaps"]:
 				if absf(spos.x - float(g["x"])) <= float(g["w"]) * 0.5 + 1.2:
 					chosen = g
+			var via: Dictionary = chosen
+			if via.is_empty():
+				var bdx := 1.0e9
+				for g2 in r["gaps"]:
+					if absf(spos.x - float(g2["x"])) < bdx:
+						bdx = absf(spos.x - float(g2["x"]))
+						via = g2
+			if not via.is_empty():
+				_pending_zone = String(via.get("leads", ""))
+				_pending_bend = float(via.get("bend", 0.0))
+				if bool(params.get("lazy", true)):
+					_good_x = float(via["x"])                         # the next stretch is built around where you came through, not around where the safe line was
+				_gate_open = true
+				if _pending_zone != "" and ZONES.has(_pending_zone):
+					var zi: Dictionary = ZONES[_pending_zone]
+					_toast(String(zi["name"]), zi["col"])
 			if chosen.is_empty() or r["crash"]:
 				continue
 			_passed_ok += 1
@@ -1580,7 +2003,9 @@ func _finish() -> void:
 
 func _restart() -> void:
 	cleanup()
-	_run_seed += 1
+	if _run_t > 2.0 or _finished:
+		_run_no += 1                                          # a fresh page always gets the same first course, on any device; each ride after that is a new one
+	_run_seed = int(params["seed"]) + _run_no
 	_rng.seed = _run_seed
 	_next_j = 0
 	_good_x = 0.0
@@ -1627,6 +2052,11 @@ func _restart() -> void:
 	_buff_cand = {}
 	_buff_cand_t = 0.0
 	_buff_w = 0.0
+	_pitch.clear()
+	_pending_zone = ""
+	_pending_bend = 0.0
+	_gate_open = true
+	zones_seen = {}
 	Engine.time_scale = 1.0
 	_slowmo_t = 0.0
 	_air_moves.clear()
@@ -1673,7 +2103,7 @@ func _restart() -> void:
 	_swerving = false
 	_wall_gap = {}
 	_wall_row_j = -999
-	while float(_next_j) * ROW_GAP < AHEAD:
+	while _gate_open and float(_next_j) * ROW_GAP < AHEAD:
 		_gen_segment(_next_j)
 		_next_j += 1
 	_place_camera(1.0, true)
@@ -1697,6 +2127,8 @@ var _squinting_now: bool = false
 var _squint_vis: float = 0.0
 var _eat_hint: bool = false
 var _fx_rng := RandomNumberGenerator.new()
+var _run_no: int = 0
+var _preset_i: int = 0
 
 
 func _wide_now() -> bool:
@@ -1831,7 +2263,7 @@ func _spawn_ball() -> void:
 
 
 func _update_balls(delta: float) -> void:
-	if balls_enabled and not _finished and _balls.is_empty() and spos.z < _next_ball_z and spos.z > FINISH_Z + 260.0:
+	if balls_enabled and not _finished and _balls.is_empty() and spos.z < _next_ball_z and spos.z > finish_z + 260.0:
 		_spawn_ball()
 	for i in range(_balls.size() - 1, -1, -1):
 		var b: Dictionary = _balls[i]
@@ -2757,6 +3189,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if not _paused:
+		if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and (event as InputEventKey).keycode == KEY_N:
+			cycle_preset()
+			get_viewport().set_input_as_handled()
+			return
 		if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and (event as InputEventKey).keycode == KEY_V:
 			_toggle_view()
 			get_viewport().set_input_as_handled()
@@ -2824,8 +3260,8 @@ func _pause_action(id: String) -> void:
 
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
-	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-FINISH_Z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-finish_z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "seed": _run_seed, "preset": PRESET_ORDER[_preset_i], "zone": _cur_zone, "zonesSeen": zones_seen, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
