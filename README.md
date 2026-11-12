@@ -52,6 +52,11 @@ Use it to see exactly what the tracker sees and to tune it for your face, screen
 - **Tests:** noise, accuracy, head-sweep drift and a live gaze-dot calibration, with copy-as-JSON results.
 - **Ball demo:** a full-screen game for trying out your gaze.
 - **Per-eye calibration and weighting**, which help with glasses.
+- **Eye-axis iris reading:** the iris is measured along the line between the eye corners, so head roll and squints don't leak into the horizontal signal (toggle it to compare).
+- **Signal fit (test 4):** follow a moving dot with no calibration and no smoothing. Each raw signal (iris in the eye, 3D gaze, head angle, and combinations) is fitted with its own delay and scored on held-out data: correlation, gain, error in cm and degrees, delay in ms. This is the baseline for deciding what to build an experience on.
+- **Works on phones and desktops:** the head and gaze monitor fits any screen shape, so the cube and gaze arrow are never cut off.
+
+EyeLab is deliberately the raw, unfuzzed instrument. The games add forgiveness (latching, swerving, glance scaling); EyeLab does not, so it is the reference to check them against.
 
 ## How the tracking works
 

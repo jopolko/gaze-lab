@@ -114,7 +114,15 @@
     #bars .lab { width: 100px; }
     pre { max-width: 100%; }
     label { flex-wrap: wrap; }
+    #results, #rcGuideOut, #rcRes { overflow-x: auto; }
+    .hCtl button, .hCtl select { max-width: 100%; }
+    .hCtl label { flex: 1 1 140px; }
+    #stagemsg { font-size: 18px; padding: 0 12px; }
+    #stageprog { left: 8%; right: 8%; }
+    #rcLive { font-size: 13px; max-width: calc(100% - 24px); }
   }
+  #results table { display: block; overflow-x: auto; max-width: 100%; }
+  @media (min-width: 1700px) { main { max-width: 1900px; } }
 </style>
 </head>
 <body>
@@ -151,6 +159,7 @@
     <label title="Remembered on this device. Only works once the browser has already allowed the camera for this site."><input id="autoStart" type="checkbox"> start camera automatically</label>
     <label><input id="trOn" type="checkbox" checked> tracers</label>
     <label>trail <select id="trLen"><option value="12">short</option><option value="28" selected>medium</option><option value="60">long</option></select></label>
+    <label title="Measure the iris along the line between the eye corners (and across it) instead of the camera's horizontal and vertical. A rolled head or a squint then no longer leaks into the horizontal reading. Untick to compare with the plain image axes."><input id="eyeAxis" type="checkbox" checked> eye-axis iris (head-roll proof)</label>
     <label><input id="flipx" type="checkbox"> flip left/right</label>
     <label><input id="flipy" type="checkbox"> flip up/down</label>
     <button id="btnFix" disabled>1. Noise test (5 s)</button>
@@ -159,6 +168,7 @@
     <button id="btnCentre" disabled title="Stare at the centre dot: sets your own looking-straight point as the middle of the pupil map.">Centre eyes (3 s)</button>
     <button id="btnLiveNC" disabled class="primary">0. Live, NO calibration</button>
     <button id="btnLive" disabled>3. Live gaze dots (18 s calibration, then live)</button>
+    <button id="btnFit" disabled class="primary" title="Follow a smoothly moving dot. No calibration is used: each raw signal (iris in the eye, 3D gaze, head angle, and combinations) is fitted to the dot with its own delay, and reported with correlation, gain, error in cm and degrees, and delay in ms. This is the baseline for deciding what to build an experience on.">4. Signal fit (follow the dot, 32 s)</button>
     <button id="btnCopy" class="primary" title="Copies the screen-reach report plus any test results as text">Copy results JSON</button>
   </div>
 </header>
@@ -408,7 +418,7 @@ async function startCamNow(my) {
   results.camera = { requested: [w, h], actual: [W, H], fps: st.frameRate || null };
   ring.length = 0;
   $('status').textContent = 'camera ' + W + 'x' + H + ' running';
-  $('btnFix').disabled = $('btnAcc').disabled = $('btnLive').disabled = $('btnLiveNC').disabled = $('btnSweep').disabled = $('btnCentre').disabled = $('rcFit').disabled = $('rcFix').disabled = $('rcClear').disabled = $('rcGuide').disabled = false;
+  $('btnFix').disabled = $('btnAcc').disabled = $('btnLive').disabled = $('btnLiveNC').disabled = $('btnSweep').disabled = $('btnCentre').disabled = $('btnFit').disabled = $('rcFit').disabled = $('rcFix').disabled = $('rcClear').disabled = $('rcGuide').disabled = false;
   if ($('fastExp').checked) applyExposure();     // only when asked: never touch the camera's exposure by default
   if (!running) { running = true; schedule(); }
   // 1080p gives ~1.5x the iris pixels; if this device cannot keep up (under 18 frames/s after 5 s), drop to 720p once.
@@ -446,6 +456,27 @@ const fpc = fpCanvas.getContext('2d', { willReadFrequently: true });
 let lastFp = -1, calls = 0, news = 0, dupes = 0, rateCalls = 0, rateNews = 0, rateDupes = 0, rateT = 0;
 const cropMemo = {};
 
+// ==== EYE FRAME BEGIN (pure; unit-tested by tests/eyelab_fit_test.js)
+// The iris position inside the eye, measured along the line between the eye corners (x) and across it (y), so a rolled head or a squint does not
+// leak vertical movement into the horizontal reading. With axis=false it reduces to the plain image axes (the old behaviour).
+function eyeFrame(o, i, tp, bt, axis) {
+  if (!axis) return { axis: false, ax: i.x - o.x, ay: 0, w: Math.abs(i.x - o.x) || 1, ux: 1, uy: 0, px: 0, py: 1, ap: bt.y - tp.y, o, tp, mx: (o.x + i.x) / 2, my: (tp.y + bt.y) / 2, mex: 0, mey: (tp.y + bt.y) / 2 };
+  const ax = i.x - o.x, ay = i.y - o.y, w = Math.hypot(ax, ay) || 1;
+  let ux = ax / w, uy = ay / w; if (ux < 0) { ux = -ux; uy = -uy; }
+  const px = -uy, py = ux;                                        // across the eye, pointing down the face
+  return { axis: true, ax, ay, w, ux, uy, px, py, ap: (bt.x - tp.x) * px + (bt.y - tp.y) * py || 1, o, tp, mx: (o.x + i.x) / 2, my: (o.y + i.y) / 2, mex: (tp.x + bt.x) / 2, mey: (tp.y + bt.y) / 2 };
+}
+function eyeNorm(E, q) {
+  if (!E.axis) return [(q.x - E.o.x) / E.ax, (q.y - E.tp.y) / E.ap];
+  return [((q.x - E.o.x) * E.ax + (q.y - E.o.y) * E.ay) / (E.w * E.w), ((q.x - E.tp.x) * E.px + (q.y - E.tp.y) * E.py) / E.ap];
+}
+function eyeRel(E, q) {
+  if (!E.axis) return [q.x - E.mx, q.y - E.my];
+  return [(q.x - E.mx) * E.ux + (q.y - E.my) * E.uy, (q.x - E.mex) * E.px + (q.y - E.mey) * E.py];
+}
+// ==== EYE FRAME END
+let eyeAxisOn = true;
+
 const EYES = {
   R: { name: 'right', outer: 33, inner: 133, top: 159, bot: 145, iris: 468, ringIdx: [469, 470, 471, 472] },
   L: { name: 'left',  outer: 362, inner: 263, top: 386, bot: 374, iris: 473, ringIdx: [474, 475, 476, 477] },
@@ -453,6 +484,7 @@ const EYES = {
 
 function process(now) {
   const t0 = performance.now();
+  { const ea = $('eyeAxis'); eyeAxisOn = ea ? ea.checked : true; }
   calls++;
   if (!hasRVFC) {
     fpc.drawImage(vid, 0, 0, 16, 9);
@@ -496,18 +528,18 @@ function process(now) {
     const cx = c.x - x0, cy = c.y - y0;
     const limb = limbusFit(gray, S, cx, cy, rad);
     const dark = darkCentroid(gray, S, cx, cy, rad);
-    const mid = { x: (o.x + i.x) / 2, y: (tp.y + bt.y) / 2 };
-    const wx = i.x - o.x, wy = bt.y - tp.y;
+    const lp = { x: x0 + limb.x, y: y0 + limb.y }, dp = { x: x0 + dark.x, y: y0 + dark.y };
+    const EF = eyeFrame(o, i, tp, bt, eyeAxisOn);
     f.eyes[k] = {
-      o, i, tp, bt, c, rad, eyeW, S, x0, y0, img, cx, cy, limb, dark,
-      // normalised position of each estimator inside the eye (0..1 across / down)
-      mp:   [(c.x - o.x) / wx, (c.y - tp.y) / wy],
-      limbN: [(x0 + limb.x - o.x) / wx, (y0 + limb.y - tp.y) / wy],
-      darkN: [(x0 + dark.x - o.x) / wx, (y0 + dark.y - tp.y) / wy],
+      o, i, tp, bt, c, rad, eyeW, S, x0, y0, img, cx, cy, limb, dark, rollDeg: Math.atan2(EF.uy, EF.ux) * 57.3,
+      // normalised position of each estimator inside the eye (0..1 across / down), along the eye's own axes when eye-axis is on
+      mp:   eyeNorm(EF, c),
+      limbN: eyeNorm(EF, lp),
+      darkN: eyeNorm(EF, dp),
       // pixel position relative to the eye centre (for jitter stats)
-      relMp:   [c.x - mid.x, c.y - mid.y],
-      relLimb: [x0 + limb.x - mid.x, y0 + limb.y - mid.y],
-      relDark: [x0 + dark.x - mid.x, y0 + dark.y - mid.y],
+      relMp:   eyeRel(EF, c),
+      relLimb: eyeRel(EF, lp),
+      relDark: eyeRel(EF, dp),
     };
   }
   const R = f.eyes.R, Lf = f.eyes.L;
@@ -856,8 +888,12 @@ function drawMonitor(f) {
   const Rz = (r, v) => [v[0] * Math.cos(r) - v[1] * Math.sin(r), v[0] * Math.sin(r) + v[1] * Math.cos(r), v[2]];
   const head = (v) => Rz(rol, Rx(pit, Ry(yaw, v)));
   const view = (v) => Rx(-0.32, v);
-  const cx = w / 2, cy = h * 0.47, S = Math.min(w, h) * 0.235;
+  // Fit to the canvas, whatever its shape: the scale follows the narrower side, and the nose and gaze arrows are shortened (never the cube) so their tips stay on the canvas.
+  const mx = 12 * k, mtop = 12 * k, mbot = (live ? 44 : 30) * k;
+  const cx = w / 2, cy = mtop + (h - mtop - mbot) * 0.5, S = Math.min(Math.min(w, h) * 0.235, (w / 2 - mx) / 2.4, (h - mtop - mbot) / 2 / 1.9);
   const proj = (p3) => { const q = view(p3); const kk = 1 / (1 - q[2] * 0.10); return [cx + q[0] * kk * S, cy - q[1] * kk * S]; };
+  const onCv = (p) => p[0] >= mx && p[0] <= w - mx && p[1] >= mtop && p[1] <= h - mbot;
+  const tipAt = (dir, L0) => { let L = L0, p = proj([dir[0] * L, dir[1] * L, dir[2] * L]); for (let n = 0; n < 24 && !onCv(p) && L > 1.15; n++) { L *= 0.93; p = proj([dir[0] * L, dir[1] * L, dir[2] * L]); } return p; };
   const line = (a, b, col, wd) => { g.strokeStyle = col; g.lineWidth = wd * k; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); };
   g.globalAlpha = A;
   for (let i = -2; i <= 2; i++) {
@@ -882,13 +918,13 @@ function drawMonitor(f) {
       line(proj(pts[i]), proj(pts[j]), front ? 'rgba(255,204,64,.95)' : 'rgba(255,255,255,.6)', front ? 3.5 : 1.8);
     }
   }
-  const o = proj([0, 0, 0]), nose = proj(head([0, 0, 2]));
+  const o = proj([0, 0, 0]), nose = tipAt(head([0, 0, 1]), 2);
   line(o, nose, '#ffc24d', 3.5);
   g.fillStyle = '#ffc24d'; g.beginPath(); g.arc(nose[0], nose[1], 5 * k, 0, 7); g.fill();
   if (live && f.geo && f.geo.ok) {
     const ga = f.geo.yaw / 57.3, gp = f.geo.pitch / 57.3;
     const gd = [Math.sin(-ga) * Math.cos(gp), -Math.sin(gp), Math.cos(-ga) * Math.cos(gp)];
-    const tip = proj([gd[0] * 2.6, gd[1] * 2.6, gd[2] * 2.6]);
+    const tip = tipAt(gd, 2.6);
     line(o, tip, '#3ddc84', 3.5);
     g.fillStyle = '#3ddc84'; g.beginPath(); g.arc(tip[0], tip[1], 6 * k, 0, 7); g.fill();
   }
@@ -904,6 +940,7 @@ function drawMonitor(f) {
   }
 }
 window.addEventListener('resize', () => { if (!frame) drawMonitor(null); });
+window.__drawMonitor = drawMonitor;          // for layout checks in a browser pane
 
 function drawChart() {
   const w = chart.width, h = chart.height; cctx.clearRect(0, 0, w, h);
@@ -1325,12 +1362,137 @@ $('btnLiveNC').onclick = async () => {
   await leaveStage(); setBusy(false);
 };
 
+// ==== SIGNAL FIT BEGIN (pure; unit-tested by tests/eyelab_fit_test.js)
+// Which raw signal best predicts where the person is looking, with no calibration and no smoothing?
+// frames: [{t (ms), s: {name: value}}]; dotAt(t_ms) -> [x, y] in screen fractions (the target); keys: signal names to combine; axis 0 = x, 1 = y.
+// Each candidate delay is tried: the signal at time t is matched to the dot at time t - lag (the camera and the eye are always a little late).
+// The fit is ordinary least squares y = a + sum b_k s_k, scored on data it was NOT fitted on (fitted on every other 1.5 s block, scored on the rest, then swapped).
+function solveLS(A, b) {                                             // Gaussian elimination with partial pivoting; A is n x n (modified)
+  const n = b.length;
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    if (Math.abs(A[p][c]) < 1e-12) return null;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    for (let r = c + 1; r < n; r++) { const m = A[r][c] / A[c][c]; for (let k = c; k < n; k++) A[r][k] -= m * A[c][k]; b[r] -= m * b[c]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = b[r]; for (let k = r + 1; k < n; k++) s -= A[r][k] * x[k]; x[r] = s / A[r][r]; }
+  return x;
+}
+function lsFit(X, y) {                                               // X: n rows of k values. Returns {a, b[]} or null
+  const n = X.length, k = X[0].length, m = k + 1;
+  const A = Array.from({ length: m }, () => new Array(m).fill(0)), r = new Array(m).fill(0);
+  for (let i = 0; i < n; i++) {
+    const row = [1].concat(X[i]);
+    for (let p = 0; p < m; p++) { r[p] += row[p] * y[i]; for (let q = 0; q < m; q++) A[p][q] += row[p] * row[q]; }
+  }
+  const sol = solveLS(A, r);
+  return sol ? { a: sol[0], b: sol.slice(1) } : null;
+}
+function corr(a, b) {
+  const n = a.length; if (n < 3) return NaN;
+  const ma = a.reduce((s, v) => s + v, 0) / n, mb = b.reduce((s, v) => s + v, 0) / n;
+  let sab = 0, saa = 0, sbb = 0;
+  for (let i = 0; i < n; i++) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) ** 2; sbb += (b[i] - mb) ** 2; }
+  return saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN;
+}
+function fitSignals(frames, dotAt, keys, axis, lagMs) {
+  const X = [], y = [], blk = [];
+  const t0 = frames.length ? frames[0].t : 0;
+  for (const f of frames) {
+    const row = keys.map((k) => f.s[k]);
+    if (!row.every(Number.isFinite)) continue;
+    const d = dotAt(f.t - lagMs);
+    if (!d) continue;
+    X.push(row); y.push(d[axis]); blk.push(Math.floor((f.t - t0) / 1500) % 2);
+  }
+  if (X.length < 40 * (keys.length + 1) / 2) return null;
+  const all = lsFit(X, y); if (!all) return null;
+  const pred = X.map((r) => all.a + r.reduce((s, v, i) => s + v * all.b[i], 0));
+  const res = pred.map((p, i) => p - y[i]);
+  const rms = (a) => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / (a.length || 1));
+  const cv = [];
+  for (const hold of [0, 1]) {
+    const tr = [], tx = [], ev = [], ey = [];
+    for (let i = 0; i < X.length; i++) { if (blk[i] === hold) { ev.push(X[i]); ey.push(y[i]); } else { tx.push(X[i]); tr.push(y[i]); } }
+    if (tx.length < 20 || !ev.length) continue;
+    const m = lsFit(tx, tr); if (!m) continue;
+    for (let i = 0; i < ev.length; i++) cv.push(m.a + ev[i].reduce((s, v, j) => s + v * m.b[j], 0) - ey[i]);
+  }
+  return { n: X.length, r: corr(pred, y), coef: all.b, intercept: all.a, rmsFit: rms(res), rmsCV: cv.length ? rms(cv) : NaN, lagMs };
+}
+function bestLagFit(frames, dotAt, keys, axis, lags) {
+  let best = null;
+  for (const lg of lags) { const r = fitSignals(frames, dotAt, keys, axis, lg); if (r && (!best || r.rmsCV < best.rmsCV)) best = r; }
+  return best;
+}
+// ==== SIGNAL FIT END
+
+$('btnFit').onclick = async () => {
+  setBusy(true); await enterStage();
+  const DUR = 32000, vw = window.innerWidth, vh = window.innerHeight;
+  const dot = (ms) => {                                              // smooth sweeps: a slow-to-quicker sinusoid in x, a slower one in y (all within 5%..95% of the screen)
+    const s = ms / 1000;
+    return [0.5 + 0.42 * Math.sin(2 * Math.PI * (0.07 * s + 0.0045 * s * s)), 0.5 + 0.38 * Math.sin(2 * Math.PI * (0.05 * s + 0.003 * s * s) + 1.0)];
+  };
+  const frames = [];
+  const tStart = performance.now() + 2500;                          // 2.5 s to settle first
+  smsg.textContent = 'Follow the dot with your eyes only. Keep your head still.';
+  modeCollect = (f) => {
+    const g = f.geoL, R = f.eyes.R, L = f.eyes.L;
+    if (f.t < tStart) return;
+    frames.push({ t: f.t - tStart, s: {
+      irisX: (R.limbN[0] + L.limbN[0]) / 2, irisY: (R.limbN[1] + L.limbN[1]) / 2,
+      geoU: g && g.ok ? g.u : NaN, geoV: g && g.ok ? g.v : NaN, yaw: f.yaw, pitch: f.pitch } });
+  };
+  while (performance.now() - tStart < DUR) {
+    const ms = Math.max(0, performance.now() - tStart), p = dot(ms);
+    place(p[0], p[1]); sprog.style.width = Math.max(0, ms / DUR * 100) + '%';
+    if (ms < 0) smsg.textContent = 'Get ready: follow the dot with your eyes only, head still...';
+    else smsg.textContent = 'Follow the dot with your eyes only. Keep your head still.  ' + Math.round((DUR - ms) / 1000) + ' s';
+    await sleep(16);
+  }
+  modeCollect = null;
+  await leaveStage();
+  if (frames.length < 120) { $('results').innerHTML = '<b class="bad">Only ' + frames.length + ' usable frames, so no fit.</b> Check that your face is in view and lit.'; setBusy(false); return; }
+  const dotAt = (ms) => (ms < 0 || ms > DUR ? null : dot(ms));
+  const lags = []; for (let l = 0; l <= 500; l += 25) lags.push(l);
+  const cm = parseFloat($('scrW').value) || 34, aspect = (screen.width > 0 && screen.height > 0) ? screen.height / screen.width : 9 / 16, dist = parseFloat($('dist').value) || 55;
+  const toCm = (fr, axis) => fr * cm * (axis === 0 ? 1 : aspect), toDeg = (c) => Math.atan(c / dist) * 57.2958;
+  const sets = [
+    [0, 'iris in the eye (x)', ['irisX']], [0, '3D gaze (x)', ['geoU']], [0, 'head yaw', ['yaw']],
+    [0, 'iris + head yaw', ['irisX', 'yaw']], [0, '3D gaze + head yaw', ['geoU', 'yaw']], [0, 'iris + 3D gaze', ['irisX', 'geoU']],
+    [1, 'iris in the eye (y)', ['irisY']], [1, '3D gaze (y)', ['geoV']], [1, 'head pitch', ['pitch']],
+    [1, 'iris + head pitch', ['irisY', 'pitch']], [1, '3D gaze + head pitch', ['geoV', 'pitch']], [1, 'iris + 3D gaze', ['irisY', 'geoV']],
+  ];
+  const out = [];
+  for (const [axis, name, keys] of sets) {
+    const r = bestLagFit(frames, dotAt, keys, axis, lags);
+    if (!r) { out.push({ axis, name, keys, ok: false }); continue; }
+    const c1 = toCm(r.rmsCV, axis);
+    out.push({ axis, name, keys, ok: true, lagMs: r.lagMs, r: r.r, coef: r.coef, errPct: r.rmsCV * 100, errCm: c1, errDeg: toDeg(c1), fitErrPct: r.rmsFit * 100, n: r.n });
+  }
+  const dur = frames.length > 1 ? (frames[frames.length - 1].t - frames[0].t) / 1000 : 0;
+  results.signalFit = { frames: frames.length, seconds: dur, fps: frames.length / Math.max(dur, 1), eyeAxis: eyeAxisOn, screenCm: cm, distCm: dist, signals: out };
+  let html = '<b>Signal fit</b>: ' + frames.length + ' frames over ' + dur.toFixed(0) + ' s (' + (frames.length / Math.max(dur, 1)).toFixed(1) + ' fps), eye-axis iris ' + (eyeAxisOn ? 'ON' : 'off') + '.<br><span class="note">No calibration, no smoothing: each raw signal is fitted to the moving dot by ordinary least squares with its own best delay. "error" is on data the fit did not see (cross-validated). Lower is better; r near 1 means the signal follows the dot.</span>';
+  html += '<table><tr><th>signal</th><th class="num">delay</th><th class="num">r</th><th class="num">error (CV)</th><th class="num">gain</th></tr>';
+  const bestPerAxis = [0, 1].map((a) => out.filter((o) => o.axis === a && o.ok).sort((p, q) => p.errPct - q.errPct)[0]);
+  for (const o of out) {
+    const star = bestPerAxis[o.axis] === o ? ' <b class="good">best</b>' : '';
+    html += o.ok ? '<tr><td>' + o.name + star + '</td><td class="num">' + o.lagMs + ' ms</td><td class="num">' + o.r.toFixed(2) + '</td><td class="num">' + o.errPct.toFixed(1) + '% = ' + o.errCm.toFixed(1) + ' cm = ' + o.errDeg.toFixed(1) + '&deg;</td><td class="num">' + o.coef.map((c) => c.toFixed(2)).join(' / ') + '</td></tr>'
+      : '<tr><td>' + o.name + '</td><td colspan="4" class="note">not enough valid frames</td></tr>';
+  }
+  html += '</table><p class="note">Repeat with your head free (just let it move) and compare: if "iris + head" beats "iris" alone, the head carries part of your gaze and combining them helps. Run once with the eye-axis box ticked and once without to see what the head-roll correction is worth on your face.</p>';
+  $('results').innerHTML = html;
+  setBusy(false); $('btnCopy').disabled = false;
+};
+
 $('btnCopy').onclick = async () => {
   const txt = JSON.stringify({ reach: reachReport(), results: results }, null, 1); window.__eyelab = results;
   $('json').hidden = false; $('json').textContent = txt;
   try { await navigator.clipboard.writeText(txt); $('btnCopy').textContent = 'Copied'; setTimeout(() => $('btnCopy').textContent = 'Copy results JSON', 1500); } catch (e) { $('btnCopy').textContent = 'See text below'; }
 };
-function setBusy(b) { for (const id of ['btnStart', 'btnFix', 'btnAcc', 'btnLive', 'btnLiveNC', 'btnSweep', 'btnCentre']) $(id).disabled = b || (id !== 'btnStart' && !stream) || false; }
+function setBusy(b) { for (const id of ['btnStart', 'btnFix', 'btnAcc', 'btnLive', 'btnLiveNC', 'btnSweep', 'btnCentre', 'btnFit']) $(id).disabled = b || (id !== 'btnStart' && !stream) || false; }
 
 $('btnStart').onclick = () => startCam().catch((e) => { $('status').textContent = 'camera error: ' + (e.message || e); });
 $('res').onchange = () => { if (stream) startCam(); };
