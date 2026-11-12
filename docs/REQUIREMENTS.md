@@ -1,0 +1,62 @@
+# Requirements tracker
+
+Everything asked for, with its status, so nothing gets lost. `[x]` built and tested in simulation, `[~]` partly done, `[ ]` not done.
+"Tested" means the headless tests and simulations; almost nothing here has been verified on a real camera yet unless it says so.
+
+## Standing rules
+- [x] Calibration is automatic: no staring at dots.
+- [x] Gaze maps to the screen; steering follows the eyes (the head may compensate).
+- [x] The eyes decide, the game does the precise steering (tracker is about 10-13 fps, about 200 ms late).
+- [ ] Gaze-centred fractals / point cloud / trippy visuals (parked, not started).
+
+## Repo, site, docs
+- [x] Public GitHub repo `jopolko/gaze-lab`, squashed history, all rights reserved.
+- [x] Site layout `/gaze-lab/godot/`, `/gaze-lab/godot-dev/`, `/gaze-lab/eyelab/`, old URLs redirect.
+- [~] The 68 site nav links still point at the old URLs (they work through redirects; not rewritten).
+- [x] README with screenshots, EyeLab section, techniques link.
+- [~] README "techniques at a glance" bullets and a line on EyeLab as the proving ground (offered, not done).
+- [x] `docs/TECHNIQUES.md` (how the tracking reaches usable accuracy on ordinary hardware).
+- [ ] A one-page item and rules map in the docs (what every pickup, hazard and move does). It exists in chat only.
+- [ ] `godot/NOTES.md` brought up to date with the Downhill changes since the rename.
+- [x] The game "Carve" is renamed **Downhill**; the old three-lane game is **Downhill Lanes** (`?level=lanes`).
+
+## EyeLab (the raw, unfuzzed baseline)
+- [x] Eye-axis iris measure (head-roll proof), toggleable.
+- [x] Test 4, signal fit: follow a dot, no calibration, per-signal delay, gain, held-out error.
+- [x] Monitor (cube and gaze arrow) fits phone and desktop shapes; mobile layout fixes.
+- [ ] Real-camera numbers from test 4 (waiting on you).
+
+## Downhill: course
+- [x] Several gate layouts: scatter, pair, evenly spaced trio, isolated decoy.
+- [x] Pickups in front of gates and beside the safe line, on orb trails, semi-frequent.
+- [ ] **Pitch variety and sections**: start steep for a launch, then alternate steep and flat stretches (the player slows on flats, is tempted by boosts, speeds up again on steeps).
+- [ ] **Gates matched to the section**: wide and spread out on slow flats; tunnels of close gates and quick choices on steep fast sections.
+- [ ] **Quick choices with consequences**: one quick bonus over one option with just enough time to adjust; otherwise several pickups to weigh at once, each changing the play.
+- [x] Targets shown closer (aim range 125 m), lone trees and rocks spotted earlier and avoided harder.
+- [~] First-person runs still crash more than third-person in simulation: obstacles hiding gates from eye level. Needs another pass.
+
+## Downhill: pickups and hazards
+- [x] Pickups are food, eaten by opening your eyes wide: burger (boost), ice cream (shield), candy (double points), donut (points).
+- [x] Missed food bounces away once like rubber and waits for a second try.
+- [x] Snowballs: squint to brace, or carve away, or outrun; a hit costs about 40% speed, a shove, and your flow chain, never a crash.
+- [x] Boost pads, also a burger boost; temporary speed boosts exist.
+- [x] Dopamine: sparkles, flash, screen shake, a hop or spin of the rider, per-type effects and sounds, prettier items.
+- [ ] Real 3D food models (planned: free CC0 pack, to be swapped in later).
+- [ ] On-screen buttons for squint, eat and tricks on touch devices (today these are eyes or keys only).
+
+## Downhill: view
+- [x] First person (default) and third person, toggled with V or the 1ST/3RD label; remembered.
+- [x] First person shows only the tip of the board, swinging with the heading, leaning in turns, carrying the tricks.
+- [~] Portrait phone layout: the camera keeps the horizontal field of view; not checked visually in a phone-sized window.
+
+## Downhill: ramps, jumps and tricks
+- [x] Big ramps in air segments with a pickup above the lip, targetable by gaze.
+- [x] Boost pads at the base, middle and top; optional charge (chin down) and pop; or just take the boost.
+- [x] Tricks: spin, grab, backflip, plus head shake, cross-eyes, crazy-eyes and a slam (elbow drop and friends).
+- [x] Ridiculous names, commentary, chaos events (goose, snowman, slow motion, fireworks, crowd), starburst callouts.
+- [~] Cross-eyes, crazy-eyes and head-shake detection is untested on a real camera; keys H, X, Z, F always work.
+- [ ] More skiing and wrestling-style moves and callouts (a bigger library).
+- [ ] A dedicated target marker on the ramp itself (today the pickup above the lip is the target).
+
+## Open problems
+- [ ] "Eye tracking is broken": the likely cause was squint detection reading you as always squinting; fixed and deployed, not confirmed on your camera.
