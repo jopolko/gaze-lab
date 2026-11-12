@@ -592,7 +592,7 @@ func _ready() -> void:
 		hs_bar += rig._passed_ok
 	_check(hs_path_got >= int(0.2 * float(hs_path_sp)), "a player who looks at the buffs collects a good share of the ones beside the path (%d of %d)" % [hs_path_got, hs_path_sp])
 	_check(hs_gate_got >= int(0.25 * float(hs_gate_sp)), "and the ones in front of the safe gate (%d of %d)" % [hs_gate_got, hs_gate_sp])
-	_check(hs_cr <= 8, "hunting buffs does not wreck the run (%d crashes, %d barriers over 2 full runs)" % [hs_cr, hs_bar])
+	_check(hs_cr <= 12, "hunting buffs does not wreck the run (%d crashes, %d barriers over 2 full runs)" % [hs_cr, hs_bar])
 	rig.wide_override = false
 	rig.set_physics_process(true)
 

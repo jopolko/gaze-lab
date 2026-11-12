@@ -898,10 +898,19 @@ func _view_juice() -> void:
 	if _tip_pivot != null:
 		_tip_pivot.visible = view_fp and (hurt_t <= 0.0 or int(_age * 14.0) % 2 == 0)
 		if view_fp:
+			# Everything eases toward where it should be, so the board seems to glide and slide on the snow instead of snapping: it lags a turn, skids a little sideways
+			# when you carve hard, and hums softly with speed.
+			var dt := get_process_delta_time()
 			var d := wrapf(heading - atan2(_cam_look.x, -_cam_look.y), -PI, PI)
-			var bob := 0.02 * sin(_age * 11.0) * clampf(vel.length() / 40.0, 0.0, 1.0) if grounded else 0.0
-			_tip_pivot.position = Vector3(0.0, -1.12 + bob - (0.1 if grabbing else 0.0), -0.2)
-			_tip_pivot.rotation = Vector3(tf + _hop_vis_pitch + (0.2 if grabbing else 0.0), -d + ts + _hop_vis_spin, -steer * 0.30)
+			var right := Vector2(cos(heading), sin(heading))
+			var slip := vel.dot(right)
+			var sp := clampf(vel.length() / 45.0, 0.0, 1.0)
+			_tip_yaw = lerpf(_tip_yaw, -d, 1.0 - exp(-6.0 * dt))
+			_tip_roll = lerpf(_tip_roll, -steer * 0.26, 1.0 - exp(-5.0 * dt))
+			_tip_x = lerpf(_tip_x, clampf(-slip * 0.012, -0.14, 0.14), 1.0 - exp(-4.0 * dt))
+			var hum := (0.008 * sin(_age * 17.0) + 0.005 * sin(_age * 29.0)) * sp if grounded else 0.0
+			_tip_pivot.position = Vector3(_tip_x, -1.15 + hum - (0.1 if grabbing else 0.0), 0.0)
+			_tip_pivot.rotation = Vector3(tf + _hop_vis_pitch + (0.2 if grabbing else 0.0) + 0.02 * sp, _tip_yaw + ts + _hop_vis_spin, _tip_roll)
 
 
 func _process(delta: float) -> void:
@@ -1984,6 +1993,9 @@ func _update_pads() -> void:
 # --------------------------------------------------------------------------
 var view_fp: bool = true
 var _tip_pivot: Node3D
+var _tip_yaw: float = 0.0
+var _tip_roll: float = 0.0
+var _tip_x: float = 0.0
 var _cam_look: Vector2 = Vector2(0.0, -1.0)
 var _hop_cam: float = 0.0
 var _view_msec: int = 0
@@ -2059,18 +2071,17 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 func _build_tip() -> void:
 	_tip_pivot = Node3D.new()
 	cam.add_child(_tip_pivot)
-	_tip_pivot.position = Vector3(0.0, -1.2, -0.25)
+	_tip_pivot.position = Vector3(0.0, -1.15, 0.0)
 	var body := BoxMesh.new()
-	body.size = Vector3(0.46, 0.06, 1.7)
-	var bm := _flat_mat(Color(0.15, 0.3, 0.75))
-	var b := _mi(_tip_pivot, body, bm, Vector3(0.0, 0.0, -0.85))
+	body.size = Vector3(0.8, 0.09, 0.82)                 # short, squat and wide: only the front of the board shows, low at the bottom of the view
+	var b := _mi(_tip_pivot, body, _flat_mat(Color(0.15, 0.3, 0.75)), Vector3(0.0, 0.0, -1.05))
 	var nose := BoxMesh.new()
-	nose.size = Vector3(0.46, 0.05, 0.34)
-	var n := _mi(_tip_pivot, nose, _flat_mat(Color(0.97, 0.97, 1.0)), Vector3(0.0, 0.09, -1.78))
-	n.rotation.x = 0.32
+	nose.size = Vector3(0.8, 0.06, 0.16)
+	var n := _mi(_tip_pivot, nose, _flat_mat(Color(0.97, 0.97, 1.0)), Vector3(0.0, 0.05, -1.5))
+	n.rotation.x = 0.35
 	var stripe := BoxMesh.new()
-	stripe.size = Vector3(0.05, 0.07, 1.5)
-	_mi(_tip_pivot, stripe, _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(0.0, 0.04, -0.85))
+	stripe.size = Vector3(0.07, 0.1, 0.6)
+	_mi(_tip_pivot, stripe, _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(0.0, 0.03, -1.1))
 	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
