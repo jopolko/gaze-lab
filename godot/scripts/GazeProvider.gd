@@ -177,6 +177,12 @@ const SQUINT_BELOW := 0.80
 const WIDE_ABOVE := 1.08
 const LID_HOLD := 0.18                # seconds a squint / wide look must last (a blink is shorter)
 var eye_open_fast: float = 1.0
+## Cross-eyed: both irises turn toward the nose, against each eye's own slow baseline.
+const CROSS_ABOVE := 0.06
+var _xc_r: float = -1.0
+var _xc_l: float = -1.0
+var _conv: float = 0.0
+var _cross_since: float = -1.0
 var _sq_since: float = -1.0
 var _wide_since: float = -1.0
 var _lid_seen: float = -10.0
@@ -326,6 +332,8 @@ func ingest(d: Dictionary) -> void:
 						coach.seed(float(pp[0]), float(pp[1]), float(pp[2]))
 					coach.add(rad_to_deg(head_rpy.y), -rad_to_deg(head_rpy.x), -rad_to_deg(head_rpy.z), lid_open, _now())
 					_track_lids(lid_open)
+					if _full.size() >= 2:
+						_track_conv(float(_full[0]), float(_full[1]))
 		_geo_limb = d.has("glimb") and int(d["glimb"]) == 1
 		if _frame_fresh and d.has("lx") and d.has("ly") and d["lx"] != null and d["ly"] != null:
 			_limb_buf.append(Vector2(float(d["lx"]), float(d["ly"])))
@@ -435,6 +443,25 @@ func _track_lids(lid_open: float) -> void:
 			_wide_since = t
 	else:
 		_wide_since = -1.0
+
+
+func _track_conv(xr: float, xl: float) -> void:
+	if _xc_r < 0.0:
+		_xc_r = xr
+		_xc_l = xl
+	_conv = lerpf(_conv, (xr - _xc_r) - (xl - _xc_l), 0.4)
+	var t := _now()
+	if _conv > CROSS_ABOVE:
+		if _cross_since < 0.0:
+			_cross_since = t
+	else:
+		_cross_since = -1.0
+		_xc_r = lerpf(_xc_r, xr, 0.02)                  # the baseline follows slowly, so a held look-at-the-nose does not become normal
+		_xc_l = lerpf(_xc_l, xl, 0.02)
+
+
+func cross_eyed() -> bool:
+	return _cross_since >= 0.0 and _now() - _cross_since >= LID_HOLD and _now() - _lid_seen < 0.6
 
 
 func squint_held() -> bool:

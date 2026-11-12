@@ -1308,6 +1308,7 @@ func _render_governor(delta: float) -> void:
 
 
 func _exit_tree() -> void:
+	Engine.time_scale = 1.0
 	var vp := get_viewport()
 	if vp != null:
 		vp.scaling_3d_scale = 1.0
@@ -1597,6 +1598,11 @@ func _restart() -> void:
 	_buff_cand = {}
 	_buff_cand_t = 0.0
 	_buff_w = 0.0
+	Engine.time_scale = 1.0
+	_slowmo_t = 0.0
+	_air_moves.clear()
+	_trk_comment_t = 0.0
+	ridiculous = 0
 	_kickers.clear()
 	_air_zones.clear()
 	_force_far_next = false
@@ -2144,8 +2150,185 @@ func _tricks_look(key: float, pk: Vector3) -> float:
 	return clampf(look + trick_look_override, -1.5, 1.5)
 
 
+const SPIN_NAMES := ["", "THE LAZY SUSAN", "THE FULL LAZY SUSAN", "THE WASHING MACHINE", "HELICOPTER DAD", "THE EXORCIST", "WEATHER REPORT", "ABSOLUTE TORNADO"]
+const FLIP_NAMES := ["THE BACKFLIP", "THE PANCAKE", "OOPS ALL FLIPS", "THE SPICY FLIP", "SOMERSAULT SALAD"]
+const GRAB_NAMES := ["THE BAGEL GRAB", "GRANDMA'S GRAB", "THE BURGER GRAB", "THE NOPE ROPE", "MELON GRAB (LIGHT)"]
+const SHAKE_NAMES := ["THE BOBBLEHEAD", "NOPE NOPE NOPE", "THE WET DOG", "MAXIMUM NOPE"]
+const CROSS_NAMES := ["BIG BRAIN TIME", "THE CROSS-EYED CRUSADER", "SPOOKY EYES", "ONE EYE ON EACH THING"]
+const CRAZY_NAMES := ["THE GOOSE EYES", "WIGGLE WIGGLE", "THE LOOSE MARBLES", "CHAOS PUPILS"]
+const SLAM_NAMES := ["THE ELBOW DROP OF DESTINY", "THE PEOPLE'S ELBOW", "FLYING SPLASH OFF THE CLIFF", "THE PILEDRIVER (INTO SNOW)", "THE SUPLEX (OF SADNESS)"]
+const COMMENTARY := ["AND THE CROWD GOES WILD!", "SOMEONE CALL HIS MOTHER!", "I'VE NEVER SEEN ANYTHING LIKE IT!", "THE JUDGES ARE WEEPING!", "IS HE EVEN HUMAN?!", "NO FEAR! NO KNEES!", "SCIENTISTS ARE BAFFLED!", "PUT THAT ON A T-SHIRT!", "THE SNOW WILL REMEMBER THIS!", "ABSOLUTE UNIT!", "BRING BACK THE REPLAY!", "WHAT A TIME TO BE ALIVE!", "MOM! GET THE CAMERA!", "THE PHYSICS TEAM IS SWEATING!"]
+const SLAM_LINES := ["TABLES! WE NEED TABLES!", "OH THE HUMANITY!", "DING DING DING!", "HE'S GOING FOR THE PIN!", "THE ROPES ARE BURNING!"]
+const FALL_LINES := ["...that was just falling.", "Ten out of ten for gravity.", "A bold choice to do nothing.", "Please do something next time.", "The snow was not impressed."]
+const MOVE_PTS := {"shake": 120, "cross": 150, "crazy": 150, "slam": 300}
+
+var head_shake_override: bool = false
+var cross_override: bool = false
+var crazy_override: bool = false
+var slam_override: bool = false
+var ridiculous: int = 0
+var _air_moves: Array = []
+var _move_name: Dictionary = {}
+var _chaos_pts: int = 0
+var _chaos_last: String = ""
+var _trk_comment: String = ""
+var _trk_comment_t: float = 0.0
+var _trk_burst_t: float = 0.0
+var _slowmo_t: float = 0.0
+var _air_time: float = 0.0
+var _slam_fell: bool = false
+var _hs_state: Dictionary = {}
+var _cz_state: Dictionary = {}
+
+
+## A zigzag detector: how many times has a value turned round, by at least `amp`, in the last `window` seconds? (Head shakes and darting eyes.)
+func _zig_push(st: Dictionary, v: float, t: float, amp: float, window: float) -> int:
+	if not st.has("ext"):
+		st["ext"] = v
+		st["dir"] = 0.0
+		st["revs"] = []
+		return 0
+	var dir: float = st["dir"]
+	var ext: float = st["ext"]
+	if dir == 0.0:
+		if absf(v - ext) > amp:
+			st["dir"] = signf(v - ext)
+			st["ext"] = v
+	elif (v - ext) * dir > 0.0:
+		st["ext"] = v
+	elif absf(v - ext) > amp:
+		(st["revs"] as Array).append(t)
+		st["dir"] = -dir
+		st["ext"] = v
+	var revs: Array = st["revs"]
+	while not revs.is_empty() and t - float(revs[0]) > window:
+		revs.remove_at(0)
+	return revs.size()
+
+
+func _head_shake_now() -> bool:
+	if not GazeProvider.head_rpy_ok or not _eye_on:
+		return false
+	return _zig_push(_hs_state, -rad_to_deg(GazeProvider.head_rpy.x), _age, 4.0, 1.0) >= 3
+
+
+func _crazy_eyes_now() -> bool:
+	if not _eye_on:
+		return false
+	var amp := maxf(0.35 * _ex_full, 0.006)
+	return _zig_push(_cz_state, GazeProvider.eih.x, _age, amp, 0.9) >= 4
+
+
+func _pick(arr: Array) -> String:
+	return String(arr[_fx_rng.randi() % arr.size()])
+
+
+## One extra move in the air: a name, a bit of noise and a line from the commentators.
+func _add_move(id: String) -> void:
+	if _air_moves.has(id):
+		return
+	_air_moves.append(id)
+	var nm := ""
+	match id:
+		"shake":
+			nm = _pick(SHAKE_NAMES)
+			Game.sfx(&"squeak")
+		"cross":
+			nm = _pick(CROSS_NAMES)
+			Game.sfx(&"boing")
+		"crazy":
+			nm = _pick(CRAZY_NAMES)
+			Game.sfx(&"honk")
+		"slam":
+			nm = _pick(SLAM_NAMES)
+			Game.sfx(&"bell")
+			vy -= 7.0                                          # a slam: you drop out of the sky
+			_slam_fell = true
+			_shake = maxf(_shake, 0.4)
+	_move_name[id] = nm
+	_trk_text = nm + "!"
+	_trk_text_t = 1.0
+	_trk_comment = _pick(SLAM_LINES if id == "slam" else COMMENTARY)
+	_trk_comment_t = 1.6
+	_trk_burst_t = 0.5
+	_gain(20)
+	var big := _air_peak > 2.5 or _air_epic
+	if _fx_rng.randf() < (0.45 if big else 0.2):
+		_chaos_event()
+
+
+## The ridiculous part: now and then, a move sets off something nobody asked for.
+func _chaos_event() -> void:
+	var opts := ["goose", "snowman", "slowmo", "fireworks", "crowd"]
+	opts.erase(_chaos_last)
+	var pick: String = opts[_fx_rng.randi() % opts.size()]
+	_chaos_last = pick
+	ridiculous += 1
+	var pos := Vector3(spos.x, spos.y + 2.0, spos.z)
+	match pick:
+		"goose":
+			_burst(pos, Color(1.0, 0.95, 0.7), 60, 12.0, 1.0, 1.4)
+			_toast("HONK!!!  A GOOSE HAS ENTERED THE CHAT", Color(1.0, 0.95, 0.6))
+			Game.sfx(&"honk")
+			_chaos_pts += 150
+		"snowman":
+			_spawn_snowman()
+			_toast("A SNOWMAN APPEARS TO WATCH", Color(0.9, 0.97, 1.0))
+			Game.sfx(&"pop")
+			_chaos_pts += 100
+		"slowmo":
+			_slowmo_t = 0.45
+			Engine.time_scale = 0.45
+			_toast("HANG TIME!", Color(0.8, 0.9, 1.0))
+			_chaos_pts += 120
+		"fireworks":
+			for fi in 4:
+				var fp := pos + Vector3(_fx_rng.randf_range(-9.0, 9.0), _fx_rng.randf_range(2.0, 9.0), -_fx_rng.randf_range(0.0, 14.0))
+				var fc := Color.from_hsv(_fx_rng.randf(), 0.8, 1.0)
+				_burst(fp, fc, 50, 11.0, 1.2, 1.2, Vector3.UP, 180.0, -3.0)
+			_toast("FIREWORKS (NOBODY ASKED)", Color(1.0, 0.85, 0.5))
+			Game.sfx(&"boom")
+			_chaos_pts += 200
+		_:
+			_burst(pos, Color(1.0, 0.8, 0.3), 70, 10.0, 1.4, 1.3, Vector3.UP, 180.0, -9.0)
+			_burst(pos, Color(0.4, 0.9, 1.0), 70, 10.0, 1.4, 1.3, Vector3.UP, 180.0, -9.0)
+			_toast("THE CROWD GOES WILD (WHAT CROWD?)", Color(1.0, 0.9, 0.5))
+			Game.sfx(&"crowd")
+			_chaos_pts += 150
+
+
+func _spawn_snowman() -> void:
+	var sx := clampf(spos.x + (9.0 if _fx_rng.randf() < 0.5 else -9.0), -42.0, 42.0)
+	var sz := spos.z - 26.0
+	var n := Node3D.new()
+	_mi(n, _sphere_mesh(1.0), _food_mat(Color(0.97, 0.98, 1.0), 0.3), Vector3(0, 1.0, 0))
+	_mi(n, _sphere_mesh(0.75), _food_mat(Color(0.97, 0.98, 1.0), 0.3), Vector3(0, 2.3, 0))
+	_mi(n, _sphere_mesh(0.55), _food_mat(Color(0.97, 0.98, 1.0), 0.3), Vector3(0, 3.35, 0))
+	var nose := _cone(0.12, 0.7)
+	nose.material_override = _food_mat(Color(1.0, 0.5, 0.1))
+	n.add_child(nose)
+	nose.position = Vector3(0, 3.35, 0.7)
+	nose.rotation.x = PI * 0.5
+	for ex in [-0.2, 0.2]:
+		_mi(n, _sphere_mesh(0.07), _food_mat(Color(0.05, 0.05, 0.08), 0.0), Vector3(float(ex), 3.5, 0.5))
+	add_child(n)
+	n.global_position = Vector3(sx, terrain_h(sx, sz) - 0.2, sz)
+	n.scale = Vector3.ONE * 0.1
+	n.rotation.y = PI
+	var tw := create_tween()
+	tw.tween_property(n, "scale", Vector3.ONE * 1.5, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(5.0)
+	tw.tween_callback(n.queue_free)
+
+
 func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 	_trk_text_t = maxf(_trk_text_t - delta, 0.0)
+	_trk_comment_t = maxf(_trk_comment_t - delta, 0.0)
+	_trk_burst_t = maxf(_trk_burst_t - delta, 0.0)
+	if _slowmo_t > 0.0:
+		_slowmo_t -= delta
+		if _slowmo_t <= 0.0:
+			Engine.time_scale = 1.0
 	var alt := spos.y - terrain_h(spos.x, spos.z)
 	var air := (not grounded) and alt > 0.6 and air_t > 0.1 and not _finished and hurt_t <= 0.0
 	if air:
@@ -2157,6 +2340,11 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 			_trk_flip_goal = 0.0
 			_trk_grab_t = 0.0
 			_air_peak = 0.0
+			_air_time = 0.0
+			_air_moves.clear()
+			_move_name.clear()
+			_chaos_pts = 0
+			_slam_fell = false
 			_air_epic = false
 			for ke in _kickers:
 				if bool(ke.get("epic", false)) and spos.z <= float(ke["z"]) and float(ke["z"]) - spos.z < 40.0 and absf(spos.x - float(ke["x"])) < 12.0:
@@ -2166,8 +2354,9 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 				_fov_punch = 6.0
 			if not _trk_hint and alt > 0.8:
 				_trk_hint = true
-				_toast("In the air: look left or right to spin", Color(0.9, 0.95, 1.0))
+				_toast("In the air: look aside to spin, chin down to grab, shake your head, cross your eyes...", Color(0.9, 0.95, 1.0))
 		_air_peak = maxf(_air_peak, alt)
+		_air_time += delta
 		var look := _tricks_look(key, pk)
 		var landing := alt < 2.0 and vy < 0.0
 		var target := 0.0
@@ -2185,15 +2374,29 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 			_trk_flip_goal += TAU
 		_flip_key_prev = fk
 		_trk_flip = move_toward(_trk_flip, _trk_flip_goal, TAU * (3.0 if landing else 1.7) * delta)
-		var parts := _trick_parts()
-		if not parts.is_empty():
+		if alt > 1.0:
+			if head_shake_override or Input.is_key_pressed(KEY_H) or _head_shake_now():
+				_add_move("shake")
+			if cross_override or Input.is_key_pressed(KEY_X) or GazeProvider.cross_eyed():
+				_add_move("cross")
+			if crazy_override or Input.is_key_pressed(KEY_Z) or _crazy_eyes_now():
+				_add_move("crazy")
+			if alt > 2.0 and (slam_override or Input.is_key_pressed(KEY_F) or nod_v < -1.6):
+				_add_move("slam")
+		var parts := _trick_parts(false)
+		if not parts.is_empty() and _trk_text_t < 0.3:
 			_trk_text = " + ".join(parts)
 			_trk_text_t = 0.25
 	elif _in_air:
 		_in_air = false
+		if _slowmo_t > 0.0:
+			_slowmo_t = 0.0
+			Engine.time_scale = 1.0
 		if hurt_t > 0.0:
 			_trk_text = "BAILED"
+			_trk_comment = "(he's fine, he's fine)"
 			_trk_text_t = 1.2
+			_trk_comment_t = 1.4
 		else:
 			_land_tricks()
 		_trk_vis_spin = _trk_spin - roundf(_trk_spin / TAU) * TAU
@@ -2207,20 +2410,26 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 		_trk_vis_flip = move_toward(_trk_vis_flip, 0.0, 14.0 * delta)
 	var ts := (_trk_spin if _in_air else _trk_vis_spin)
 	var tf := (_trk_flip if _in_air else _trk_vis_flip)
-	_trk_cam_roll = lerpf(_trk_cam_roll, sin(ts) * 0.16, 1.0 - exp(-14.0 * delta))
+	var wob := 0.0
+	if _in_air and (_air_moves.has("shake") or _air_moves.has("crazy")):
+		wob = sin(_age * 40.0) * 0.07
+	_trk_cam_roll = lerpf(_trk_cam_roll, sin(ts) * 0.16 + wob, 1.0 - exp(-14.0 * delta))
 	_trk_cam_pitch = lerpf(_trk_cam_pitch, sin(tf) * 0.3, 1.0 - exp(-14.0 * delta))
 
 
-func _trick_parts() -> Array:
+## The plain list while you are in the air (degrees and the moves so far), or the silly names once you land.
+func _trick_parts(funny: bool) -> Array:
 	var parts: Array = []
 	var n := int(roundf(absf(_trk_spin) / PI))
 	if n >= 1:
-		parts.append(str(n * 180))
+		parts.append(SPIN_NAMES[mini(n, SPIN_NAMES.size() - 1)] if funny else str(n * 180))
 	var fl := int(floorf(_trk_flip / TAU + 0.25))
 	if fl >= 1:
-		parts.append("FLIP" if fl == 1 else "DOUBLE FLIP")
+		parts.append((FLIP_NAMES[_fx_rng.randi() % FLIP_NAMES.size()] if fl == 1 else "DOUBLE " + FLIP_NAMES[_fx_rng.randi() % FLIP_NAMES.size()]) if funny else ("FLIP" if fl == 1 else "DOUBLE FLIP"))
 	if _trk_grab_t >= 0.35:
-		parts.append("GRAB")
+		parts.append(_pick(GRAB_NAMES) if funny else "GRAB")
+	for mv in _air_moves:
+		parts.append(String(_move_name.get(mv, mv)))
 	return parts
 
 
@@ -2239,15 +2448,23 @@ func _land_tricks() -> void:
 	if gr >= 1:
 		pts += 40 * gr
 		kinds += 1
+	for mv in _air_moves:
+		pts += int(MOVE_PTS.get(mv, 100))
+		kinds += 1
 	if _air_peak > 2.5:
 		pts += 30
 	if pts <= 30:
+		if _air_time > 0.8:
+			_trk_text = "JUST FALLING"
+			_trk_comment = _pick(FALL_LINES)
+			_trk_text_t = 1.6
+			_trk_comment_t = 1.8
 		return
-	var mult := 1.0 + 0.5 * float(maxi(kinds - 1, 0))
-	pts = int(float(pts) * mult)
+	var mult := minf(1.0 + 0.5 * float(maxi(kinds - 1, 0)), 4.0)
+	pts = int(float(pts) * mult) + _chaos_pts
 	if _air_epic:
 		pts = int(float(pts) * 1.6)
-	var name := " + ".join(_trick_parts())
+	var name := " + ".join(_trick_parts(true))
 	if _air_epic:
 		name = "EPIC " + name
 	tricks_landed += 1
@@ -2258,8 +2475,14 @@ func _land_tricks() -> void:
 	chain += 1
 	groove = 1.0 + 0.25 * minf(float(chain), 8.0)
 	best_flow = maxf(best_flow, groove)
-	_trk_text = "%s  +%d" % [name, pts] if name != "" else "AIR  +%d" % pts
-	_trk_text_t = 1.8
+	var shown := name
+	if shown.length() > 64:
+		shown = shown.substr(0, 61) + "..."
+	_trk_text = "%s  +%d" % [shown, pts] if name != "" else "AIR  +%d" % pts
+	_trk_text_t = 2.2
+	_trk_comment = _pick(SLAM_LINES if _air_moves.has("slam") else COMMENTARY)
+	_trk_comment_t = 2.4
+	_trk_burst_t = 0.7
 	_flash = 0.3
 	_shake = maxf(_shake, 0.3)
 	_pop_col = Color(1.0, 0.85, 0.3)
@@ -2267,7 +2490,16 @@ func _land_tricks() -> void:
 	var gp := Vector3(spos.x, spos.y + 1.0, spos.z)
 	_burst(gp, Color(1.0, 0.9, 0.5), 40, 10.0, 0.9, 1.0)
 	_ring(Vector3(spos.x, spos.y + 0.3, spos.z), Color(1.0, 0.85, 0.4), 9.0, 0.5, false)
-	Game.sfx(&"buff_mult")
+	if _slam_fell:
+		_ring(Vector3(spos.x, spos.y + 0.3, spos.z), Color(1.0, 0.5, 0.3), 16.0, 0.7, false)
+		_burst(gp, Color(0.95, 0.98, 1.0), 80, 14.0, 1.0, 2.0, Vector3.UP, 180.0, -9.0)
+		_shake = maxf(_shake, 0.9)
+		Game.sfx(&"boom")
+		Game.sfx(&"crowd")
+	if _air_epic or kinds >= 3:
+		Game.sfx(&"levelup")
+	else:
+		Game.sfx(&"buff_mult")
 
 
 func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
@@ -2325,7 +2557,20 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 	if _trk_text_t > 0.0 and _trk_text != "":
 		var a := clampf(_trk_text_t / 0.5, 0.0, 1.0)
 		var big := _trk_text_t > 0.3 and not _in_air
-		_ctext(font, s.y * (0.27 if big else 0.34), _trk_text, 46 if big else 30, Color(1.0, 0.88, 0.35, a))
+		var ty := s.y * (0.27 if big else 0.34)
+		if _trk_burst_t > 0.0:
+			var u := 1.0 - _trk_burst_t / 0.7
+			var rad := (150.0 + 90.0 * u) * k
+			var c0 := Vector2(s.x * 0.5, ty + 12.0 * k)
+			var pts := PackedVector2Array()
+			for si in 24:
+				var ang := float(si) * TAU / 24.0 + _age * 0.8
+				var rr := rad * (1.0 if si % 2 == 0 else 0.62)
+				pts.append(c0 + Vector2(cos(ang), sin(ang)) * rr)
+			_hud.draw_colored_polygon(pts, Color(1.0, 0.45, 0.1, 0.55 * clampf(_trk_burst_t / 0.4, 0.0, 1.0)))
+		_ctext(font, ty, _trk_text, 46 if big else 30, Color(1.0, 0.88, 0.35, a))
+		if _trk_comment_t > 0.0 and _trk_comment != "":
+			_ctext(font, ty + 52.0 * k, _trk_comment, 24, Color(1.0, 1.0, 1.0, clampf(_trk_comment_t / 0.5, 0.0, 1.0)))
 	var vr := _view_rect()
 	_hud.draw_rect(vr, Color(0.05, 0.12, 0.25, 0.5))
 	_text(font, vr.position + Vector2(6.0 * k, 21.0 * k), "1ST" if view_fp else "3RD", 18, Color(1, 1, 1, 0.9))
@@ -2490,7 +2735,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-FINISH_Z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "pads": pads_hit, "epicKickers": epics_built, "tricks": {"landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "pads": pads_hit, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
