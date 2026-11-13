@@ -196,6 +196,13 @@ func _gen_segment(j: int) -> void:
 			var sx := _rng.randf_range(-W_HALF + 3.0, W_HALF - 3.0)
 			if absf(sx - path_x(row, sz)) < 9.0:
 				continue
+			var in_forecourt := false
+			if sz - rz < 60.0:
+				for gq in row["gaps"]:
+					if absf(sx - float(gq["x"])) < float(gq["w"]) * 0.5 + 8.0:
+						in_forecourt = true
+			if in_forecourt:
+				continue                                    # nothing stands in the approach to a gate: it must be easy to see and to look at
 			var in_air_zone := false
 			for az in _air_zones:
 				if sz < float(az["z0"]) and sz > float(az["z1"]) and absf(sx - float(az["x"])) < 16.0:
@@ -461,7 +468,7 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 		add_child(root)
 		root.global_position = Vector3(gx, terrain_h(gx, rz) + 9.5, rz + 0.5)
 		(row["nodes"] as Array).append(root)
-		var mat := _fx_mat("solid", col, 2.4)
+		var mat := _fx_mat("solid", Color(1.0, 1.0, 1.0).lerp(col, 0.3), 3.2)          # one bright, near-white frame for every gate: the sign glyph and the beacon carry the colour
 		var cm := CylinderMesh.new()
 		cm.top_radius = 0.3
 		cm.bottom_radius = 0.45
@@ -472,13 +479,20 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 		var gw: float = float(g.get("w", 10.0))
 		for psx in [-1.0, 1.0]:
 			var post := CylinderMesh.new()
-			post.top_radius = 0.28
-			post.bottom_radius = 0.36
-			post.height = 9.0
+			post.top_radius = 0.6
+			post.bottom_radius = 0.78
+			post.height = 15.0
 			post.radial_segments = 6
 			var ppx: float = gx + float(psx) * gw * 0.5
-			var pn2 := _mi(self, post, mat, Vector3(ppx, terrain_h(ppx, rz) + 4.5, rz))
+			var pn2 := _mi(self, post, mat, Vector3(ppx, terrain_h(ppx, rz) + 7.5, rz))
 			(row["nodes"] as Array).append(pn2)
+		# a lintel across the top and a lit doorstep on the ground: the opening reads as a door from a long way off, over the trees
+		var lm := BoxMesh.new()
+		lm.size = Vector3(gw + 1.6, 0.9, 0.9)
+		(row["nodes"] as Array).append(_mi(self, lm, mat, Vector3(gx, terrain_h(gx, rz) + 14.6, rz)))
+		var sm := BoxMesh.new()
+		sm.size = Vector3(gw, 0.2, 1.2)
+		(row["nodes"] as Array).append(_mi(self, sm, _fx_mat("add", Color(col.r, col.g, col.b, 0.75)), Vector3(gx, terrain_h(gx, rz) + 0.2, rz)))
 		match zn:
 			"rush":
 				for vi in 2:
@@ -947,16 +961,29 @@ func _update_ribbons() -> void:
 		return
 	var sx := spos.x + vel.x * 0.3
 	var sz := spos.z - 8.0
+	if _tune != null and _tune.active:
+		_tune_assign(row)
 	for g in row["gaps"]:
 		var zn: Dictionary = ZONES[String(g.get("leads", "rush"))]
 		var col: Color = zn.get("scol", zn["col"])
 		var chosen := is_same(g, _aim)
-		var a := 0.9 if chosen else (0.5 if _aim.is_empty() else 0.2)
-		var w := 1.5 if chosen else 0.9
+		var cand := is_same(g, _cand) and not chosen
+		var full := chosen or cand
+		var a := 0.95 if chosen else (0.6 if cand else 0.3)
+		var w := 1.8 if chosen else (1.2 if cand else 0.7)
+		if _tune != null and _tune.active and int(row["tune_t"]) >= 0:
+			var is_t := is_same(g, (row["gaps"] as Array)[int(row["tune_t"])])
+			col = Color(1.0, 0.1, 0.85) if is_t else col
+			a = 1.0 if is_t else 0.1
+			w = 2.0 if is_t else 0.7
+			full = is_t
+		if not full and (not _aim.is_empty() or not _cand.is_empty()):
+			continue                                        # one path: once you lean on a gate, the others' ribbons vanish
 		var gx: float = g["x"]
 		_rib_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 		var n := 18
-		for i in n + 1:
+		var n_end := n if full else 6                        # an undecided gate shows only a short stub from the board: a fan, never a criss-cross
+		for i in n_end + 1:
 			var u := float(i) / float(n)
 			var x := lerpf(sx, gx, u * u * (3.0 - 2.0 * u))
 			var z := lerpf(sz, bz, u)
@@ -2217,7 +2244,12 @@ func _guard_path(delta: float, s_in: float) -> float:
 	var spd_w := maxf(-vel.y, MIN_SPEED)
 	var wall_far := clampf(spd_w * 2.4 * (1.0 + 0.5 * _a()), WALL_FAR, 230.0)       # the hill speeds up, so the pull starts earlier in metres, not in seconds
 	var wall_near := clampf(spd_w * 1.0, WALL_NEAR, 70.0)
-	if gate_assist and not row.is_empty() and bd <= wall_far:
+	# a gate your eyes chose far off to the side needs room to be reached (the course never asks for more than ~0.25 m sideways per metre forward): the pull toward it starts early enough for that,
+	# not at the usual ~50 m, where a gate 30 m over could only ever be swapped for the nearest reachable one
+	var engage_far := wall_far
+	if not _aim.is_empty() and is_same(_aim_row, row):
+		engage_far = maxf(wall_far, minf(AIM_MAX_DIST, absf(float(_aim["x"]) - spos.x) / 0.22 + 20.0))
+	if gate_assist and not row.is_empty() and bd <= engage_far:
 		if int(row["j"]) != _wall_row_j:
 			_wall_row_j = int(row["j"])
 			_wall_gap = {}
@@ -2659,6 +2691,7 @@ func _update_rows() -> void:
 						bdx = absf(spos.x - float(g2["x"]))
 						via = g2
 			if not via.is_empty():
+				_alog_push(r, via)
 				_pending_zone = String(via.get("leads", ""))
 				_pending_bend = float(via.get("bend", 0.0))
 				if bool(params.get("lazy", true)):
@@ -4079,7 +4112,270 @@ func _update_focus(delta: float) -> void:
 	_pf_focus = _pf(_pf_focus, pf0)
 
 
+## The per-barrier log: while a barrier is the next one, note where its gates are on screen and where your gaze cursor is; when you pass it, file the entry.
+var _alog: Dictionary = {}
+var _alog_n: int = 0
+var _cap_t: float = 0.0
+
+
+func _alog_note(row: Dictionary, cx: float, vs: Vector2, delta: float) -> void:
+	if GazeProvider.capture_on and spos.z - float(row["z"]) >= 14.0:
+		_cap_t -= delta
+		if _cap_t <= 0.0:
+			_cap_t = 1.2
+			var cxs: Array = []
+			var cai := -1
+			var ci := 0
+			for cg in row["gaps"]:
+				var csc := _gap_screen(row, cg)
+				cxs.append(snappedf((csc["c"] as Vector2).x / vs.x, 0.01) if not csc.is_empty() else -1.0)
+				if is_same(cg, _aim):
+					cai = ci
+				ci += 1
+			GazeProvider.capture_frame("downhill", {"gates": cxs, "lit": int(row.get("tune_t", -1)), "cursor": snappedf(cx / vs.x, 0.01), "aim": cai, "steer": snappedf(_steer_gaze, 0.01), "dist": int(spos.z - float(row["z"])), "cfg": _tune.config_name() if (_tune != null and _tune.active) else ""})
+	if _tune != null and _tune.active:
+		_tune_note(row, cx, vs, delta)
+	if not is_same(_alog.get("row", null), row):
+		_alog = {"row": row, "cs": [], "gates": [], "aim": -1}
+		_alog_n = 0
+	var dist := spos.z - float(row["z"])
+	if dist < 14.0:
+		return
+	_alog_n += 1
+	if _alog_n % 6 == 0:
+		var cs: Array = _alog["cs"]
+		cs.append(cx / vs.x)
+		if cs.size() > 120:
+			cs.remove_at(0)
+	var gx: Array = []
+	var ai := -1
+	var i := 0
+	for g in row["gaps"]:
+		var sc := _gap_screen(row, g)
+		gx.append(snappedf((sc["c"] as Vector2).x / vs.x, 0.01) if not sc.is_empty() else -1.0)
+		if is_same(g, _aim):
+			ai = i
+		i += 1
+	_alog["gates"] = gx
+	_alog["aim"] = ai
+	_alog["steer"] = snappedf(_steer_gaze, 0.01)
+	_alog["raw"] = snappedf(GazeProvider.gaze.x, 0.01)
+
+
+func _alog_push(row: Dictionary, via: Dictionary) -> void:
+	if _tune != null and _tune.active:
+		_tune_finish_trial(row, via)
+	if not is_same(_alog.get("row", null), row):
+		return
+	var cs: Array = _alog["cs"]
+	var srt := cs.duplicate()
+	srt.sort()
+	var med: float = float(srt[srt.size() / 2]) if not srt.is_empty() else 0.5
+	var near := -1
+	var nd := 1.0e9
+	var gx: Array = _alog["gates"]
+	for i in gx.size():
+		if float(gx[i]) >= 0.0 and absf(float(gx[i]) - med) < nd:
+			nd = absf(float(gx[i]) - med)
+			near = i
+	var went := -1
+	var k := 0
+	for g in row["gaps"]:
+		if is_same(g, via):
+			went = k
+		k += 1
+	var e := {"row": rows_passed, "n": gx.size(), "gates": gx, "cur_med": snappedf(med, 0.01), "cur_min": snappedf(float(srt[0]) if not srt.is_empty() else 0.5, 0.01), "cur_max": snappedf(float(srt[srt.size() - 1]) if not srt.is_empty() else 0.5, 0.01),
+		"looked": near, "aim": _alog.get("aim", -1), "went": went, "steer": _alog.get("steer", 0.0), "pick": GazeProvider.opt_pick}
+	GazeProvider.gate_log.append(e)
+	GazeProvider.post_stream("barrier", e)
+	while GazeProvider.gate_log.size() > 80:
+		GazeProvider.gate_log.remove_at(0)
+	_alog = {}
+
+
+## ---- The tuning session (GazeTune): a lit gate per barrier, a new test setting every few barriers, the verdict per barrier.
+var _tune: GazeTune = null
+var _tune_acc: Dictionary = {}
+var _tune_msg: String = ""
+var _tune_msg_kind: String = ""
+var _tune_msg_t: float = 0.0
+var _tune_sum_t: float = 0.0
+
+
+var _sweep_hooked: bool = false
+
+
+func _on_sweep(active: bool) -> void:
+	set_physics_process(not active)
+
+
+func _tune_start() -> void:
+	if GazeProvider.backend == GazeProvider.Backend.CAMERA and not GazeProvider.sweep_done and not GazeProvider.sweep_active:
+		GazeProvider.start_sweep()                          # one four-second sweep first: the gaze scale and offset measured, not guessed
+	_tune = GazeTune.new()
+	_tune.loop = GazeProvider.auto_on
+	_tune.start()
+	_tune_acc = {}
+	_tune_msg = ""
+	_tune_sum_t = 0.0
+	_toast("TUNE: look at the WHITE gate", Color(1, 1, 1))
+
+
+func _tune_assign(row: Dictionary) -> void:
+	if not row.has("tune_t"):
+		# only gates that will be on screen as you close in can be looked at: about 45 m out, a gate further off to the side than the view is wide is out of frame
+		var vp := get_viewport().get_visible_rect().size
+		var half_w := 45.0 * tan(deg_to_rad(cam.fov) * 0.5) * vp.x / maxf(vp.y, 1.0)
+		var allowed: Array = []
+		var gl: Array = row["gaps"]
+		for i in gl.size():
+			if absf(float(gl[i]["x"]) - spos.x) < 0.8 * half_w:
+				allowed.append(i)
+		row["tune_t"] = _tune.pick_target(gl, allowed) if _tune.should_light(int(row["j"])) else -1
+
+
+func _tune_note(row: Dictionary, cx: float, vs: Vector2, delta: float) -> void:
+	_tune_assign(row)
+	if int(row["tune_t"]) < 0:
+		return                                              # an unlit barrier: not scored
+	if not is_same(_tune_acc.get("row", null), row):
+		_tune_acc = {"row": row, "t": 0.0, "cur": 0.0, "gaze": 0.0, "aim": -1.0, "aim_last": -1, "flips": 0, "lost": 0, "aim_end": -1}
+	if spos.z - float(row["z"]) < 14.0:
+		return
+	var g: Dictionary = (row["gaps"] as Array)[int(row["tune_t"])]
+	var sc := _gap_screen(row, g)
+	if sc.is_empty():
+		return
+	var tol := maxf(float(sc["hw"]), 0.09 * vs.x)
+	var tx: float = (sc["c"] as Vector2).x
+	_tune_acc["t"] = float(_tune_acc["t"]) + delta
+	if absf(tx - cx) < tol:
+		_tune_acc["cur"] = float(_tune_acc["cur"]) + delta
+	if absf(tx - GazeProvider.gaze.x * vs.x) < tol:
+		_tune_acc["gaze"] = float(_tune_acc["gaze"]) + delta
+	if float(_tune_acc["aim"]) < 0.0 and is_same(_aim, g):
+		_tune_acc["aim"] = _tune_acc["t"]
+	# what the game itself had selected, over time: which gate it ended on, how many times it changed its mind, how often it let go
+	var ai := -1
+	var gl: Array = row["gaps"]
+	for i in gl.size():
+		if is_same(gl[i], _aim):
+			ai = i
+	var last: int = int(_tune_acc["aim_last"])
+	if ai != last:
+		if ai >= 0 and last >= 0:
+			_tune_acc["flips"] = int(_tune_acc["flips"]) + 1
+		elif ai < 0 and last >= 0:
+			_tune_acc["lost"] = int(_tune_acc["lost"]) + 1
+		_tune_acc["aim_last"] = ai
+	if ai >= 0:
+		_tune_acc["aim_end"] = ai
+
+
+func _tune_finish_trial(row: Dictionary, via: Dictionary) -> void:
+	if not is_same(_tune_acc.get("row", null), row):
+		return
+	var gaps: Array = row["gaps"]
+	var ti := int(row.get("tune_t", 0))
+	var went := -1
+	for i in gaps.size():
+		if is_same(gaps[i], via):
+			went = i
+	var t := float(_tune_acc["t"])
+	var lc := float(_tune_acc["cur"]) / maxf(t, 0.001)
+	var lg := float(_tune_acc["gaze"]) / maxf(t, 0.001)
+	var v := GazeTune.classify(went == ti, lc, lg, t)
+	var aim_t := float(_tune_acc["aim"])
+	var acc_end := int(_tune_acc.get("aim_end", -1))
+	var acc_flips := int(_tune_acc.get("flips", 0))
+	var acc_lost := int(_tune_acc.get("lost", 0))
+	_tune_acc = {}
+	if v == "n/a":
+		return
+	var trial := {"verdict": v, "target": ti, "went": went, "n": gaps.size(), "t": snappedf(t, 0.1), "look_cur": snappedf(lc, 0.01), "look_gaze": snappedf(lg, 0.01), "aim_t": snappedf(aim_t, 0.1), "aim_end": int(acc_end), "flips": int(acc_flips), "lost": int(acc_lost)}
+	_tune.record(trial)
+	_tune_msg = GazeTune.explain(v)
+	_tune_msg_kind = v
+	_tune_msg_t = 3.5
+	_tune_post(trial)
+	if _tune.note != "":
+		_toast(_tune.note, Color(0.6, 0.9, 1.0))
+		GazeProvider.post_stream("auto", {"msg": _tune.note})
+	if _tune.done:
+		_tune_sum_t = 90.0
+		_tune_msg = "TUNE DONE: best = " + _tune.best
+		DisplayServer.clipboard_set(JSON.stringify(GazeProvider.options_report(), "  "))
+		_tune_post({"summary": _tune.summary, "best": _tune.best})
+
+
+## Each result goes to the local test server too (only when the page was opened from localhost), so it can be read while you play.
+func _tune_post(d: Dictionary) -> void:
+	if not OS.has_feature("web"):
+		return
+	GazeProvider.post_stream("trial" if d.has("verdict") else "tune", d)
+
+
+## Centred text at a point, with a dark outline so it reads over anything.
+func _ctext_at(font: Font, pos: Vector2, text: String, size: int, color: Color) -> void:
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var q := pos - Vector2(w * 0.5, 0.0)
+	_hud.draw_string_outline(font, q, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 8, Color(0, 0, 0, 0.9))
+	_hud.draw_string(font, q, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+
+
+func _draw_tune(font: Font, s: Vector2, k: float) -> void:
+	if _tune == null:
+		return
+	if _tune.active:
+		if _tune.loop:
+			_ctext(font, s.y * 0.17, "AUTO  %s     %s" % [_tune.phase, _tune.config_name()], 22, Color(0.7, 0.9, 1.0, 0.9))
+		else:
+			_ctext(font, s.y * 0.17, "TUNE %d / %d     %s" % [mini(_tune.trial_i + 1, _tune.total()), _tune.total(), _tune.config_name()], 22, Color(1, 1, 1, 0.9))
+		_ctext(font, s.y * 0.17 + 28.0 * k, "look at the WHITE gate", 20, Color(1, 1, 1, 0.75))
+		var row: Dictionary = _tune_acc.get("row", {})
+		if not row.is_empty() and row.has("tune_t") and int(row["tune_t"]) >= 0:
+			var sc := _gap_screen(row, (row["gaps"] as Array)[int(row["tune_t"])])
+			if not sc.is_empty():
+				var p: Vector2 = sc["c"]
+				var rad := maxf(float(sc["hw"]) * 1.2, 46.0 * k) + 6.0 * sin(_age * 7.0)
+				var hot := Color(1.0, 0.1, 0.85)
+				_hud.draw_arc(p, rad + 4.0 * k, 0.0, TAU, 48, Color(0, 0, 0, 0.75), 14.0 * k)
+				_hud.draw_arc(p, rad, 0.0, TAU, 48, hot, 8.0 * k)
+				_hud.draw_arc(p, rad * 0.55, 0.0, TAU, 32, Color(1.0, 1.0, 0.3, 0.95), 5.0 * k)
+				var tip := p + Vector2(0.0, -rad - 14.0 * k)
+				_hud.draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-18.0 * k, -30.0 * k), tip + Vector2(18.0 * k, -30.0 * k)]), hot)
+				_ctext_at(font, tip + Vector2(0.0, -40.0 * k), "LOOK HERE", 28, Color(1, 1, 1))
+	if _tune_msg_t > 0.0 and _tune_msg != "":
+		var col := Color(0.5, 1.0, 0.6)
+		if _tune_msg_kind == "looked-not-followed" or _tune_msg_kind == "cursor-lost-it":
+			col = Color(1.0, 0.55, 0.3)
+		elif _tune_msg_kind == "never-reached" or _tune_msg_kind == "assist":
+			col = Color(1.0, 0.9, 0.4)
+		_ctext(font, s.y * 0.17 + 64.0 * k, _tune_msg, 26, col)
+	if _tune.done and _tune_sum_t > 0.0:
+		var y := s.y * 0.3
+		_hud.draw_rect(Rect2(s.x * 0.1, y - 30.0 * k, s.x * 0.8, (60.0 + 30.0 * _tune.summary.size()) * k), Color(0.02, 0.03, 0.08, 0.88))
+		_ctext(font, y, "TUNE RESULTS (copied)   best: " + _tune.best, 24, Color(0.6, 1.0, 0.7))
+		y += 34.0 * k
+		for sm: Dictionary in _tune.summary:
+			var line := "%-30s followed %d/%d   looked-not-followed %d   cursor-lost %d   never-reached %d   assist %d   lock %.1fs" % [sm["name"], sm["followed"], sm["n"], sm["looked_not_followed"], sm["cursor_lost_it"], sm["never_reached"], sm["assist"], sm["mean_lock_s"]]
+			_ctext(font, y, line, 16, Color(1, 1, 1, 0.9))
+			y += 28.0 * k
+
+
 func _update_aim(delta: float) -> void:
+	if not _sweep_hooked:
+		_sweep_hooked = true
+		GazeProvider.sweep_changed.connect(_on_sweep)
+	if GazeProvider.tune_request or (GazeProvider.auto_on and _tune == null):
+		GazeProvider.tune_request = false
+		_tune_start()
+	elif _tune != null and _tune.loop and not GazeProvider.auto_on:
+		_tune.active = false
+		_tune = null                                       # AUTO switched off: stop testing, keep whatever setting is on
+	GazeProvider.tune_phase = _tune.phase if (_tune != null and _tune.active) else ""
+	_tune_msg_t = maxf(_tune_msg_t - delta, 0.0)
+	_tune_sum_t = maxf(_tune_sum_t - delta, 0.0)
 	if _paused:
 		return
 	var row: Dictionary = {}
@@ -4109,6 +4405,7 @@ func _update_aim(delta: float) -> void:
 		_aim_cx = _cursor_px.x
 	_aim_cx = lerpf(_aim_cx, _cursor_px.x, 1.0 - exp(-delta / 0.18))
 	var cx := _aim_cx
+	_alog_note(row, cx, vs, delta)
 	var best: Dictionary = {}
 	var best_d := 1.0e9
 	for g in row["gaps"]:
@@ -4123,6 +4420,26 @@ func _update_aim(delta: float) -> void:
 		if dd < best_d:
 			best_d = dd
 			best = g
+	if GazeProvider.opt_pick == 1:
+		# gaze zones: the gate nearest to where you look wins, however far it is; the one you hold keeps it unless a rival is clearly closer (hysteresis)
+		var zb: Dictionary = {}
+		var zdx := 1.0e9
+		var cur_dx := 1.0e9
+		for g3 in row["gaps"]:
+			var zs := _gap_screen(row, g3)
+			if zs.is_empty():
+				continue
+			var zdd := absf((zs["c"] as Vector2).x - cx)
+			if is_same(g3, _aim):
+				cur_dx = zdd
+			if zdd < zdx:
+				zdx = zdd
+				zb = g3
+		if not zb.is_empty():
+			if not _aim.is_empty() and not is_same(zb, _aim) and zdx > 0.7 * cur_dx:
+				zb = _aim
+			best = zb
+			best_d = 0.5
 	if best_d >= 1.0 and absf(_steer_gaze) > 0.5:
 		# a hard look to one side with no gate under it: the outermost gate on that side. The far ones are always reachable this way, however small they are on screen.
 		var side := signf(_steer_gaze)
@@ -4148,8 +4465,12 @@ func _update_aim(delta: float) -> void:
 				_cand = {}
 				_cand_t = 0.0
 		else:
-			_cand = best
-			_cand_t = 0.0
+			# a different gate is nearest this instant: the build-up toward the one being looked at drains instead of being wiped, so a flicker between two close gates does not
+			# restart the clock every time (with gates ~0.2 of the screen apart and a noisy reading, it never reached the lock before)
+			_cand_t -= 1.2 * delta
+			if _cand_t <= 0.0:
+				_cand = best
+				_cand_t = 0.0
 	else:
 		_cand = {}
 		_cand_t = 0.0
@@ -4304,6 +4625,7 @@ func _draw_hud_inner() -> void:
 	_draw_pops(font, s, k)
 	_draw_tricks(font, s, k)
 	_draw_eyes_hud(font, s, k)
+	_draw_tune(font, s, k)
 	# speed lines at the edge of the screen: the faster you go, the more of them
 	var sp_f := clampf((vel.length() - 26.0) / 40.0, 0.0, 1.0)
 	if sp_f > 0.02:

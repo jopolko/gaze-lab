@@ -3,3 +3,10 @@ build/
 *.import
 *.tmp
 .claude/
+
+# local dev server: private key and collected test results
+godot/tools/dev-cert.pem
+godot/tools/dev-key.pem
+godot/tools/tune_results.jsonl
+godot/tools/frames/
+godot/tools/logs/

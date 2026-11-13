@@ -112,7 +112,7 @@ func _process(delta: float) -> void:
 	if lv != null and lv.level_index != _lvl:
 		_lvl = lv.level_index
 		reset()
-	if Game.peek_mode and player != null and not player.dead:
+	if Game.peek_mode and player != null and not player.dead and not GazeProvider.sweep_active:
 		_peek_gaze(rd)
 	elif peek_lock != null or _peek_target != null:
 		_peek_clear()
@@ -477,6 +477,8 @@ func draw_overlay(ci: Control) -> void:
 		return
 	var cam := player.camera
 	var font := ThemeDB.fallback_font
+	if GazeProvider.sweep_active:
+		return                                  # the dot is drawn by the options layer (GazeOptions), in every mode
 	if GazeProvider.calibrating:
 		_draw_calibration(ci, font)
 		return
@@ -580,6 +582,26 @@ func _draw_guide(ci: Control, font: Font) -> void:
 		if st.size() > 2 and st[2] != "":
 			line += "  " + String(st[2])
 		ci.draw_string(font, Vector2(x + 18, y + 90 + 38.0 * i), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, col)
+
+
+## The sweep: a dot waits, then glides round the screen edge and back to the middle. Follow it with your eyes.
+func _draw_sweep(ci: Control, font: Font) -> void:
+	var t := GazeProvider.sweep_t
+	var p := EyeSweep.dot(t) * ci.size
+	ci.draw_rect(Rect2(Vector2.ZERO, ci.size), Color(0.02, 0.03, 0.08, 0.6))
+	var pulse := 1.0 + 0.15 * sin(Time.get_ticks_msec() / 140.0)
+	var moving := t >= 0.0
+	var col := Color(0.4, 1.0, 0.5) if moving else Color(1.0, 0.85, 0.3)
+	ci.draw_circle(p, 34.0 * pulse, Color(col, 0.22))
+	ci.draw_circle(p, 13.0, col)
+	var msg := "FOLLOW THE DOT WITH YOUR EYES" if moving else "READY? find the dot"
+	var mw := font.get_string_size(msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 34).x
+	var y := ci.size.y * 0.5
+	ci.draw_string_outline(font, Vector2(ci.size.x * 0.5 - mw * 0.5, y), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, 8, Color(0, 0, 0, 0.9))
+	ci.draw_string(font, Vector2(ci.size.x * 0.5 - mw * 0.5, y), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 34, Color.WHITE)
+	var sub := "keep your head still, only your eyes move   (tap to skip)"
+	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	ci.draw_string(font, Vector2(ci.size.x * 0.5 - sw * 0.5, y + 32.0), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.8))
 
 
 func _draw_calibration(ci: Control, font: Font) -> void:
@@ -728,6 +750,17 @@ func _draw_aim_panel(ci: Control, font: Font) -> void:
 	var on := Game.peek_eye_aim
 	ci.draw_rect(br, Color(0.1, 0.45, 0.3, 0.75) if on else Color(0.35, 0.28, 0.08, 0.75))
 	ci.draw_string(font, br.position + Vector2(10.0, 26.0), "AIM: EYES  (tap / M)" if on else "AIM: HEAD  (tap / M)", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.95))
+	var off_e := (GazeProvider.gaze - Vector2(0.5, 0.5))
+	var inside := absf(off_e.x) < 0.07 and absf(off_e.y) < 0.07
+	var dbg := "gaze %.2f %.2f   view yaw %+.0f pitch %+.0f deg   %s" % [GazeProvider.gaze.x, GazeProvider.gaze.y, rad_to_deg(Game.peek_eye_look.x), rad_to_deg(Game.peek_eye_look.y), ("IN THE DEAD ZONE: no turn" if inside else "turning toward the gaze") if on else "head aiming"]
+	ci.draw_string_outline(font, Vector2(12.0, ci.size.y - 160.0), dbg, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Color(0, 0, 0, 0.9))
+	ci.draw_string(font, Vector2(12.0, ci.size.y - 160.0), dbg, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1.0, 0.9, 0.5) if (on and inside) else Color(1, 1, 1, 0.9))
+	var sr := _sweep_btn_rect(ci.size)
+	ci.draw_rect(sr, Color(0.12, 0.25, 0.45, 0.75))
+	ci.draw_string(font, sr.position + Vector2(10.0, 26.0), "SWEEP  (tap / V)", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.95))
+	if GazeProvider.sweep_note != "":
+		ci.draw_string_outline(font, Vector2(412.0, ci.size.y - 122.0), GazeProvider.sweep_note, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Color(0, 0, 0, 0.9))
+		ci.draw_string(font, Vector2(412.0, ci.size.y - 122.0), GazeProvider.sweep_note, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.85))
 	var y := ci.size.y - 52.0
 	for m in ["head", "eyes"]:
 		var t := AimStats.line(m)
@@ -753,6 +786,9 @@ func _peek_clear() -> void:
 	AimAssist.locked = null
 
 
+var _cap_t: float = 0.0
+
+
 func _peek_gaze(rd: float) -> void:
 	_sniff_cd = maxf(_sniff_cd - rd, 0.0)
 	if not _peek_eyes_live():
@@ -766,6 +802,14 @@ func _peek_gaze(rd: float) -> void:
 	var gp := GazeProvider.gaze * get_viewport().get_visible_rect().size
 	var now_s := float(Time.get_ticks_msec()) / 1000.0
 	_gh.append([now_s, gp])
+	if GazeProvider.capture_on:
+		_cap_t -= rd
+		if _cap_t <= 0.0:
+			_cap_t = 1.2
+			var lock_x := -1.0
+			if peek_lock != null and is_instance_valid(peek_lock) and not cam.is_position_behind(peek_lock.global_position):
+				lock_x = snappedf(cam.unproject_position(peek_lock.global_position + Vector3.UP * peek_lock.s).x / get_viewport().get_visible_rect().size.x, 0.01)
+			GazeProvider.capture_frame("peek", {"eyeAim": Game.peek_eye_aim, "eyeLook": [snappedf(Game.peek_eye_look.x, 0.01), snappedf(Game.peek_eye_look.y, 0.01)], "lockX": lock_x, "target": _peek_target != null})
 	while _gh.size() > 2 and now_s - float((_gh[0] as Array)[0]) > 1.0:
 		_gh.remove_at(0)
 	if Game.peek_eye_aim:
@@ -1024,11 +1068,17 @@ func _score_pending(rd: float) -> void:
 ## HEAD <-> EYES. The head-tracked Peek is the default and is untouched when this is off.
 func toggle_peek_aim() -> void:
 	Game.peek_eye_aim = not Game.peek_eye_aim
+	if Game.peek_eye_aim and not GazeProvider.sweep_done and GazeProvider.backend == GazeProvider.Backend.CAMERA:
+		GazeProvider.start_sweep()          # first time on eyes: the four-second sweep
 	_eye_look = Vector2.ZERO
 	_eye_look_out = Vector2.ZERO
 	Game.peek_eye_look = Vector2.ZERO
 	AimStats.save()
 	Game.banner_requested.emit("AIM WITH YOUR EYES" if Game.peek_eye_aim else "AIM WITH YOUR HEAD", Color(0.5, 1.0, 0.7) if Game.peek_eye_aim else Color(1.0, 0.85, 0.4), 1.6)
+
+
+func _sweep_btn_rect(vs: Vector2) -> Rect2:
+	return Rect2(252.0, vs.y - 150.0, 150.0, 40.0)
 
 
 func _aim_btn_rect(vs: Vector2) -> Rect2:
@@ -1040,19 +1090,31 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo:
 		var kc := (event as InputEventKey).keycode
+		if GazeProvider.sweep_active:
+			GazeProvider.cancel_sweep()
+			get_viewport().set_input_as_handled()
+			return
 		if kc == KEY_M:
 			toggle_peek_aim()
 		elif kc == KEY_K:
 			DisplayServer.clipboard_set(AimStats.report())
 			Game.banner_requested.emit("AIM NUMBERS COPIED", Color(0.8, 0.9, 1.0), 1.4)
+		elif kc == KEY_V:
+			GazeProvider.start_sweep()
 		return
 	var pos := Vector2.INF
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		pos = (event as InputEventMouseButton).position
 	elif event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
 		pos = (event as InputEventScreenTouch).position
-	if pos.is_finite() and _aim_btn_rect(get_viewport().get_visible_rect().size).has_point(pos):
+	if pos.is_finite() and GazeProvider.sweep_active:
+		GazeProvider.cancel_sweep()
+		get_viewport().set_input_as_handled()
+	elif pos.is_finite() and _aim_btn_rect(get_viewport().get_visible_rect().size).has_point(pos):
 		toggle_peek_aim()
+		get_viewport().set_input_as_handled()
+	elif pos.is_finite() and _sweep_btn_rect(get_viewport().get_visible_rect().size).has_point(pos):
+		GazeProvider.start_sweep()
 		get_viewport().set_input_as_handled()
 
 

@@ -23,6 +23,7 @@ signal winked(left: bool)
 signal mouth_opened
 signal brows_raised
 signal mode_changed(active: bool)
+signal sweep_changed(active: bool)          # a sweep calibration started / ended: a running game holds still while the dot goes round
 
 enum Backend { MOUSE, UDP, SCRIPTED, TOUCH, CAMERA }
 
@@ -215,6 +216,19 @@ var _calib: Vector2 = Vector2.ZERO
 var _last_packet_msec: int = -100000
 var _fx := OneEuro.new()
 var _fy := OneEuro.new()
+## The gaze point is filtered by a Kalman filter per axis (position + velocity, jumps recognised): steadier than One Euro when you
+## look at something, and it keeps gliding between the camera's 14 readings a second. ?nokalman goes back to One Euro to compare.
+var kal_on: bool = true
+var _kx := GazeKalman.new()
+var _ky := GazeKalman.new()
+var _kal_pending: bool = false
+## One-pass sweep calibration (EyeSweep): a dot glides round the screen, you follow it with your eyes.
+var sweep_active: bool = false
+var sweep_t: float = 0.0
+var sweep_done: bool = false           # a sweep has been fitted this session
+var sweep_note: String = ""
+var sweep_fit: Dictionary = {}
+var _sweep_samples: Array = []
 var _closed: bool = false
 var _close_t: float = 0.0
 var _last_blink_t: float = -10.0
@@ -231,11 +245,13 @@ var _brows_on: bool = false
 ## True during the short 'look at the centre of the screen' auto-calibration.
 var calibrating: bool:
 	get:
-		return cal_index >= 0
+		return cal_index >= 0 or sweep_active
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep tracking while a menu pauses the game
+	_load_opts()
+	add_child.call_deferred(GazeOptions.new())      # the in-game EYE OPTIONS panel (shows itself only in Peek and Downhill)
 	if OS.has_feature("web"):
 		var q := str(JavaScriptBridge.eval("window.location.search"))
 		if q.contains("flipyaw"):
@@ -244,6 +260,12 @@ func _ready() -> void:
 			_head_sign.y = -1.0
 		if q.contains("nopm"):
 			pm_on = false
+		if q.contains("nokalman"):
+			kal_on = false
+		if q.contains("bare"):
+			opts_bare()
+		if q.contains("tune"):
+			tune_request = true
 		if q.contains("headw="):
 			head_weight = clampf(float(q.split("headw=")[1].split("&")[0]), 0.0, 1.0)
 	_dfx.min_cutoff = 2.0
@@ -388,6 +410,7 @@ func ingest(d: Dictionary) -> void:
 		_update_nod()
 	_last_packet_msec = Time.get_ticks_msec()
 	if _frame_fresh:
+		_kal_pending = true
 		_pkt_times.append(_last_packet_msec)
 	while not _pkt_times.is_empty() and _last_packet_msec - _pkt_times[0] > 2000:
 		_pkt_times.remove_at(0)
@@ -573,8 +596,9 @@ func _input(event: InputEvent) -> void:
 			_head_sign.x = -_head_sign.x
 			Game.banner("Head left/right flipped", Color(0.7, 0.9, 1.0), 1.2)
 		KEY_K:
-			_head_sign.y = -_head_sign.y
-			Game.banner("Head up/down flipped", Color(0.7, 0.9, 1.0), 1.2)
+			if not Game.peek_mode:
+				_head_sign.y = -_head_sign.y
+				Game.banner("Head up/down flipped", Color(0.7, 0.9, 1.0), 1.2)
 		KEY_F8, KEY_C:
 			if active or Game.peek_mode or Game.downhill_mode or Game.gaze_test_mode:
 				recentre()
@@ -597,6 +621,7 @@ func _process(delta: float) -> void:
 	if not active and not Game.peek_mode and not Game.flight_mode and not (Game.trance_mode or Game.gaze_test_mode):
 		return
 	var rd := delta / maxf(Engine.time_scale, 0.05)
+	_health_tick(rd)
 	match backend:
 		Backend.MOUSE:
 			var vp := get_viewport().get_visible_rect().size
@@ -611,6 +636,10 @@ func _process(delta: float) -> void:
 				_poll_camera(rd)
 				if cal_index >= 0:
 					_calibrate_tick(rd)
+				if sweep_active:
+					sweep_t += rd
+					if sweep_t >= EyeSweep.duration() + 0.3:
+						_finish_sweep()
 			else:
 				_poll_udp()
 			if Time.get_ticks_msec() - _last_packet_msec > 1500:
@@ -626,7 +655,21 @@ func _process(delta: float) -> void:
 					c = _predict(_full)
 				elif _geo_ok and not _calibrated:
 					c = _geo_out
-				gaze = Vector2(_fx.filter(c.x, rd), _fy.filter(c.y, rd)).clamp(Vector2.ZERO, Vector2.ONE)
+				if kal_on:
+					var fresh_k := _kal_pending
+					_kal_pending = false
+					gaze = Vector2(_kx.step(c.x, rd, fresh_k), _ky.step(c.y, rd, fresh_k)).clamp(Vector2.ZERO, Vector2.ONE)
+				else:
+					gaze = Vector2(_fx.filter(c.x, rd), _fy.filter(c.y, rd)).clamp(Vector2.ZERO, Vector2.ONE)
+				if hold_on:
+					# fixation hold: small movements inside a dead zone are ignored, a bigger one drags the zone along, a jump moves it at once
+					var hd := gaze - _hold_pt
+					var hl := hd.length()
+					if hl > 0.16:
+						_hold_pt = gaze
+					elif hl > HOLD_R:
+						_hold_pt = gaze - hd / hl * HOLD_R
+					gaze = _hold_pt
 
 
 func _poll_udp() -> void:
@@ -801,6 +844,491 @@ func start_calibration() -> void:
 	_cal_samples = []
 	for i in CAL_POINTS.size():
 		_cal_samples.append([])
+
+
+# --------------------------------------------------------------------------
+# Test switches (the in-game EYE OPTIONS panel): every layer between the eyes and the game can be turned off
+# --------------------------------------------------------------------------
+const OPT_FILE := "user://gaze_opts.cfg"
+const HOLD_R := 0.035
+var hold_on: bool = false
+var geo_win: int = 5                   # readings in the median that comes before everything else (1 = none)
+var opt_pick: int = 0                  # Downhill gate choice: 0 = the gate nearest your gaze within a tolerance (as before), 1 = gaze zones with hysteresis
+var gate_log: Array = []               # one entry per barrier passed in Downhill: where the gates were, where you looked, where you went
+var _hold_pt: Vector2 = Vector2(0.5, 0.5)
+var _sweep_lin: Array = []
+var tune_request: bool = false         # the panel (or ?tune) asks the Downhill rig to start a tuning session
+var tune_summary: Array = []
+var tune_trials: Array = []
+var auto_on: bool = false              # AUTO: keep testing the layers with lit gates while you play and switch to what works, plus the rules below
+var auto_log: Array = []
+## Frame capture for the camera-vs-decision analysis: OFF every time the page loads, switched on by the player in EYE OPTIONS. Each captured frame (a face crop, a small whole
+## frame and the tracker's numbers) goes to the local test server only, with what the game decided at that moment.
+var capture_on: bool = false
+var capture_n: int = 0
+const CAPTURE_MAX := 300
+var tune_phase: String = ""            # set by the rig: while a setting is being tested (explore / challenge) the AUTO rules keep their hands off
+var health: Dictionary = {}            # the latest health sample (every 5 s): frame rate, tracker rate, latency, jitter, how much of the screen the gaze covers
+var _h_ft := PackedFloat32Array()
+var _h_gx := PackedFloat32Array()
+var _h_gy := PackedFloat32Array()
+var _h_dr := PackedFloat32Array()
+var _h_do := PackedFloat32Array()
+var _h_prev_raw: Vector2 = Vector2.INF
+var _h_prev_out: Vector2 = Vector2.INF
+var _h_clock: float = 0.0
+var _h_samp: float = 0.0
+var _h_narrow: int = 0
+var _h_slow: int = 0
+var _h_note_t: float = -100.0
+
+
+## Frame rate, tracker rate, jitter and screen coverage, sampled continuously; a summary every 5 s goes into the report and, on the local test
+## server, into tools/tune_results.jsonl as it happens (so it can be watched while you play).
+func _health_tick(rd: float) -> void:
+	_h_ft.append(rd * 1000.0)
+	if _h_ft.size() > 300:
+		_h_ft.remove_at(0)
+	if backend == Backend.CAMERA:
+		_h_samp -= rd
+		if _h_samp <= 0.0:
+			_h_samp = 0.1
+			_h_gx.append(gaze.x)
+			_h_gy.append(gaze.y)
+			if _h_gx.size() > 200:
+				_h_gx.remove_at(0)
+				_h_gy.remove_at(0)
+			if _h_prev_raw.is_finite():
+				_h_dr.append(_last_g.distance_to(_h_prev_raw))
+				_h_do.append(gaze.distance_to(_h_prev_out))
+				if _h_dr.size() > 50:
+					_h_dr.remove_at(0)
+					_h_do.remove_at(0)
+			_h_prev_raw = _last_g
+			_h_prev_out = gaze
+	_h_clock += rd
+	if _h_clock >= 5.0:
+		_h_clock = 0.0
+		_health_sample()
+
+
+func _quiet_mean(a: PackedFloat32Array) -> float:
+	if a.size() < 8:
+		return -1.0
+	var b := a.duplicate()
+	b.sort()
+	var t := 0.0
+	var n := int(float(b.size()) * 0.7)
+	for i in n:
+		t += b[i]
+	return t / maxf(n, 1.0)
+
+
+func _pctl(a: PackedFloat32Array, q: float) -> float:
+	if a.is_empty():
+		return 0.0
+	var b := a.duplicate()
+	b.sort()
+	return b[clampi(int(float(b.size()) * q), 0, b.size() - 1)]
+
+
+func _health_sample() -> void:
+	var span := Vector2(_pctl(_h_gx, 0.95) - _pctl(_h_gx, 0.05), _pctl(_h_gy, 0.95) - _pctl(_h_gy, 0.05))
+	health = {"gameFps": int(Engine.get_frames_per_second()), "frameP95ms": snappedf(_pctl(_h_ft, 0.95), 0.1), "trackerFps": snappedf(float(_pkt_times.size()) / 2.0, 0.1),
+		"latencyMs": int(trk_lat_ms), "modelMs": int(trk_inf_ms), "confidence": snappedf(confidence, 0.01), "face": snappedf(face_size, 0.01),
+		"jitterRaw": snappedf(_quiet_mean(_h_dr), 0.001), "jitterOut": snappedf(_quiet_mean(_h_do), 0.001), "spanX": snappedf(span.x, 0.01), "spanY": snappedf(span.y, 0.01),
+		"device": device_tag(), "view": [int(get_viewport().get_visible_rect().size.x), int(get_viewport().get_visible_rect().size.y)], "camera": cam_label(), "mode": "downhill" if Game.downhill_mode else ("peek" if Game.peek_mode else "other"), "eyeAim": Game.peek_eye_aim, "gaze": [snappedf(gaze.x, 0.01), snappedf(gaze.y, 0.01)], "eyeLook": [snappedf(Game.peek_eye_look.x, 0.01), snappedf(Game.peek_eye_look.y, 0.01)], "offset": [snappedf(bias.bias.x, 0.01), snappedf(bias.bias.y, 0.01)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01)], "locked": bias.cal_locked, "kalman": kal_on, "hold": hold_on, "median": geo_win, "pick": opt_pick, "auto": auto_on}
+	if backend == Backend.CAMERA:
+		post_stream("health", health)
+		if auto_on:
+			_auto_rules()
+
+
+## Who is testing, which visit, and on what: every logged line carries all three, so sessions from different people and devices never mix.
+## The tester name comes from ?who=name (remembered in the browser afterwards) or the box in EYE OPTIONS. The session id is new on every page load.
+var tester: String = ""
+var session_id: String = ""
+var hw: Dictionary = {}
+var device: String = ""
+
+
+func tester_name() -> String:
+	if tester != "":
+		return tester
+	var n := ""
+	if OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("new URLSearchParams(location.search).get('who') || ''"))
+		if q != "":
+			n = q
+			JavaScriptBridge.eval("try{localStorage.setItem('gazelab_who'," + JSON.stringify(q) + ")}catch(e){}")
+		else:
+			n = str(JavaScriptBridge.eval("(function(){try{return localStorage.getItem('gazelab_who')||''}catch(e){return ''}})()"))
+	tester = _clean_name(n) if n != "" else "unnamed"
+	return tester
+
+
+func _clean_name(n: String) -> String:
+	var out := ""
+	for ch in n.strip_edges().to_lower():
+		if (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9") or ch == "-" or ch == "_":
+			out += ch
+	return out.substr(0, 24) if out != "" else "unnamed"
+
+
+func set_tester(n: String) -> void:
+	tester = _clean_name(n)
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("try{localStorage.setItem('gazelab_who'," + JSON.stringify(tester) + ")}catch(e){}")
+
+
+func session() -> String:
+	if session_id == "":
+		session_id = "%06x" % (randi() % 0xFFFFFF)
+	return session_id
+
+
+## The hardware, once per page load: browser and OS, screen, cores, memory, the graphics chip, touch.
+func hw_info() -> Dictionary:
+	if not hw.is_empty():
+		return hw
+	hw = {"web": false}
+	if OS.has_feature("web"):
+		var j := str(JavaScriptBridge.eval("(function(){var o={};try{o.ua=navigator.userAgent.slice(0,200);o.platform=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||'';o.mobile=!!(navigator.userAgentData&&navigator.userAgentData.mobile);o.brands=((navigator.userAgentData&&navigator.userAgentData.brands)||[]).map(function(b){return b.brand+' '+b.version}).join(', ');o.cores=navigator.hardwareConcurrency||0;o.mem=navigator.deviceMemory||0;o.dpr=window.devicePixelRatio||1;o.screen=[screen.width,screen.height];o.touch=navigator.maxTouchPoints||0;var c=document.createElement('canvas'),g=c.getContext('webgl'),e=g&&g.getExtension('WEBGL_debug_renderer_info');o.gpu=e?g.getParameter(e.UNMASKED_RENDERER_WEBGL):'';}catch(x){}return JSON.stringify(o)})()"))
+		var p: Variant = JSON.parse_string(j)
+		if p is Dictionary:
+			hw = p
+			hw["web"] = true
+	return hw
+
+
+func hw_short() -> String:
+	var h := hw_info()
+	return "%s | %s cores | %s GB | %s" % [str(h.get("platform", "?")), str(h.get("cores", "?")), str(h.get("mem", "?")), str(h.get("gpu", "?")).substr(0, 60)]
+
+
+func device_tag() -> String:
+	if device != "":
+		return device
+	var touch := Game.touch_mode
+	if OS.has_feature("web"):
+		touch = touch or bool(JavaScriptBridge.eval("(navigator.maxTouchPoints > 0 && matchMedia('(pointer: coarse)').matches)"))
+	device = "mobile" if touch else "desktop"
+	return device
+
+
+## The cameras the browser knows ([{id, label}], names only once a camera is allowed), the one in use, and a switch to the next one.
+func cam_list() -> Array:
+	if not OS.has_feature("web"):
+		return []
+	var p: Variant = JSON.parse_string(str(JavaScriptBridge.eval("JSON.stringify(window.__gazeCams || [])")))
+	return p if p is Array else []
+
+
+func cam_label() -> String:
+	if not OS.has_feature("web"):
+		return "(web build only)"
+	var l := str(JavaScriptBridge.eval("window.__gazeCamLabel || ''"))
+	return l if l != "" else "(not started)"
+
+
+func cam_next() -> bool:
+	var cams := cam_list()
+	if cams.size() < 2:
+		return false
+	var cur := cam_label()
+	var idx := 0
+	for i in cams.size():
+		if String((cams[i] as Dictionary).get("label", "")) == cur:
+			idx = i
+	var nxt: Dictionary = cams[(idx + 1) % cams.size()]
+	camera_status = "switching camera"
+	JavaScriptBridge.eval("window.__gazeUseCam(" + JSON.stringify(String(nxt.get("id", ""))) + ")")
+	return true
+
+
+func capture_frame(tag: String, meta: Dictionary) -> void:
+	if not capture_on or capture_n >= CAPTURE_MAX or not OS.has_feature("web"):
+		return
+	capture_n += 1
+	var m := meta.duplicate()
+	m["tag"] = tag
+	m["device"] = device_tag()
+	m["who"] = tester_name()
+	m["sid"] = session()
+	m["gaze"] = [snappedf(gaze.x, 0.001), snappedf(gaze.y, 0.001)]
+	m["opts"] = {"kalman": kal_on, "hold": hold_on, "median": geo_win, "stretch": bias.stretch_on, "learn": bias.learn_on, "pick": opt_pick, "locked": bias.cal_locked}
+	m["offset"] = [snappedf(bias.bias.x, 0.001), snappedf(bias.bias.y, 0.001)]
+	m["scale"] = [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01)]
+	m["t"] = snappedf(float(Time.get_ticks_msec()) / 1000.0, 0.1)
+	var vsz := get_viewport().get_visible_rect().size
+	m["view"] = [int(vsz.x), int(vsz.y)]
+	JavaScriptBridge.eval("(function(){if(!(location.hostname==='localhost'||location.port==='8443'))return;var s=window.__gazeSnap&&window.__gazeSnap();if(!s)return;fetch('/frame',{method:'POST',body:JSON.stringify({meta:JSON.parse(" + JSON.stringify(JSON.stringify(m)) + "),snap:s})}).catch(function(){});})()")
+
+
+func post_stream(kind: String, d: Dictionary) -> void:
+	if not OS.has_feature("web"):
+		return
+	var o := d.duplicate()
+	o["device"] = device_tag()
+	o["who"] = tester_name()
+	o["sid"] = session()
+	if kind == "health":
+		o["hw"] = hw_info()
+	o["kind"] = kind
+	o["t"] = snappedf(float(Time.get_ticks_msec()) / 1000.0, 0.1)
+	JavaScriptBridge.eval("if(location.hostname==='localhost'||location.port==='8443'){fetch('/tune',{method:'POST',body:" + JSON.stringify(JSON.stringify(o)) + "}).catch(function(){})}")
+
+
+func _auto_say(msg: String, banner: bool = true) -> void:
+	auto_log.append(msg)
+	while auto_log.size() > 30:
+		auto_log.remove_at(0)
+	post_stream("auto", {"msg": msg})
+	if banner:
+		Game.banner("AUTO: " + msg, Color(0.6, 0.9, 1.0), 3.0)
+
+
+## The rules AUTO applies on top of the lit-gate testing, each one small and reversible (every change is announced and logged).
+func _auto_rules() -> void:
+	if tune_phase == "explore" or tune_phase == "challenge":
+		return
+	var h := health
+	var tf := float(h["trackerFps"])
+	if tf > 0.0 and tf < 9.0 and geo_win > 3:
+		opt_set("median", 3)
+		_auto_say("tracker only %.0f readings a second: median window cut to 3 to cut the delay" % tf)
+	elif tf >= 13.0 and geo_win == 3 and int(h["gameFps"]) > 40:
+		opt_set("median", 5)
+		_auto_say("tracker back to %.0f readings a second: median window back to 5" % tf, false)
+	var jo := float(h["jitterOut"])
+	if jo > 0.022 and not hold_on:
+		opt_set("hold", true)
+		_auto_say("gaze point jitters (%.1f%% of the screen between samples): fixation hold on" % (jo * 100.0))
+	elif jo >= 0.0 and jo < 0.007 and hold_on:
+		opt_set("hold", false)
+		_auto_say("gaze point is steady (%.1f%%): fixation hold off, it only adds lag" % (jo * 100.0), false)
+	if float(h["spanX"]) < 0.22 and Game.downhill_mode:
+		_h_narrow += 1
+	else:
+		_h_narrow = 0
+	if _h_narrow >= 3 and float(Time.get_ticks_msec()) / 1000.0 - _h_note_t > 90.0:
+		_h_note_t = float(Time.get_ticks_msec()) / 1000.0
+		_auto_say("your gaze covers only %d%% of the screen width: press SWEEP in EYE OPTIONS (or look further)" % int(float(h["spanX"]) * 100.0))
+	if int(h["gameFps"]) < 22:
+		_h_slow += 1
+	else:
+		_h_slow = 0
+	if _h_slow == 3:
+		_auto_say("game at %d fps (frame p95 %.0f ms): the quality tier controller should step down" % [int(h["gameFps"]), float(h["frameP95ms"])], false)
+
+
+func opt_defs() -> Array:
+	return [["auto", "AUTO-tune (lit gates + rules)"], ["kalman", "Kalman filter"], ["stab", "Phone-motion stabiliser"], ["stretch", "Spread stretching"], ["learn", "Auto offset learning"],
+		["hold", "Fixation hold (dead zone)"], ["median", "Median window"], ["headw", "Head weight"], ["pick", "Gate pick (Downhill)"]]
+
+
+func opt_value(key: String) -> Variant:
+	match key:
+		"auto":
+			return auto_on
+		"kalman":
+			return kal_on
+		"stab":
+			return pm_on
+		"stretch":
+			return bias.stretch_on
+		"learn":
+			return bias.learn_on
+		"hold":
+			return hold_on
+		"median":
+			return geo_win
+		"headw":
+			return head_weight
+		"pick":
+			return opt_pick
+	return null
+
+
+func opt_label(key: String) -> String:
+	var v: Variant = opt_value(key)
+	if v is bool:
+		return "ON" if v else "off"
+	if key == "median":
+		return "none" if int(v) <= 1 else "%d readings" % int(v)
+	if key == "headw":
+		return "%d%%" % int(round(float(v) * 100.0))
+	if key == "pick":
+		return "gaze zones" if int(v) == 1 else "nearest in tolerance"
+	return str(v)
+
+
+func opt_set(key: String, v: Variant) -> void:
+	match key:
+		"auto":
+			auto_on = bool(v)
+		"kalman":
+			kal_on = bool(v)
+			_kx.reset()
+			_ky.reset()
+			_fx.reset()
+			_fy.reset()
+		"stab":
+			pm_on = bool(v)
+		"stretch":
+			bias.stretch_on = bool(v)
+		"learn":
+			bias.learn_on = bool(v)
+		"hold":
+			hold_on = bool(v)
+			_hold_pt = gaze
+		"median":
+			geo_win = clampi(int(v), 1, 9)
+			while _geo_buf.size() > geo_win:
+				_geo_buf.remove_at(0)
+		"headw":
+			head_weight = clampf(float(v), 0.0, 1.0)
+		"pick":
+			opt_pick = int(v)
+	_save_opts()
+
+
+func opt_next(key: String) -> void:
+	var v: Variant = opt_value(key)
+	if v is bool:
+		opt_set(key, not v)
+	elif key == "median":
+		var cyc := [1, 3, 5]
+		opt_set(key, cyc[(cyc.find(int(v)) + 1) % cyc.size()])
+	elif key == "headw":
+		var cw := [0.0, 0.12, 0.3, 0.5]
+		var bi := 0
+		for i in cw.size():
+			if absf(float(cw[i]) - float(v)) < absf(float(cw[bi]) - float(v)):
+				bi = i
+		opt_set(key, cw[(bi + 1) % cw.size()])
+	elif key == "pick":
+		opt_set(key, 1 - int(v))
+
+
+func opts_default() -> void:
+	opt_set("kalman", true)
+	opt_set("stab", true)
+	opt_set("stretch", true)
+	opt_set("learn", true)
+	opt_set("hold", false)
+	opt_set("median", 5)
+	opt_set("headw", 0.12)
+	opt_set("pick", 0)
+
+
+## Everything that helps is off: raw geometry gaze, no stretching, no learning, no filter, and the gate nearest where you look.
+func opts_bare() -> void:
+	opt_set("kalman", false)
+	opt_set("stab", false)
+	opt_set("stretch", false)
+	opt_set("learn", false)
+	opt_set("hold", false)
+	opt_set("median", 1)
+	opt_set("pick", 1)
+
+
+func opts_changed() -> bool:
+	return not (kal_on and pm_on and bias.stretch_on and bias.learn_on and not hold_on and geo_win == 5 and absf(head_weight - 0.12) < 0.001 and opt_pick == 0)
+
+
+func _save_opts() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var cf := ConfigFile.new()
+	for d: Array in opt_defs():
+		cf.set_value("opts", d[0], opt_value(d[0]))
+	cf.save(OPT_FILE)
+
+
+func _load_opts() -> void:
+	var cf := ConfigFile.new()
+	if cf.load(OPT_FILE) != OK:
+		return
+	for d: Array in opt_defs():
+		if cf.has_section_key("opts", d[0]):
+			var key: String = d[0]
+			var v: Variant = cf.get_value("opts", key)
+			match key:
+				"auto":
+					auto_on = bool(v)
+				"kalman":
+					kal_on = bool(v)
+				"stab":
+					pm_on = bool(v)
+				"stretch":
+					bias.stretch_on = bool(v)
+				"learn":
+					bias.learn_on = bool(v)
+				"hold":
+					hold_on = bool(v)
+				"median":
+					geo_win = clampi(int(v), 1, 9)
+				"headw":
+					head_weight = clampf(float(v), 0.0, 1.0)
+				"pick":
+					opt_pick = int(v)
+
+
+## After a Downhill run resets the gaze correction: put the sweep's measured map back.
+func reapply_sweep() -> void:
+	if sweep_done and _sweep_lin.size() == 4:
+		bias.set_linear(float(_sweep_lin[0]), float(_sweep_lin[1]), float(_sweep_lin[2]), float(_sweep_lin[3]))
+
+
+## For the run report / the COPY LOG button: which layers were on, what the correction looked like, and the last barriers.
+func options_report() -> Dictionary:
+	var sw: Dictionary = {}
+	if not sweep_fit.is_empty():
+		sw = {"ok": sweep_fit.get("ok", false), "scaleX": snappedf(float(sweep_fit.get("sx", 0.0)), 0.01), "scaleY": snappedf(float(sweep_fit.get("sy", 0.0)), 0.01), "lag": sweep_fit.get("lag", 0.0), "n": sweep_fit.get("n", 0), "note": sweep_note}
+		if sweep_fit.has("rms"):
+			sw["miss"] = [snappedf((sweep_fit["rms"] as Vector2).x, 0.001), snappedf((sweep_fit["rms"] as Vector2).y, 0.001)]
+	return {"kalman": kal_on, "stabiliser": pm_on, "stretch": bias.stretch_on, "learn": bias.learn_on, "hold": hold_on, "median": geo_win, "headWeight": head_weight, "pick": ["nearest", "zones"][opt_pick],
+		"offset": [snappedf(bias.bias.x, 0.001), snappedf(bias.bias.y, 0.001)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01), snappedf(bias.scale_lo.y, 0.01), snappedf(bias.scale_hi.y, 0.01)],
+		"who": tester_name(), "sid": session(), "device": device_tag(), "hw": hw_info(), "calLocked": bias.cal_locked, "sweep": sw, "kalmanJumps": _kx.jumps, "gateLog": gate_log.slice(maxi(gate_log.size() - 40, 0)), "tune": tune_summary, "tuneTrials": tune_trials, "auto": auto_on, "autoLog": auto_log, "health": health}
+
+
+## Start the one-pass sweep: a dot glides round the screen for about four seconds. Needs the geometry gaze (the camera path).
+func start_sweep() -> bool:
+	if backend != Backend.CAMERA or not _geo_limb:
+		sweep_note = "needs the camera tracker"
+		return false
+	sweep_active = true
+	sweep_t = -EyeSweep.LEAD
+	_sweep_samples = []
+	sweep_note = ""
+	sweep_changed.emit(true)
+	return true
+
+
+func cancel_sweep() -> void:
+	if sweep_active:
+		sweep_active = false
+		sweep_note = "skipped"
+		sweep_changed.emit(false)
+
+
+func _finish_sweep() -> void:
+	sweep_active = false
+	sweep_changed.emit(false)
+	sweep_fit = EyeSweep.fit(_sweep_samples)
+	if bool(sweep_fit["ok"]):
+		bias.set_linear(float(sweep_fit["ax"]), float(sweep_fit["sx"]), float(sweep_fit["ay"]), float(sweep_fit["sy"]))
+		_sweep_lin = [float(sweep_fit["ax"]), float(sweep_fit["sx"]), float(sweep_fit["ay"]), float(sweep_fit["sy"])]
+		sweep_done = true
+		_kx.reset()
+		_ky.reset()
+		var rms: Vector2 = sweep_fit["rms"]
+		sweep_note = "calibrated, typical miss %d%% of the screen" % int(round(maxf(rms.x, rms.y) * 100.0))
+		Game.banner(sweep_note, Color(0.5, 1.0, 0.6), 2.5)
+	else:
+		sweep_note = String(sweep_fit.get("why", "failed"))
+		Game.banner("Sweep did not take: " + sweep_note, Color(1.0, 0.7, 0.3), 3.5)
 
 
 func _calibrate_tick(rd: float) -> void:
@@ -1082,9 +1610,11 @@ func _geo_push(g: Vector2, openness: float = 0.0, head: Vector2 = Vector2.INF) -
 	if has_head:
 		_last_hd = head
 	_geo_buf.append(Vector3(g.x, g.y, openness))
+	if sweep_active and sweep_t >= 0.0 and maxf(dbg_l, dbg_r) < 0.22:
+		_sweep_samples.append([sweep_t, g.x, g.y])
 	if has_head:
 		_hbuf.append(head)
-	if _geo_buf.size() > 5:
+	while _geo_buf.size() > geo_win:
 		_geo_buf.remove_at(0)
 	if _hbuf.size() > 7:
 		_hbuf.remove_at(0)

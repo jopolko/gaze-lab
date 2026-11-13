@@ -525,6 +525,24 @@ const MAIN := """
       } catch (e) { window.__gazeWorkerError = String(e && e.message || e); fin(false); }
     });
   }
+  window.__gazeCams = [];
+  window.__gazeCamLabel = '';
+  window.__gazeListCams = async function () {
+    try {
+      const ds = await navigator.mediaDevices.enumerateDevices();
+      window.__gazeCams = ds.filter((d) => d.kind === 'videoinput').map((d, i) => ({ id: d.deviceId, label: d.label || ('camera ' + (i + 1)) }));
+    } catch (e) { window.__gazeCams = []; }
+    return window.__gazeCams;
+  };
+  try { navigator.mediaDevices.addEventListener('devicechange', () => { window.__gazeListCams(); }); } catch (e) {}
+  // Switch camera: remember the choice, release everything and start again on that camera.
+  window.__gazeUseCam = function (id) {
+    try { localStorage.setItem('gazelab_cam', id); } catch (e) {}
+    window.__gazeStatus = 'switching camera...';
+    stopAll();
+    window.__gazeRunning = false;
+    setTimeout(() => { window.__gazeStart(); }, 150);
+  };
   window.__gazeStart = async function () {
     if (window.__gazeRunning) return;
     window.__gazeRunning = true;
@@ -551,8 +569,20 @@ const MAIN := """
       worker = w;
       worker2 = w2;
       window.__gazeRunning = true;
-      const stream = window.__gazeStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', frameRate: { ideal: 30, max: 30 }, width: { ideal: Math.round((parseInt(qs.get('res')) || (coarseNow ? 720 : 1080)) * 16 / 9) }, height: { ideal: parseInt(qs.get('res')) || (coarseNow ? 720 : 1080) } }, audio: false });
+      let camId = '';
+      try { camId = localStorage.getItem('gazelab_cam') || ''; } catch (e) {}
+      const vq = { frameRate: { ideal: 30, max: 30 }, width: { ideal: Math.round((parseInt(qs.get('res')) || (coarseNow ? 720 : 1080)) * 16 / 9) }, height: { ideal: parseInt(qs.get('res')) || (coarseNow ? 720 : 1080) } };
+      let stream0 = null;
+      try { stream0 = await navigator.mediaDevices.getUserMedia({ video: camId ? Object.assign({ deviceId: { exact: camId } }, vq) : Object.assign({ facingMode: 'user' }, vq), audio: false }); }
+      catch (e) { stream0 = await navigator.mediaDevices.getUserMedia({ video: Object.assign({ facingMode: 'user' }, vq), audio: false }); }      // the saved camera is gone: whatever the browser picks
+      const stream = window.__gazeStream = stream0;
+      window.__gazeCamLabel = (stream.getVideoTracks()[0] || {}).label || '';
+      // which cameras exist (the names only appear once a camera is allowed). With no saved choice an external / USB camera is preferred over the built-in one.
+      await window.__gazeListCams();
+      if (!camId) {
+        const ext = (window.__gazeCams || []).find((c) => /usb|logi|brio|c9[0-9][0-9]|kiyo|elgato|obsbot|external/i.test(c.label));
+        if (ext && ext.label !== window.__gazeCamLabel) { window.__gazeUseCam(ext.id); return; }
+      }
       try { const ts = stream.getVideoTracks()[0].getSettings(); window.__gazeStats.vw = ts.width; window.__gazeStats.vh = ts.height; window.__gazeStats.cfps = ts.frameRate; } catch (e) {}
       if (qs.has('fast')) {
         // Dim rooms make auto-exposure pick ~60 ms shutters, which caps the camera near 15 fps. A short
@@ -602,6 +632,24 @@ const MAIN := """
         return rc;
       };
       const ORDER = [0, 90, 270, 180];
+      // A snapshot for the frame-capture test (opt-in, the player turns it on): a square crop around the face (the eyes in detail), a small copy of the whole frame, and the tracker's
+      // numbers for that frame. Raw camera orientation (not mirrored). Only ever sent to the local test server, never anywhere else.
+      window.__gazeSnap = () => {
+        try {
+          const src = srcFrame();
+          const W = src.videoWidth || src.width, H = src.videoHeight || src.height;
+          if (!W || !H) return null;
+          const g = window.__gaze || {};
+          const fx = g.nx !== undefined ? (1 - g.nx) * W : W / 2, fy = g.ny !== undefined ? g.ny * H : H / 2;
+          const side = Math.max(160, Math.min(H, (g.fw || 0.3) * W * 1.7));
+          const x0 = Math.min(Math.max(fx - side / 2, 0), W - side), y0 = Math.min(Math.max(fy - side / 2, 0), H - side);
+          const c1 = document.createElement('canvas'); c1.width = 480; c1.height = 480;
+          c1.getContext('2d').drawImage(src, x0, y0, side, side, 0, 0, 480, 480);
+          const c2 = document.createElement('canvas'); c2.width = 320; c2.height = Math.round(320 * H / W);
+          c2.getContext('2d').drawImage(src, 0, 0, W, H, 0, 0, c2.width, c2.height);
+          return { face: c1.toDataURL('image/jpeg', 0.82), full: c2.toDataURL('image/jpeg', 0.7), pkt: g, rot: rot, w: W, h: H, crop: [Math.round(x0), Math.round(y0), Math.round(side)] };
+        } catch (e) { return null; }
+      };
       setInterval(() => {
         if (!window.__gazeRunning) return;
         const g = window.__gaze, t = performance.now(), has = !!(g && g.conf > 0 && g.nx !== undefined);

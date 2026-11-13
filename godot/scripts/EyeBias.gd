@@ -35,6 +35,12 @@ var scale_lo: Vector2 = Vector2.ONE         # toward the left / top of the scree
 var scale_hi: Vector2 = Vector2.ONE         # toward the right / bottom
 var obs_span: Vector2 = Vector2.ZERO
 var saturated: bool = false          # the offset hit its limit: the signal is too far off to trust
+## After a sweep calibration the scale and offset come from measured pairs (eyes here, dot there): the spread-based stretching is
+## switched off (it would fight the measurement) and the silent offset learning slows to a quarter, so a settled posture drifts
+## gently instead of being pulled toward the middle.
+var cal_locked: bool = false
+var stretch_on: bool = true         # test switch: the spread-based stretching of each side of the screen
+var learn_on: bool = true           # test switch: the silent offset learning toward the screen centre
 
 var _u_buf: Array = []
 var _v_buf: Array = []
@@ -85,8 +91,11 @@ func _window_done() -> void:
 	var mp: float = EyeBias._median(ps)
 	var ma: float = EyeBias._median(aps)
 	windows_used += 1
+	if not learn_on:
+		_update_scale()
+		return
 	# horizontal: nudge the whole-window median toward the target
-	bias.x = clampf(bias.x + RATE * (target.x - (mu + bias.x)), -MAX_BIAS, MAX_BIAS)
+	bias.x = clampf(bias.x + RATE * (0.25 if cal_locked else 1.0) * (target.x - (mu + bias.x)), -MAX_BIAS, MAX_BIAS)
 	# vertical: collect what offset this window needed, then fit it against head pitch and aperture
 	_hist.append([target.y - mv, mp, ma])
 	if _hist.size() > 30:
@@ -103,7 +112,12 @@ func _pct(a: Array, q: float) -> float:
 
 
 func _update_scale() -> void:
-	if _u_buf.size() < 150:
+	if not stretch_on and not cal_locked:
+		scale_lo = Vector2.ONE
+		scale_hi = Vector2.ONE
+		scale = Vector2.ONE
+		return
+	if cal_locked or _u_buf.size() < 150:
 		return
 	var u5 := _pct(_u_buf, 0.05)
 	var u50 := _pct(_u_buf, 0.5)
@@ -129,7 +143,7 @@ func _fit_vertical() -> void:
 	var n := _hist.size()
 	if n < 3:
 		var cur: float = float(_hist[n - 1][0])
-		bias.y = clampf(bias.y + RATE * (cur - bias.y), -MAX_BIAS, MAX_BIAS)
+		bias.y = clampf(bias.y + RATE * (0.25 if cal_locked else 1.0) * (cur - bias.y), -MAX_BIAS, MAX_BIAS)
 		return
 	var mean_y := 0.0
 	var mean_p := 0.0
@@ -173,7 +187,7 @@ func _fit_vertical() -> void:
 			ka = 0.0
 	k_pitch = clampf(lerpf(k_pitch, kp, 0.3), -1.5, 1.5)
 	k_aper = clampf(lerpf(k_aper, ka, 0.3), -3.0, 3.0)
-	bias.y = clampf(lerpf(bias.y, mean_y, 0.35), -MAX_BIAS, MAX_BIAS)
+	bias.y = clampf(lerpf(bias.y, mean_y, 0.35 * (0.25 if cal_locked else 1.0)), -MAX_BIAS, MAX_BIAS)
 
 
 ## The corrected gaze point, always inside the screen.
@@ -196,7 +210,19 @@ func anchor(raw: Vector2, pitch: float, aperture: float, screen_pos: Vector2, we
 	_win.clear()
 
 
+## Take a measured map (screen = a + s * reading, per axis) from a sweep calibration.
+func set_linear(ax: float, sx: float, ay: float, sy: float) -> void:
+	scale_lo = Vector2(sx, sy)
+	scale_hi = Vector2(sx, sy)
+	scale = Vector2(sx, sy)
+	bias = Vector2(target.x + (ax - target.x) / sx, target.y + (ay - target.y) / sy)
+	cal_locked = true
+	saturated = false
+	_win.clear()
+
+
 func reset() -> void:
+	cal_locked = false
 	bias = Vector2.ZERO
 	scale = Vector2.ONE
 	scale_lo = Vector2.ONE

@@ -253,6 +253,7 @@ func setup(p_player: PlayerController) -> void:
 	GazeProvider.bias.reset()
 	GazeProvider.coach.reset()
 	GazeProvider.bias.exp_span = Vector2.ZERO if lane_mode else Vector2(0.6, 0.0)      # lane mode: NO spread-based stretching (it multiplies noise by up to 3x when you hold your gaze on the middle)
+	GazeProvider.reapply_sweep()
 	_make_assets()
 	cam = Camera3D.new()
 	cam.fov = 70.0
@@ -2577,7 +2578,7 @@ func _pause_report() -> Dictionary:
 	return {"backend": GazeProvider.backend_name(), "trackerMode": (str(JavaScriptBridge.eval("window.__gazeMode || '?'")) if OS.has_feature("web") else "n/a"), "camera": GazeProvider.camera_status, "fps": snappedf(fps, 0.1), "gameFps": int(Engine.get_frames_per_second()), "latencyMs": int(GazeProvider.trk_lat_ms), "modelMs": int(GazeProvider.trk_inf_ms), "detectMs": int(GazeProvider.trk_det_ms), "delegate": GazeProvider.trk_delegate, "video": GazeProvider.trk_video, "faceCropPx": GazeProvider.trk_roi, "camFrames": GazeProvider.trk_cam_frames, "droppedFrames": GazeProvider.trk_dropped, "trackerFpsWhilePlaying": snappedf(_trk_play_fps, 0.1), "gazeStretch": [snappedf(GazeProvider.bias.scale_lo.x, 0.01), snappedf(GazeProvider.bias.scale_hi.x, 0.01)], "irisPx": snappedf(GazeProvider.limb_rad * 2.0, 0.1),
 		"confidence": snappedf(GazeProvider.confidence, 0.01), "gazeNoiseStd": snappedf(_stat_std, 0.001), "gazeRange": [snappedf(_stat_p5 - _gx_med, 0.001), snappedf(_stat_p95 - _gx_med, 0.001)],
 		"deadZone": snappedf(_zone, 0.001), "fixationNoise": snappedf(_noise_fix, 0.001), "zoneScale": snappedf(_zone_scale, 0.01), "offNow": snappedf(_off_now, 0.001), "headOff": snappedf(_head_off, 0.001), "headDeg": [snappedf(-rad_to_deg(GazeProvider.head_rpy.x), 0.1), snappedf(rad_to_deg(GazeProvider.head_rpy.y), 0.1), snappedf(-rad_to_deg(GazeProvider.head_rpy.z), 0.1)],
-		"eyesOpenRatio": snappedf(cs.open_ratio, 0.01), "headQuality": snappedf(cs.quality, 0.01), "lane": _lane, "control": ["gate", "side", "steer", "seek"][lane_ctl], "steer": snappedf(_steer_gaze, 0.01), "steerScale": snappedf(_steer_scale, 0.001), "reach": snappedf(reach, 0.01), "eyesOnly": eyes_only, "exFull": snappedf(_ex_full, 0.0001), "exNoise": snappedf(_ex_noise, 0.0001), "exSign": _ex_sign, "eihX": snappedf(GazeProvider.eih.x, 0.0001), "lookSmoothMs": int(look_smooth * 1000.0), "steerCurve": steer_curve, "steerRate": steer_rate, "steerRef": snappedf(_ref_x, 0.001), "directGaze": [snappedf(GazeProvider.direct.x, 0.001), snappedf(GazeProvider.direct.y, 0.001)], "refY": snappedf(_ref_y, 0.001), "steerArm": snappedf(_steer_arm, 0.01), "anchored": _anchored, "headAssist": head_assist, "coins": coins_got, "crashes": crashes, "rows": rows_passed}
+		"eyesOpenRatio": snappedf(cs.open_ratio, 0.01), "headQuality": snappedf(cs.quality, 0.01), "lane": _lane, "control": ["gate", "side", "steer", "seek"][lane_ctl], "steer": snappedf(_steer_gaze, 0.01), "steerScale": snappedf(_steer_scale, 0.001), "reach": snappedf(reach, 0.01), "eyesOnly": eyes_only, "exFull": snappedf(_ex_full, 0.0001), "exNoise": snappedf(_ex_noise, 0.0001), "exSign": _ex_sign, "eihX": snappedf(GazeProvider.eih.x, 0.0001), "lookSmoothMs": int(look_smooth * 1000.0), "steerCurve": steer_curve, "steerRate": steer_rate, "steerRef": snappedf(_ref_x, 0.001), "directGaze": [snappedf(GazeProvider.direct.x, 0.001), snappedf(GazeProvider.direct.y, 0.001)], "refY": snappedf(_ref_y, 0.001), "steerArm": snappedf(_steer_arm, 0.01), "anchored": _anchored, "headAssist": head_assist, "coins": coins_got, "crashes": crashes, "rows": rows_passed, "gaze": GazeProvider.options_report()}
 
 
 func _pause_action(id: String) -> void:
@@ -2601,6 +2602,7 @@ func _pause_action(id: String) -> void:
 		"reset":
 			GazeProvider.bias.reset()
 			GazeProvider.bias.exp_span = Vector2.ZERO if lane_mode else Vector2(0.6, 0.0)
+			GazeProvider.reapply_sweep()
 			GazeProvider.coach.reset()
 			_gx_hist.clear()
 			_gx_long.clear()

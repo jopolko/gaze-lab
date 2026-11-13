@@ -83,7 +83,7 @@ static func line(mode: String) -> String:
 
 
 static func report() -> String:
-	return JSON.stringify({"when": Time.get_datetime_string_from_system(), "touch": Game.touch_mode, "head": summary("head"), "eyes": summary("eyes")}, "  ")
+	return JSON.stringify({"when": Time.get_datetime_string_from_system(), "touch": Game.touch_mode, "head": summary("head"), "eyes": summary("eyes"), "gaze": GazeProvider.options_report()}, "  ")
 
 
 static func save() -> void:
