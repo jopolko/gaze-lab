@@ -634,6 +634,21 @@ const MAIN := """
       const ORDER = [0, 90, 270, 180];
       // A snapshot for the frame-capture test (opt-in, the player turns it on): a square crop around the face (the eyes in detail), a small copy of the whole frame, and the tracker's
       // numbers for that frame. Raw camera orientation (not mirrored). Only ever sent to the local test server, never anywhere else.
+      window.__gazeBright = () => {                                       // mean brightness of the camera picture, 0 (black) .. 255 (white)
+        try {
+          const c = document.createElement('canvas'); c.width = 16; c.height = 12;
+          const x = c.getContext('2d'); x.drawImage(v, 0, 0, 16, 12);
+          const d = x.getImageData(0, 0, 16, 12).data; let s = 0;
+          for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          return s / (d.length / 4);
+        } catch (e) { return -1; }
+      };
+      window.__gazeSetRes = async (h) => {                                // a different camera resolution without restarting the camera
+        try { await stream.getVideoTracks()[0].applyConstraints({ width: { ideal: Math.round(h * 16 / 9) }, height: { ideal: h } }); } catch (e) {}
+      };
+      window.__gazeExposure = async (fast) => {                           // a short fixed exposure keeps 30 fps in a dim room; false puts it back to automatic
+        try { await stream.getVideoTracks()[0].applyConstraints(fast ? { advanced: [{ exposureMode: 'manual', exposureTime: 150 }] } : { advanced: [{ exposureMode: 'continuous' }] }); } catch (e) {}
+      };
       window.__gazeSnap = () => {
         try {
           const src = srcFrame();
@@ -700,6 +715,9 @@ const MAIN := """
           if (inflight > 0 && now - busyAt > 3000) inflight = 0;         // a lost frame must not stall the tracker
           if (v.readyState >= 2 && v.currentTime !== last) { window.__gazeStats.cf++; if (inflight >= DEPTH) window.__gazeStats.drop++; }   // camera frames seen / dropped because the pipeline was full
           if (inflight >= DEPTH || v.readyState < 2 || v.currentTime === last) return;
+          const cap = window.__gazeCap || 0;                              // the tuner can hold the tracker to N readings a second so the game keeps its frame rate
+          if (cap > 0 && now - (window.__gazeLastSend || 0) < 1000 / cap - 3) return;
+          window.__gazeLastSend = now;
           last = v.currentTime; inflight++; busyAt = now;
           const SRC = srcFrame();
           const roi = qs.has('noroi') ? null : window.__gazeRoi;       // a crop around the face, from the previous packet (null: whole frame)

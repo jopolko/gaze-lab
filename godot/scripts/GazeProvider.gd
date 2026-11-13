@@ -251,6 +251,8 @@ var calibrating: bool:
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep tracking while a menu pauses the game
 	_load_opts()
+	if OS.has_feature("web"):
+		JavaScriptBridge.eval("try{fetch('/gaze-lab/profiles.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){window.__gazeFleet=j}).catch(function(){})}catch(e){}")
 	add_child.call_deferred(GazeOptions.new())      # the in-game EYE OPTIONS panel (shows itself only in Peek and Downhill)
 	if OS.has_feature("web"):
 		var q := str(JavaScriptBridge.eval("window.location.search"))
@@ -950,7 +952,8 @@ func _auto_sweep_check(rd: float) -> void:
 		_cam_good_t = 0.0
 	if sweep_active:
 		return
-	if doctor.sweep_wanted or (not sweep_done and not _sweep_tried and _cam_good_t > 4.0):
+	# never at the start: only when the stats show a tracking problem (the doctor asks), only once the player has been playing a while, and only once per visit by itself
+	if doctor.sweep_wanted and _cam_good_t > 20.0 and not _sweep_tried:
 		doctor.sweep_wanted = false
 		_sweep_tried = true
 		start_sweep()
@@ -986,7 +989,189 @@ func peek_fix_sample(err_pct: float) -> void:
 		doctor_event({"event": "action", "issue": "PEEK_GAZE_OFF", "evidence": {"median_error_pct": snappedf(med, 0.1), "windows": _pf_bad}, "action": what})
 
 
+# --------------------------------------------------------------------------
+# The load-time tuner (GazeTuner): camera exposure (only in a dim room), camera resolution and tracker rate, a few seconds per option, once per device
+# --------------------------------------------------------------------------
+const PROFILE_FILE := "user://gaze_profile.cfg"
+var tuner := GazeTuner.new()
+var tuner_state: String = "wait"          # wait -> running -> done
+var applied: Dictionary = {"cap": 0, "res": 0, "expo": "auto"}
+var tuning_flash: String = ""
+var tuning_flash_t: float = 0.0
+var _tn_baseline: float = -1.0
+var _tn_guard_t: float = 0.0
+var _tn_guard_bad: int = 0
+var _tn_cool: float = 0.0
+var _tn_ema: Dictionary = {"game": 0.0, "trk": 0.0, "lat": 0.0}
+var _sweep_bias0: Vector2 = Vector2.ZERO
+var _drift_n: int = 0
+var _drift_last: float = -1000.0
+var _h_shake: int = 0
+var _shake_hold: bool = false
+var _shake_prev_hold: bool = false
+
+
+func tuner_apply(key: String, v: Variant) -> void:
+	applied[key] = v
+	if not OS.has_feature("web"):
+		return
+	match key:
+		"cap":
+			JavaScriptBridge.eval("window.__gazeCap=%d" % int(v))
+		"res":
+			if int(v) > 0:
+				JavaScriptBridge.eval("window.__gazeSetRes&&window.__gazeSetRes(%d)" % int(v))
+		"expo":
+			JavaScriptBridge.eval("window.__gazeExposure&&window.__gazeExposure(%s)" % ("true" if str(v) == "fast" else "false"))
+
+
+## Which device this is (hardware + screen + camera): the saved tuning is per device and camera.
+func profile_key() -> String:
+	var h := hw_info()
+	return ("%s|%s|%s|%s|%s" % [h.get("platform", "?"), h.get("cores", "?"), str(h.get("gpu", "?")).substr(0, 40), str(h.get("screen", "?")), cam_label()]).md5_text().substr(0, 10)
+
+
+## A coarse class of hardware (for the fleet table built from everybody's logs).
+func hw_class() -> String:
+	var h := hw_info()
+	return "%s|%s|%s" % [h.get("platform", "?"), "touch" if int(h.get("touch", 0)) > 0 else "pointer", str(h.get("gpu", "?")).substr(0, 24)]
+
+
+func _tuner_metrics() -> Dictionary:
+	return {"game": float(Engine.get_frames_per_second()), "trk": float(_pkt_times.size()) / 2.0, "lat": maxf(trk_lat_ms, 0.0)}
+
+
+func _tuner_knobs() -> Array:
+	var ks: Array = []
+	var phone := device_tag() == "mobile"
+	if OS.has_feature("web"):
+		var br := float(JavaScriptBridge.eval("window.__gazeBright ? window.__gazeBright() : -1"))
+		if br >= 0.0 and br < 70.0:
+			ks.append({"id": "expo", "label": "camera exposure (dim room)", "options": [{"v": "auto", "label": "automatic"}, {"v": "fast", "label": "short fixed exposure"}]})
+	var ro: Array = [{"v": 0, "label": "as chosen"}, {"v": 480, "label": "480p"}] if phone else [{"v": 0, "label": "as chosen"}, {"v": 720, "label": "720p"}, {"v": 480, "label": "480p"}]
+	ks.append({"id": "res", "label": "camera resolution", "options": ro})
+	ks.append({"id": "cap", "label": "tracker rate", "options": [{"v": 0, "label": "as fast as it goes"}, {"v": 24, "label": "at most 24 a second"}, {"v": 18, "label": "at most 18 a second"}]})
+	return ks
+
+
+func _tuner_begin() -> void:
+	var cf := ConfigFile.new()
+	var key := profile_key()
+	if cf.load(PROFILE_FILE) == OK and cf.has_section(key):
+		for id in ["cap", "res", "expo"]:
+			if cf.has_section_key(key, id):
+				tuner_apply(id, cf.get_value(key, id))
+		_tn_baseline = float(cf.get_value(key, "score", -1.0))
+		tuner_state = "done"
+		_tn_guard_t = 0.0
+		tuning_flash = "settings for this device restored"
+		tuning_flash_t = 4.0
+		post_stream("tuner", {"event": "restored", "key": key, "class": hw_class(), "applied": applied})
+		return
+	var fleet: Variant = null
+	if OS.has_feature("web"):
+		fleet = JSON.parse_string(str(JavaScriptBridge.eval("JSON.stringify((window.__gazeFleet && window.__gazeFleet[" + JSON.stringify(hw_class()) + "]) || null)")))
+	if fleet is Dictionary:
+		for id in ["cap", "res", "expo"]:
+			if (fleet as Dictionary).has(id):
+				tuner_apply(id, (fleet as Dictionary)[id])
+		_tn_baseline = -1.0
+		tuner_state = "done"
+		_tn_guard_t = 0.0
+		tuning_flash = "starting from what worked on similar devices"
+		tuning_flash_t = 4.0
+		post_stream("tuner", {"event": "fleet", "key": key, "class": hw_class(), "applied": applied})
+		return
+	tuner.start(_tuner_knobs())
+	tuner_state = "running" if tuner.active else "done"
+	post_stream("tuner", {"event": "start", "key": key, "class": hw_class(), "hw": hw_short()})
+
+
+func _tuner_finish() -> void:
+	tuner_state = "done"
+	_tn_baseline = tuner.final_score
+	_tn_guard_t = 0.0
+	var cf := ConfigFile.new()
+	cf.load(PROFILE_FILE)
+	var key := profile_key()
+	for id in tuner.chosen:
+		cf.set_value(key, str(id), tuner.chosen[id])
+	cf.set_value(key, "score", tuner.final_score)
+	if DisplayServer.get_name() != "headless":
+		cf.save(PROFILE_FILE)
+	var parts: Array = []
+	for id in tuner.chosen:
+		parts.append("%s=%s" % [id, str(tuner.chosen[id])])
+	tuning_flash = "tuned for this device: " + ", ".join(parts)
+	tuning_flash_t = 5.0
+	post_stream("tuner", {"event": "done", "key": key, "class": hw_class(), "hw": hw_short(), "chosen": tuner.chosen, "score": snappedf(tuner.final_score, 0.001), "log": tuner.log})
+
+
+func _tuner_tick(rd: float) -> void:
+	tuning_flash_t = maxf(tuning_flash_t - rd, 0.0)
+	if not auto_on or backend != Backend.CAMERA:
+		return
+	_tn_cool = maxf(_tn_cool - rd, 0.0)
+	var m := _tuner_metrics()
+	for key in _tn_ema:
+		_tn_ema[key] = lerpf(float(_tn_ema[key]), float(m[key]), clampf(rd / 8.0, 0.0, 1.0))
+	if tuner_state == "wait":
+		if _cam_good_t > 6.0 and not sweep_active:
+			_tuner_begin()
+	elif tuner_state == "running":
+		if sweep_active:
+			return
+		var ev := tuner.tick(rd, m)
+		if not ev.is_empty():
+			if ev["event"] == "knob" or ev["event"] == "done":
+				post_stream("tuner", {"event": "knob", "knob": ev["knob"], "kept": ev["kept"], "score": snappedf(float(ev["score"]), 0.001), "default_score": snappedf(float(ev["default"]), 0.001)})
+				tuning_flash = "%s: kept '%s'" % [ev["knob"], ev["kept"]]
+				tuning_flash_t = 3.0
+			if ev["event"] == "done":
+				_tuner_finish()
+	elif tuner_state == "done":
+		# the heat / battery guard: if the machine is clearly slower than when it was tuned, tune again (at most every five minutes)
+		_tn_guard_t += rd
+		if _tn_guard_t >= 30.0:
+			_tn_guard_t = 0.0
+			var cur := GazeTuner.score(_tn_ema)
+			if _tn_baseline < 0.0:
+				_tn_baseline = cur
+			elif cur < _tn_baseline * 0.75:
+				_tn_guard_bad += 1
+			else:
+				_tn_guard_bad = 0
+			if _tn_guard_bad >= 2 and _tn_cool <= 0.0:
+				_tn_guard_bad = 0
+				_tn_cool = 300.0
+				tuner_state = "wait"
+				_cam_good_t = 7.0
+				tuning_flash = "the machine slowed down: tuning again"
+				tuning_flash_t = 4.0
+				post_stream("tuner", {"event": "retune", "score_now": snappedf(cur, 0.001), "baseline": snappedf(_tn_baseline, 0.001)})
+				var cf := ConfigFile.new()
+				if cf.load(PROFILE_FILE) == OK:
+					cf.erase_section(profile_key())
+					if DisplayServer.get_name() != "headless":
+						cf.save(PROFILE_FILE)
+
+
+## What the corner indicator says right now (empty: nothing is being tried).
+func tuning_text() -> Dictionary:
+	if tuner.active and tuner_state == "running":
+		var st := tuner.status()
+		if not st.is_empty():
+			return {"text": "TUNING  %s: %s" % [st["element"], st["option"]], "frac": 1.0 - float(st["left"]) / maxf(float(st["total"]), 0.01), "step": "%d / %d" % [int(st["step"]), int(st["steps"])]}
+	if not doctor.pending.is_empty():
+		var act: Dictionary = doctor.pending["action"]
+		return {"text": "CHECKING  %s" % str(act["label"]), "frac": float(doctor.pending["seen"]) / float(GazeDoctor.WIN), "step": "%d / %d barriers" % [int(doctor.pending["seen"]), GazeDoctor.WIN]}
+	if tuning_flash_t > 0.0:
+		return {"text": tuning_flash, "frac": -1.0, "step": ""}
+	return {}
+
+
 func _health_tick(rd: float) -> void:
+	_tuner_tick(rd)
 	_auto_sweep_check(rd)
 	var app_now := app_id()
 	if app_now != _app_last:
@@ -1240,6 +1425,32 @@ func _auto_rules() -> void:
 	elif tf >= 13.0 and geo_win == 3 and int(h["gameFps"]) > 40:
 		opt_set("median", 5)
 		_auto_say("tracker back to %.0f readings a second: median window back to 5" % tf, false)
+	# a shaking phone (bus, walking): steady the gaze point while it lasts, put it back after
+	if pm_on and pm.active and pm.shake > 0.35:
+		_h_shake += 1
+	else:
+		_h_shake = maxi(_h_shake - 1, 0)
+	if _h_shake >= 3 and not _shake_hold:
+		_shake_hold = true
+		_shake_prev_hold = hold_on
+		opt_set("hold", true)
+		_auto_say("the phone is shaking: gaze point steadied while it lasts")
+	elif _h_shake == 0 and _shake_hold:
+		_shake_hold = false
+		opt_set("hold", _shake_prev_hold)
+		_auto_say("steady again: back to normal", false)
+	# the player has shifted in their seat since the sweep: the learned offset has moved a long way, so measure again (at most every five minutes)
+	var now_s := float(Time.get_ticks_msec()) / 1000.0
+	if sweep_done and (bias.bias - _sweep_bias0).length() > 0.18:
+		_drift_n += 1
+	else:
+		_drift_n = 0
+	if _drift_n >= 3 and now_s - _drift_last > 300.0:
+		_drift_last = now_s
+		_drift_n = 0
+		_sweep_tried = false
+		doctor.sweep_wanted = true
+		_auto_say("seating has shifted since the calibration: one new sweep")
 	var jo := float(h["jitterOut"])
 	if jo > 0.022 and not hold_on:
 		opt_set("hold", true)
@@ -1253,7 +1464,11 @@ func _auto_rules() -> void:
 		_h_narrow = 0
 	if _h_narrow >= 3 and float(Time.get_ticks_msec()) / 1000.0 - _h_note_t > 90.0:
 		_h_note_t = float(Time.get_ticks_msec()) / 1000.0
-		_auto_say("your gaze covers only %d%% of the screen width: press SWEEP in EYE OPTIONS (or look further)" % int(float(h["spanX"]) * 100.0))
+		if not _sweep_tried and not sweep_done:
+			doctor.sweep_wanted = true
+			_auto_say("the gaze covers only %d%% of the screen width: one calibration sweep" % int(float(h["spanX"]) * 100.0))
+		else:
+			_auto_say("the gaze covers only %d%% of the screen width (SWEEP in EYE OPTIONS re-calibrates)" % int(float(h["spanX"]) * 100.0), false)
 	if int(h["gameFps"]) < 22:
 		_h_slow += 1
 	else:
@@ -1438,7 +1653,7 @@ func options_report() -> Dictionary:
 			sw["miss"] = [snappedf((sweep_fit["rms"] as Vector2).x, 0.001), snappedf((sweep_fit["rms"] as Vector2).y, 0.001)]
 	return {"kalman": kal_on, "stabiliser": pm_on, "stretch": bias.stretch_on, "learn": bias.learn_on, "hold": hold_on, "median": geo_win, "headWeight": head_weight, "pick": ["nearest", "zones"][opt_pick],
 		"offset": [snappedf(bias.bias.x, 0.001), snappedf(bias.bias.y, 0.001)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01), snappedf(bias.scale_lo.y, 0.01), snappedf(bias.scale_hi.y, 0.01)],
-		"who": tester_name(), "sid": session(), "device": device_tag(), "hw": hw_info(), "calLocked": bias.cal_locked, "sweep": sw, "kalmanJumps": _kx.jumps, "gateLog": gate_log.slice(maxi(gate_log.size() - 40, 0)), "tune": tune_summary, "tuneTrials": tune_trials, "auto": auto_on, "doctor": doctor.log, "doctorPending": str((doctor.pending.get("action", {}) as Dictionary).get("label", "")) if not doctor.pending.is_empty() else "", "params": {"linger": snappedf(p_linger, 0.01), "pull": snappedf(p_pull, 0.01), "carve": snappedf(p_carve, 0.01), "reach": snappedf(p_reach, 0.01)}, "autoLog": auto_log, "health": health}
+		"who": tester_name(), "sid": session(), "device": device_tag(), "hw": hw_info(), "calLocked": bias.cal_locked, "sweep": sw, "kalmanJumps": _kx.jumps, "gateLog": gate_log.slice(maxi(gate_log.size() - 40, 0)), "tuner": {"state": tuner_state, "applied": applied, "chosen": tuner.chosen, "log": tuner.log, "baseline": snappedf(_tn_baseline, 0.001)}, "tune": tune_summary, "tuneTrials": tune_trials, "auto": auto_on, "doctor": doctor.log, "doctorPending": str((doctor.pending.get("action", {}) as Dictionary).get("label", "")) if not doctor.pending.is_empty() else "", "params": {"linger": snappedf(p_linger, 0.01), "pull": snappedf(p_pull, 0.01), "carve": snappedf(p_carve, 0.01), "reach": snappedf(p_reach, 0.01)}, "autoLog": auto_log, "health": health}
 
 
 ## Start the one-pass sweep: a dot glides round the screen for about four seconds. Needs the geometry gaze (the camera path).
@@ -1468,6 +1683,7 @@ func _finish_sweep() -> void:
 	if bool(sweep_fit["ok"]):
 		bias.set_linear(float(sweep_fit["ax"]), float(sweep_fit["sx"]), float(sweep_fit["ay"]), float(sweep_fit["sy"]))
 		_sweep_lin = [float(sweep_fit["ax"]), float(sweep_fit["sx"]), float(sweep_fit["ay"]), float(sweep_fit["sy"])]
+		_sweep_bias0 = bias.bias
 		sweep_done = true
 		_kx.reset()
 		_ky.reset()

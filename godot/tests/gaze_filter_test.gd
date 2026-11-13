@@ -285,5 +285,29 @@ func _ready() -> void:
 	GazeProvider.opts_default()
 	GazeProvider.p_pull = 0.22
 
+	# ---- the load-time tuner: a few seconds per option, keep the best, the default unless another is clearly better
+	GazeProvider.applied = {"cap": 0, "res": 0, "expo": "auto"}
+	var tu := GazeTuner.new()
+	tu.start([{"id": "cap", "label": "tracker rate", "options": [{"v": 0, "label": "as fast as it goes"}, {"v": 24, "label": "at most 24 a second"}, {"v": 18, "label": "at most 18 a second"}]}])
+	var guard := 0
+	while tu.active and guard < 4000:
+		guard += 1
+		var capv := int(GazeProvider.applied["cap"])
+		tu.tick(0.1, {"game": 55.0 if capv == 24 else (30.0 if capv == 0 else 45.0), "trk": 21.0 if capv == 24 else (28.0 if capv == 0 else 16.0), "lat": 60.0})
+	_check(tu.done and int(tu.chosen["cap"]) == 24 and tu.log.size() == 3, "the tuner tries each option and keeps the one where game and tracker are both smooth (kept %s, %d trials, %.1f s each)" % [str(tu.chosen.get("cap")), tu.log.size(), GazeTuner.SETTLE + GazeTuner.WINDOW])
+	GazeProvider.applied = {"cap": 0, "res": 0, "expo": "auto"}
+	var tu2 := GazeTuner.new()
+	tu2.start([{"id": "res", "label": "camera resolution", "options": [{"v": 0, "label": "as chosen"}, {"v": 720, "label": "720p"}]}])
+	guard = 0
+	while tu2.active and guard < 4000:
+		guard += 1
+		tu2.tick(0.1, {"game": 50.0, "trk": 20.0 if int(GazeProvider.applied["res"]) == 0 else 20.4, "lat": 60.0})
+	_check(tu2.done and int(tu2.chosen["res"]) == 0, "when options are about equal the default stays (no hopping on noise)")
+	_check(absf(GazeTuner.score({"game": 50.0, "trk": 20.0, "lat": 60.0}) - 1.0) < 0.001 and GazeTuner.score({"game": 25.0, "trk": 10.0, "lat": 400.0}) < 0.3, "the score is 1 when both are smooth and falls with a slow game, slow tracker or long delay")
+	GazeProvider.applied = {"cap": 0, "res": 0, "expo": "auto"}
+	GazeProvider.tuner_state = "wait"
+	var tk := GazeProvider.tuning_text()
+	_check(tk.is_empty() or str(tk.get("text", "")) != "", "the corner indicator has something to say only while something is being tried")
+
 	print("RESULT: " + ("ALL PASSED" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit(1 if _fails > 0 else 0)

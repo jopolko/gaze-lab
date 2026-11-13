@@ -15,6 +15,10 @@ var _share_btn: Button
 var _who_box: LineEdit
 var _note_box: LineEdit
 var _sweep_ui: Control
+var _pill: PanelContainer
+var _pill_label: Label
+var _pill_bar: ProgressBar
+var _pill_step: Label
 var _consent: PanelContainer
 var _was_paused: bool = false
 var _t: float = 0.0
@@ -89,6 +93,36 @@ func _build() -> void:
 	no.pressed.connect(func() -> void:
 		GazeProvider.set_share(false)
 		_consent.visible = false)
+	_pill = PanelContainer.new()
+	_pill.add_theme_stylebox_override("panel", _style(Color(0.03, 0.05, 0.12, 0.82)))
+	_pill.anchor_left = 0.5
+	_pill.anchor_right = 0.5
+	_pill.offset_left = -230.0
+	_pill.offset_right = 230.0
+	_pill.offset_top = 10.0
+	_pill.offset_bottom = 66.0
+	_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pill.visible = false
+	add_child(_pill)
+	var pv := VBoxContainer.new()
+	pv.add_theme_constant_override("separation", 3)
+	_pill.add_child(pv)
+	var prow := HBoxContainer.new()
+	pv.add_child(prow)
+	_pill_label = Label.new()
+	_pill_label.add_theme_font_size_override("font_size", 16)
+	_pill_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pill_label.clip_text = true
+	prow.add_child(_pill_label)
+	_pill_step = Label.new()
+	_pill_step.add_theme_font_size_override("font_size", 14)
+	_pill_step.modulate = Color(1, 1, 1, 0.6)
+	prow.add_child(_pill_step)
+	_pill_bar = ProgressBar.new()
+	_pill_bar.show_percentage = false
+	_pill_bar.custom_minimum_size = Vector2(0, 6)
+	_pill_bar.max_value = 1.0
+	pv.add_child(_pill_bar)
 	_sweep_ui = Control.new()
 	_sweep_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_sweep_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -323,6 +357,13 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	var tt := GazeProvider.tuning_text()
+	_pill.visible = not tt.is_empty() and not GazeProvider.sweep_active and (Game.downhill_mode or Game.peek_mode or Game.flight_mode or Game.trance_mode or Game.gaze_test_mode)
+	if _pill.visible:
+		_pill_label.text = str(tt["text"])
+		_pill_step.text = str(tt["step"])
+		_pill_bar.visible = float(tt["frac"]) >= 0.0
+		_pill_bar.value = clampf(float(tt["frac"]), 0.0, 1.0)
 	_consent.visible = GazeProvider.consent_needed() and not GazeProvider.sweep_active
 	_sweep_ui.visible = GazeProvider.sweep_active
 	if _sweep_ui.visible:
