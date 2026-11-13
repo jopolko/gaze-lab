@@ -11,9 +11,12 @@ var _info: Label
 var _note: Label
 var _cam_btn: Button
 var _cap_btn: Button
+var _share_btn: Button
 var _who_box: LineEdit
 var _note_box: LineEdit
 var _sweep_ui: Control
+var _consent: PanelContainer
+var _was_paused: bool = false
 var _t: float = 0.0
 var _built: bool = false
 
@@ -50,6 +53,42 @@ func _mk_button(text: String, parent: Node, fs: int = 18) -> Button:
 
 
 func _build() -> void:
+	GazeProvider.sweep_changed.connect(_on_sweep_any)
+	_consent = PanelContainer.new()
+	_consent.add_theme_stylebox_override("panel", _style(Color(0.03, 0.05, 0.1, 0.94)))
+	_consent.anchor_left = 0.5
+	_consent.anchor_right = 0.5
+	_consent.anchor_top = 1.0
+	_consent.anchor_bottom = 1.0
+	_consent.offset_left = -330.0
+	_consent.offset_right = 330.0
+	_consent.offset_top = -150.0
+	_consent.offset_bottom = -14.0
+	_consent.visible = false
+	add_child(_consent)
+	var cvb := VBoxContainer.new()
+	cvb.add_theme_constant_override("separation", 8)
+	_consent.add_child(cvb)
+	var cl := Label.new()
+	cl.text = "Help improve eye tracking? Share anonymous performance numbers (speed, tracking quality, which gate you picked). No camera images, no video, no name."
+	cl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cl.add_theme_font_size_override("font_size", 17)
+	cvb.add_child(cl)
+	var crow := HBoxContainer.new()
+	crow.add_theme_constant_override("separation", 10)
+	cvb.add_child(crow)
+	var yes := _mk_button("Share numbers", crow, 17)
+	yes.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	yes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	yes.pressed.connect(func() -> void:
+		GazeProvider.set_share(true)
+		_consent.visible = false)
+	var no := _mk_button("No thanks", crow, 17)
+	no.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	no.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	no.pressed.connect(func() -> void:
+		GazeProvider.set_share(false)
+		_consent.visible = false)
 	_sweep_ui = Control.new()
 	_sweep_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_sweep_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -129,6 +168,10 @@ func _build() -> void:
 		_note_box.text = ""
 		_note_box.release_focus())
 	vb.add_child(_note_box)
+	_share_btn = _mk_button("", vb, 15)
+	_share_btn.pressed.connect(func() -> void:
+		GazeProvider.set_share(GazeProvider.share_state != "1")
+		_refresh())
 	_cap_btn = _mk_button("", vb, 15)
 	_cap_btn.pressed.connect(_on_cap)
 	_cam_btn = _mk_button("Camera: ?", vb, 15)
@@ -175,6 +218,15 @@ func _draw_sweep_ui() -> void:
 	var sub := "keep your head still, only your eyes move   (tap or press a key to skip)"
 	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
 	_sweep_ui.draw_string(font, Vector2(sz.x * 0.5 - sw * 0.5, sz.y * 0.5 + 32.0), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1, 0.85))
+
+
+## Any app holds still while the calibration dot goes round (and is back as it was afterwards).
+func _on_sweep_any(active: bool) -> void:
+	if active:
+		_was_paused = get_tree().paused
+		get_tree().paused = true
+	else:
+		get_tree().paused = _was_paused
 
 
 func toggle() -> void:
@@ -234,12 +286,18 @@ func _refresh() -> void:
 		var key: String = d[0]
 		(_rows[key] as Button).text = "%s:  %s" % [d[1], GazeProvider.opt_label(key)]
 	_btn.text = "EYE OPTIONS" + (" *" if GazeProvider.opts_changed() else "")
+	_share_btn.text = "Share anonymous numbers with the developer: " + ("ON" if GazeProvider.share_state == "1" else "off")
 	_cap_btn.text = ("REC  saving camera frames to the dev laptop: ON (%d)" % GazeProvider.capture_n) if GazeProvider.capture_on else "Save camera frames (local only): off"
 	_cap_btn.modulate = Color(1.0, 0.5, 0.5) if GazeProvider.capture_on else Color.WHITE
 	var cl := GazeProvider.cam_label()
 	_cam_btn.text = "Camera: %s   (%d found, tap to switch)" % [cl.substr(0, 34), GazeProvider.cam_list().size()]
 	var g := GazeProvider
 	var lines: Array[String] = []
+	if not g.doctor.log.is_empty():
+		var dl: Dictionary = g.doctor.log[g.doctor.log.size() - 1]
+		lines.append("doctor: %s -> %s: %s" % [dl.get("issue"), dl.get("action"), dl.get("verdict")])
+	if not g.doctor.pending.is_empty():
+		lines.append("doctor is checking: %s (%d / %d barriers)" % [str((g.doctor.pending["action"] as Dictionary)["label"]), int(g.doctor.pending["seen"]), GazeDoctor.WIN])
 	lines.append("gaze x %.2f  y %.2f   head turn %+.0f deg" % [g.gaze.x, g.gaze.y, -rad_to_deg(g.head_rpy.x)])
 	lines.append("offset %+.0f%% %+.0f%%   scale x%.2f..%.2f   %s" % [g.bias.bias.x * 100.0, g.bias.bias.y * 100.0, g.bias.scale_lo.x, g.bias.scale_hi.x, "LOCKED by sweep" if g.bias.cal_locked else "self-learned"])
 	if g.sweep_note != "":
@@ -265,10 +323,11 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	_consent.visible = GazeProvider.consent_needed() and not GazeProvider.sweep_active
 	_sweep_ui.visible = GazeProvider.sweep_active
 	if _sweep_ui.visible:
 		_sweep_ui.queue_redraw()
-	var on := Game.peek_mode or Game.downhill_mode
+	var on := (Game.peek_mode or Game.downhill_mode) and GazeProvider.dev_mode          # the panel is for testers (?dev or ?who=); the doctor works without it
 	_btn.visible = on
 	if not on:
 		_panel.visible = false

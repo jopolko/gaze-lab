@@ -64,6 +64,31 @@ class H(http.server.SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
+    _gz = {}
+
+    def do_GET(self):
+        # the wasm is ~40 MB raw and ~9 MB compressed: a phone on Wi-Fi gives up on the raw one, so serve a gzip copy (made once, kept in memory) when the browser accepts it
+        path = self.translate_path(self.path.split("?", 1)[0])
+        if os.path.isdir(path):
+            path = os.path.join(path, "index.html")
+        if os.path.isfile(path) and path.endswith((".wasm", ".js", ".pck", ".html", ".mjs")) and "gzip" in (self.headers.get("Accept-Encoding") or ""):
+            import gzip
+            key = (path, os.path.getmtime(path))
+            data = self._gz.get(key)
+            if data is None:
+                with open(path, "rb") as f:
+                    data = gzip.compress(f.read(), compresslevel=6)
+                self._gz.clear()
+                self._gz[key] = data if os.path.getsize(path) < 80 * 1024 * 1024 else None
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        super().do_GET()
+
     def do_POST(self):
         # test results from the game (tune sessions) are appended to tools/tune_results.jsonl, so they can be read while you play
         n = int(self.headers.get("Content-Length", "0") or 0)

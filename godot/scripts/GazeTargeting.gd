@@ -853,7 +853,9 @@ func _peek_gaze(rd: float) -> void:
 	if peek_lock != null and is_instance_valid(peek_lock):
 		var fp := peek_lock.global_position + Vector3.UP * peek_lock.s
 		if not cam.is_position_behind(fp):
-			AimStats.fixation("eyes", cam.unproject_position(fp).distance_to(gp) / get_viewport().get_visible_rect().size.x * 100.0)
+			var fix_pct := cam.unproject_position(fp).distance_to(gp) / get_viewport().get_visible_rect().size.x * 100.0
+			AimStats.fixation("eyes", fix_pct)
+			GazeProvider.peek_fix_sample(fix_pct)
 	# 2. snuffle: rest your gaze on a rock and it tells you whether something hides behind it
 	_peek_sniff(rd, cam, gp)
 

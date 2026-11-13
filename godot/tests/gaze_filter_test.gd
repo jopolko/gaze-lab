@@ -215,5 +215,75 @@ func _ready() -> void:
 	GazeProvider.opts_default()
 	GazeProvider.backend = GazeProvider.Backend.MOUSE
 
+	# ---- the silent doctor: diagnose, fix one thing, check, keep or put back
+	GazeProvider.opts_default()
+	GazeProvider.p_pull = 0.22
+	GazeProvider.p_linger = 1.0
+	var doc := GazeDoctor.new()
+	var ev: Dictionary = {}
+	for i in GazeDoctor.WIN:
+		ev = doc.add_barrier({"n": 2, "aim_end": -1, "went": 0, "looked": 0, "flips": 0, "cur_min": 0.2, "cur_max": 0.7})
+	_check(ev.get("issue", "") == "NO_LOCK" and GazeProvider.opt_pick == 1, "gaze moves but the game never locks: the doctor names it and switches to the gaze-zones pick (%s)" % str(ev.get("action", "")))
+	for i in GazeDoctor.WIN:
+		ev = doc.add_barrier({"n": 2, "aim_end": 0, "went": 0, "looked": 0, "flips": 0, "cur_min": 0.2, "cur_max": 0.7})
+	_check(ev.get("verdict", "") == "kept" and GazeProvider.opt_pick == 1 and doc.log.size() == 1, "...and after six better barriers the change is kept")
+	GazeProvider.opts_default()
+	var doc2 := GazeDoctor.new()
+	for i in GazeDoctor.WIN:
+		ev = doc2.add_barrier({"n": 3, "aim_end": 1, "went": 0, "looked": 1, "flips": 0, "cur_min": 0.2, "cur_max": 0.8})
+	_check(ev.get("issue", "") == "NOT_HONORED" and GazeProvider.p_pull < 0.2, "it locks but the board goes elsewhere: the pull toward the chosen gate starts earlier (%.2f)" % GazeProvider.p_pull)
+	for i in GazeDoctor.WIN:
+		ev = doc2.add_barrier({"n": 3, "aim_end": -1, "went": 0, "looked": 2, "flips": 3, "cur_min": 0.2, "cur_max": 0.8})
+	_check(ev.get("verdict", "") == "put back" and absf(GazeProvider.p_pull - 0.22) < 0.001, "...and when the next barriers are worse, it is put back exactly as it was")
+	var doc3 := GazeDoctor.new()
+	for i in GazeDoctor.WIN:
+		ev = doc3.add_barrier({"n": 2, "aim_end": -1, "went": 0, "looked": 1, "flips": 0, "cur_min": 0.45, "cur_max": 0.52})
+	_check(ev.get("issue", "") == "NARROW" and doc3.sweep_wanted, "a gaze that hardly travels across the screen asks for a calibration sweep")
+	var doc5 := GazeDoctor.new()
+	for i in GazeDoctor.WIN * 2:
+		ev = doc5.add_barrier({"n": 2, "aim_end": 0, "went": 0, "looked": 0, "flips": 2, "cur_min": 0.2, "cur_max": 0.7})
+	_check(doc5.log.is_empty() and doc5.pending.is_empty(), "when the choices are going well, the doctor leaves everything alone even if the game changes its mind a lot")
+	var doc4 := GazeDoctor.new()
+	for i in 30:
+		doc4.add_barrier({"n": 1, "aim_end": -1, "went": 0, "looked": -1, "flips": 0, "cur_min": 0.5, "cur_max": 0.5})
+	_check(doc4.log.is_empty() and doc4.records.is_empty(), "barriers with a single gate say nothing about choosing, so the doctor ignores them")
+	# every app is known by name for the logs
+	var flags := [Game.run_mode, Game.downhill_mode, Game.peek_mode, Game.flight_mode, Game.trance_mode, Game.gaze_test_mode]
+	Game.run_mode = false
+	Game.downhill_mode = false
+	Game.peek_mode = false
+	Game.flight_mode = false
+	Game.trance_mode = false
+	Game.gaze_test_mode = false
+	var names: Array = []
+	for flg in ["run_mode", "downhill_mode", "peek_mode", "flight_mode", "trance_mode", "gaze_test_mode"]:
+		Game.set(flg, true)
+		names.append(GazeProvider.app_id())
+		Game.set(flg, false)
+	_check(names == ["downhill", "lanes", "peek", "flight", "trance", "gazetest"] and GazeProvider.app_id() == "arena", "every Godot app logs under its own name (%s)" % str(names))
+	Game.run_mode = flags[0]
+	Game.downhill_mode = flags[1]
+	Game.peek_mode = flags[2]
+	Game.flight_mode = flags[3]
+	Game.trance_mode = flags[4]
+	Game.gaze_test_mode = flags[5]
+	# Peek: a poor eye reading asks for a sweep, then steadies the gaze point
+	Game.peek_eye_aim = true
+	GazeProvider.auto_on = true
+	GazeProvider.sweep_done = false
+	GazeProvider.doctor.sweep_wanted = false
+	for i in 14:
+		GazeProvider.peek_fix_sample(15.0)
+	_check(GazeProvider.doctor.sweep_wanted, "Peek, eyes on, readings 15% of the screen off the baddy: a calibration sweep is requested")
+	GazeProvider.sweep_done = true
+	for i in 14:
+		GazeProvider.peek_fix_sample(15.0)
+	_check(GazeProvider.hold_on, "...and when that did not help, the gaze point is steadied")
+	Game.peek_eye_aim = false
+	GazeProvider.sweep_done = false
+	GazeProvider.doctor.sweep_wanted = false
+	GazeProvider.opts_default()
+	GazeProvider.p_pull = 0.22
+
 	print("RESULT: " + ("ALL PASSED" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit(1 if _fails > 0 else 0)

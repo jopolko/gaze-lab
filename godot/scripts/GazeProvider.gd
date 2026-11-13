@@ -262,6 +262,20 @@ func _ready() -> void:
 			pm_on = false
 		if q.contains("nokalman"):
 			kal_on = false
+		var dv_flag := str(JavaScriptBridge.eval("(function(){try{return localStorage.getItem('gazelab_dev')||''}catch(e){return ''}})()"))
+		dev_mode = dv_flag != "0"                     # while this is in development the tester panel is there for everybody; ?nodev hides it (and remembers), ?dev brings it back
+		if q.contains("nodev"):
+			dev_mode = false
+			JavaScriptBridge.eval("try{localStorage.setItem('gazelab_dev','0')}catch(e){}")
+		elif q.contains("dev"):
+			dev_mode = true
+			JavaScriptBridge.eval("try{localStorage.removeItem('gazelab_dev')}catch(e){}")
+		if q.contains("noauto"):
+			auto_on = false
+		if q.contains("share=1"):
+			set_share(true)                                  # a link from the person running the test: sharing the numbers is already agreed, no question asked
+		elif q.contains("share=0"):
+			set_share(false)
 		if q.contains("bare"):
 			opts_bare()
 		if q.contains("tune"):
@@ -417,9 +431,9 @@ func ingest(d: Dictionary) -> void:
 	if backend == Backend.CAMERA and not _cal_done and cal_index < 0 and confidence > 0.5 and d.has("x"):
 		_cal_done = true
 		if d.has("gu"):
-			Game.banner("Camera ready. No calibration needed: look around and it learns your centre. (C = optional dot calibration)", Color(0.5, 1.0, 0.6), 4.0)
+			Game.banner("Camera ready: it calibrates itself, no dots to stare at", Color(0.5, 1.0, 0.6), 3.0)
 		else:
-			start_calibration()
+			Game.banner("Camera ready", Color(0.5, 1.0, 0.6), 2.0)          # never the nine-dot calibration by itself: the one-pass sweep and the doctor do the work
 
 
 ## True when a tracker is feeding us (or we're simulating with the mouse).
@@ -860,7 +874,15 @@ var _sweep_lin: Array = []
 var tune_request: bool = false         # the panel (or ?tune) asks the Downhill rig to start a tuning session
 var tune_summary: Array = []
 var tune_trials: Array = []
-var auto_on: bool = false              # AUTO: keep testing the layers with lit gates while you play and switch to what works, plus the rules below
+var auto_on: bool = true               # the silent doctor (GazeDoctor) and the health rules: on for everybody, nobody has to know about it
+var dev_mode: bool = false             # ?dev, ?who= or a remembered dev flag: the EYE OPTIONS panel and the on-screen AUTO messages are only for testers
+var doctor := GazeDoctor.new()
+## What the doctor may adjust besides the switches (read by the game every frame): how long a look must stay on a gate before it latches (x), how many metres of sideways
+## room per metre forward the pull toward a chosen gate asks for (smaller = earlier), how hard the pull is (x), and how far a look moves the cursor (x).
+var p_linger: float = 1.0
+var p_pull: float = 0.22
+var p_carve: float = 1.0
+var p_reach: float = 1.0
 var auto_log: Array = []
 ## Frame capture for the camera-vs-decision analysis: OFF every time the page loads, switched on by the player in EYE OPTIONS. Each captured frame (a face crop, a small whole
 ## frame and the tracker's numbers) goes to the local test server only, with what the game decided at that moment.
@@ -885,7 +907,91 @@ var _h_note_t: float = -100.0
 
 ## Frame rate, tracker rate, jitter and screen coverage, sampled continuously; a summary every 5 s goes into the report and, on the local test
 ## server, into tools/tune_results.jsonl as it happens (so it can be watched while you play).
+## Consent to share anonymous numbers (no images, no video, no names) with the people running this site. Asked once, after the camera has started, never on a dev host.
+var share_state: String = "1"          # "1" sharing (the default while in development), "0" the player turned it off
+var _share_loaded: bool = false
+var _app_last: String = ""
+var _cam_good_t: float = 0.0
+var _sweep_tried: bool = false
+
+
+func _on_dev_host() -> bool:
+	return OS.has_feature("web") and bool(JavaScriptBridge.eval("(location.hostname==='localhost'||location.port==='8443')"))
+
+
+const SHARE_BY_DEFAULT := true         # development: anonymous numbers are shared unless the player turns it off (a clear opt-in button replaces this before it is public)
+
+
+func consent_needed() -> bool:
+	if SHARE_BY_DEFAULT:
+		return false
+	if not OS.has_feature("web") or backend != Backend.CAMERA or not _camera_fresh():
+		return false
+	if not _share_loaded:
+		_share_loaded = true
+		share_state = str(JavaScriptBridge.eval("(function(){try{return localStorage.getItem('gazelab_share')||''}catch(e){return ''}})()"))
+		if _on_dev_host():
+			share_state = "1"
+	return share_state == ""
+
+
+func set_share(yes: bool) -> void:
+	share_state = "1" if yes else "0"
+	JavaScriptBridge.eval("try{localStorage.setItem('gazelab_share','" + share_state + "')}catch(e){}")
+
+
+## One calibration sweep per visit, in every app, once the camera is delivering a good face (or when the doctor asks for one).
+func _auto_sweep_check(rd: float) -> void:
+	if backend != Backend.CAMERA or not auto_on:
+		return
+	if _camera_fresh() and confidence > 0.5 and face_size > 0.12:
+		_cam_good_t += rd
+	else:
+		_cam_good_t = 0.0
+	if sweep_active:
+		return
+	if doctor.sweep_wanted or (not sweep_done and not _sweep_tried and _cam_good_t > 4.0):
+		doctor.sweep_wanted = false
+		_sweep_tried = true
+		start_sweep()
+
+
+## Peek: how far the eyes read from the baddy being looked at (screen widths, %), sampled while locked. A poor reading asks for a calibration sweep and steadies the gaze point.
+var _pf_win: Array = []
+var _pf_bad: int = 0
+
+
+func peek_fix_sample(err_pct: float) -> void:
+	if not auto_on or not Game.peek_eye_aim:
+		return
+	_pf_win.append(err_pct)
+	if _pf_win.size() < 14:
+		return
+	var s := _pf_win.duplicate()
+	s.sort()
+	var med: float = float(s[s.size() / 2])
+	_pf_win.clear()
+	if med <= 10.0:
+		_pf_bad = 0
+		return
+	_pf_bad += 1
+	var what := ""
+	if not sweep_done and not sweep_active:
+		doctor.sweep_wanted = true
+		what = "calibrate the eyes with one sweep"
+	elif not hold_on:
+		opt_set("hold", true)
+		what = "steady the gaze point (fixation hold)"
+	if what != "":
+		doctor_event({"event": "action", "issue": "PEEK_GAZE_OFF", "evidence": {"median_error_pct": snappedf(med, 0.1), "windows": _pf_bad}, "action": what})
+
+
 func _health_tick(rd: float) -> void:
+	_auto_sweep_check(rd)
+	var app_now := app_id()
+	if app_now != _app_last:
+		_app_last = app_now
+		post_stream("app", {"app": app_now})
 	_h_ft.append(rd * 1000.0)
 	if _h_ft.size() > 300:
 		_h_ft.remove_at(0)
@@ -937,7 +1043,7 @@ func _health_sample() -> void:
 	health = {"gameFps": int(Engine.get_frames_per_second()), "frameP95ms": snappedf(_pctl(_h_ft, 0.95), 0.1), "trackerFps": snappedf(float(_pkt_times.size()) / 2.0, 0.1),
 		"latencyMs": int(trk_lat_ms), "modelMs": int(trk_inf_ms), "confidence": snappedf(confidence, 0.01), "face": snappedf(face_size, 0.01),
 		"jitterRaw": snappedf(_quiet_mean(_h_dr), 0.001), "jitterOut": snappedf(_quiet_mean(_h_do), 0.001), "spanX": snappedf(span.x, 0.01), "spanY": snappedf(span.y, 0.01),
-		"device": device_tag(), "view": [int(get_viewport().get_visible_rect().size.x), int(get_viewport().get_visible_rect().size.y)], "camera": cam_label(), "mode": "downhill" if Game.downhill_mode else ("peek" if Game.peek_mode else "other"), "eyeAim": Game.peek_eye_aim, "gaze": [snappedf(gaze.x, 0.01), snappedf(gaze.y, 0.01)], "eyeLook": [snappedf(Game.peek_eye_look.x, 0.01), snappedf(Game.peek_eye_look.y, 0.01)], "offset": [snappedf(bias.bias.x, 0.01), snappedf(bias.bias.y, 0.01)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01)], "locked": bias.cal_locked, "kalman": kal_on, "hold": hold_on, "median": geo_win, "pick": opt_pick, "auto": auto_on}
+		"device": device_tag(), "view": [int(get_viewport().get_visible_rect().size.x), int(get_viewport().get_visible_rect().size.y)], "camera": cam_label(), "mode": app_id(), "app": app_id(), "eyeAim": Game.peek_eye_aim, "gaze": [snappedf(gaze.x, 0.01), snappedf(gaze.y, 0.01)], "eyeLook": [snappedf(Game.peek_eye_look.x, 0.01), snappedf(Game.peek_eye_look.y, 0.01)], "offset": [snappedf(bias.bias.x, 0.01), snappedf(bias.bias.y, 0.01)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01)], "locked": bias.cal_locked, "kalman": kal_on, "hold": hold_on, "median": geo_win, "pick": opt_pick, "auto": auto_on}
 	if backend == Backend.CAMERA:
 		post_stream("health", health)
 		if auto_on:
@@ -952,6 +1058,23 @@ var hw: Dictionary = {}
 var device: String = ""
 
 
+## Which Godot app is running (the same logging and the same doctor apply to every one of them).
+func app_id() -> String:
+	if Game.run_mode:
+		return "downhill"
+	if Game.downhill_mode:
+		return "lanes"
+	if Game.peek_mode:
+		return "peek"
+	if Game.flight_mode:
+		return "flight"
+	if Game.trance_mode:
+		return "trance"
+	if Game.gaze_test_mode:
+		return "gazetest"
+	return "arena"
+
+
 func tester_name() -> String:
 	if tester != "":
 		return tester
@@ -963,6 +1086,9 @@ func tester_name() -> String:
 			JavaScriptBridge.eval("try{localStorage.setItem('gazelab_who'," + JSON.stringify(q) + ")}catch(e){}")
 		else:
 			n = str(JavaScriptBridge.eval("(function(){try{return localStorage.getItem('gazelab_who')||''}catch(e){return ''}})()"))
+	if n == "" and OS.has_feature("web"):
+		# nobody has to give a name: each browser gets a random anonymous id once, so one person's sessions stay together and nobody's are mixed with anyone else's
+		n = str(JavaScriptBridge.eval("(function(){try{var a=localStorage.getItem('gazelab_anon');if(!a){a='anon-'+Math.random().toString(16).slice(2,8);localStorage.setItem('gazelab_anon',a)}return a}catch(e){return 'anon-x'}})()"))
 	tester = _clean_name(n) if n != "" else "unnamed"
 	return tester
 
@@ -1052,6 +1178,7 @@ func capture_frame(tag: String, meta: Dictionary) -> void:
 	capture_n += 1
 	var m := meta.duplicate()
 	m["tag"] = tag
+	m["app"] = app_id()
 	m["device"] = device_tag()
 	m["who"] = tester_name()
 	m["sid"] = session()
@@ -1072,11 +1199,12 @@ func post_stream(kind: String, d: Dictionary) -> void:
 	o["device"] = device_tag()
 	o["who"] = tester_name()
 	o["sid"] = session()
+	o["app"] = app_id()
 	if kind == "health":
 		o["hw"] = hw_info()
 	o["kind"] = kind
 	o["t"] = snappedf(float(Time.get_ticks_msec()) / 1000.0, 0.1)
-	JavaScriptBridge.eval("if(location.hostname==='localhost'||location.port==='8443'){fetch('/tune',{method:'POST',body:" + JSON.stringify(JSON.stringify(o)) + "}).catch(function(){})}")
+	JavaScriptBridge.eval("(function(){var dev=(location.hostname==='localhost'||location.port==='8443');var ok=dev;var off=false;try{off=localStorage.getItem('gazelab_share')==='0'}catch(e){}ok=ok||!off;if(!ok)return;fetch(dev?'/tune':'/gaze-lab/log.php',{method:'POST',body:" + JSON.stringify(JSON.stringify(o)) + "}).catch(function(){})})()")
 
 
 func _auto_say(msg: String, banner: bool = true) -> void:
@@ -1084,8 +1212,20 @@ func _auto_say(msg: String, banner: bool = true) -> void:
 	while auto_log.size() > 30:
 		auto_log.remove_at(0)
 	post_stream("auto", {"msg": msg})
-	if banner:
-		Game.banner("AUTO: " + msg, Color(0.6, 0.9, 1.0), 3.0)
+	if banner and dev_mode:
+		Game.banner("AUTO: " + msg, Color(0.6, 0.9, 1.0), 3.0)          # testers see what the system did; everybody else sees nothing
+
+
+## The doctor decided something (an action, or the verdict on an earlier one): log it for whoever validates it afterwards.
+func doctor_event(e: Dictionary) -> void:
+	if e.is_empty():
+		return
+	post_stream("fix", e)
+	if str(e.get("event", "")) == "action":
+		_auto_say("%s: %s" % [e.get("issue"), e.get("action")])
+	else:
+		_auto_say("%s: '%s' %s (score %.2f -> %.2f)" % [e.get("issue"), e.get("action"), e.get("verdict"), float((e["before"] as Dictionary).get("score", 0.0)), float((e["after"] as Dictionary).get("score", 0.0))])
+	_save_opts()
 
 
 ## The rules AUTO applies on top of the lit-gate testing, each one small and reversible (every change is announced and logged).
@@ -1107,7 +1247,7 @@ func _auto_rules() -> void:
 	elif jo >= 0.0 and jo < 0.007 and hold_on:
 		opt_set("hold", false)
 		_auto_say("gaze point is steady (%.1f%%): fixation hold off, it only adds lag" % (jo * 100.0), false)
-	if float(h["spanX"]) < 0.22 and Game.downhill_mode:
+	if float(h["spanX"]) < 0.22 and (Game.downhill_mode or Game.peek_mode or Game.flight_mode or Game.gaze_test_mode):
 		_h_narrow += 1
 	else:
 		_h_narrow = 0
@@ -1123,7 +1263,7 @@ func _auto_rules() -> void:
 
 
 func opt_defs() -> Array:
-	return [["auto", "AUTO-tune (lit gates + rules)"], ["kalman", "Kalman filter"], ["stab", "Phone-motion stabiliser"], ["stretch", "Spread stretching"], ["learn", "Auto offset learning"],
+	return [["auto", "AUTO-FIX (silent doctor + rules)"], ["kalman", "Kalman filter"], ["stab", "Phone-motion stabiliser"], ["stretch", "Spread stretching"], ["learn", "Auto offset learning"],
 		["hold", "Fixation hold (dead zone)"], ["median", "Median window"], ["headw", "Head weight"], ["pick", "Gate pick (Downhill)"]]
 
 
@@ -1243,6 +1383,10 @@ func _save_opts() -> void:
 	var cf := ConfigFile.new()
 	for d: Array in opt_defs():
 		cf.set_value("opts", d[0], opt_value(d[0]))
+	cf.set_value("params", "p_linger", p_linger)
+	cf.set_value("params", "p_pull", p_pull)
+	cf.set_value("params", "p_carve", p_carve)
+	cf.set_value("params", "p_reach", p_reach)
 	cf.save(OPT_FILE)
 
 
@@ -1250,6 +1394,10 @@ func _load_opts() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(OPT_FILE) != OK:
 		return
+	p_linger = clampf(float(cf.get_value("params", "p_linger", 1.0)), 0.3, 2.0)
+	p_pull = clampf(float(cf.get_value("params", "p_pull", 0.22)), 0.1, 0.3)
+	p_carve = clampf(float(cf.get_value("params", "p_carve", 1.0)), 0.8, 1.6)
+	p_reach = clampf(float(cf.get_value("params", "p_reach", 1.0)), 0.8, 2.0)
 	for d: Array in opt_defs():
 		if cf.has_section_key("opts", d[0]):
 			var key: String = d[0]
@@ -1290,7 +1438,7 @@ func options_report() -> Dictionary:
 			sw["miss"] = [snappedf((sweep_fit["rms"] as Vector2).x, 0.001), snappedf((sweep_fit["rms"] as Vector2).y, 0.001)]
 	return {"kalman": kal_on, "stabiliser": pm_on, "stretch": bias.stretch_on, "learn": bias.learn_on, "hold": hold_on, "median": geo_win, "headWeight": head_weight, "pick": ["nearest", "zones"][opt_pick],
 		"offset": [snappedf(bias.bias.x, 0.001), snappedf(bias.bias.y, 0.001)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01), snappedf(bias.scale_lo.y, 0.01), snappedf(bias.scale_hi.y, 0.01)],
-		"who": tester_name(), "sid": session(), "device": device_tag(), "hw": hw_info(), "calLocked": bias.cal_locked, "sweep": sw, "kalmanJumps": _kx.jumps, "gateLog": gate_log.slice(maxi(gate_log.size() - 40, 0)), "tune": tune_summary, "tuneTrials": tune_trials, "auto": auto_on, "autoLog": auto_log, "health": health}
+		"who": tester_name(), "sid": session(), "device": device_tag(), "hw": hw_info(), "calLocked": bias.cal_locked, "sweep": sw, "kalmanJumps": _kx.jumps, "gateLog": gate_log.slice(maxi(gate_log.size() - 40, 0)), "tune": tune_summary, "tuneTrials": tune_trials, "auto": auto_on, "doctor": doctor.log, "doctorPending": str((doctor.pending.get("action", {}) as Dictionary).get("label", "")) if not doctor.pending.is_empty() else "", "params": {"linger": snappedf(p_linger, 0.01), "pull": snappedf(p_pull, 0.01), "carve": snappedf(p_carve, 0.01), "reach": snappedf(p_reach, 0.01)}, "autoLog": auto_log, "health": health}
 
 
 ## Start the one-pass sweep: a dot glides round the screen for about four seconds. Needs the geometry gaze (the camera path).

@@ -2280,7 +2280,7 @@ func _lane_tick(delta: float, vs: Vector2) -> void:
 		var offs := gxs - (_ref_x if _ref_init else _gx_med) + _head_off
 		if eyes_only and cam_direct and GazeProvider.eih_ok:
 			offs = _eyes_only_offs(delta, offs)
-		offs *= reach
+		offs *= reach * GazeProvider.p_reach
 		_offs_s += (offs - _offs_s) * (1.0 - exp(-delta / maxf(look_smooth, 0.01)))
 		offs = _offs_s
 		# vertical: only for the reticle (the game steers sideways), but it must be able to go anywhere on the screen

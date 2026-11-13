@@ -31,9 +31,9 @@ while True:
     except Exception:
         continue
     k = d.get("kind", "tune")
-    dv = "[%s/%s %s] " % (d.get("who", "?"), d.get("device", "?"), str(d.get("sid", ""))[:4])
+    dv = "[%s/%s %s %s] " % (d.get("who", "?"), d.get("device", "?"), str(d.get("sid", ""))[:4], d.get("app", "?"))
     if k == "health":
-        health.setdefault("%s/%s %s" % (d.get("who", "?"), d.get("device", "?"), str(d.get("sid", ""))[:4]), []).append(d)
+        health.setdefault("%s/%s %s %s" % (d.get("who", "?"), d.get("device", "?"), str(d.get("sid", ""))[:4], d.get("app", "?")), []).append(d)
     elif k == "trial":
         print(dv + "TRIAL %s #%s [%s] %s  looked(cursor) %.0f%%  looked(tracker) %.0f%%  lock %.1fs  went gate %s of %s (lit %s)  game ended on gate %s, changed its mind %s x, let go %s x" % (
             d.get("phase", ""), d.get("i"), d.get("cfg"), d.get("verdict"), 100 * float(d.get("look_cur", 0)), 100 * float(d.get("look_gaze", 0)), float(d.get("aim_t", -1)), d.get("went"), d.get("n"), d.get("target"), d.get("aim_end"), d.get("flips"), d.get("lost")), flush=True)
@@ -41,6 +41,13 @@ while True:
         print(dv + "BARRIER gates at %s  you looked at %.2f (%.2f..%.2f)  went through %s  pick=%s" % (d.get("gates"), float(d.get("cur_med", 0)), float(d.get("cur_min", 0)), float(d.get("cur_max", 0)), d.get("went"), d.get("pick")), flush=True)
     elif k == "frame":
         print(dv + "FRAME %s %s  gaze %s  gates %s lit %s cursor %s aim %s" % (d.get("tag"), d.get("path"), d.get("gaze"), d.get("gates"), d.get("lit"), d.get("cursor"), d.get("aim")), flush=True)
+    elif k == "app":
+        print(dv + "APP -> %s" % d.get("app"), flush=True)
+    elif k == "fix":
+        if d.get("event") == "action":
+            print(dv + "FIX %s: %s   evidence %s" % (d.get("issue"), d.get("action"), d.get("evidence")), flush=True)
+        else:
+            print(dv + "FIX VERDICT %s: %s -> %s   before %s  after %s" % (d.get("issue"), d.get("action"), str(d.get("verdict")).upper(), (d.get("before") or {}).get("score"), (d.get("after") or {}).get("score")), flush=True)
     elif k == "note":
         print(dv + "NOTE: %s   [gaze %s, opts %s]" % (d.get("text"), d.get("gaze"), d.get("opts")), flush=True)
     elif k == "opt":

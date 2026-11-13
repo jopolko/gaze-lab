@@ -2248,7 +2248,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 	# not at the usual ~50 m, where a gate 30 m over could only ever be swapped for the nearest reachable one
 	var engage_far := wall_far
 	if not _aim.is_empty() and is_same(_aim_row, row):
-		engage_far = maxf(wall_far, minf(AIM_MAX_DIST, absf(float(_aim["x"]) - spos.x) / 0.22 + 20.0))
+		engage_far = maxf(wall_far, minf(AIM_MAX_DIST, absf(float(_aim["x"]) - spos.x) / GazeProvider.p_pull + 20.0))
 	if gate_assist and not row.is_empty() and bd <= engage_far:
 		if int(row["j"]) != _wall_row_j:
 			_wall_row_j = int(row["j"])
@@ -2298,7 +2298,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 		var u := clampf((wall_far - bd) / (wall_far - wall_near), 0.0, 1.0)
 		var w := maxf(u * _engage, 0.35 * _a() * clampf((wall_far - bd) / 30.0, 0.0, 1.0))          # with help on, the board begins to commit early and gently; with no sign of you, it does not choose a gate for you
 		if eyes_chose:
-			w = maxf(carve_assist * _assist_conf() * _aim_w, w)
+			w = maxf(carve_assist * GazeProvider.p_carve * _assist_conf() * _aim_w, w)
 		_wall_w = w
 		# the aim point glides to the chosen gate instead of jumping when the choice changes: no jerk when the eyes flick between two gates
 		if _glide_row != int(row["j"]):
@@ -2321,7 +2321,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 		add += w * want * (1.0 - 0.6 * absf(s_in)) * (1.0 - 0.85 * yield_to_buff)
 		gate_done = true
 	if not gate_done:
-		add += carve_assist * _assist_conf() * _aim_w * _aim_want * (1.0 - 0.6 * absf(s_in))
+		add += carve_assist * GazeProvider.p_carve * _assist_conf() * _aim_w * _aim_want * (1.0 - 0.6 * absf(s_in))
 	if _buff_w > 0.0 and not _buff_tgt.is_empty():
 		add += _buff_w * _buff_want * (1.0 - 0.6 * absf(s_in))
 	# 2) a lone tree or rock on the way: swerve by just what is needed
@@ -4136,7 +4136,7 @@ func _alog_note(row: Dictionary, cx: float, vs: Vector2, delta: float) -> void:
 	if _tune != null and _tune.active:
 		_tune_note(row, cx, vs, delta)
 	if not is_same(_alog.get("row", null), row):
-		_alog = {"row": row, "cs": [], "gates": [], "aim": -1}
+		_alog = {"row": row, "cs": [], "gates": [], "aim": -1, "t": 0.0, "aim_last": -1, "flips": 0, "lost": 0, "aim_end": -1, "lock_t": -1.0}
 		_alog_n = 0
 	var dist := spos.z - float(row["z"])
 	if dist < 14.0:
@@ -4158,6 +4158,19 @@ func _alog_note(row: Dictionary, cx: float, vs: Vector2, delta: float) -> void:
 		i += 1
 	_alog["gates"] = gx
 	_alog["aim"] = ai
+	# the game's own choice over this approach, for the doctor: when it first locked, how often it changed its mind, how often it let go, which gate it ended on
+	_alog["t"] = float(_alog["t"]) + delta
+	var a_last: int = int(_alog["aim_last"])
+	if ai != a_last:
+		if ai >= 0 and a_last >= 0:
+			_alog["flips"] = int(_alog["flips"]) + 1
+		elif ai < 0 and a_last >= 0:
+			_alog["lost"] = int(_alog["lost"]) + 1
+		_alog["aim_last"] = ai
+	if ai >= 0:
+		_alog["aim_end"] = ai
+		if float(_alog["lock_t"]) < 0.0:
+			_alog["lock_t"] = _alog["t"]
 	_alog["steer"] = snappedf(_steer_gaze, 0.01)
 	_alog["raw"] = snappedf(GazeProvider.gaze.x, 0.01)
 
@@ -4186,8 +4199,13 @@ func _alog_push(row: Dictionary, via: Dictionary) -> void:
 		k += 1
 	var e := {"row": rows_passed, "n": gx.size(), "gates": gx, "cur_med": snappedf(med, 0.01), "cur_min": snappedf(float(srt[0]) if not srt.is_empty() else 0.5, 0.01), "cur_max": snappedf(float(srt[srt.size() - 1]) if not srt.is_empty() else 0.5, 0.01),
 		"looked": near, "aim": _alog.get("aim", -1), "went": went, "steer": _alog.get("steer", 0.0), "pick": GazeProvider.opt_pick}
+	e["aim_end"] = _alog.get("aim_end", -1)
+	e["flips"] = _alog.get("flips", 0)
+	e["lost"] = _alog.get("lost", 0)
+	e["lock_t"] = snappedf(float(_alog.get("lock_t", -1.0)), 0.1)
 	GazeProvider.gate_log.append(e)
 	GazeProvider.post_stream("barrier", e)
+	GazeProvider.doctor_event(GazeProvider.doctor.add_barrier(e))
 	while GazeProvider.gate_log.size() > 80:
 		GazeProvider.gate_log.remove_at(0)
 	_alog = {}
@@ -4203,6 +4221,7 @@ var _tune_sum_t: float = 0.0
 
 
 var _sweep_hooked: bool = false
+var _auto_sweep_tried: bool = false
 
 
 func _on_sweep(active: bool) -> void:
@@ -4213,7 +4232,7 @@ func _tune_start() -> void:
 	if GazeProvider.backend == GazeProvider.Backend.CAMERA and not GazeProvider.sweep_done and not GazeProvider.sweep_active:
 		GazeProvider.start_sweep()                          # one four-second sweep first: the gaze scale and offset measured, not guessed
 	_tune = GazeTune.new()
-	_tune.loop = GazeProvider.auto_on
+	_tune.loop = false
 	_tune.start()
 	_tune_acc = {}
 	_tune_msg = ""
@@ -4367,12 +4386,12 @@ func _update_aim(delta: float) -> void:
 	if not _sweep_hooked:
 		_sweep_hooked = true
 		GazeProvider.sweep_changed.connect(_on_sweep)
-	if GazeProvider.tune_request or (GazeProvider.auto_on and _tune == null):
+	if GazeProvider.tune_request:
 		GazeProvider.tune_request = false
 		_tune_start()
-	elif _tune != null and _tune.loop and not GazeProvider.auto_on:
-		_tune.active = false
-		_tune = null                                       # AUTO switched off: stop testing, keep whatever setting is on
+	# the silent doctor: off while a lit-gate tuning session is running (it would be tuning the tuning), and it may ask for one calibration sweep
+	GazeProvider.doctor.enabled = GazeProvider.auto_on and not (_tune != null and _tune.active)
+	# (the calibration sweep the doctor or the first good camera frames ask for is started by GazeProvider, the same in every app)
 	GazeProvider.tune_phase = _tune.phase if (_tune != null and _tune.active) else ""
 	_tune_msg_t = maxf(_tune_msg_t - delta, 0.0)
 	_tune_sum_t = maxf(_tune_sum_t - delta, 0.0)
@@ -4459,7 +4478,7 @@ func _update_aim(delta: float) -> void:
 			_cand_t = 0.0
 		elif is_same(best, _cand):
 			_cand_t += delta
-			if _cand_t >= AIM_LINGER:
+			if _cand_t >= AIM_LINGER * GazeProvider.p_linger:
 				_aim = best
 				_aim_row = row
 				_cand = {}

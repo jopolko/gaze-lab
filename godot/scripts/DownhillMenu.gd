@@ -146,12 +146,28 @@ func _style(bg: Color, border: Color, radius: int, bw: int = 0) -> StyleBoxFlat:
 func _card(title: String) -> VBoxContainer:
 	var pc := PanelContainer.new()
 	pc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	pc.add_theme_stylebox_override("panel", _style(Color(0.04, 0.05, 0.12, 0.62), Color(1, 1, 1, 0.14), 26, 2))
+	var csb := _style(Color(0.04, 0.05, 0.12, 0.66), Color(_accent.r, _accent.g, _accent.b, 0.28), 16, 1)
+	csb.shadow_color = Color(0, 0, 0, 0.35)
+	csb.shadow_size = 10
+	csb.content_margin_left = 18
+	csb.content_margin_right = 18
+	csb.content_margin_top = 14
+	csb.content_margin_bottom = 14
+	pc.add_theme_stylebox_override("panel", csb)
 	_grid.add_child(pc)
 	_cards.append(pc)
 	var vb := VBoxContainer.new()
 	pc.add_child(vb)
-	_label(title, 20, _accent, vb)
+	_label(title, 17, Color(_accent.r, _accent.g, _accent.b, 0.95), vb)
+	var hr := HSeparator.new()
+	var hs := _style(Color(_accent.r, _accent.g, _accent.b, 0.35), Color(0, 0, 0, 0), 0)
+	hs.content_margin_left = 0
+	hs.content_margin_right = 0
+	hs.content_margin_top = 0
+	hs.content_margin_bottom = 0
+	hr.add_theme_stylebox_override("separator", hs)
+	hr.add_theme_constant_override("separation", 2)
+	vb.add_child(hr)
 	return vb
 
 
@@ -160,10 +176,10 @@ func _button(text: String, font: int, parent: Node, toggle: bool = false) -> But
 	b.text = text
 	b.toggle_mode = toggle
 	b.focus_mode = Control.FOCUS_NONE
-	b.add_theme_stylebox_override("normal", _style(Color(1, 1, 1, 0.08), Color(1, 1, 1, 0.25), 18, 2))
-	b.add_theme_stylebox_override("hover", _style(Color(1, 1, 1, 0.16), Color(1, 1, 1, 0.4), 18, 2))
-	b.add_theme_stylebox_override("pressed", _style(Color(_accent.r, _accent.g, _accent.b, 0.30), _accent, 18, 3))
-	b.add_theme_stylebox_override("hover_pressed", _style(Color(_accent.r, _accent.g, _accent.b, 0.38), _accent, 18, 3))
+	b.add_theme_stylebox_override("normal", _style(Color(1, 1, 1, 0.06), Color(1, 1, 1, 0.20), 12, 1))
+	b.add_theme_stylebox_override("hover", _style(Color(1, 1, 1, 0.13), Color(1, 1, 1, 0.38), 12, 1))
+	b.add_theme_stylebox_override("pressed", _style(Color(_accent.r, _accent.g, _accent.b, 0.26), _accent, 12, 2))
+	b.add_theme_stylebox_override("hover_pressed", _style(Color(_accent.r, _accent.g, _accent.b, 0.34), _accent, 12, 2))
 	b.add_theme_color_override("font_color", Color(1, 1, 1, 0.92))
 	b.add_theme_color_override("font_pressed_color", Color(1, 1, 1, 1))
 	b.add_theme_color_override("font_hover_pressed_color", Color(1, 1, 1, 1))
@@ -229,13 +245,13 @@ func _build_header() -> void:
 	tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(tb)
 	_title = _label("DOWNHILL", 52, Color(1.0, 0.9, 0.4), tb)
-	_sub = _label("Steer with your eyes. Pick a look, a course, and go.", 20, Color(1, 1, 1, 0.8), tb)
-	_more = _button("OTHER GAMES", 18, h)
+	_sub = _label("Steer with your eyes. Pick effects and a course, then go.", 20, Color(1, 1, 1, 0.7), tb)
+	_more = _button("DEMOS", 18, h)
 	_more.pressed.connect(_other_games)
 
 
 func _build_theme_card() -> void:
-	var c := _card("LOOK")
+	var c := _card("EFFECTS  (colours, sky, scenery and screen effects)")
 	var f := _flow(c)
 	var grp := ButtonGroup.new()
 	for id in Themes.ORDER:
@@ -244,15 +260,15 @@ func _build_theme_card() -> void:
 		b.button_group = grp
 		var c1: Color = d["c1"]
 		var c2: Color = d["c2"]
-		b.add_theme_stylebox_override("normal", _style(Color(c1.r, c1.g, c1.b, 0.22), Color(c1.r, c1.g, c1.b, 0.6), 18, 2))
-		b.add_theme_stylebox_override("hover", _style(Color(c1.r, c1.g, c1.b, 0.34), c1, 18, 2))
-		b.add_theme_stylebox_override("pressed", _style(Color(c1.r, c1.g, c1.b, 0.55), c2, 18, 4))
-		b.add_theme_stylebox_override("hover_pressed", _style(Color(c1.r, c1.g, c1.b, 0.6), c2, 18, 4))
+		b.add_theme_stylebox_override("normal", _style(Color(c1.r, c1.g, c1.b, 0.18), Color(c1.r, c1.g, c1.b, 0.5), 12, 1))
+		b.add_theme_stylebox_override("hover", _style(Color(c1.r, c1.g, c1.b, 0.30), c1, 12, 1))
+		b.add_theme_stylebox_override("pressed", _style(Color(c1.r, c1.g, c1.b, 0.50), c2, 12, 3))
+		b.add_theme_stylebox_override("hover_pressed", _style(Color(c1.r, c1.g, c1.b, 0.56), c2, 12, 3))
 		b.pressed.connect(_pick_theme.bind(id))
 		_theme_btns[id] = b
 		_boxes.append([b, 190.0, 64.0])
 	_blurb = _label("", 20, Color(1, 1, 1, 0.8), c)
-	var r := _slider(c, 0.0, 1.5, 0.05, "TRIPPY INTENSITY")
+	var r := _slider(c, 0.0, 1.5, 0.05, "EFFECT INTENSITY")
 	_int_s = r[0]
 	_int_l = r[1]
 	_int_row = _int_s.get_parent()
@@ -399,7 +415,9 @@ func _build_footer() -> void:
 	_cam_btn.text = "START WITH CAMERA"
 	_cam_btn.focus_mode = Control.FOCUS_NONE
 	for st in ["normal", "hover", "pressed", "focus"]:
-		var sb := _style(Color(0.92, 0.28, 0.24) if st != "hover" else Color(1.0, 0.4, 0.34), Color.WHITE, 22, 3)
+		var sb := _style(Color(0.92, 0.28, 0.24) if st != "hover" else Color(1.0, 0.4, 0.34), Color(1, 1, 1, 0.55), 40, 2)
+		sb.shadow_color = Color(0.92, 0.28, 0.24, 0.55)
+		sb.shadow_size = 16
 		_cam_btn.add_theme_stylebox_override(st, sb)
 	_cam_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cam_btn.pressed.connect(_start.bind(true))
@@ -410,13 +428,15 @@ func _build_footer() -> void:
 	_alt_btn.text = "PLAY WITHOUT CAMERA"
 	_alt_btn.focus_mode = Control.FOCUS_NONE
 	for st in ["normal", "hover", "pressed", "focus"]:
-		_alt_btn.add_theme_stylebox_override(st, _style(Color(0.2, 0.4, 0.8) if st != "hover" else Color(0.3, 0.5, 0.9), Color(1, 1, 1, 0.8), 22, 2))
+		_alt_btn.add_theme_stylebox_override(st, _style(Color(1, 1, 1, 0.07) if st != "hover" else Color(1, 1, 1, 0.16), Color(1, 1, 1, 0.35), 40, 1))
 	_alt_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_alt_btn.pressed.connect(_start.bind(false))
 	_footer.add_child(_alt_btn)
+	_footer.move_child(_cam_btn, _footer.get_child_count() - 1)          # START WITH CAMERA goes last: on the right of a wide screen, at the bottom of a phone held upright, under the thumb
 	_texts.append([_alt_btn, 22])
 	_boxes.append([_alt_btn, 0.0, 84.0])
 	_label("The camera never leaves your device.  No camera: A / D carve, mouse = your eyes.", 16, Color(1, 1, 1, 0.55), _root, true)
+	_label("While we tune this, anonymous performance numbers (speed, tracking quality, gate choices; never images, video or names) go to the developer. EYE OPTIONS has a switch to stop it.", 14, Color(1, 1, 1, 0.42), _root, true)
 
 
 static func Game_presets() -> Array:
@@ -490,10 +510,10 @@ func _sync_labels() -> void:
 	var d := Themes.theme_data(id)
 	_blurb.text = String(d["blurb"])
 	_int_row.visible = Themes.post_mode(id) > 0
-	_diff_l.text = "DIFFICULTY  %s" % _diff_word(float(cfg["diff"]))
+	_diff_l.text = "DIFFICULTY  %s   (more gates, narrower and trickier ones, more trees; speed and controls stay the same)" % _diff_word(float(cfg["diff"]))
 	_assist_l.text = "AUTO-HELP  %s" % ("OFF" if float(cfg["assist"]) < 0.05 else ("LIGHT" if float(cfg["assist"]) < 0.4 else ("BALANCED" if float(cfg["assist"]) < 0.75 else "STRONG")))
 	_len_l.text = "LENGTH  %s" % ("ENDLESS" if bool(cfg["endless"]) else "%.1f km" % float(cfg["length_km"]))
-	_int_l.text = "TRIPPY INTENSITY  %d%%" % int(float(cfg["intensity"]) / 1.5 * 100.0) if _int_l != null else ""
+	_int_l.text = "EFFECT INTENSITY  %d%%" % int(float(cfg["intensity"]) / 1.5 * 100.0) if _int_l != null else ""
 	for z in _zone_l:
 		(_zone_l[z] as Label).text = "%s   %s" % [ZONE_LABELS[z], _mix_word(float((cfg["zones"] as Dictionary).get(z, 1.0)))]
 	for k in _toggles:

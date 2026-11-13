@@ -75,6 +75,7 @@ func _ready() -> void:
 	var rig: RunRig = level._dh as RunRig
 	rig.view_fp = false                  # the older checks measure the third-person camera; first person has its own checks below
 	rig.balls_enabled = false            # the older simulations have no snowballs; they have their own checks below
+	GazeProvider.auto_on = false          # the silent doctor must not change settings in the middle of a scripted test
 	rig.weird = 0.0                     # the older checks measure the original zones; the strange places have their own checks at the end
 	_check(rig != null and Game.run_mode and Game.downhill_mode and rig.cam.current, "carve rig starts, owns the camera")
 	_check(rig.lane_ctl == 2, "gaze steering is continuous (STEER)")
