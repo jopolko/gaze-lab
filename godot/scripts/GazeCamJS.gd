@@ -552,7 +552,7 @@ const MAIN := """
       worker2 = w2;
       window.__gazeRunning = true;
       const stream = window.__gazeStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: Math.round((parseInt(qs.get('res')) || (coarseNow ? 720 : 1080)) * 16 / 9) }, height: { ideal: parseInt(qs.get('res')) || (coarseNow ? 720 : 1080) } }, audio: false });
+        video: { facingMode: 'user', frameRate: { ideal: 30, max: 30 }, width: { ideal: Math.round((parseInt(qs.get('res')) || (coarseNow ? 720 : 1080)) * 16 / 9) }, height: { ideal: parseInt(qs.get('res')) || (coarseNow ? 720 : 1080) } }, audio: false });
       try { const ts = stream.getVideoTracks()[0].getSettings(); window.__gazeStats.vw = ts.width; window.__gazeStats.vh = ts.height; window.__gazeStats.cfps = ts.frameRate; } catch (e) {}
       if (qs.has('fast')) {
         // Dim rooms make auto-exposure pick ~60 ms shutters, which caps the camera near 15 fps. A short
@@ -580,6 +580,46 @@ const MAIN := """
         cx.fillStyle = '#3f6';
         for (const q of pts) { cx.beginPath(); cx.arc(q[0] * 176, q[1] * 132, 3, 0, 6.3); cx.fill(); }
       };
+      // ---- frame rotation. Some phones hand over the front camera sideways or upside down (the sensor is mounted that way, or the screen is locked to landscape while the phone
+      // is held upright), and a leaning phone does the same by a few degrees. A face model reads an upright face best, so: if no face is found for ~2 s, try the other
+      // three orientations in turn and keep the one that works; if the face is found but turned more than ~45 degrees, turn the frame a quarter and check that it helped.
+      // A rotated frame is drawn onto a canvas and the tracker reads that canvas instead of the video; the preview shows the same canvas, so what you see is what it sees.
+      let rot = 0, lastFace = performance.now(), lastRot = 0, rollSince = 0, rollSign = 1, pend = null;
+      const rc = document.createElement('canvas');
+      const rx = rc.getContext('2d');
+      rc.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none';
+      wrap.insertBefore(rc, cv);
+      const setRot = (r) => {
+        rot = ((r % 360) + 360) % 360; window.__gazeRot = rot; window.__gazeRoi = null; window.__gazeEyes = null;
+        rc.style.display = rot ? 'block' : 'none'; v.style.display = rot ? 'none' : 'block';
+        lastRot = performance.now();
+      };
+      const srcFrame = () => {
+        if (!rot) return v;
+        const W = v.videoWidth, H = v.videoHeight, sw = (rot === 90 || rot === 270);
+        if (rc.width !== (sw ? H : W) || rc.height !== (sw ? W : H)) { rc.width = sw ? H : W; rc.height = sw ? W : H; }
+        rx.save(); rx.translate(rc.width / 2, rc.height / 2); rx.rotate(rot * Math.PI / 180); rx.drawImage(v, -W / 2, -H / 2, W, H); rx.restore();
+        return rc;
+      };
+      const ORDER = [0, 90, 270, 180];
+      setInterval(() => {
+        if (!window.__gazeRunning) return;
+        const g = window.__gaze, t = performance.now(), has = !!(g && g.conf > 0 && g.nx !== undefined);
+        if (has) lastFace = t;
+        else if (t - lastFace > 2000 && t - lastRot > 1700) { setRot(ORDER[(ORDER.indexOf(rot) + 1) % 4]); lastFace = t - 300; }
+        if (has && typeof g.hroll === 'number') {
+          const ar = Math.abs(g.hroll);
+          if (pend && t - pend.t > 1500) {                       // did the last quarter turn help?
+            if (ar > pend.ar - 0.25) { rollSign = -rollSign; setRot(rot + pend.dir * -1 * 1); }
+            pend = null; rollSince = 0;
+          } else if (!pend) {
+            if (ar > 0.78) {
+              if (!rollSince) rollSince = t;
+              else if (t - rollSince > 2000 && t - lastRot > 3000) { const dir = (g.hroll > 0 ? -90 : 90) * rollSign; pend = { t: t, ar: ar, dir: dir }; setRot(rot + dir); rollSince = 0; }
+            } else rollSince = 0;
+          }
+        }
+      }, 400);
       let last = -1, errShown = false, inflight = 0, busyAt = 0;
       const DEPTH = 2;        // frames in the pipeline at once: one in the model worker, one being turned into a packet
       if (workerOk) {
@@ -613,16 +653,17 @@ const MAIN := """
           if (v.readyState >= 2 && v.currentTime !== last) { window.__gazeStats.cf++; if (inflight >= DEPTH) window.__gazeStats.drop++; }   // camera frames seen / dropped because the pipeline was full
           if (inflight >= DEPTH || v.readyState < 2 || v.currentTime === last) return;
           last = v.currentTime; inflight++; busyAt = now;
+          const SRC = srcFrame();
           const roi = qs.has('noroi') ? null : window.__gazeRoi;       // a crop around the face, from the previous packet (null: whole frame)
           // Full detail only where it matters: the face model gets a SMALL copy of the face crop (it shrinks the face to ~256 px anyway), and the iris fit gets two
           // small full-resolution patches around the eyes. ?bigcrop goes back to one big full-resolution crop; ?mi=N sets the model copy's size (default 448).
           const eyes = (roi && !qs.has('bigcrop')) ? window.__gazeEyes : null;
           const MI = parseInt(qs.get('mi')) || 448;
-          const mk = roi ? ((eyes && roi.w > MI) ? createImageBitmap(v, roi.x, roi.y, roi.w, roi.h, { resizeWidth: MI, resizeHeight: MI, resizeQuality: 'medium' }) : createImageBitmap(v, roi.x, roi.y, roi.w, roi.h)) : createImageBitmap(v);
-          const pk = eyes ? Promise.all(eyes.map((e) => createImageBitmap(v, e.x, e.y, e.s, e.s))) : Promise.resolve(null);
+          const mk = roi ? ((eyes && roi.w > MI) ? createImageBitmap(SRC, roi.x, roi.y, roi.w, roi.h, { resizeWidth: MI, resizeHeight: MI, resizeQuality: 'medium' }) : createImageBitmap(SRC, roi.x, roi.y, roi.w, roi.h)) : createImageBitmap(SRC);
+          const pk = eyes ? Promise.all(eyes.map((e) => createImageBitmap(SRC, e.x, e.y, e.s, e.s))) : Promise.resolve(null);
           Promise.all([mk, pk]).then((res) => {
             const bmp = res[0], pb = res[1];
-            if (worker) worker.postMessage({ type: 'frame', bmp: bmp, pa: pb ? [{ bmp: pb[0], x: eyes[0].x, y: eyes[0].y, s: eyes[0].s }, { bmp: pb[1], x: eyes[1].x, y: eyes[1].y, s: eyes[1].s }] : null, t: performance.now(), env: envNow(), roi: roi || null, W: v.videoWidth, H: v.videoHeight, noroi: qs.has('noroi') }, pb ? [bmp, pb[0], pb[1]] : [bmp]);
+            if (worker) worker.postMessage({ type: 'frame', bmp: bmp, pa: pb ? [{ bmp: pb[0], x: eyes[0].x, y: eyes[0].y, s: eyes[0].s }, { bmp: pb[1], x: eyes[1].x, y: eyes[1].y, s: eyes[1].s }] : null, t: performance.now(), env: envNow(), roi: roi || null, W: SRC === v ? v.videoWidth : SRC.width, H: SRC === v ? v.videoHeight : SRC.height, noroi: qs.has('noroi') }, pb ? [bmp, pb[0], pb[1]] : [bmp]);
             else { bmp.close(); if (pb) pb.forEach((b) => b.close()); }
           }).catch(() => { inflight = Math.max(0, inflight - 1); window.__gazeRoi = null; window.__gazeEyes = null; });
         };

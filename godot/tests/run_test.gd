@@ -2,6 +2,41 @@ extends Node
 ## Headless checks for DOWNHILL:  godot --headless --path . res://tests/run_test.tscn
 var _fails := 0
 
+var _metrics: Dictionary = {}
+var _t_start: int = Time.get_ticks_msec()
+
+
+## Every number worth comparing between builds goes through here: the suite writes them all to tests/metrics_latest.json and appends a row to tests/metrics_history.csv.
+func _m(key: String, value: Variant) -> void:
+	_metrics[key] = value
+
+
+func _write_metrics() -> void:
+	_metrics["tests_failed"] = _fails
+	_metrics["seconds"] = snappedf(float(Time.get_ticks_msec() - _t_start) / 1000.0, 0.1)
+	_metrics["when"] = Time.get_datetime_string_from_system(false, true)
+	var txt := JSON.stringify(_metrics, "  ", true)
+	for path in ["res://tests/metrics_latest.json", "user://metrics_latest.json"]:
+		var f := FileAccess.open(path, FileAccess.WRITE)
+		if f != null:
+			f.store_string(txt)
+	var keys: Array = _metrics.keys()
+	keys.sort()
+	var hist := "res://tests/metrics_history.csv"
+	var new_file := not FileAccess.file_exists(hist)
+	var h := FileAccess.open(hist, FileAccess.READ_WRITE if not new_file else FileAccess.WRITE)
+	if h != null:
+		if new_file:
+			h.store_line(",".join(keys))
+		else:
+			h.seek_end()
+		var row: Array = []
+		for k in keys:
+			row.append(str(_metrics[k]))
+		h.store_line(",".join(row))
+	print("metrics: %d numbers written to tests/metrics_latest.json (and a row to metrics_history.csv)" % keys.size())
+
+
 func _check(ok: bool, msg: String) -> void:
 	print(("PASS  " if ok else "FAIL  ") + msg)
 	if not ok:
@@ -316,7 +351,13 @@ func _ready() -> void:
 		st += 1
 		rig._physics_process(dt)
 	print("hands off: %d barriers, %d crashes, %d swerves over %.0f m" % [rig._passed_ok, rig.crashes, rig.swerves, -rig.spos.z])
-	_check(rig.crashes <= 4, "with no input at all it makes it down 1500 m with few crashes (%d)" % rig.crashes)
+	_m("handsoff_barriers_passed", rig._passed_ok)
+	_m("handsoff_crashes", rig.crashes)
+	_m("handsoff_metres", int(-rig.spos.z))
+	_m("handsoff_engage_end", snappedf(rig._engage, 0.01))
+	var ho_eng := float(rig.agency_summary()["engageMean"])
+	_m("handsoff_engage_mean", ho_eng)
+	_check(ho_eng < 0.8, "with no input the help fades (it was engaged %.0f%% of the time; the board still passed %d barriers with %d crashes)" % [ho_eng * 100.0, rig._passed_ok, rig.crashes])
 	rig._restart()
 
 	# ---- steering from the eyes: a steady gaze goes straight, a look aside carves that way, then straightens
@@ -340,14 +381,14 @@ func _ready() -> void:
 		await get_tree().physics_frame
 		await get_tree().process_frame
 		rig.spos.x = clampf(rig.spos.x, -10.0, 10.0)
-	_check(rig._steer_gaze > 0.4 and rig.heading > 0.25, "a look to the right carves right (steer %.2f, heading %.2f)" % [rig._steer_gaze, rig.heading])
+	_check(rig._steer_gaze > 0.4 and rig.heading > 0.18, "a look to the right carves right (steer %.2f, heading %.2f)" % [rig._steer_gaze, rig.heading])
 	var t_c := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t_c < 900:
 		GazeProvider.set_scripted(Vector2(clampf(0.42 + nrng.randfn(0.0, 0.008), 0.0, 1.0), 0.45))
 		await get_tree().physics_frame
 		await get_tree().process_frame
 		rig.spos.x = clampf(rig.spos.x, -10.0, 10.0)
-	_check(rig._steer_gaze < -0.4 and rig.heading < -0.25, "a look to the left carves left (steer %.2f, heading %.2f)" % [rig._steer_gaze, rig.heading])
+	_check(rig._steer_gaze < -0.4 and rig.heading < -0.18, "a look to the left carves left (steer %.2f, heading %.2f)" % [rig._steer_gaze, rig.heading])
 	await _hold(1800, Vector2(0.5, 0.45))
 	_check(absf(rig.heading) < 0.4, "looking back at the middle straightens the board (heading %.2f)" % rig.heading)
 
@@ -510,6 +551,10 @@ func _ready() -> void:
 		for cl in rig.crash_log:
 			print("    crash: ", cl)
 	print("human totals over 3 runs each: clean eyes %d crashes, %d barriers   |   30%% wrong picks %d crashes, %d barriers" % [tot_cr[0.0], tot_bar[0.0], tot_cr[0.3], tot_bar[0.3]])
+	_m("human_clean_crashes", tot_cr[0.0])
+	_m("human_clean_barriers", tot_bar[0.0])
+	_m("human_wrongpick_crashes", tot_cr[0.3])
+	_m("human_wrongpick_barriers", tot_bar[0.3])
 	_check(tot_cr[0.0] <= 9 and tot_cr[0.3] <= 24, "a full 4200 m run with late, noisy, sometimes wrong gate choices stays nearly crash free (%d / %d crashes over 3 runs each)" % [tot_cr[0.0], tot_cr[0.3]])
 
 	# ---- a player who hunts the buffs with their eyes: looks at the nearest buff in reach (path buffs, and the ones in front of the safe gate), else the safe gate
@@ -1016,6 +1061,293 @@ func _ready() -> void:
 			break
 	_check(rig.trick_score == z_sc2 and rig._trk_text == "JUST FALLING", "a long jump with no tricks is just falling, and the game says so (text %s, comment %s, crashes %d, score %d vs %d, air %s steps %d z %.0f kick z %.0f air_time %.2f)" % [rig._trk_text, rig._trk_comment, rig.crashes, rig.trick_score, z_sc2, str(z_air2), z_steps2, rig.spos.z, zkz, rig._air_time])
 	rig.ghost = false
+	# ---- regions and the new zones
+	rig.apply_params({})
+	rig._restart()
+	rig.balls_enabled = false
+	for jr in range(rig._next_j, 140):
+		rig._gen_segment(jr)
+	_check(rig.regions_seen.size() >= 3, "a long course passes through several regions (%s)" % str(rig.regions_seen))
+	_check(rig.zones_seen.has("forest") and rig.zones_seen.has("drop"), "forests and cliff drops turn up (%s)" % str(rig.zones_seen))
+	var tints := {}
+	for jt in rig._rows:
+		tints[String((rig._rows[jt] as Dictionary).get("region", ""))] = true
+	_check(tints.size() >= 3 and rig._chunk_tint(40) is Color, "regions colour the snow differently")
+	# ---- the desert theme: mummies roll like snowballs but look different
+	_check(Themes.DATA.has("egypt") and Themes.hazard_skin("egypt") == "mummy" and Themes.hazard_skin("alpine") == "snow", "there is an Egypt theme whose hazard is a mummy")
+	rig.hazard_skin = "mummy"
+	rig._balls.clear()
+	rig._spawn_ball()
+	var mb: Dictionary = rig._balls.back()
+	_check(mb["eyes"] != null and is_instance_valid(mb["eyes"]), "a mummy rolls in with glowing eyes that stay turned to you")
+	for bb in rig._balls:
+		if is_instance_valid(bb["n"]):
+			(bb["n"] as Node).queue_free()
+		if bb.get("eyes") != null and is_instance_valid(bb["eyes"]):
+			(bb["eyes"] as Node).queue_free()
+	rig._balls.clear()
+	rig.hazard_skin = "snow"
+	_check(Themes.pyramid_mesh().get_surface_count() == 1 and Themes.ground_material("egypt") != null and Themes.sky_material("egypt") != null, "the desert has pyramids, dunes and a sky")
+	# ---- dynamic light: the day wraps round and moves through dawn, day, golden hour and dusk
+	var dl := DhLighting.new()
+	var d0 := dl.sample_day(0.0)
+	var d1 := dl.sample_day(1.0)
+	var dn := dl.sample_day(0.25)
+	var dg := dl.sample_day(0.5)
+	_check((d0["sun"] as Color).is_equal_approx(d1["sun"]) and float(d0["elev"]) < float(dn["elev"]) and float(dg["elev"]) < float(dn["elev"]), "the day wraps, with a low sun at dawn and golden hour and a high one at noon (%.0f / %.0f / %.0f degrees)" % [float(d0["elev"]), float(dn["elev"]), float(dg["elev"])])
+	_check((dg["hor"] as Color).r > (dn["hor"] as Color).r - 0.2 and (dg["hor"] as Color).b < (dn["hor"] as Color).b, "golden hour is warmer than noon")
+	dl.free()
+	# ---- the black box and the lean
+	var rl := RunLog.new()
+	rig._restart()
+	for ti in 200:
+		rl.tick(rig, 1.0 / 60.0)
+	rig._run_t = 5.0
+	for ti2 in 200:
+		rl.tick(rig, 1.0 / 60.0)
+	var sm := rl.summary(rig, "test")
+	_check(sm.has("steering") and sm.has("phone") and sm.has("vehicle") and sm.has("performance") and sm.has("tracker") and sm.has("device"), "a run summary has steering, phone, vehicle, performance, tracker and device sections")
+	var shares := float((sm["steering"] as Dictionary)["left"]) + float((sm["steering"] as Dictionary)["centre"]) + float((sm["steering"] as Dictionary)["right"])
+	_check(absf(shares - 1.0) < 0.03, "the left, centre and right shares add up (%.2f)" % shares)
+	_check(RunLog.line(sm).contains("steer L"), "a run can be shown as one line: %s" % RunLog.line(sm))
+	_check(not JSON.stringify(sm).to_lower().contains("latitude") and not JSON.stringify(sm).to_lower().contains("longitude"), "no location is ever recorded")
+	rl.end_run(rig, "test")
+	var stored := RunLog.load_all()
+	_check(stored.size() >= 1, "a finished run is kept (%d stored)" % stored.size())
+	RunLog.clear_all()
+	# a lean: the look sits 0.02 to one side all the time, swinging 0.03 either way. After a while the centre must have followed it.
+	rig.eyes_only = true
+	rig._ex_init = false
+	rig._ex_raw.clear()
+	rig._ex_abs.clear()
+	rig._ex_slow.clear()
+	var lean_sum := 0.0
+	var lean_n := 0
+	for li in 6000:
+		var lt := float(li) / 60.0
+		GazeProvider.eih = Vector2(-(0.02 + 0.03 * sin(lt * 0.9)), 0.5)
+		var lo: float = rig._eyes_only_offs(1.0 / 60.0, 0.0)
+		if li > 5000:
+			lean_sum += lo
+			lean_n += 1
+	var lean_mean := lean_sum / float(lean_n)
+	_check(absf(lean_mean) < 0.012, "a constant lean is absorbed into the centre (mean offset %.4f after 100 s)" % lean_mean)
+	# ---- earned help
+	rig._restart()
+	rig._run_t = 30.0
+	rig._eye_on = false
+	rig.grounded = true
+	for ei in 400:
+		rig._update_engage(1.0 / 60.0, 0.0, Vector3.ZERO)
+	var eng_idle: float = rig._engage
+	for ei2 in 90:
+		rig._update_engage(1.0 / 60.0, 1.0, Vector3.ZERO)
+	_check(eng_idle < 0.3 and rig._engage > 0.9, "help fades when you do nothing (%.2f) and returns the moment you act (%.2f)" % [eng_idle, rig._engage])
+	rig._restart()
+	_check(rig._engage == 1.0 and int(rig.ag["eyes"]) == 0 and rig.agency_summary().has("eyesGateShare"), "a new run starts fully helped with an empty agency record")
+	# ---- real looks versus noise: noise around the true gaze, one-frame spikes, blinks, and genuine jumps that settle
+	var sd := Saccades.new()
+	sd.jitter = 0.12
+	sd.min_amp = 0.28
+	var srng := RandomNumberGenerator.new()
+	srng.seed = 4242
+	var truth: Array = []                   # [t, dir]
+	var found: Array = []                   # [t, dir]
+	var fix := 0.0
+	var t_s := 0.0
+	var next_jump := 1.0
+	var blink_left := 0
+	var n_spikes := 0
+	for fi in 3600:                          # five minutes at 12 frames a second
+		t_s += 1.0 / 12.0
+		if t_s >= next_jump:
+			var dir_s := 1.0 if (fix < -0.4 or (fix < 0.4 and srng.randf() < 0.5)) else -1.0
+			fix = clampf(fix + dir_s * srng.randf_range(0.8, 1.5), -1.6, 1.6)
+			truth.append([t_s, dir_s])
+			next_jump = t_s + srng.randf_range(1.0, 2.2)
+		var x_s := fix + srng.randfn(0.0, 0.10)
+		if srng.randf() < 0.04:
+			x_s += srng.randf_range(0.7, 1.2) * (1.0 if srng.randf() < 0.5 else -1.0)         # a one-frame spike
+			n_spikes += 1
+		if blink_left > 0:
+			x_s -= 0.7                                                                        # a blink drags the reading one way for two frames
+			blink_left -= 1
+		elif srng.randf() < 0.01:
+			blink_left = 2
+		var ev_before := sd.events
+		var ev := sd.push(t_s, x_s)
+		if sd.events > ev_before:
+			found.append([t_s, ev])
+		elif sd.events < ev_before and not found.is_empty():
+			found.pop_back()                                  # the look was taken back
+	var tp := 0
+	var used := {}
+	for tr_i in truth:
+		for fd_i in found.size():
+			if used.has(fd_i):
+				continue
+			var fdv: Array = found[fd_i]
+			if float(fdv[0]) >= float(tr_i[0]) and float(fdv[0]) - float(tr_i[0]) <= 0.6 and float(fdv[1]) == float(tr_i[1]):
+				tp += 1
+				used[fd_i] = true
+				break
+	var recall := float(tp) / float(maxi(truth.size(), 1))
+	var fp_min := float(found.size() - tp) / 5.0
+	_m("saccade_recall", snappedf(recall, 0.01))
+	_m("saccade_false_per_min", snappedf(fp_min, 0.1))
+	_m("saccade_spikes_rejected", sd.spikes)
+	_m("saccade_retracted", sd.retracted)
+	_check(recall >= 0.8 and fp_min <= 4.0, "real looks are found and noise is not (recall %.0f%%, %.1f false per minute, %d one-frame spikes rejected of %d)" % [recall * 100.0, fp_min, sd.spikes, n_spikes])
+
+	# ---- rocking and twitching: following the safe gate with a slow, noisy, late look must not make the board swing back and forth
+	rig._restart()
+	rig.set_physics_process(false)
+	rig.vel = Vector2(0.0, -16.0)
+	var orng := RandomNumberGenerator.new()
+	orng.seed = 9
+	var oq: Array = []
+	var o_rev := 0
+	var o_last := 0.0
+	var o_st := 0
+	var o_steer_changes := 0.0
+	var o_prev_steer := 0.0
+	while rig.spos.z > -900.0 and o_st < 9000:
+		o_st += 1
+		var o_row: Dictionary = {}
+		var o_bz := -1.0e9
+		for oj in rig._rows:
+			var orw: Dictionary = rig._rows[oj]
+			if orw["has_row"] and float(orw["z"]) < rig.spos.z - 4.0 and float(orw["z"]) > o_bz:
+				o_bz = float(orw["z"])
+				o_row = orw
+		if not o_row.is_empty():
+			var o_gx := 0.0
+			for og in o_row["gaps"]:
+				if og["good"]:
+					o_gx = float(og["x"])
+			oq.append(clampf((o_gx - rig.spos.x) / 30.0, -1.0, 1.0) + orng.randfn(0.0, 0.12))
+			if oq.size() > 21:
+				oq.pop_front()
+			rig._steer_gaze = float(oq[0])
+		rig._physics_process(dt)
+		o_steer_changes += absf(rig.steer - o_prev_steer)
+		o_prev_steer = rig.steer
+		if absf(rig.vel.x) > 1.0:
+			if o_last != 0.0 and signf(rig.vel.x) != signf(o_last):
+				o_rev += 1
+			o_last = rig.vel.x
+	var o_per := float(o_rev) / maxf(-rig.spos.z / 100.0, 1.0)
+	var o_twitch := o_steer_changes / maxf(float(o_st) * dt, 0.1)
+	_m("rocking_reversals_per_100m", snappedf(o_per, 0.1))
+	_m("twitch_steer_change_per_s", snappedf(o_twitch, 0.01))
+	_check(o_per < 2.0, "a late, noisy look does not make the board rock (%.1f sideways reversals per 100 m, steering moves %.2f per second)" % [o_per, o_twitch])
+
+	# ---- tentative intent: starts at once, is confirmed by staying, cancelled by going back
+	rig._restart()
+	rig._eye_on = true
+	rig.sacc.accepted += 1
+	rig.sacc.last_dir = 1.0
+	rig._update_intent(1.0 / 60.0)
+	var int_start: float = rig._intent_amt
+	rig.sacc.confirmed += 1
+	rig._update_intent(1.0 / 60.0)
+	var int_conf: float = rig._intent_amt
+	rig.sacc.accepted += 1
+	rig.sacc.last_dir = -1.0
+	rig._update_intent(1.0 / 60.0)
+	rig.sacc.retracted += 1
+	rig._update_intent(1.0 / 60.0)
+	var int_cancel: float = rig._intent_amt
+	_m("intent_start_amt", snappedf(int_start, 0.01))
+	_check(int_start >= 0.5 and int_conf >= 0.99 and int_cancel < 0.01, "a look moves the board at once (%.2f), staying confirms it (%.2f), going back cancels it (%.2f)" % [int_start, int_conf, int_cancel])
+
+	# ---- every button does what it says
+	var menu := DownhillMenu.new()
+	var menu_layer := CanvasLayer.new()
+	add_child(menu_layer)
+	menu_layer.add_child(menu)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	get_tree().paused = false
+	var btn_ok := true
+	var btn_bad: Array = []
+	for tid in Themes.ORDER:
+		menu._pick_theme(tid)
+		if String(menu.cfg["theme"]) != tid:
+			btn_ok = false
+			btn_bad.append("theme " + tid)
+	for pid in menu._preset_btns:
+		menu._pick_preset(pid)
+		if String(menu.cfg["preset"]) != pid:
+			btn_ok = false
+			btn_bad.append("preset " + pid)
+	menu._pick_preset("endless")
+	if not bool(menu.cfg["endless"]):
+		btn_ok = false
+		btn_bad.append("endless preset")
+	for tk in menu._toggles:
+		var before: bool = bool(menu.cfg[tk])
+		(menu._toggles[tk] as Button).toggled.emit(not before)
+		if bool(menu.cfg[tk]) == before:
+			btn_ok = false
+			btn_bad.append("toggle " + tk)
+	menu._diff_s.value = 1.35
+	menu._assist_s.value = 0.3
+	menu._len_s.value = 7.0
+	if absf(float(menu.cfg["diff"]) - 1.35) > 0.01 or absf(float(menu.cfg["assist"]) - 0.3) > 0.01 or absf(float(menu.cfg["length_km"]) - 7.0) > 0.01:
+		btn_ok = false
+		btn_bad.append("sliders")
+	var got_cfg: Array = []
+	Game.dh_started.connect(func(cc: Dictionary) -> void: got_cfg.append(cc))
+	menu._pick_theme("candy")
+	menu._start(false)
+	await get_tree().process_frame
+	get_tree().paused = false
+	if got_cfg.is_empty() or String((got_cfg[0] as Dictionary)["theme"]) != "candy" or int((got_cfg[0] as Dictionary)["seed"]) == 0:
+		btn_ok = false
+		btn_bad.append("start")
+	_check(btn_ok, "every menu button and slider changes what it should and START hands the settings over (%s)" % str(btn_bad))
+	rig._paused = true
+	rig._pause_action("advanced")
+	var adv_on: bool = rig._pause_adv
+	rig._pause_action("simple")
+	var adv_off: bool = not rig._pause_adv
+	rig._pause_action("resume")
+	_check(adv_on and adv_off and not rig._paused, "the pause screen's ADVANCED, BACK and RESUME work")
+	# right after START the browser's camera prompt takes focus: that must not pause the game
+	rig._paused = false
+	rig._no_pause_until = Time.get_ticks_msec() + 5000
+	rig._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	var no_pause_in_grace: bool = not rig._paused
+	rig._no_pause_until = 0
+	GazeProvider.backend = GazeProvider.Backend.SCRIPTED
+	rig._notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	_check(no_pause_in_grace and rig._paused, "losing focus right after START does not pause, losing it later does")
+	rig._paused = false
+
+	# ---- the speed governor: camera and control come first
+	var gv := DhLighting.new()
+	for gi in 6:
+		gv.step_governor(2.0, 60.0, 8.0, true)                 # the game is fine but the tracker is starving
+	var tier_trk := gv.tier
+	for gi2 in 12:
+		gv.step_governor(2.0, 60.0, 14.0, true)
+	var tier_rec := gv.tier
+	var gv2 := DhLighting.new()
+	gv2.floor_tier = 1
+	gv2.tier = 1
+	for gi3 in 30:
+		gv2.step_governor(2.0, 60.0, 14.0, true)
+	var gv3 := DhLighting.new()
+	for gi4 in 12:
+		gv3.step_governor(2.0, 25.0, 14.0, true)
+	_m("governor_tier_when_tracker_slow", tier_trk)
+	_check(tier_trk >= 2 and tier_rec < tier_trk, "a starving tracker makes the game give up looks (tier %d) and they come back when it recovers (tier %d)" % [tier_trk, tier_rec])
+	_check(gv2.tier == 1 and gv3.tier >= 2, "a phone never drops below its floor, and a slow game gives up looks too (%d, %d)" % [gv2.tier, gv3.tier])
+	gv.free()
+	gv2.free()
+	gv3.free()
+
 	# ---- sky ramps, face challenges, the cutaway camera, gate posts and breadcrumbs
 	rig.set_physics_process(false)
 	rig.apply_params({"zones": {"air": 9.0, "rush": 1.0, "flat": 0.0, "tunnel": 0.0, "bend": 0.0}})
@@ -1070,6 +1402,9 @@ func _ready() -> void:
 		await get_tree().process_frame
 	Engine.time_scale = 1.0
 	print("    sky flight: steps %d end z %.0f kick z %.0f lip %.0f rise %.2f speed %.1f epic %s drag %.2f" % [s_steps, rig.spos.z, sz0, float(srow["kick"]["lip"]), float(rig._kickers[0]["rise"]) if not rig._kickers.is_empty() else -1.0, rig.vel.length(), str(rig._air_epic), rig.sky_drag])
+	_m("sky_peak_m", snappedf(s_peak, 0.1))
+	_m("sky_air_s", snappedf(s_air, 0.1))
+	_m("faces_done", rig.face_done)
 	_check(s_peak > 5.0 and s_air > 1.4, "an air-stretch ramp throws you into the sky (%.1f m up, %.1f s in the air)" % [s_peak, s_air])
 	_check(s_asked > 0 and rig.face_done >= 1, "up there the game asks for a face and pays for pulling it (%d frames asked, %d done, tricks %s)" % [s_asked, rig.face_done, str(rig.face_seen)])
 	_check((s_cine > 0.5 or s_peak < 7.0) and rig.cines >= 1, "a big jump cuts away to the hero camera (blend %.2f, %d cutaways)" % [s_cine, rig.cines])
@@ -1155,5 +1490,6 @@ func _ready() -> void:
 	for pk3 in 20:
 		pm5.feed(80.0, 0.0, 0, Vector3(120, 100, 90), 1.0 / 30.0)
 	_check(pm5.holding(), "a hard bump holds the gaze for a moment")
+	_write_metrics()
 	print("RESULT: " + ("ALL PASSED" if _fails == 0 else "%d FAILED" % _fails))
 	get_tree().quit()

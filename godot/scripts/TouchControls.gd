@@ -252,6 +252,8 @@ func _tap(action: StringName) -> void:
 func _button_hidden(id: String) -> bool:
 	if Game.flight_mode and (id == "fire" or id == "weapon"):
 		return true
+	if Game.run_mode and id == "float":
+		return true                                    # chin up does nothing in Downhill: no button for it
 	# In hands-free mode keep only what's useful: fire(blink), jump, kick, eyes.
 	if id == "cam":
 		if not OS.has_feature("web"):
@@ -414,6 +416,8 @@ func _draw() -> void:
 		draw_circle(c, r, Color(col, 0.85 if down else 0.55))
 		draw_arc(c, r, 0.0, TAU, 48, Color(1, 1, 1, 0.95), 5.0)
 		var label: String = String(b[1])
+		if Game.run_mode:
+			label = {"gather": "TUCK", "slam": "SLAM", "center": "RE-CENTRE", "cam": "CAMERA"}.get(id, label)          # Downhill words for the chin buttons: TUCK (hold: tuck, brace, charge a ramp), SLAM (a quick drop in the air)
 		if Game.peek_mode and Game.demo_mode:
 			label = {"fire": "FIRE", "weapon": "SWAP", "center": "CENTER"}.get(id, label)
 		if not Game.demo_mode:

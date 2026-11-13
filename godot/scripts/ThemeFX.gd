@@ -6,10 +6,47 @@ extends Node
 
 var post: ThemePost
 var _theme: String = "alpine"
+var level: MainLevel
+var rig: RunRig
+var _clock: float = 0.0
+var _base_fog: float = 0.0
+var _base_fog_col: Color = Color.WHITE
+var _storm_said: bool = false
+
+const STORM_EVERY := 55.0
+const STORM_LEN := 14.0
+
+
+func reset_storm() -> void:
+	_clock = 0.0
+	_storm_said = false
+	var env: Environment = level.world_env.environment
+	_base_fog = env.fog_density
+	_base_fog_col = env.fog_light_color
+
+
+## The desert: a sandstorm rolls in now and then and the world goes thick and gold. The gate beams and signs stay readable: that is the point.
+func _process(delta: float) -> void:
+	if _theme != "egypt" or level == null or get_tree().paused or rig == null or not is_instance_valid(rig):
+		return
+	_clock += delta
+	var cyc := fposmod(_clock, STORM_EVERY)
+	var k := 0.0
+	if cyc > STORM_EVERY - STORM_LEN:
+		k = sin((cyc - (STORM_EVERY - STORM_LEN)) / STORM_LEN * PI)
+	var env: Environment = level.world_env.environment
+	env.fog_density = lerpf(_base_fog, 0.016, k)
+	env.fog_light_color = _base_fog_col.lerp(Color(0.9, 0.66, 0.38), k)
+	if k > 0.15 and not _storm_said:
+		_storm_said = true
+		rig._toast("SANDSTORM!  follow the beams", Color(1.0, 0.8, 0.4))
+	elif k < 0.02:
+		_storm_said = false
+
 
 
 ## Apply a theme to the Downhill level. Safe to call again with another theme (alpine puts everything back).
-static func apply_to_level(level: MainLevel, rig: DownhillRig, id: String, intensity: float = 1.0) -> void:
+static func apply_to_level(level: MainLevel, rig: DownhillRig, id: String, intensity: float = 1.0, dyn: bool = true, snow: bool = true, fluffy: bool = false) -> void:
 	var env: Environment = level.world_env.environment
 	var sky := env.sky
 	if not sky.has_meta("orig_sky"):
@@ -30,6 +67,23 @@ static func apply_to_level(level: MainLevel, rig: DownhillRig, id: String, inten
 	var gm := Themes.ground_material(id)
 	(rig._m_ground as ShaderMaterial).shader = gm.shader if gm != null else (rig.get_meta("orig_ground") as Shader)
 	rig._veg_theme = Themes.veg_material(id)
+	rig.hazard_skin = Themes.hazard_skin(id)
+	# the shapes: fluffy puffs for trees and gumdrops for rocks, in the candy theme or wherever FLUFFY SHAPES is on
+	if not rig.has_meta("orig_shapes"):
+		rig.set_meta("orig_shapes", [rig._m_cone, rig._m_rock, rig._m_rock_snow])
+	var shapes: Array = rig.get_meta("orig_shapes")
+	if fluffy or id == "candy":
+		rig._m_cone = Themes.fluffy_tree_mesh(id)
+		rig._m_rock = Themes.gumdrop_mesh()
+		rig._m_rock_snow = Themes.gumdrop_mesh()
+	else:
+		rig._m_cone = shapes[0]
+		rig._m_rock = shapes[1]
+		rig._m_rock_snow = shapes[2]
+	if rig._mtn != null:
+		if not rig.has_meta("orig_mtn"):
+			rig.set_meta("orig_mtn", rig._mtn.mesh)
+		rig._mtn.mesh = Themes.pyramid_mesh() if id == "egypt" else (Themes.candy_hills_mesh() if id == "candy" else (rig.get_meta("orig_mtn") as Mesh))
 	rig.mist_color = Themes.mist_color(id)
 	if rig._mist != null:
 		(rig._mist.material_override as ShaderMaterial).set_shader_parameter("tint", rig.mist_color)
@@ -40,7 +94,17 @@ static func apply_to_level(level: MainLevel, rig: DownhillRig, id: String, inten
 		fx.name = "ThemeFX"
 		fx.process_mode = Node.PROCESS_MODE_ALWAYS
 		level.add_child(fx)
+	fx.level = level
+	fx.rig = rig
+	var lt: DhLighting = level.get_node_or_null("Lighting") as DhLighting
+	if lt == null:
+		lt = DhLighting.new()
+		lt.name = "Lighting"
+		lt.process_mode = Node.PROCESS_MODE_PAUSABLE
+		level.add_child(lt)
+	lt.setup(level, rig as RunRig, id, dyn, snow)
 	fx.show_theme(id, intensity)
+	fx.reset_storm()
 
 
 static func _snapshot(level: MainLevel) -> Dictionary:
@@ -79,6 +143,7 @@ class ThemePost extends Node:
 	var src_tex: Texture2D
 	var mode: int = 0
 	var amount: float = 1.0
+	var trails_ok: bool = true
 	var _own_tex: bool = false
 
 	## Over the whole game picture (above the HUD, below the menus).
@@ -120,7 +185,7 @@ class ThemePost extends Node:
 		mat.set_shader_parameter("breathe", amount)
 		if layer != null:
 			layer.visible = m > 0
-		if m == 1:
+		if m == 1 and trails_ok:
 			_make_trail()
 		elif trail_vp != null:
 			trail_vp.queue_free()
@@ -129,6 +194,7 @@ class ThemePost extends Node:
 				cur_vp.queue_free()
 				cur_vp = null
 			mat.set_shader_parameter("trail", null)
+		mat.set_shader_parameter("use_trail", 1.0 if trail_vp != null else 0.0)
 
 	func _make_trail() -> void:
 		if trail_vp != null:

@@ -159,6 +159,11 @@ var eyes_only: bool = true                 # control from where the IRIS sits in
 var _ex_sign: float = 1.0
 var _ex_yaw: float = 0.0
 var _ex_ref: float = 0.0
+var sacc := Saccades.new()               # real looks (a jump that settles) as opposed to jitter and one-frame spikes
+var _sacc_last_raw: float = 1.0e9
+var _ex_slow: Array = []                 # a long, slow record of where the look sits (every 0.25 s, about 40 s): its median is the true centre of a long ride
+var _ex_slow_t: float = 0.0
+var vehicle_forced: bool = false         # the player said "I am on a bus / train": the centre re-learns faster
 var _ex_init: bool = false
 var _ex_dec: float = 0.0                   # lingered (smoothed) eye-in-head offset
 var _ex_full: float = 0.02                 # the eye-in-head offset of your biggest normal glances: that maps to a full look at the outer gate
@@ -199,6 +204,7 @@ var _zone_scale: float = 1.0           # sensitivity: smaller = steps with a sma
 var _was_fullscreen: bool = false
 var _paused: bool = false
 var _pause_btns: Array = []
+var _pause_adv: bool = false              # the tracking monitor (tuning tools) sits behind ADVANCED; the plain pause screen is for players
 var _stat_std: float = 0.0
 var _noise_fix: float = 0.03
 var _stat_p5: float = 0.5
@@ -232,6 +238,7 @@ var _mtn: MeshInstance3D
 var _m_bank: BoxMesh
 var _m_post: CylinderMesh
 var _m_bar: BoxMesh
+var veg_range: float = 0.0               # 0 = trees and rocks are drawn as far as you can see; the speed governor shortens it
 var _veg_theme: Material                  # a theme's finish for trees and rocks (null = the plain vertex-colour one)
 var _m_veg: StandardMaterial3D
 var _m_ground: Material
@@ -565,6 +572,8 @@ func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedCo
 	inst.multimesh = mm
 	inst.material_override = mat if mat != null else (_veg_theme if _veg_theme != null else _m_veg)
 	inst.extra_cull_margin = 40.0
+	if veg_range > 0.0:
+		inst.visibility_range_end = veg_range
 	add_child(inst)
 	(row["nodes"] as Array).append(inst)
 
@@ -602,6 +611,10 @@ func _make_marker(g: Dictionary, rz: float) -> Node3D:
 	return m
 
 
+func _chunk_tint(_j: int) -> Color:
+	return Color.WHITE
+
+
 func _build_chunk(j: int) -> MeshInstance3D:
 	const NX := 60
 	const NZ := 34
@@ -635,7 +648,7 @@ func _build_chunk(j: int) -> MeshInstance3D:
 			var c := Color(0.97, 0.98, 1.0).lerp(Color(0.8, 0.86, 0.97), clampf(0.35 * t + 0.1 * stripe, 0.0, 1.0))
 			if absf(x) > W_HALF:
 				c = c.lerp(Color(0.8, 0.84, 0.88), 0.3)
-			cols.append(c)
+			cols.append(c * _chunk_tint(j))
 	for iz in NZ:
 		for ix in NX:
 			var a := iz * stride + ix
@@ -1780,9 +1793,9 @@ func _build_mountains() -> void:
 	st.set_smooth_group(-1)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 777
-	var rock := Color(0.42, 0.38, 0.5)
-	var snow := Color(0.9, 0.9, 0.97)
-	var white := Color(0.98, 0.98, 1.0)
+	var rock := Color(0.50, 0.55, 0.90)               # blue-violet, so the far ranges melt into the haze
+	var snow := Color(0.80, 0.86, 0.98)
+	var white := Color(0.95, 0.97, 1.0)
 	var n := 30
 	for i in n:
 		var ang := TAU * (float(i) + rng.randf_range(-0.3, 0.3)) / float(n)
@@ -1964,6 +1977,9 @@ func _seek_term() -> float:
 ## a small glance then reaches the outer gates. It lingers (short smoothing) so a split-second look is noise-free, and returns screen-fraction units like the geometry offset.
 func _eyes_only_offs(delta: float, geo_offs: float) -> float:
 	var raw := -GazeProvider.eih.x * _ex_sign
+	if _ex_full > 0.004 and not is_equal_approx(raw, _sacc_last_raw):
+		_sacc_last_raw = raw                               # a new tracker frame (the game runs faster than the camera)
+		sacc.push(_age, (raw - _ex_ref) / _ex_full)
 	_ex_raw.append(raw)
 	if _ex_raw.size() > 90:
 		_ex_raw.remove_at(0)
@@ -2005,7 +2021,21 @@ func _eyes_only_offs(delta: float, geo_offs: float) -> float:
 					return 0.0
 	var d := raw - _ex_ref
 	if absf(d) < 0.6 * _ex_full:
-		_ex_ref += d * minf(delta / 20.0, 1.0)         # slow drift only while you look near the middle
+		_ex_ref += d * minf(delta / (7.0 if RunLog.on_vehicle(vehicle_forced) else 20.0), 1.0)         # slow drift only while you look near the middle
+	# a lean (a streetcar, a tilted phone, a slumped shoulder) moves the whole reading by less than a glance, so the rules above never see it. Over a long ride you look left and
+	# right about equally, so the median of the last ~40 s IS the centre: follow it, gently.
+	_ex_slow_t -= delta
+	if _ex_slow_t <= 0.0:
+		_ex_slow_t = 0.25
+		_ex_slow.append(raw)
+		if _ex_slow.size() > 160:
+			_ex_slow.remove_at(0)
+	if _ex_slow.size() >= 40 and _ex_full > 0.0:
+		var ss := _ex_slow.duplicate()
+		ss.sort()
+		var dm: float = float(ss[ss.size() / 2]) - _ex_ref
+		if absf(dm) > 0.12 * _ex_full:
+			_ex_ref += dm * minf(delta / (4.0 if RunLog.on_vehicle(vehicle_forced) else 14.0), 1.0)
 	# a head shift or a lighting change moves the whole iris reading: if the look sits beyond any normal glance for 2 s the centre is stale, so re-centre on the recent median
 	if not _ex_rec:
 		if absf(d) > _ex_full:
@@ -2464,9 +2494,18 @@ func _collect_coins() -> void:
 # --------------------------------------------------------------------------
 # Pause + live tracking monitor (P / Esc, or the button under EYES). Same idea as EyeLab, kept simple.
 # --------------------------------------------------------------------------
+var _no_pause_until: int = 0              # msec: right after START the browser asks for the camera, may leave fullscreen and steals focus; none of that is a reason to pause
+
+
+func _pause_grace() -> bool:
+	if Time.get_ticks_msec() < _no_pause_until:
+		return true
+	return GazeProvider.backend == GazeProvider.Backend.CAMERA and not GazeProvider._camera_fresh() and _age < 30.0          # still waiting for the first camera frames
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
-		if lane_mode and cam != null:
+		if lane_mode and cam != null and not _pause_grace():
 			_paused = true
 
 
@@ -2482,7 +2521,7 @@ func _watch_trk(delta: float) -> void:
 
 func _watch_fullscreen() -> void:
 	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN or DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
-	if _was_fullscreen and not fs:
+	if _was_fullscreen and not fs and not _pause_grace():
 		_paused = true                 # Esc in a fullscreen browser only leaves fullscreen: treat it as pause
 	_was_fullscreen = fs
 
@@ -2540,6 +2579,17 @@ func _pause_action(id: String) -> void:
 	match id:
 		"resume":
 			_paused = false
+			_pause_adv = false
+		"restart":
+			_paused = false
+			_pause_adv = false
+			call("_restart")
+		"menu":
+			_return_to_menu()
+		"advanced":
+			_pause_adv = true
+		"simple":
+			_pause_adv = false
 		"copy":
 			DisplayServer.clipboard_set(JSON.stringify(_pause_report(), "  "))
 			_copy_note = "report copied"
@@ -2603,8 +2653,41 @@ func _pause_action(id: String) -> void:
 			_copy_note = "sensitivity x%.1f (dead zone +-%.0f%%)" % [1.0 / _zone_scale, _zone * _zone_scale * 100.0]
 
 
+func _return_to_menu() -> void:
+	_paused = false
+	_pause_adv = false
+	Engine.time_scale = 1.0
+	get_tree().paused = false
+	get_tree().reload_current_scene()                 # the start menu comes back (the camera keeps running)
+
+
+## The pause screen a player sees: big buttons, nothing to tune.
+func _draw_pause_simple(font: Font, s: Vector2, k: float) -> void:
+	_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0.03, 0.07, 0.15, 0.9))
+	_ctext(font, s.y * 0.14, "PAUSED", 46, Color(1, 1, 1))
+	var pt := "GAME %d fps" % int(Engine.get_frames_per_second())
+	if GazeProvider.backend == GazeProvider.Backend.CAMERA:
+		pt += "    CAM %.0f fps  %d ms" % [float(GazeProvider._pkt_times.size()) / 2.0, int(GazeProvider.trk_lat_ms)]
+	_ctext(font, s.y * 0.14 + 40.0 * k, pt, 18, Color(1, 1, 1, 0.7))
+	var labels := [["resume", "RESUME"], ["restart", "RESTART RUN"], ["menu", "RETURN TO MENU"], ["advanced", "ADVANCED: TRACKING MONITOR"]]
+	var bw := minf(s.x * 0.8, 560.0 * k)
+	var bh := 62.0 * k
+	var y := s.y * 0.30
+	for b in labels:
+		var br := Rect2((s.x - bw) * 0.5, y, bw, bh)
+		var primary: bool = b[0] == "resume"
+		_hud.draw_rect(br, Color(0.2, 0.5, 0.9, 0.95) if primary else Color(1, 1, 1, 0.14))
+		var tw := font.get_string_size(String(b[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, int(24.0 * k)).x
+		_text(font, Vector2(br.position.x + (bw - tw) * 0.5, br.position.y + bh * 0.66), String(b[1]), 24, Color(1, 1, 1))
+		_pause_btns.append({"id": b[0], "r": br})
+		y += bh + 14.0 * k
+
+
 func _draw_pause(font: Font, s: Vector2, k: float) -> void:
 	_pause_btns.clear()
+	if not _pause_adv:
+		_draw_pause_simple(font, s, k)
+		return
 	_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0.03, 0.07, 0.15, 0.88))
 	var m := 22.0 * k
 	var y := m
@@ -2691,7 +2774,7 @@ func _draw_pause(font: Font, s: Vector2, k: float) -> void:
 	_text(font, Vector2(m, y + 14.0 * k), "Look left / right and watch the orange line leave the grey band: that is what steers. Vertical gaze is not used (looking down is the least accurate); nodding your chin handles speed.", 14, Color(1, 1, 1, 0.6))
 	y += 34.0 * k
 	# buttons
-	var labels := [["resume", "RESUME"], ["ctl", "CONTROL: " + ["GATE", "SIDE", "STEER", "SEEK"][lane_ctl]], ["copy", "COPY REPORT"], ["reset", "RESET LEARNING"], ["head", "HEAD HELP: " + ("ON" if head_assist else "OFF")], ["sens_up", "MORE SENSITIVE"], ["sens_dn", "LESS SENSITIVE"], ["curve_up", "FINER CENTRE"], ["curve_dn", "FLATTER"], ["rate_up", "FASTER"], ["rate_dn", "SMOOTHER"], ["reach_up", "REACH +"], ["reach_dn", "REACH -"], ["smooth_up", "STEADIER"], ["smooth_dn", "SNAPPIER"], ["eyes", "EYES ONLY: " + ("ON" if eyes_only else "OFF")], ["flip", "REVERSE EYES"]]
+	var labels := [["simple", "BACK"], ["resume", "RESUME"], ["ctl", "CONTROL: " + ["GATE", "SIDE", "STEER", "SEEK"][lane_ctl]], ["copy", "COPY REPORT"], ["reset", "RESET LEARNING"], ["head", "HEAD HELP: " + ("ON" if head_assist else "OFF")], ["sens_up", "MORE SENSITIVE"], ["sens_dn", "LESS SENSITIVE"], ["curve_up", "FINER CENTRE"], ["curve_dn", "FLATTER"], ["rate_up", "FASTER"], ["rate_dn", "SMOOTHER"], ["reach_up", "REACH +"], ["reach_dn", "REACH -"], ["smooth_up", "STEADIER"], ["smooth_dn", "SNAPPIER"], ["eyes", "EYES ONLY: " + ("ON" if eyes_only else "OFF")], ["flip", "REVERSE EYES"]]
 	if Game.run_mode:
 		labels.append(["trace", "TRACE TEST"])
 		labels.append(["trace_off", "END TRACE"])

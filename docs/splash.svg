@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="overflow:hidden" viewBox="0 0 1600 900" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a0222"/>
+      <stop offset="0.45" stop-color="#4a0a6e"/>
+      <stop offset="0.72" stop-color="#d7287f"/>
+      <stop offset="0.74" stop-color="#1b0638"/>
+      <stop offset="1" stop-color="#07010f"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe45c"/>
+      <stop offset="0.55" stop-color="#ff7a3d"/>
+      <stop offset="1" stop-color="#ff1f8e"/>
+    </linearGradient>
+    <linearGradient id="neon" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2fa8"/>
+      <stop offset="1" stop-color="#2fe6ff"/>
+    </linearGradient>
+    <radialGradient id="glowp" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff58c8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ff58c8" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.45" r="0.75">
+      <stop offset="0.55" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.65"/>
+    </radialGradient>
+    <clipPath id="sunclip"><rect x="0" y="0" width="1600" height="560"/></clipPath>
+    <clipPath id="disc"><circle cx="800" cy="520" r="210"/></clipPath>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow2" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="stripes" width="10" height="22" patternUnits="userSpaceOnUse">
+      <rect width="10" height="22" fill="#000" opacity="0"/>
+    </pattern>
+    <g id="tree">
+      <path d="M0 -92 L26 -52 L12 -52 L34 -16 L16 -16 L40 22 L-40 22 L-16 -16 L-34 -16 L-12 -52 L-26 -52 Z" fill="#14052e" stroke="url(#neon)" stroke-width="3"/>
+    </g>
+    <g id="mandala">
+      <g fill="none" stroke-width="2.5" opacity="0.9">
+        <circle r="60" stroke="#2fe6ff"/>
+        <circle r="110" stroke="#ff2fa8" stroke-dasharray="6 10"/>
+        <circle r="170" stroke="#ffe45c" stroke-dasharray="2 12"/>
+        <circle r="240" stroke="#8a5cff"/>
+        <g stroke="#2fe6ff">
+          <path d="M0 -240 L0 240 M-240 0 L240 0 M-170 -170 L170 170 M170 -170 L-170 170"/>
+        </g>
+        <g stroke="#ff2fa8">
+          <path d="M0 -110 Q60 -60 0 0 Q-60 -60 0 -110 M0 110 Q60 60 0 0 Q-60 60 0 110 M-110 0 Q-60 60 0 0 Q-60 -60 -110 0 M110 0 Q60 60 0 0 Q60 -60 110 0"/>
+        </g>
+      </g>
+    </g>
+    <!-- feature icons, 64 box centred on 0,0 -->
+    <g id="i-eye" fill="none" stroke="#2fe6ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M-30 0 Q0 -26 30 0 Q0 26 -30 0 Z"/><circle r="8" fill="#2fe6ff"/></g>
+    <g id="i-lock" fill="none" stroke="#ff2fa8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle r="22"/><circle r="6" fill="#ff2fa8"/><path d="M0 -30 V-22 M0 22 V30 M-30 0 H-22 M22 0 H30"/></g>
+    <g id="i-fork" fill="none" stroke="#ffe45c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M0 28 V4 L-20 -24 M0 4 L20 -24"/><path d="M-26 -16 L-20 -26 L-10 -20 M26 -16 L20 -26 L10 -20"/></g>
+    <g id="i-ramp" fill="none" stroke="#2fe6ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M-30 22 L18 22 L18 -6 L-30 22 M26 -14 L34 -26 M16 -22 L16 -34"/></g>
+    <g id="i-face" fill="none" stroke="#ff2fa8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle r="26"/><path d="M-14 -6 H-6 M6 -6 H14 M-12 10 Q0 22 12 10"/></g>
+    <g id="i-shield" fill="none" stroke="#ffe45c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M0 -28 L24 -18 V4 Q24 22 0 30 Q-24 22 -24 4 V-18 Z"/></g>
+  </defs>
+
+  <!-- sky and world -->
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <g transform="translate(800 330)" opacity="0.55" filter="url(#glow)"><use href="#mandala"/></g>
+  <circle cx="800" cy="330" r="360" fill="url(#glowp)"/>
+  <g clip-path="url(#sunclip)">
+    <circle cx="800" cy="520" r="210" fill="url(#sun)" filter="url(#glow2)"/>
+    <g fill="#0b0220" clip-path="url(#disc)">
+      <rect x="560" y="470" width="480" height="5"/><rect x="560" y="492" width="480" height="8"/><rect x="560" y="516" width="480" height="11"/><rect x="560" y="542" width="480" height="14"/>
+    </g>
+  </g>
+  <!-- mountains -->
+  <path d="M0 585 L120 470 L210 540 L340 410 L470 545 L560 495 L640 585 L960 585 L1040 500 L1150 560 L1290 420 L1420 540 L1500 480 L1600 560 L1600 600 L0 600 Z" fill="#10032a" stroke="url(#neon)" stroke-width="3" filter="url(#glow)"/>
+  <!-- ground -->
+  <rect x="0" y="585" width="1600" height="315" fill="#0a0120"/>
+  <g stroke="#ff2fa8" stroke-width="2" opacity="0.85" filter="url(#glow)">
+    <path d="M800 585 L-700 900 M800 585 L-300 900 M800 585 L100 900 M800 585 L450 900 M800 585 L800 900 M800 585 L1150 900 M800 585 L1500 900 M800 585 L1900 900 M800 585 L2300 900"/>
+  </g>
+  <g stroke="#2fe6ff" stroke-width="2" opacity="0.7" filter="url(#glow)">
+    <path d="M0 605 H1600 M0 632 H1600 M0 668 H1600 M0 716 H1600 M0 782 H1600 M0 870 H1600"/>
+  </g>
+  <!-- trees -->
+  <g filter="url(#glow)">
+    <use href="#tree" transform="translate(130 640) scale(1.0)"/>
+    <use href="#tree" transform="translate(260 610) scale(0.6)"/>
+    <use href="#tree" transform="translate(50 760) scale(1.6)"/>
+    <use href="#tree" transform="translate(1470 650) scale(1.1)"/>
+    <use href="#tree" transform="translate(1340 612) scale(0.6)"/>
+    <use href="#tree" transform="translate(1560 770) scale(1.7)"/>
+  </g>
+  <!-- gate: two posts and a beam -->
+  <g filter="url(#glow2)">
+    <rect x="715" y="470" width="10" height="128" fill="#2fe6ff"/>
+    <rect x="875" y="470" width="10" height="128" fill="#2fe6ff"/>
+    <rect x="793" y="150" width="14" height="450" fill="#ff2fa8" opacity="0.32"/>
+  </g>
+  <!-- the board tip, as in first person -->
+  <g transform="translate(800 880)">
+    <ellipse rx="150" ry="70" fill="#14139a" stroke="#d8c8ff" stroke-width="6"/>
+    <ellipse rx="150" ry="70" fill="none" stroke="#2fe6ff" stroke-width="2" opacity="0.8" transform="scale(0.88)"/>
+  </g>
+  <rect width="1600" height="900" fill="url(#vig)"/>
+
+  <!-- title -->
+  <g text-anchor="middle" font-weight="900" letter-spacing="14">
+    <text x="810" y="196" font-size="148" fill="#2fe6ff" opacity="0.8">DOWNHILL</text>
+    <text x="790" y="196" font-size="148" fill="#ff2fa8" opacity="0.8">DOWNHILL</text>
+    <text x="800" y="196" font-size="148" fill="#fff" filter="url(#glow)">DOWNHILL</text>
+  </g>
+  <text x="800" y="244" text-anchor="middle" font-size="30" font-weight="600" letter-spacing="14" fill="#ffe45c" filter="url(#glow)">STEER WITH YOUR EYES</text>
+
+  <!-- features: 2 to 3 words each -->
+  <g font-weight="800" font-size="25" letter-spacing="3" text-anchor="middle" fill="#fff">
+    <g transform="translate(235 332)"><use href="#i-eye"/><text y="62">LOOK = STEER</text></g>
+    <g transform="translate(235 462)"><use href="#i-lock"/><text y="62">HOLD = LOCK GATE</text></g>
+    <g transform="translate(235 592)"><use href="#i-fork"/><text y="62">GATES = WORLDS</text></g>
+    <g transform="translate(1365 332)"><use href="#i-ramp"/><text y="62">SKY RAMPS</text></g>
+    <g transform="translate(1365 462)"><use href="#i-face"/><text y="62">MAKE FACES</text></g>
+    <g transform="translate(1365 592)"><use href="#i-shield"/><text y="62">EAT · BRACE</text></g>
+  </g>
+
+  <!-- settings strip -->
+  <g transform="translate(800 790)" text-anchor="middle" font-weight="800" letter-spacing="5">
+    <rect x="-560" y="-46" width="1120" height="92" rx="46" fill="#07010f" opacity="0.72" stroke="url(#neon)" stroke-width="2.5"/>
+    <text y="-6" font-size="21" fill="#ffe45c">ALPINE  ·  PSYCHEDELIC  ·  DIGITAL  ·  SYNTHWAVE</text>
+    <text y="27" font-size="19" fill="#9cf3ff">SEED  ·  LENGTH  ·  DIFFICULTY  ·  WORLD MIX</text>
+  </g>
+</svg>

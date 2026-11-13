@@ -6,12 +6,12 @@ extends Control
 
 const SAVE := "user://downhill_menu.cfg"
 const PRESET_NAMES := {"classic": "CLASSIC", "alpine": "ALPINE RUSH", "meadow": "MEADOWS", "canyon": "CANYON", "chaos": "CHAOS", "endless": "ENDLESS"}
-const ZONE_LABELS := {"rush": "STEEP RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "bend": "BEND", "air": "SKY RAMP"}
+const ZONE_LABELS := {"rush": "STEEP RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "bend": "BEND", "air": "SKY RAMP", "forest": "DENSE FOREST", "drop": "CLIFF DROP"}
 
 var cfg: Dictionary = {
 	"theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
-	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0},
-	"faces": true, "cine": true, "phone": true, "haptics": true, "intensity": 0.8,
+	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
+	"faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.8,
 }
 
 var _bg: ThemeBackdrop
@@ -39,9 +39,12 @@ var _zone_s: Dictionary = {}
 var _zone_l: Dictionary = {}
 var _toggles: Dictionary = {}
 var _int_s: HSlider
+var _assist_s: HSlider
+var _assist_l: Label
 var _int_l: Label
 var _int_row: Control
 var _status: Label
+var _reports_l: Label
 var _cam_btn: Button
 var _alt_btn: Button
 var _u: float = 1.0
@@ -97,11 +100,21 @@ func _ready() -> void:
 	_build_course_card()
 	_build_mix_card()
 	_build_experience_card()
+	_build_reports_card()
 	_build_footer()
 	_building = false
 	_sync_widgets()
 	_last_vs = get_viewport_rect().size
 	_apply_unit(true)
+	# the welcome screen: shown over the settings until a tap (add nosplash to the address to skip it)
+	var skip := OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nosplash")
+	if not skip:
+		var sp := SplashView.new()
+		add_child(sp)
+		_margin.visible = false
+		sp.done.connect(func() -> void:
+			sp.queue_free()
+			_margin.visible = true)
 
 
 # ---------------------------------------------------------------- pieces
@@ -312,7 +325,7 @@ func _build_course_card() -> void:
 
 func _build_mix_card() -> void:
 	var c := _card("WORLD MIX  (what the gates lead to)")
-	for z in ["rush", "flat", "tunnel", "bend", "air"]:
+	for z in ["rush", "flat", "tunnel", "bend", "air", "forest", "drop"]:
 		var r := _slider(c, 0.0, 3.0, 0.1, "")
 		_zone_s[z] = r[0]
 		_zone_l[z] = r[1]
@@ -326,8 +339,16 @@ func _build_mix_card() -> void:
 
 func _build_experience_card() -> void:
 	var c := _card("EXPERIENCE")
+	var ar := _slider(c, 0.0, 1.0, 0.05, "")
+	_assist_s = ar[0]
+	_assist_l = ar[1]
+	_assist_s.value_changed.connect(func(v: float) -> void:
+		if _building:
+			return
+		cfg["assist"] = v
+		_sync_labels())
 	var f := _flow(c)
-	for t in [["faces", "FACE CHALLENGES"], ["cine", "CINEMATIC JUMPS"], ["phone", "PHONE STABILISER"], ["haptics", "HAPTICS"]]:
+	for t in [["faces", "FACE CHALLENGES"], ["cine", "CINEMATIC JUMPS"], ["dynlight", "DYNAMIC LIGHT"], ["snow", "SNOWFALL"], ["fluffy", "FLUFFY SHAPES"], ["phone", "PHONE STABILISER"], ["haptics", "HAPTICS"], ["speed_first", "SPEED FIRST"], ["vehicle", "ON A VEHICLE"], ["gps", "GPS SPEED"]]:
 		var b := _button(String(t[1]), 20, f, true)
 		b.toggled.connect(func(on: bool) -> void:
 			if _building:
@@ -337,6 +358,36 @@ func _build_experience_card() -> void:
 		_toggles[t[0]] = b
 		_boxes.append([b, 240.0, 56.0])
 	_label("Face challenges pop up in the air: pull the face for bonus points. The stabiliser uses your phone's motion sensors to steady the eye tracking.", 18, Color(1, 1, 1, 0.65), c)
+
+
+func _build_reports_card() -> void:
+	var c := _card("RUN REPORTS  (kept on this device only)")
+	_reports_l = _label("", 17, Color(1, 1, 1, 0.8), c)
+	var f := _flow(c)
+	var cp := _button("COPY ALL", 20, f)
+	cp.pressed.connect(func() -> void:
+		RunLog.copy_text(JSON.stringify(RunLog.load_all(), "  "))
+		_status.text = "Reports copied: paste them wherever you want help with them.")
+	var dl := _button("DOWNLOAD", 20, f)
+	dl.pressed.connect(func() -> void:
+		RunLog.download(JSON.stringify(RunLog.load_all(), "  ")))
+	var cl := _button("CLEAR", 20, f)
+	cl.pressed.connect(func() -> void:
+		RunLog.clear_all()
+		_refresh_reports())
+	_label("VEHICLE: tells the game you are on a bus or train, so it re-centres your look faster. GPS SPEED: lets the browser report only your speed (never your position) so it can notice a moving vehicle by itself.", 16, Color(1, 1, 1, 0.55), c)
+	_refresh_reports()
+
+
+func _refresh_reports() -> void:
+	var runs := RunLog.load_all()
+	if runs.is_empty():
+		_reports_l.text = "No runs yet. Every run is recorded here: how the tracking, the steering and the frame rate behaved."
+		return
+	var lines: Array = []
+	for i in range(runs.size() - 1, maxi(runs.size() - 6, -1), -1):
+		lines.append(RunLog.line(runs[i]))
+	_reports_l.text = "\n".join(lines)
 
 
 func _build_footer() -> void:
@@ -429,6 +480,7 @@ func _sync_widgets() -> void:
 	for k in _toggles:
 		(_toggles[k] as Button).set_pressed_no_signal(bool(cfg[k]))
 	_int_s.value = float(cfg["intensity"])
+	_assist_s.value = float(cfg["assist"])
 	_building = was
 	_sync_labels()
 
@@ -437,8 +489,9 @@ func _sync_labels() -> void:
 	var id := String(cfg["theme"])
 	var d := Themes.theme_data(id)
 	_blurb.text = String(d["blurb"])
-	_int_row.visible = id != "alpine"
+	_int_row.visible = Themes.post_mode(id) > 0
 	_diff_l.text = "DIFFICULTY  %s" % _diff_word(float(cfg["diff"]))
+	_assist_l.text = "AUTO-HELP  %s" % ("OFF" if float(cfg["assist"]) < 0.05 else ("LIGHT" if float(cfg["assist"]) < 0.4 else ("BALANCED" if float(cfg["assist"]) < 0.75 else "STRONG")))
 	_len_l.text = "LENGTH  %s" % ("ENDLESS" if bool(cfg["endless"]) else "%.1f km" % float(cfg["length_km"]))
 	_int_l.text = "TRIPPY INTENSITY  %d%%" % int(float(cfg["intensity"]) / 1.5 * 100.0) if _int_l != null else ""
 	for z in _zone_l:
@@ -536,7 +589,7 @@ func _url_overrides() -> void:
 
 func link() -> String:
 	var z: Array = []
-	for k in ["rush", "flat", "tunnel", "bend", "air"]:
+	for k in ["rush", "flat", "tunnel", "bend", "air", "forest", "drop"]:
 		z.append("%s:%.1f" % [k, float((cfg["zones"] as Dictionary).get(k, 1.0))])
 	var sd := int(cfg["seed"]) if int(cfg["seed"]) != 0 else randi_range(1000, 999999)
 	cfg["seed"] = sd

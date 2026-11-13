@@ -112,6 +112,7 @@ func _gen_segment(j: int) -> void:
 	var rz := z0 - _rng.randf_range(50.0, 60.0) if _force_far_next else z0 - _rng.randf_range(26.0, 60.0)
 	_force_far_next = false
 	# now and then a segment has no barrier at all: an air segment, with an epic kicker at the top and room to land
+	_region_step(j)
 	var zone := _pending_zone if _pending_zone != "" else _pick_zone(j)
 	_pending_zone = ""
 	if j < 3 or not ZONES.has(zone) or (zone == "air" and (_last_air or rz < finish_z + 300.0)):
@@ -125,7 +126,7 @@ func _gen_segment(j: int) -> void:
 	_last_air = air_seg
 	var has_row := j >= START_CALM and rz > finish_z + 40.0 and not air_seg
 	var row: Dictionary = {"j": j, "z": rz, "z0": z0, "gaps": [], "obs": PackedFloat32Array(), "banks": [], "nodes": [],
-		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "pads": [], "layout": "none", "zone": zone}
+		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "pads": [], "layout": "none", "zone": zone, "region": _region}
 	var cones: Array[Transform3D] = []
 	var cone_cols := PackedColorArray()
 	var trunks: Array[Transform3D] = []
@@ -270,6 +271,8 @@ const ZONES := {
 	"tunnel": {"m": 1.25, "w": 0.95, "singles": 0.0, "walls": 26.0, "path_buff": 0.12, "col": Color(0.7, 0.45, 1.0), "name": "TUNNEL"},
 	"bend": {"m": 1.0, "w": 1.0, "singles": 0.5, "walls": 30.0, "path_buff": 0.35, "col": Color(1.0, 0.85, 0.3), "name": "BEND"},
 	"air": {"m": 1.0, "w": 1.0, "singles": 0.0, "walls": 0.0, "path_buff": 0.0, "col": Color(1.0, 0.4, 0.7), "name": "AIR"},
+	"forest": {"m": 1.15, "w": 1.0, "singles": 3.2, "walls": 0.0, "path_buff": 0.4, "col": Color(0.2, 0.75, 0.35), "name": "FOREST"},
+	"drop": {"m": 2.2, "w": 1.15, "singles": 0.25, "walls": 0.0, "path_buff": 0.2, "col": Color(1.0, 0.6, 0.15), "name": "DROP"},
 }
 ## What a gate offers in front of it depends on what lies behind it, so the offer teaches you something: a burger is as likely in front of a BEND (a trap)
 ## as in front of a RUSH (a reward).
@@ -279,11 +282,27 @@ const FOOD_BY_ZONE := {
 	"tunnel": {"boost": 0.25, "shield": 0.4, "mult": 0.2, "donut": 0.15},
 	"bend": {"boost": 0.4, "shield": 0.3, "mult": 0.15, "donut": 0.15},
 	"air": {"boost": 0.2, "shield": 0.1, "mult": 0.45, "donut": 0.25},
+	"forest": {"boost": 0.15, "shield": 0.4, "mult": 0.2, "donut": 0.25},          # trees everywhere: a boost here is a gamble, a shield is not
+	"drop": {"boost": 0.1, "shield": 0.3, "mult": 0.3, "donut": 0.3},              # already fast enough: the sensible gifts are the ones that do not add speed
 }
-const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 0.8, "air": 0.5}
+const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 0.8, "air": 0.9, "forest": 0.8, "drop": 0.5}
+
+## Regions: the world comes in stretches of four to seven zones with a character of their own (which zones are likely, and the colour of the snow). A banner says when you cross into one.
+const REGIONS := {
+	"pines": {"name": "PINE VALLEY", "tint": Color(1.0, 1.0, 1.0), "w": {"forest": 1.8, "flat": 1.1}},
+	"glacier": {"name": "THE GLACIER", "tint": Color(0.78, 0.9, 1.0), "w": {"tunnel": 1.8, "drop": 1.3, "flat": 0.5}},
+	"ember": {"name": "EMBER RIDGE", "tint": Color(1.0, 0.86, 0.78), "w": {"rush": 1.5, "drop": 1.8, "bend": 1.3, "flat": 0.5}},
+	"blossom": {"name": "BLOSSOM FIELDS", "tint": Color(1.0, 0.9, 0.96), "w": {"flat": 1.9, "forest": 1.1, "air": 1.4, "tunnel": 0.4}},
+	"dusk": {"name": "DUSK CANYON", "tint": Color(0.86, 0.84, 1.0), "w": {"bend": 1.8, "tunnel": 1.3, "rush": 1.1, "air": 0.5}},
+}
+const REGION_ORDER := ["pines", "glacier", "ember", "blossom", "dusk"]
 
 var _pitch: Array = []                  # the slope of the hill, stretch by stretch: [{z, h, s}]
 var _cur_zone: String = "rush"
+var _region: String = "pines"
+var _region_left: int = 5
+var _player_region: String = "pines"
+var regions_seen: Dictionary = {}
 var _pending_zone: String = ""          # set by the gate you go through
 var _pending_bend: float = 0.0
 var _gate_open: bool = true             # false: the next stretch waits for you to go through the barrier ahead
@@ -315,7 +334,31 @@ func _zone_weights() -> Dictionary:
 	var pz: Dictionary = params.get("zones", {})
 	for k in pz:
 		w[k] = float(pz[k])
+	var rw: Dictionary = (REGIONS[_region] as Dictionary)["w"]
+	for k in rw:
+		w[k] = float(w.get(k, 1.0)) * float(rw[k])
 	return w
+
+
+## Called once per segment: a region lasts four to seven of them, then another (never the same twice in a row) takes over.
+func _region_step(j: int) -> void:
+	if j < 4:
+		_region = "pines"
+		_region_left = 5
+		return
+	_region_left -= 1
+	if _region_left <= 0:
+		var opts: Array = REGION_ORDER.duplicate()
+		opts.erase(_region)
+		_region = String(opts[_rng.randi() % opts.size()])
+		_region_left = _rng.randi_range(4, 7)
+	regions_seen[_region] = int(regions_seen.get(_region, 0)) + 1
+
+
+func _chunk_tint(j: int) -> Color:
+	if _rows.has(j):
+		return (REGIONS[String((_rows[j] as Dictionary).get("region", "pines"))] as Dictionary)["tint"]
+	return Color.WHITE
 
 
 func _pick_zone_w(excl: Array, d: float) -> String:
@@ -438,6 +481,18 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 				ab.size = Vector3(0.8, 0.38, 0.3)
 				var a := _mi(root, ab, mat, Vector3(side * 1.55, 0.25, 0))
 				a.rotation.z = -side * 0.8
+			"forest":
+				for fi in 2:
+					var fp := PrismMesh.new()
+					fp.size = Vector3(2.0 - 0.5 * float(fi), 1.1, 0.35)
+					_mi(root, fp, mat, Vector3(0, 0.55 - 0.9 * float(fi) * -1.0 - 0.9, 0))
+			"drop":
+				for di in 3:
+					var db := BoxMesh.new()
+					db.size = Vector3(1.5, 0.34, 0.3)
+					for dsx in [-1.0, 1.0]:
+						var dn := _mi(root, db, mat, Vector3(float(dsx) * 0.62, 0.9 - float(di) * 0.8, 0.0))
+						dn.rotation.z = float(dsx) * 0.55
 			_:
 				var pm := PrismMesh.new()
 				pm.size = Vector3(2.4, 1.5, 0.4)
@@ -1545,6 +1600,84 @@ const WALL_FAR := 80.0               # the barrier ahead starts pulling you into
 const WALL_NEAR := 34.0              # ... and pulls with full strength from here
 var avoid_enabled: bool = true
 var gate_assist: bool = true
+var _eye_lp: float = 0.0
+## TENTATIVE INTENT. The instant a real look to one side is recognised, the board starts to move that way (provisional); if the eyes stay there it is confirmed, if they go
+## back it is cancelled. So the response is immediate but never committed on a flicker.
+var _intent_dir: float = 0.0
+var _intent_amt: float = 0.0
+var _sacc_seen: int = 0
+var _sacc_conf_seen: int = 0
+var _sacc_ret_seen: int = 0
+var assist_level: float = 0.7             # AUTO-HELP, 0..1: how much the board does for you. The eyes say WHICH way (a side, a gate, a moment of attention); the board does the carving, early and smoothly.
+var _glide_x: float = 0.0
+var _glide_row: int = -999
+## EARNED HELP. The board only helps while there is evidence you are steering it: a look to one side, a gate or pickup you are looking at, a key or a lean. Look at nothing
+## for a moment and the help fades away (it comes back the instant you act), so a hands-off board does not play itself down the hill.
+var _engage: float = 1.0
+var _idle_t: float = 0.0
+var _brake_toast_t: float = 0.0
+var ag := {"eyes": 0, "auto": 0, "wrong": 0, "in": 0.0, "as": 0.0, "eng": 0.0, "idle": 0.0}      # who did the driving: gates chosen by you vs the board, steering that came from you vs from help
+
+
+func _configure_sacc() -> void:
+	sacc.jitter = 0.12                  # the look is measured in units of YOUR glance (1 = a full look aside), so these are fractions of one
+	sacc.min_amp = 0.28
+	sacc.k = 3.0
+
+
+func _update_intent(delta: float) -> void:
+	if not _eye_on:
+		_intent_amt = move_toward(_intent_amt, 0.0, delta * 4.0)
+		return
+	if sacc.accepted != _sacc_seen:
+		_sacc_seen = sacc.accepted
+		_intent_dir = sacc.last_dir
+		_intent_amt = maxf(_intent_amt, 0.55)                     # provisional: start now
+	if sacc.retracted != _sacc_ret_seen:
+		_sacc_ret_seen = sacc.retracted
+		_intent_amt = 0.0                                         # it went back: cancelled
+	if sacc.confirmed != _sacc_conf_seen:
+		_sacc_conf_seen = sacc.confirmed
+		_intent_amt = 1.0                                         # it stayed: confirmed
+	else:
+		_intent_amt = move_toward(_intent_amt, 0.0, delta * (0.35 if sacc.pending() else 0.7))
+
+
+## Which way the player means to go, from the most certain evidence down: the gate their eyes hold, a look just made, a look held to one side.
+func _intent_pref() -> float:
+	if not _aim.is_empty():
+		return signf(float(_aim["x"]) - spos.x)
+	if _intent_amt > 0.2:
+		return _intent_dir
+	if absf(_steer_gaze) > 0.25:
+		return signf(_steer_gaze)
+	return 0.0
+
+
+func _a() -> float:
+	return assist_level * _engage
+
+
+## How much of the run was you: the share of gates chosen with your eyes, the share of the steering that came from you (not from help), how engaged the help thought you were.
+func agency_summary() -> Dictionary:
+	var gates := maxi(int(ag["eyes"]) + int(ag["auto"]) + int(ag["wrong"]), 1)
+	var steer_tot := maxf(float(ag["in"]) + float(ag["as"]), 0.0001)
+	return {"gatesChosen": int(ag["eyes"]), "gatesByBoard": int(ag["auto"]), "gatesWrong": int(ag["wrong"]), "eyesGateShare": snappedf(float(ag["eyes"]) / float(gates), 0.01),
+		"steerFromYouShare": snappedf(float(ag["in"]) / steer_tot, 0.01), "engageMean": snappedf(float(ag["eng"]) / maxf(_run_t, 0.1), 0.01), "idleSeconds": snappedf(float(ag["idle"]), 0.1), "assistSetting": assist_level}
+
+
+func _update_engage(delta: float, key: float, pk: Vector3) -> void:
+	var active := absf(key) > 0.05
+	if _eye_on:
+		active = active or sacc.recent(2.5, _age) or absf(_steer_gaze) > 0.12 or not _aim.is_empty() or _buff_w > 0.2 or not _buff_tgt.is_empty()
+	else:
+		active = active or absf(pk.x) > 0.1 or absf(GazeProvider.touch_lean) > 0.05 or absf(GazeProvider.touch_steer) > 0.05
+	if autopilot or _finished or _run_t < 6.0 or not grounded:
+		active = true                                           # the start, the air and the finish line are not a test
+	_idle_t = 0.0 if active else _idle_t + delta
+	var want := clampf(1.0 - (_idle_t - 2.5) / 3.0, 0.2, 1.0)          # a quiet stretch costs nothing; a long one leaves a fifth of the help
+	_engage = move_toward(_engage, want, delta * (4.0 if want > _engage else 0.6))
+
 var _wall_gap: Dictionary = {}
 var _wall_row_j: int = -999
 var _wall_w: float = 0.0             # how hard the nearest barrier pulls (0..1), for the HUD and the report
@@ -1593,6 +1726,8 @@ func _free_shift(max_t: float, sp: float, above: float, skip_wall: bool = false)
 	if tmin > 8.0:
 		return Vector2(0.0, 9.0)
 	var best := 1.0e9
+	var best_cost := 1.0e9
+	var pref := _intent_pref()
 	var cand := PackedFloat32Array([0.0])
 	for k in cs.size():
 		cand.append(-cs[k] - rs[k] - 0.05)
@@ -1605,8 +1740,10 @@ func _free_shift(max_t: float, sp: float, above: float, skip_wall: bool = false)
 			if absf(cs[k] + s) < rs[k] - 0.001:
 				ok = false
 				break
-		if ok and absf(s) < absf(best):
+		var cost := absf(s) + (2.5 if (pref != 0.0 and absf(s) > 0.05 and signf(s) != pref) else 0.0)          # a swerve goes the way you mean to go when it can
+		if ok and cost < best_cost:
 			best = s
+			best_cost = cost
 	return Vector2(0.0 if best > 1.0e8 else best, tmin)
 
 
@@ -1631,7 +1768,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 		row = r
 	var gate_done := false
 	var spd_w := maxf(-vel.y, MIN_SPEED)
-	var wall_far := clampf(spd_w * 2.4, WALL_FAR, 180.0)       # the hill speeds up, so the pull starts earlier in metres, not in seconds
+	var wall_far := clampf(spd_w * 2.4 * (1.0 + 0.5 * _a()), WALL_FAR, 230.0)       # the hill speeds up, so the pull starts earlier in metres, not in seconds
 	var wall_near := clampf(spd_w * 1.0, WALL_NEAR, 70.0)
 	if gate_assist and not row.is_empty() and bd <= wall_far:
 		if int(row["j"]) != _wall_row_j:
@@ -1649,6 +1786,10 @@ func _guard_path(delta: float, s_in: float) -> float:
 			var bd2 := 1.0e9
 			for g in row["gaps"]:
 				var dd := absf(float(g["x"]) - px) * (0.6 if is_same(g, _wall_gap) else 1.0)
+				if _eye_on and absf(_steer_gaze) > 0.2 and signf(float(g["x"]) - spos.x) == signf(_steer_gaze):
+					dd *= lerpf(1.0, 0.55, _a())
+				if _intent_amt > 0.2 and signf(float(g["x"]) - spos.x) == _intent_dir:
+					dd *= lerpf(1.0, 0.5, _intent_amt)          # a look to one side is a vote for the gates on that side, even when it is too rough to pick one
 				if dd < bd2:
 					bd2 = dd
 					tgt = g
@@ -1676,11 +1817,27 @@ func _guard_path(delta: float, s_in: float) -> float:
 						alt = g
 			tgt = alt
 		var u := clampf((wall_far - bd) / (wall_far - wall_near), 0.0, 1.0)
-		var w := u
+		var w := maxf(u * _engage, 0.35 * _a() * clampf((wall_far - bd) / 30.0, 0.0, 1.0))          # with help on, the board begins to commit early and gently; with no sign of you, it does not choose a gate for you
 		if eyes_chose:
-			w = maxf(carve_assist * _assist_conf() * _aim_w, u)
+			w = maxf(carve_assist * _assist_conf() * _aim_w, w)
 		_wall_w = w
-		var want := clampf((float(tgt["x"]) - (spos.x + vel.x * 0.45)) / 12.0, -0.9, 0.9)
+		# the aim point glides to the chosen gate instead of jumping when the choice changes: no jerk when the eyes flick between two gates
+		if _glide_row != int(row["j"]):
+			_glide_row = int(row["j"])
+			_glide_x = spos.x + vel.x * 0.45
+		# the aim point glides to the chosen gate (no jerk when the choice flips), but never slower than it takes to ARRIVE: a gate chosen late and far off must still be reached
+		var glide_need := absf(float(tgt["x"]) - _glide_x) / maxf(bd / spd_w - 0.7, 0.25)
+		_glide_x = move_toward(_glide_x, float(tgt["x"]), maxf(lerpf(40.0, 14.0, _a()), glide_need * 1.5) * delta)
+		var want := clampf((_glide_x - (spos.x + vel.x * 0.45)) / 12.0, -0.9, 0.9)
+		# too far off to make the gap with a normal carve: give up speed instead of the line (a friendly brake, never a crash)
+		var miss := absf(float(tgt["x"]) - spos.x) - float(tgt["w"]) * 0.35
+		if _a() > 0.05 and miss > 0.0 and bd < 95.0:
+			var need := miss / (maxf(bd - 4.0, 1.0) / spd_w)
+			if need > 11.0:
+				vel *= 1.0 - _a() * clampf((need - 11.0) / 14.0, 0.0, 1.0) * 0.8 * delta
+				if _brake_toast_t <= 0.0 and need > 16.0:
+					_brake_toast_t = 4.0
+					_toast("EASING OFF TO MAKE IT", Color(0.8, 0.9, 1.0))          # the help says so when it does more than a carve
 		var yield_to_buff := _buff_w * clampf((bd - (wall_near + 8.0)) / 10.0, 0.0, 1.0)       # a buff you are looking at wins until the barrier is close
 		add += w * want * (1.0 - 0.6 * absf(s_in)) * (1.0 - 0.85 * yield_to_buff)
 		gate_done = true
@@ -1703,7 +1860,8 @@ func _guard_path(delta: float, s_in: float) -> float:
 			var near := _free_shift(0.55, sp, above)
 			if absf(near.x) > 0.001:
 				var nudge := near.x * clampf(delta / maxf(near.y, 0.1), 0.0, 1.0)
-				nudge = clampf(nudge, -12.0 * delta, 12.0 * delta)
+				var nmax := lerpf(5.0, 12.0, _engage)
+				nudge = clampf(nudge, -nmax * delta, nmax * delta)
 				spos.x += nudge
 				_swerve_s = nudge / maxf(delta, 0.0001)
 		else:
@@ -1776,6 +1934,8 @@ func _physics_process(delta: float) -> void:
 	hurt_t = maxf(hurt_t - delta, 0.0)
 	_tick_buffs(delta)
 	_eye_on = _eye_mode()
+	_update_engage(delta, key, pk)
+	_update_intent(delta)
 	_clock += delta
 	if _finished:
 		_end_t += delta
@@ -1784,18 +1944,41 @@ func _physics_process(delta: float) -> void:
 	var dist := maxf(-spos.z, 0.0)
 	var prog := clampf(dist / PULL_RAMP, 0.0, 1.0)
 	# steering: your gaze when the eyes are on (a head lean must not steer), else a lean, plus keys; a latched opening adds a gentle pull
-	var eye_s := _guard_gaze(_steer_gaze, delta) if _eye_on else 0.0
+	var eye_raw := _guard_gaze(_steer_gaze, delta) if _eye_on else 0.0
+	# The board must not twitch with the eyes. A small dead zone (a resting eye is never exactly still), then a low-pass: it follows where you MEAN to go, not every flicker.
+	# The stronger the help, the longer it averages (0.1 s with none, about 0.4 s at full strength).
+	var eye_dz := signf(eye_raw) * maxf(absf(eye_raw) - 0.06, 0.0) / 0.94
+	var lp_tau := lerpf(0.08, 0.30, assist_level)
+	lp_tau *= lerpf(1.0, 0.4, smoothstep(0.35, 0.7, absf(eye_dz)))          # a small wobble is averaged away; a big, deliberate look gets through quickly
+	_eye_lp += (eye_dz - _eye_lp) * (1.0 - exp(-delta / lp_tau))
+	var eye_s := _eye_lp
 	# A webcam gaze is a slow, noisy signal (a few percent of the screen of jitter), so the eyes CHOOSE the opening and the board carves to it; free steering from the
 	# raw look only trims (0.6 with nothing chosen, 0.15 once an opening is locked).
-	var eye_gain := lerpf(0.6, 0.15, _aim_w)
+	var eye_gain := lerpf(0.6, 0.15, _aim_w) * lerpf(1.0, 0.5, _a() * _aim_w)
 	var s_in := key + (eye_s * eye_gain if _eye_on else clampf(pk.x / 1.8, -1.0, 1.0))
+	if _eye_on:
+		s_in += _intent_dir * _intent_amt * 0.38                     # the board starts toward a look at once; the settled gaze and the chosen gate take over
+	if false:
+		# the moment a real look to one side is recognised the board starts turning that way, then the settled gaze takes over: response without waiting for the smoothed signal
+		pass
 	if autopilot:
 		s_in = _auto_steer()
 	s_in = clampf(s_in, -1.0, 1.0)
 	steer = clampf(s_in + _guard_path(delta, s_in), -1.0, 1.0)
+	if grounded and absf(s_in) < 0.3 and _aim.is_empty():
+		steer = clampf(steer - 0.12 * clampf(vel.x / 12.0, -1.0, 1.0), -1.0, 1.0)          # coming back to the middle: damp the sideways speed so it does not ring
+	_brake_toast_t = maxf(_brake_toast_t - delta, 0.0)
+	if not _finished and grounded:
+		ag["in"] = float(ag["in"]) + absf(s_in) * delta
+		ag["as"] = float(ag["as"]) + absf(steer - s_in) * delta
+		ag["eng"] = float(ag["eng"]) + _engage * delta
+		if _idle_t > 2.5:
+			ag["idle"] = float(ag["idle"]) + delta
 	if _finished:
 		steer = 0.0
+	var prev_ss := _steer_s
 	_steer_s = lerpf(_steer_s, steer, 1.0 - exp(-steer_rate * delta))
+	_steer_s = move_toward(prev_ss, _steer_s, lerpf(12.0, 5.0, _a()) * delta)          # the wheel cannot be whipped: a smooth sweep, whatever the eyes do
 	steer = _steer_s
 	var tuck := nod_p < -0.10 and not _finished
 	tucking = tuck and grounded
@@ -2036,18 +2219,26 @@ func _update_rows() -> void:
 				if _pending_zone != "" and ZONES.has(_pending_zone):
 					var zi: Dictionary = ZONES[_pending_zone]
 					_toast(String(zi["name"]), zi["col"])
+			var rg := String(r.get("region", "pines"))
+			if rg != _player_region:
+				_player_region = rg
+				_toast("ENTERING: " + String((REGIONS[rg] as Dictionary)["name"]), Color(1.0, 0.95, 0.7))
 			if chosen.is_empty() or r["crash"]:
 				continue
 			_passed_ok += 1
 			# with the eyes on, the points are for the gate you chose with them; the board's own pick (or a wrong one) carries you through but is worth little
 			var eg: Dictionary = r.get("eyes_gap", {})
+			if _eye_on and gate_assist and not autopilot and is_same(eg, chosen):
+				ag["eyes"] = int(ag["eyes"]) + 1                                      # a gate you chose with your eyes and then went through
 			if _eye_on and gate_assist and not autopilot and not is_same(eg, chosen):
 				_gain(10)
 				chain = 0
 				groove = 1.0
 				if eg.is_empty():
+					ag["auto"] = int(ag["auto"]) + 1
 					_toast("AUTO GATE", Color(0.8, 0.8, 0.85))
 				else:
+					ag["wrong"] = int(ag["wrong"]) + 1
 					wrong_gates += 1
 					_toast("WRONG GATE: RECOVER", Color(1.0, 0.75, 0.3))
 				continue
@@ -2066,6 +2257,7 @@ func _update_rows() -> void:
 
 func _finish() -> void:
 	_finished = true
+	_runlog.end_run(self, "finish")
 	_end_t = 0.0
 	if _best_time <= 0.0 or (_clean and _run_t < _best_time):
 		_best_time = _run_t
@@ -2077,6 +2269,17 @@ func _finish() -> void:
 
 
 func _restart() -> void:
+	ag = {"eyes": 0, "auto": 0, "wrong": 0, "in": 0.0, "as": 0.0, "eng": 0.0, "idle": 0.0}
+	_engage = 1.0
+	_idle_t = 0.0
+	sacc.reset()
+	_configure_sacc()
+	_intent_dir = 0.0
+	_intent_amt = 0.0
+	_sacc_seen = 0
+	_sacc_conf_seen = 0
+	_sacc_ret_seen = 0
+	_runlog.end_run(self, "restart")
 	cleanup()
 	if _run_t > 2.0 or _finished:
 		_run_no += 1                                          # a fresh page always gets the same first course, on any device; each ride after that is a new one
@@ -2131,6 +2334,10 @@ func _restart() -> void:
 	face_kind = ""
 	_cine_k = 0.0
 	_cine_on = false
+	_region = "pines"
+	_region_left = 5
+	_player_region = "pines"
+	regions_seen = {}
 	_pending_zone = ""
 	_pending_bend = 0.0
 	_gate_open = true
@@ -2324,16 +2531,26 @@ func _spawn_ball() -> void:
 	var sz := pz + vb * T
 	var vx := (px - sx) / T
 	var n := Node3D.new()
-	_mi(n, _sphere_mesh(BALL_R), _fx_mat("solid", Color(0.95, 0.97, 1.0), 0.9))
+	var mummy := hazard_skin == "mummy"
+	var gum := hazard_skin == "gumball"
+	var body_c := Color(0.93, 0.87, 0.68) if mummy else (Color(1.0, 0.45, 0.72) if gum else Color(0.95, 0.97, 1.0))
+	var lump_c := Color(0.8, 0.72, 0.5) if mummy else (Color(0.5, 0.95, 0.8) if gum else Color(0.88, 0.93, 1.0))
+	_mi(n, _sphere_mesh(BALL_R), _fx_mat("solid", body_c, 0.9))
 	for i in 5:
 		var a := float(i) * 1.7
-		_mi(n, _sphere_mesh(1.1), _fx_mat("solid", Color(0.88, 0.93, 1.0), 0.8), Vector3(cos(a), sin(a * 1.3), sin(a)) * 2.4)
+		_mi(n, _sphere_mesh(1.1), _fx_mat("solid", lump_c, 0.8), Vector3(cos(a), sin(a * 1.3), sin(a)) * 2.4)
 	add_child(n)
+	var eyes: Node3D = null
+	if mummy:
+		eyes = Node3D.new()                                       # two glowing green eyes that stay turned toward you while the bandaged ball rolls
+		for ex in [-0.9, 0.9]:
+			_mi(eyes, _sphere_mesh(0.5), _fx_mat("solid", Color(0.3, 1.0, 0.45), 3.0), Vector3(float(ex), 0.0, 0.0))
+		add_child(eyes)
 	n.global_position = Vector3(sx, terrain_h(sx, sz) + BALL_R, sz)
-	_balls.append({"n": n, "x": sx, "z": sz, "vx": vx, "vz": -vb, "t": 0.0, "done": false})
+	_balls.append({"n": n, "x": sx, "z": sz, "vx": vx, "vz": -vb, "t": 0.0, "done": false, "eyes": eyes})
 	snow_spawned += 1
 	_next_ball_z = spos.z - _fx_rng.randf_range(150.0, 230.0) * lerpf(1.0, 0.7, d)
-	_toast("SNOWBALL!", Color(0.85, 0.95, 1.0))
+	_toast("MUMMY!" if mummy else ("GUMBALL!" if gum else "SNOWBALL!"), Color(0.95, 0.85, 0.5) if mummy else (Color(1.0, 0.7, 0.85) if gum else Color(0.85, 0.95, 1.0)))
 	Game.sfx(&"whoosh")
 	if not _ball_hint:
 		_ball_hint = true
@@ -2362,6 +2579,9 @@ func _update_balls(delta: float) -> void:
 			nn.global_position = Vector3(bx, terrain_h(bx, bz) + BALL_R, bz)
 			nn.rotate_x(float(b["vz"]) * delta / BALL_R)
 			nn.rotate_z(-float(b["vx"]) * delta / BALL_R)
+			var ey: Variant = b.get("eyes")
+			if ey != null and is_instance_valid(ey):
+				(ey as Node3D).global_position = Vector3(bx, terrain_h(bx, bz) + BALL_R * 1.25, bz + BALL_R * 0.78)
 		if not b["done"]:
 			var dx := spos.x - bx
 			var dz := spos.z - bz
@@ -2376,6 +2596,9 @@ func _update_balls(delta: float) -> void:
 		if bz > spos.z + 70.0 or float(b["t"]) > 14.0 or b.get("gone", false):
 			if is_instance_valid(n):
 				(n as Node).queue_free()
+			var ey2: Variant = b.get("eyes")
+			if ey2 != null and is_instance_valid(ey2):
+				(ey2 as Node).queue_free()
 			_balls.remove_at(i)
 
 
@@ -2621,6 +2844,10 @@ func _build_tip() -> void:
 #   flip   snap your chin up (or W): a backflip
 # You always land: the landing straightens the board to the nearest half turn, so a trick never costs you a crash. Doing more than one at once multiplies the points.
 # --------------------------------------------------------------------------
+var perf_pin: int = -1                 # -1 automatic; 0..3 pins the quality tier (the menu's SPEED FIRST pins 2)
+var show_perf: bool = true               # F3 hides the frame-rate line
+var _runlog := RunLog.new()
+var hazard_skin: String = "snow"                          # what rolls at you: a snowball, or (desert) a mummy
 var mist_color: Color = Color(0.93, 0.96, 1.0, 0.97)       # what hides the stretch that is not built yet: the theme sets it
 var _crumbs: Array = []
 var _crumb_a: float = 0.0
@@ -2800,7 +3027,14 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	cine_enabled = bool(c.get("cine", true))
 	GazeProvider.pm_on = bool(c.get("phone", true))
 	GazeProvider.pm.haptics_on = bool(c.get("haptics", true))
-	ThemeFX.apply_to_level(level, self, String(c.get("theme", "alpine")), float(c.get("intensity", 0.8)))
+	vehicle_forced = bool(c.get("vehicle", false))
+	_no_pause_until = Time.get_ticks_msec() + 12000
+	_paused = false
+	perf_pin = 2 if bool(c.get("speed_first", false)) else -1
+	assist_level = clampf(float(c.get("assist", 0.7)), 0.0, 1.0)
+	if bool(c.get("gps", false)):
+		RunLog.start_gps()
+	ThemeFX.apply_to_level(level, self, String(c.get("theme", "alpine")), float(c.get("intensity", 0.8)), bool(c.get("dynlight", true)), bool(c.get("snow", true)), bool(c.get("fluffy", false)))
 	_run_no = 0
 	_restart()
 
@@ -3360,6 +3594,7 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 func _update_focus(delta: float) -> void:
 	var pf0 := Time.get_ticks_usec()
 	super._update_focus(delta)
+	_runlog.tick(self, delta)
 	_update_crumbs(delta)
 	_update_aim(delta)
 	_update_buff_aim(delta)
@@ -3411,6 +3646,19 @@ func _update_aim(delta: float) -> void:
 		if dd < best_d:
 			best_d = dd
 			best = g
+	if best_d >= 1.0 and absf(_steer_gaze) > 0.5:
+		# a hard look to one side with no gate under it: the outermost gate on that side. The far ones are always reachable this way, however small they are on screen.
+		var side := signf(_steer_gaze)
+		var far_g: Dictionary = {}
+		var far_d := 6.0
+		for g2 in row["gaps"]:
+			var dx2 := (float(g2["x"]) - spos.x) * side
+			if dx2 > far_d:
+				far_d = dx2
+				far_g = g2
+		if not far_g.is_empty():
+			best = far_g
+			best_d = 0.9
 	if best_d < 1.0:
 		if is_same(best, _aim):
 			_cand = {}
@@ -3446,6 +3694,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if not _paused:
+		if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and (event as InputEventKey).keycode == KEY_F3:
+			show_perf = not show_perf
+			get_viewport().set_input_as_handled()
+			return
 		if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and (event as InputEventKey).keycode == KEY_N:
 			cycle_preset()
 			get_viewport().set_input_as_handled()
@@ -3518,7 +3770,7 @@ func _pause_action(id: String) -> void:
 func _pause_report() -> Dictionary:
 	var r := super._pause_report()
 	r["carve"] = {"distance": int(-spos.z), "finishAt": int(-finish_z), "speedKmh": int(vel.length() * 3.6), "crashes": crashes, "barriersPassed": _passed_ok,
-		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "faces": {"asked": face_done, "seen": face_seen, "cines": cines}, "phone": {"active": GazeProvider.pm.active, "shake": snappedf(GazeProvider.pm.shake, 0.01), "lap": snappedf(GazeProvider.pm.lap, 0.01), "removedPct": snappedf(GazeProvider.pm.removed_pct, 0.1), "learned": snappedf(GazeProvider.pm.learned, 0.01), "tiltX": snappedf(GazeProvider.pm.tilt_x, 0.1), "tiltY": snappedf(GazeProvider.pm.tilt_y, 0.1)}, "seed": _run_seed, "preset": PRESET_ORDER[_preset_i], "zone": _cur_zone, "zonesSeen": zones_seen, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
+		"tight": _tight_n, "crashLog": crash_log.slice(maxi(crash_log.size() - 12, 0)), "swerves": swerves, "wrongGates": wrong_gates, "buffs": {"got": buffs_got, "spawned": buffs_spawned, "byType": buff_log, "gotByKind": got_kind, "spawnedByKind": spawned_kind, "orbs": orbs_got, "latched": not _buff_tgt.is_empty(), "pull": snappedf(_buff_w, 0.01)}, "foods": {"bounced": foods_bounced, "lost": foods_lost, "eyeOpenFast": snappedf(GazeProvider.eye_open_fast, 0.01), "squinting": _squinting_now}, "snowballs": {"spawned": snow_spawned, "braced": snow_braced, "hit": snow_hit, "dodged": snow_dodged}, "faces": {"asked": face_done, "seen": face_seen, "cines": cines}, "agency": agency_summary(), "phone": {"active": GazeProvider.pm.active, "shake": snappedf(GazeProvider.pm.shake, 0.01), "lap": snappedf(GazeProvider.pm.lap, 0.01), "removedPct": snappedf(GazeProvider.pm.removed_pct, 0.1), "learned": snappedf(GazeProvider.pm.learned, 0.01), "tiltX": snappedf(GazeProvider.pm.tilt_x, 0.1), "tiltY": snappedf(GazeProvider.pm.tilt_y, 0.1)}, "seed": _run_seed, "preset": PRESET_ORDER[_preset_i], "zone": _cur_zone, "zonesSeen": zones_seen, "region": _region, "regionsSeen": regions_seen, "pads": pads_hit, "pops": pops_done, "epicKickers": epics_built, "tricks": {"ridiculous": ridiculous, "landed": tricks_landed, "score": trick_score, "best": best_trick, "kickers": kickers_built, "view": "1p" if view_fp else "3p"}, "gatePull": snappedf(_wall_w, 0.01), "aimLatched": not _aim.is_empty(), "aimPull": snappedf(_aim_w, 0.01), "runTime": snappedf(_run_t, 0.1), "finished": _finished, "events": _ev}
 	if not _tr_res.is_empty():
 		r["trace"] = _tr_res
 	return r
@@ -3646,6 +3898,18 @@ func _draw_hud_inner() -> void:
 	var ew := font.get_string_size(eye_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(20.0 * k)).x
 	_text(font, Vector2(s.x - m - ew, m + 18.0 * k), eye_txt, 20, ecol)
 	_text(font, Vector2(m, s.y - m - 30.0 * k), "%d km/h" % int(vel.length() * 3.6), 30, Color(1, 1, 1))
+	if show_perf:
+		var lt: Node = get_parent().get_node_or_null("Lighting") if get_parent() != null else null
+		var qt := (lt as DhLighting).tier if lt != null else 0
+		var gf := int(Engine.get_frames_per_second())
+		var tf := float(GazeProvider._pkt_times.size()) / 2.0
+		var pt := "GAME %d fps" % gf
+		if GazeProvider.backend == GazeProvider.Backend.CAMERA:
+			pt += "   CAM %.0f fps  %d ms" % [tf, int(GazeProvider.trk_lat_ms)]
+		pt += "   Q%d" % qt
+		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
+		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
+		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 40.0 * k), pt, 18, pcol)
 	if chain > 0:
 		_text(font, Vector2(m, s.y - m), "FLOW x%.1f" % groove, 22, Color(1.0, 0.85, 0.3))
 	var dtxt := "%d m" % int(maxf(-spos.z, 0.0))

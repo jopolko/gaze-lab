@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" style="overflow:hidden" viewBox="0 0 1600 900" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" font-family="Arial Black, Segoe UI Black, Helvetica, Arial, sans-serif">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f7bff"/>
+      <stop offset="1" stop-color="#9fe3ff"/>
+    </linearGradient>
+    <g id="tree">
+      <path d="M0 -150 L52 -78 L26 -78 L68 -20 L34 -20 L84 52 L-84 52 L-34 -20 L-68 -20 L-26 -78 L-52 -78 Z" fill="#1f9a63" stroke="#14214f" stroke-width="9" stroke-linejoin="round"/>
+      <path d="M0 -150 L26 -112 L-26 -112 Z M26 -78 L40 -58 L-40 -58 L-26 -78 Z M34 -20 L56 8 L-56 8 L-34 -20 Z" fill="#fff" stroke="#14214f" stroke-width="7" stroke-linejoin="round"/>
+      <rect x="-12" y="52" width="24" height="26" fill="#8a5a33" stroke="#14214f" stroke-width="8"/>
+    </g>
+    <g id="cloud"><path d="M-70 20 Q-90 20 -90 0 Q-90 -24 -62 -22 Q-56 -52 -22 -50 Q6 -72 34 -46 Q70 -50 80 -18 Q100 -14 98 6 Q96 20 78 20 Z" fill="#fff" stroke="#14214f" stroke-width="8" stroke-linejoin="round"/></g>
+    <style>
+      .ol { stroke:#14214f; stroke-width:8; stroke-linejoin:round; stroke-linecap:round; }
+      .tile { stroke:#14214f; stroke-width:9; }
+      .lab { font-size:30px; fill:#fff; stroke:#14214f; stroke-width:8; paint-order:stroke; stroke-linejoin:round; text-anchor:middle; letter-spacing:1px; }
+    </style>
+  </defs>
+
+  <!-- sky, mountains, snow -->
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <use href="#cloud" transform="translate(260 120) scale(1.1)"/>
+  <use href="#cloud" transform="translate(1340 90) scale(0.8)"/>
+  <use href="#cloud" transform="translate(1180 230) scale(0.6)"/>
+  <path d="M0 470 L230 210 L380 360 L520 250 L720 470 Z" fill="#8cb7f0" class="ol"/>
+  <path d="M230 210 L292 280 L252 262 L230 300 L196 262 L164 282 Z" fill="#fff" class="ol"/>
+  <path d="M520 250 L560 296 L532 288 L520 320 L496 290 L478 302 Z" fill="#fff" class="ol"/>
+  <path d="M840 470 L1130 160 L1290 350 L1400 270 L1600 470 Z" fill="#7aa6e8" class="ol"/>
+  <path d="M1130 160 L1210 244 L1160 226 L1130 280 L1092 228 L1050 250 Z" fill="#fff" class="ol"/>
+  <path d="M0 430 Q420 380 800 470 Q1200 560 1600 420 L1600 900 L0 900 Z" fill="#f4fbff" class="ol"/>
+  <path d="M0 640 Q500 560 900 650 Q1300 730 1600 610 L1600 900 L0 900 Z" fill="#dff2ff" stroke="#14214f" stroke-width="8"/>
+
+  <!-- trees -->
+  <use href="#tree" transform="translate(90 560) scale(1.15)"/>
+  <use href="#tree" transform="translate(250 520) scale(0.7)"/>
+  <use href="#tree" transform="translate(1500 560) scale(1.2)"/>
+  <use href="#tree" transform="translate(1340 515) scale(0.65)"/>
+
+  <!-- gate in the middle distance -->
+  <g class="ol">
+    <rect x="688" y="372" width="22" height="130" rx="8" fill="#ff4d6a"/>
+    <rect x="890" y="372" width="22" height="130" rx="8" fill="#ff4d6a"/>
+    <rect x="688" y="364" width="224" height="22" rx="11" fill="#ffd93b"/>
+  </g>
+
+  <!-- title -->
+  <g text-anchor="middle">
+    <text x="808" y="236" font-size="168" fill="#14214f" stroke="#14214f" stroke-width="30" stroke-linejoin="round">DOWNHILL</text>
+    <text x="800" y="226" font-size="168" fill="#ffd93b" stroke="#14214f" stroke-width="14" stroke-linejoin="round" paint-order="stroke">DOWNHILL</text>
+  </g>
+  <g text-anchor="middle">
+    <rect x="520" y="262" width="560" height="62" rx="31" fill="#fff" class="ol"/>
+    <text x="800" y="306" font-size="31" fill="#14214f" letter-spacing="5">STEER WITH YOUR EYES</text>
+  </g>
+
+  <!-- pictogram tiles: 9 of them, 150 wide, 20 apart -->
+  <!-- STEER -->
+  <g transform="translate(45 585)">
+    <rect width="150" height="200" rx="30" fill="#35b6ff" class="tile"/>
+    <g transform="translate(75 70)">
+      <ellipse cx="-24" cy="0" rx="22" ry="26" fill="#fff" class="ol" stroke-width="6"/><ellipse cx="24" cy="0" rx="22" ry="26" fill="#fff" class="ol" stroke-width="6"/>
+      <circle cx="-14" cy="2" r="9" fill="#14214f"/><circle cx="34" cy="2" r="9" fill="#14214f"/>
+      <path d="M-6 44 H44 M30 32 L46 44 L30 56" fill="none" class="ol" stroke-width="8"/>
+    </g>
+    <text x="75" y="178" class="lab">STEER</text>
+  </g>
+  <!-- LOCK -->
+  <g transform="translate(215 585)">
+    <rect width="150" height="200" rx="30" fill="#ff6a9a" class="tile"/>
+    <g transform="translate(75 70)">
+      <path d="M-26 -6 V-24 A26 26 0 0 1 26 -24 V-6" fill="none" class="ol" stroke-width="9"/>
+      <rect x="-38" y="-8" width="76" height="62" rx="14" fill="#ffd93b" class="ol"/>
+      <circle cx="0" cy="18" r="8" fill="#14214f"/><rect x="-4" y="22" width="8" height="18" rx="4" fill="#14214f"/>
+    </g>
+    <text x="75" y="178" class="lab">LOCK</text>
+  </g>
+  <!-- JUMP -->
+  <g transform="translate(385 585)">
+    <rect width="150" height="200" rx="30" fill="#ffb52e" class="tile"/>
+    <g transform="translate(75 70)">
+      <path d="M-46 38 L40 38 L40 -2 Z" fill="#fff" class="ol"/>
+      <path d="M22 -14 L44 -48 M28 -48 H46 V-30" fill="none" class="ol" stroke-width="8"/>
+    </g>
+    <text x="75" y="178" class="lab">JUMP</text>
+  </g>
+  <!-- SPIN -->
+  <g transform="translate(555 585)">
+    <rect width="150" height="200" rx="30" fill="#7a5cff" class="tile"/>
+    <g transform="translate(75 70)">
+      <path d="M-40 6 A40 40 0 1 1 -10 40" fill="none" class="ol" stroke-width="9"/>
+      <path d="M-52 -8 L-38 10 L-22 -6" fill="none" class="ol" stroke-width="8"/>
+      <ellipse cx="0" cy="8" rx="26" ry="9" fill="#35b6ff" class="ol" stroke-width="6"/>
+    </g>
+    <text x="75" y="178" class="lab">SPIN</text>
+  </g>
+  <!-- GRAB -->
+  <g transform="translate(725 585)">
+    <rect width="150" height="200" rx="30" fill="#3ddc97" class="tile"/>
+    <g transform="translate(75 70)">
+      <ellipse cx="0" cy="22" rx="44" ry="11" fill="#35b6ff" class="ol" stroke-width="6" transform="rotate(-12 0 22)"/>
+      <path d="M-26 -34 q-6 -16 6 -18 q10 0 8 14 q10 -10 18 -2 q8 10 -4 22 q-16 14 -30 4 Z" fill="#ffd9a8" class="ol" stroke-width="6"/>
+    </g>
+    <text x="75" y="178" class="lab">GRAB</text>
+  </g>
+  <!-- EAT -->
+  <g transform="translate(895 585)">
+    <rect width="150" height="200" rx="30" fill="#ff7a3d" class="tile"/>
+    <g transform="translate(75 70)">
+      <path d="M-42 -4 A42 34 0 0 1 42 -4 Z" fill="#f2a64a" class="ol" stroke-width="7"/>
+      <rect x="-46" y="-2" width="92" height="12" rx="6" fill="#4dd16a" class="ol" stroke-width="6"/>
+      <rect x="-44" y="12" width="88" height="14" rx="7" fill="#8a4b2a" class="ol" stroke-width="6"/>
+      <path d="M-42 30 H42 Q40 48 0 48 Q-40 48 -42 30 Z" fill="#f2a64a" class="ol" stroke-width="7"/>
+    </g>
+    <text x="75" y="178" class="lab">EAT</text>
+  </g>
+  <!-- SHIELD -->
+  <g transform="translate(1065 585)">
+    <rect width="150" height="200" rx="30" fill="#5ad1ff" class="tile"/>
+    <g transform="translate(75 70)">
+      <path d="M0 -44 L38 -30 V4 Q38 34 0 50 Q-38 34 -38 4 V-30 Z" fill="#fff" class="ol"/>
+      <path d="M0 -16 L8 2 L28 4 L12 16 L18 36 L0 25 L-18 36 L-12 16 L-28 4 L-8 2 Z" fill="#ffd93b" class="ol" stroke-width="5"/>
+    </g>
+    <text x="75" y="178" class="lab">SHIELD</text>
+  </g>
+  <!-- BRACE -->
+  <g transform="translate(1235 585)">
+    <rect width="150" height="200" rx="30" fill="#ff5757" class="tile"/>
+    <g transform="translate(75 70)">
+      <circle cx="12" cy="6" r="34" fill="#fff" class="ol"/>
+      <path d="M-14 -6 l14 8 l-14 8" fill="none" class="ol" stroke-width="7"/>
+      <path d="M-46 -22 H-22 M-46 6 H-26 M-46 34 H-22" fill="none" class="ol" stroke-width="7"/>
+    </g>
+    <text x="75" y="178" class="lab">BRACE</text>
+  </g>
+  <!-- FACE -->
+  <g transform="translate(1405 585)">
+    <rect width="150" height="200" rx="30" fill="#ffd93b" class="tile"/>
+    <g transform="translate(75 70)">
+      <circle r="42" fill="#ffe9a0" class="ol"/>
+      <ellipse cx="-16" cy="-10" rx="9" ry="12" fill="#fff" class="ol" stroke-width="5"/><ellipse cx="16" cy="-10" rx="9" ry="12" fill="#fff" class="ol" stroke-width="5"/>
+      <circle cx="-13" cy="-8" r="4" fill="#14214f"/><circle cx="19" cy="-12" r="4" fill="#14214f"/>
+      <path d="M-20 16 Q0 30 20 16" fill="none" class="ol" stroke-width="6"/>
+      <path d="M2 22 q0 22 12 18 q10 -4 4 -20 Z" fill="#ff5d83" class="ol" stroke-width="5"/>
+    </g>
+    <text x="75" y="178" class="lab">FACE</text>
+  </g>
+
+  <!-- the board tip, as in first person -->
+  <ellipse cx="800" cy="888" rx="150" ry="62" fill="#2d35c9" class="ol"/>
+  <ellipse cx="800" cy="888" rx="118" ry="44" fill="none" stroke="#fff" stroke-width="6" opacity="0.8"/>
+</svg>

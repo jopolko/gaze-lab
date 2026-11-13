@@ -1,4 +1,4 @@
-# Handoff notes (Goose Chaos FPS + face-control demos)
+# Handoff notes (Gaze Lab: Godot games + face-control demos (formerly "Goose Chaos FPS"))
 
 Godot 4.7.2 project in `gaze-lab/godot`. Web demo live at https://joshuaopolko.com/gaze-lab/godot/ ;
 EyeLab (webcam tracking lab) at https://joshuaopolko.com/gaze-lab/eyelab/ (in the site's XR nav menu on 69 pages).

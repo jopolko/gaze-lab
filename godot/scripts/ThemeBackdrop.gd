@@ -12,6 +12,7 @@ var terrain: MeshInstance3D
 var trees: MultiMeshInstance3D
 var rocks: MultiMeshInstance3D
 var gates: Node3D
+var pyramids: MeshInstance3D
 var post: ThemeFX.ThemePost
 var theme_id: String = "alpine"
 var intensity: float = 1.0
@@ -117,6 +118,10 @@ func choose_theme(id: String) -> void:
 	else:
 		trees.material_override = vm
 		rocks.material_override = vm
+	pyramids.visible = id == "egypt"
+	var sweet := id == "candy"
+	trees.multimesh.mesh = Themes.fluffy_tree_mesh(id) if sweet else _tree_mesh
+	rocks.multimesh.mesh = Themes.gumdrop_mesh() if sweet else _rock_mesh
 	_recolor_gates(d["c1"], d["c2"])
 	post.set_look(Themes.post_mode(id), intensity)
 
@@ -172,6 +177,16 @@ func _build_world() -> void:
 	rocks = _scatter(_rock_mesh, 46, rng, 0.9, 2.4)
 	vp.add_child(trees)
 	vp.add_child(rocks)
+	pyramids = MeshInstance3D.new()
+	pyramids.mesh = Themes.pyramid_mesh()
+	var pm := StandardMaterial3D.new()
+	pm.vertex_color_use_as_albedo = true
+	pm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	pm.roughness = 1.0
+	pyramids.material_override = pm
+	pyramids.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pyramids.position = Vector3(0, hill(0.0, -60.0) - 6.0, -60.0)
+	vp.add_child(pyramids)
 	gates = Node3D.new()
 	vp.add_child(gates)
 	for i in 7:

@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="Goose Chaos FPS"
+config/name="Gaze Lab: Downhill"
 config/description="Physics-driven slapstick FPS prototype."
 run/main_scene="res://scenes/MainLevel.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
