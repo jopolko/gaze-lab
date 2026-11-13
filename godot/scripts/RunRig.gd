@@ -17,7 +17,7 @@ const FINISH_Z := -4200.0
 const PULL_RAMP := 3500.0            # metres until the hill is at full pull
 const AIM_LINGER := 0.22             # seconds your eyes must stay on an opening before it latches
 const AIM_MIN_DIST := 14.0
-const AIM_MAX_DIST := 125.0
+const AIM_MAX_DIST := 190.0          # the choice starts early: you can pick a gate while it is still a long way off
 const START_CALM := 2                # the first segments are open snow
 const MIN_SPEED := 14.0
 
@@ -77,6 +77,9 @@ func terrain_h(x: float, z: float) -> float:
 	var ax := absf(x) - W_HALF
 	if ax > 0.0:
 		h += 0.0085 * ax * ax
+	if _zone_by_j.get(int(floor(-z / ROW_GAP)), "") == "melt":
+		var fz := fposmod(-z, ROW_GAP)
+		h += Realms.melt_h(x, z, smoothstep(0.0, 12.0, fz) * smoothstep(0.0, 12.0, ROW_GAP - fz))          # the ground rolls like liquid, easing in and out at the edges of the stretch
 	for k in _kickers:
 		var kz: float = k["z"]
 		if z > kz + 1.0 or z < kz - float(k["len"]) - 1.0:
@@ -119,6 +122,10 @@ func _gen_segment(j: int) -> void:
 		zone = "rush"
 	var zp: Dictionary = ZONES[zone]
 	_cur_zone = zone
+	_zone_by_j[j] = zone
+	_gen_z0 = z0
+	_gen_lip = not Realms.has_roof(String(_zone_by_j.get(j - 1, "")))          # a cave has a low mouth, unless the stretch before it was one too
+	_rp.clear()
 	_zone_w = float(zp["w"])
 	_push_pitch(z0, float(zp["m"]))
 	zones_seen[zone] = int(zones_seen.get(zone, 0)) + 1
@@ -175,6 +182,9 @@ func _gen_segment(j: int) -> void:
 					_add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, lz + _rng.randf_range(-0.6, 0.6), _rng.randf_range(0.8, 1.25), true)
 	row["px"] = prev_x
 	row["pz"] = prev_rz
+	if zone == "interzone" and has_row and bool(params.get("lazy", true)):
+		var csgn := -signf(_good_x) if absf(_good_x) > 8.0 else (1.0 if _rng.randf() < 0.5 else -1.0)
+		row["cut"] = csgn * _rng.randf_range(9.0, 15.0)          # the world is spliced here: you come out sideways
 	var halfw: float = float(zp["walls"])
 	if has_row and halfw > 0.0:
 		_build_corridor(row, zone, halfw, prev_rz, rz, cones, cone_cols, trunks, trunk_cols, obs)
@@ -224,6 +234,7 @@ func _gen_segment(j: int) -> void:
 	_add_mm(row, _m_cone, cones, cone_cols)
 	_add_mm(row, _m_trunk, trunks, trunk_cols)
 	_add_mm(row, _m_rock, rocks, rock_cols)
+	_flush_realm(row, zone, j, z0)
 	if z0 > finish_z and z0 - ROW_GAP <= finish_z:
 		_make_finish(row)
 	_rows[j] = row
@@ -273,6 +284,18 @@ const ZONES := {
 	"air": {"m": 1.0, "w": 1.0, "singles": 0.0, "walls": 0.0, "path_buff": 0.0, "col": Color(1.0, 0.4, 0.7), "name": "AIR"},
 	"forest": {"m": 1.15, "w": 1.0, "singles": 3.2, "walls": 0.0, "path_buff": 0.4, "col": Color(0.2, 0.75, 0.35), "name": "FOREST"},
 	"drop": {"m": 2.2, "w": 1.15, "singles": 0.25, "walls": 0.0, "path_buff": 0.2, "col": Color(1.0, 0.6, 0.15), "name": "DROP"},
+	# the realms (see Realms.gd): no name on the gate, a violet glyph; the name shows when you arrive
+	"highway": {"m": 1.35, "w": 1.1, "singles": 0.9, "walls": 0.0, "path_buff": 0.25, "col": Color(1.0, 0.35, 0.75), "scol": Realms.SIGN_COL, "name": "DESERT HIGHWAY"},
+	"interzone": {"m": 1.0, "w": 1.0, "singles": 1.1, "walls": 0.0, "path_buff": 0.3, "col": Color(0.98, 0.84, 0.2), "scol": Realms.SIGN_COL, "name": "INTERZONE"},
+	"hive": {"m": 1.2, "w": 0.85, "singles": 0.0, "walls": 22.0, "path_buff": 0.1, "col": Color(0.5, 0.9, 0.6), "scol": Realms.SIGN_COL, "name": "THE HIVE"},
+	"eyes": {"m": 0.95, "w": 1.05, "singles": 2.2, "walls": 0.0, "path_buff": 0.45, "col": Color(1.0, 0.5, 0.5), "scol": Realms.SIGN_COL, "name": "ORCHARD OF EYES"},
+	"melt": {"m": 1.1, "w": 1.0, "singles": 0.8, "walls": 0.0, "path_buff": 0.35, "col": Color(0.4, 1.0, 0.8), "scol": Realms.SIGN_COL, "name": "THE MELT"},
+	"mandala": {"m": 2.0, "w": 1.15, "singles": 0.9, "walls": 0.0, "path_buff": 0.2, "col": Color(1.0, 0.7, 1.0), "scol": Realms.SIGN_COL, "name": "MANDALA DROP"},
+	# the roofed ones: caves and chambers, dark inside, lit by what grows or burns there
+	"glowcave": {"m": 1.0, "w": 1.1, "singles": 1.6, "walls": 0.0, "path_buff": 0.4, "col": Color(0.3, 1.0, 0.8), "scol": Realms.SIGN_COL, "name": "GLOW GROTTO"},
+	"crystal": {"m": 1.15, "w": 1.0, "singles": 1.4, "walls": 0.0, "path_buff": 0.3, "col": Color(0.6, 0.9, 1.0), "scol": Realms.SIGN_COL, "name": "CRYSTAL VAULT"},
+	"lava": {"m": 1.5, "w": 0.9, "singles": 2.2, "walls": 0.0, "path_buff": 0.15, "col": Color(1.0, 0.45, 0.1), "scol": Realms.SIGN_COL, "name": "LAVA TUBE"},
+	"abyss": {"m": 0.85, "w": 1.1, "singles": 1.2, "walls": 0.0, "path_buff": 0.5, "col": Color(0.2, 0.7, 1.0), "scol": Realms.SIGN_COL, "name": "JELLY ABYSS"},
 }
 ## What a gate offers in front of it depends on what lies behind it, so the offer teaches you something: a burger is as likely in front of a BEND (a trap)
 ## as in front of a RUSH (a reward).
@@ -285,7 +308,8 @@ const FOOD_BY_ZONE := {
 	"forest": {"boost": 0.15, "shield": 0.4, "mult": 0.2, "donut": 0.25},          # trees everywhere: a boost here is a gamble, a shield is not
 	"drop": {"boost": 0.1, "shield": 0.3, "mult": 0.3, "donut": 0.3},              # already fast enough: the sensible gifts are the ones that do not add speed
 }
-const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 0.8, "air": 0.9, "forest": 0.8, "drop": 0.5}
+const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 0.8, "air": 0.9, "forest": 0.8, "drop": 0.5,
+	"highway": 0.8, "interzone": 0.8, "hive": 0.7, "eyes": 0.8, "melt": 0.7, "mandala": 0.7, "glowcave": 1.0, "crystal": 0.9, "lava": 0.8, "abyss": 0.8}
 
 ## Regions: the world comes in stretches of four to seven zones with a character of their own (which zones are likely, and the colour of the snow). A banner says when you cross into one.
 const REGIONS := {
@@ -294,8 +318,10 @@ const REGIONS := {
 	"ember": {"name": "EMBER RIDGE", "tint": Color(1.0, 0.86, 0.78), "w": {"rush": 1.5, "drop": 1.8, "bend": 1.3, "flat": 0.5}},
 	"blossom": {"name": "BLOSSOM FIELDS", "tint": Color(1.0, 0.9, 0.96), "w": {"flat": 1.9, "forest": 1.1, "air": 1.4, "tunnel": 0.4}},
 	"dusk": {"name": "DUSK CANYON", "tint": Color(0.86, 0.84, 1.0), "w": {"bend": 1.8, "tunnel": 1.3, "rush": 1.1, "air": 0.5}},
+	"fever": {"name": "THE FEVER", "tint": Color(1.0, 0.9, 1.0), "w": {"highway": 2.4, "interzone": 2.4, "hive": 2.2, "eyes": 2.4, "melt": 2.2, "mandala": 2.2, "flat": 0.4, "forest": 0.3}},
+	"under": {"name": "THE UNDERWORLD", "tint": Color(0.9, 0.9, 1.0), "w": {"glowcave": 3.0, "crystal": 2.6, "lava": 2.2, "abyss": 2.4, "flat": 0.3, "forest": 0.3, "rush": 0.5}},
 }
-const REGION_ORDER := ["pines", "glacier", "ember", "blossom", "dusk"]
+const REGION_ORDER := ["pines", "glacier", "ember", "blossom", "dusk", "fever", "under"]
 
 var _pitch: Array = []                  # the slope of the hill, stretch by stretch: [{z, h, s}]
 var _cur_zone: String = "rush"
@@ -309,6 +335,7 @@ var _gate_open: bool = true             # false: the next stretch waits for you 
 var _mist: MeshInstance3D
 var _zone_w: float = 1.0
 var zones_seen: Dictionary = {}
+var realms_seen: Dictionary = {}
 var finish_z: float = FINISH_Z
 var diff_scale: float = 1.0
 var params: Dictionary = {"seed": 424242, "length": 4200, "diff": 1.0, "zones": {}, "lazy": true}
@@ -337,6 +364,11 @@ func _zone_weights() -> Dictionary:
 	var rw: Dictionary = (REGIONS[_region] as Dictionary)["w"]
 	for k in rw:
 		w[k] = float(w.get(k, 1.0)) * float(rw[k])
+	for k in Realms.IDS:
+		w[k] = float(w.get(k, 1.0)) * weird                      # 0 = none of the strange places, 1 = the usual share, 2 = mostly strange
+	if _force_realm != "":
+		for k in ZONES:
+			w[k] = 1.0 if (Realms.is_realm(k) and (_force_realm == "all" or _force_realm == k)) else 0.0
 	return w
 
 
@@ -423,7 +455,7 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 	for g in row["gaps"]:
 		var zn: String = g.get("leads", "rush")
 		var zp: Dictionary = ZONES[zn]
-		var col: Color = zp["col"]
+		var col: Color = zp.get("scol", zp["col"])
 		var gx: float = g["x"]
 		var root := Node3D.new()
 		add_child(root)
@@ -493,6 +525,80 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 					for dsx in [-1.0, 1.0]:
 						var dn := _mi(root, db, mat, Vector3(float(dsx) * 0.62, 0.9 - float(di) * 0.8, 0.0))
 						dn.rotation.z = float(dsx) * 0.55
+			"highway":
+				var hd := PrismMesh.new()
+				hd.size = Vector3(1.8, 1.8, 0.3)
+				var hn := _mi(root, hd, mat)
+				hn.rotation.z = PI
+				_mi(root, hd, mat, Vector3(0, 1.2, 0))
+			"interzone":
+				for ik in 2:
+					var ib := BoxMesh.new()
+					ib.size = Vector3(1.0, 1.0, 0.3)
+					_mi(root, ib, mat, Vector3(-0.55 + 1.1 * float(ik), 0.5 - 1.0 * float(ik), 0.0))
+			"hive":
+				for hk in 3:
+					var hb := BoxMesh.new()
+					hb.size = Vector3(2.4 - 0.7 * float(hk), 0.28, 0.3)
+					_mi(root, hb, mat, Vector3(0, 0.9 - 0.7 * float(hk), 0.0))
+			"eyes":
+				var et := TorusMesh.new()
+				et.inner_radius = 0.7
+				et.outer_radius = 1.2
+				var en := _mi(root, et, mat)
+				en.rotation.x = PI * 0.5
+				var es := SphereMesh.new()
+				es.radius = 0.4
+				es.height = 0.8
+				_mi(root, es, mat)
+			"melt":
+				for mk in 3:
+					var ms := SphereMesh.new()
+					ms.radius = 0.75 - 0.2 * float(mk)
+					ms.height = ms.radius * 2.0
+					_mi(root, ms, mat, Vector3(0.12 * float(mk), 0.9 - 0.9 * float(mk), 0.0))
+			"glowcave":
+				for gk in 2:
+					var gs := SphereMesh.new()
+					gs.radius = 0.7 - 0.25 * float(gk)
+					gs.height = gs.radius * 2.0
+					_mi(root, gs, mat, Vector3(0.0, 0.5 - 0.9 * float(gk), 0.0))
+				var gr := TorusMesh.new()
+				gr.inner_radius = 0.9
+				gr.outer_radius = 1.2
+				var gn := _mi(root, gr, mat)
+				gn.rotation.x = PI * 0.5
+			"crystal":
+				var cp := PrismMesh.new()
+				cp.size = Vector3(1.0, 2.2, 0.3)
+				_mi(root, cp, mat, Vector3(0, 0.3, 0))
+				var cp2 := PrismMesh.new()
+				cp2.size = Vector3(1.0, 2.2, 0.3)
+				var cn2 := _mi(root, cp2, mat, Vector3(0, -0.8, 0))
+				cn2.rotation.z = PI
+			"lava":
+				var lb := BoxMesh.new()
+				lb.size = Vector3(0.3, 2.0, 0.3)
+				_mi(root, lb, mat, Vector3(-0.45, 0.0, 0))
+				_mi(root, lb, mat, Vector3(0.45, 0.0, 0))
+				var lt := BoxMesh.new()
+				lt.size = Vector3(1.4, 0.3, 0.3)
+				_mi(root, lt, mat, Vector3(0, 0.95, 0))
+			"abyss":
+				var aj := SphereMesh.new()
+				aj.radius = 0.8
+				aj.height = 0.9
+				_mi(root, aj, mat, Vector3(0, 0.6, 0))
+				for ab in 3:
+					var at := BoxMesh.new()
+					at.size = Vector3(0.12, 1.2, 0.12)
+					_mi(root, at, mat, Vector3(-0.4 + 0.4 * float(ab), -0.5, 0))
+			"mandala":
+				for ak in 6:
+					var ab2 := BoxMesh.new()
+					ab2.size = Vector3(0.3, 1.5, 0.3)
+					var an := _mi(root, ab2, mat)
+					an.rotation.z = float(ak) * PI / 6.0
 			_:
 				var pm := PrismMesh.new()
 				pm.size = Vector3(2.4, 1.5, 0.4)
@@ -513,7 +619,7 @@ func _build_corridor(row: Dictionary, zone: String, halfw: float, prev_rz: float
 			if absf(x) < W_HALF - 1.0:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, z + _rng.randf_range(-0.6, 0.6), _rng.randf_range(0.9, 1.3), true)
 		z -= 3.7
-	if zone == "tunnel":
+	if zone == "tunnel" or zone == "hive":
 		for hk in [1, 2]:
 			var hz := rz + 26.0 * float(hk)
 			if hz > prev_rz - 24.0:
@@ -526,6 +632,278 @@ func _build_corridor(row: Dictionary, zone: String, halfw: float, prev_rz: float
 				hx += 3.7
 
 
+# --------------------------------------------------------------------------
+# Realms (Realms.gd): what is built there and what the rule is. Props go into buckets while a stretch is generated, then one multimesh per kind.
+# --------------------------------------------------------------------------
+var _zone_by_j: Dictionary = {}
+var _rp: Dictionary = {}
+var _row_eyes: Array = []
+var _eye_count: int = 0
+var _grip_mul: float = 1.0
+var _drag_mul: float = 1.0
+var weird: float = 1.0                  # how many of the strange places (Realms.gd) the gates lead to
+var _gen_z0: float = 0.0
+var _gen_lip: bool = true
+var _reveal_j: int = -1
+var _force_realm: String = ""
+var _realm_now: String = ""
+var _cut_z: float = 0.0
+var _cut_dx: float = 0.0
+
+
+func _zone_at(z: float) -> String:
+	return String(_zone_by_j.get(int(floor(-z / ROW_GAP)), ""))
+
+
+func _build_chunk(j: int) -> MeshInstance3D:
+	var mi := super._build_chunk(j)
+	if Realms.is_realm(String(_zone_by_j.get(j, ""))):
+		mi.material_override = Realms.ground_material()          # a realm has its own ground, whatever theme is on
+	return mi
+
+
+func _ground_color(j: int, x: float, z: float, c: Color) -> Color:
+	var zn := String(_zone_by_j.get(j, ""))
+	if Realms.is_realm(zn):
+		return Realms.ground(zn, x, z, -ROW_GAP * (float(j) + 0.5), c)
+	return c
+
+
+func _add_tree(cones: Array[Transform3D], cone_cols: PackedColorArray, trunks: Array[Transform3D], trunk_cols: PackedColorArray,
+		obs: PackedFloat32Array, x: float, z: float, s: float, solid: bool) -> void:
+	if Realms.is_realm(_cur_zone):
+		_realm_prop(x, z, s, solid, obs)
+		return
+	super._add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, z, s, solid)
+
+
+func _add_rock(rocks: Array[Transform3D], cols: PackedColorArray, obs: PackedFloat32Array, x: float, z: float, s: float, c: Color, tall: float, solid: bool = true) -> void:
+	if Realms.is_realm(_cur_zone):
+		_realm_prop(x, z, s, solid, obs)
+		return
+	super._add_rock(rocks, cols, obs, x, z, s, c, tall, solid)
+
+
+func _rp_add(id: String, x: float, z: float, sc: float, yaw: float, vy: float, y_abs: float = NAN) -> void:
+	if not _rp.has(id):
+		_rp[id] = {"xf": [], "col": []}
+	var d: Dictionary = _rp[id]
+	var y := terrain_h(x, z) if is_nan(y_abs) else y_abs
+	(d["xf"] as Array).append(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3(sc, sc * vy, sc)), Vector3(x, y, z)))
+	(d["col"] as Array).append(Realms.tint(_cur_zone, _rng))
+
+
+## Height of the roof above the ground at a point in a roofed realm: a low mouth at the start, then a tall cavern that closes in at the sides of the valley.
+func _roof_y(x: float, z: float, z0: float, lip: bool) -> float:
+	var e := sqrt(maxf(1.0 - (x / 145.0) * (x / 145.0), 0.0))
+	var n := 0.5 + 0.5 * sin(x * 0.09 + z * 0.05) * sin(z * 0.043 - x * 0.03)
+	var k := (0.18 + 0.82 * smoothstep(0.0, 40.0, z0 - z)) if lip else 1.0
+	return terrain_h(x, z) + (4.0 + (24.0 + 8.0 * n) * e) * k
+
+
+func _realm_prop(x: float, z: float, s: float, solid: bool, obs: PackedFloat32Array) -> void:
+	var id := Realms.pick(_cur_zone, not solid, _rng)
+	var sc := s if solid else clampf(s * 0.2, 1.0, 2.6)
+	if Realms.has_roof(_cur_zone):
+		var into := _gen_z0 - z                                   # metres into this stretch
+		if not solid and into < 42.0 and id != "stalag":
+			return                                                # the first stretch of a cave is dark and bare: the lights come on later
+		if not solid and (id == "glowshroom" or id == "coral" or id == "crystal"):
+			sc *= 1.6                                             # mammoth
+		if Realms.HANGING.has(id):
+			_rp_add(id, x, z, sc, _rng.randf() * TAU, 1.0, _roof_y(x, z, _gen_z0, _gen_lip))
+			return
+		if Realms.FLOATING.has(id):
+			_rp_add(id, x, z, sc, _rng.randf() * TAU, 1.0, terrain_h(x, z) + _rng.randf_range(-1.0, 8.0))
+			return
+	if id == "eyeball" and solid:
+		if _eye_count < 7:
+			_make_watcher(x, z, sc, obs)
+			return
+		id = "stalk"
+	var yaw := 0.0 if Realms.FACING.has(id) else _rng.randf() * TAU
+	_rp_add(id, x, z, sc, yaw, _rng.randf_range(0.9, 1.3))
+	if solid:
+		obs.append(x)
+		obs.append(z)
+		obs.append(Realms.radius(id) * sc)
+		obs.append(1.0 if (id == "blob" or id == "mush") else 0.0)
+	_push_shadow(x, z, 6.0 * sc, 2.4 * sc)
+
+
+## A giant eye on a stalk: a real node, because its iris follows you. Look toward it and hold and it blinks shut, and lets you through.
+func _make_watcher(x: float, z: float, sc: float, obs: PackedFloat32Array) -> void:
+	var root := Node3D.new()
+	add_child(root)
+	root.global_position = Vector3(x, terrain_h(x, z), z)
+	root.scale = Vector3.ONE * sc
+	var mat := Realms.material("eyes")
+	var body := MeshInstance3D.new()
+	body.mesh = Realms.mesh("eyeball")
+	body.material_override = mat
+	root.add_child(body)
+	var iris := MeshInstance3D.new()
+	iris.mesh = Realms.mesh("iris")
+	iris.material_override = mat
+	root.add_child(iris)
+	iris.position = Vector3(0, 7.0, 1.8)
+	var oi := obs.size()
+	obs.append(x)
+	obs.append(z)
+	obs.append(Realms.radius("eyeball") * sc)
+	obs.append(0.0)
+	_push_shadow(x, z, 6.0 * sc, 2.4 * sc)
+	_row_eyes.append({"root": root, "iris": iris, "x": x, "z": z, "sc": sc, "oi": oi, "t": 0.0, "seen": false, "c": 0.0})
+	_eye_count += 1
+
+
+## The roof of a cave: one cheap lumpy sheet over the whole stretch, closing down to the valley walls at the sides.
+func _build_roof(row: Dictionary, zone: String, z0: float) -> void:
+	const NXR := 26
+	const NZR := 12
+	var base: Color = (Realms.ROOF[zone] as Dictionary)["col"]
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var cols := PackedColorArray()
+	var idx := PackedInt32Array()
+	for iz in NZR + 1:
+		var z := z0 - ROW_GAP * float(iz) / float(NZR)
+		for ix in NXR + 1:
+			var x := -145.0 + 290.0 * float(ix) / float(NXR)
+			verts.append(Vector3(x, _roof_y(x, z, z0, _gen_lip), z))
+			norms.append(Vector3(0.0, -1.0, 0.0))
+			var n := 0.5 + 0.5 * sin(x * 0.21 + z * 0.17) * sin(z * 0.13 - x * 0.11)
+			cols.append(base.lerp(base * 1.8, n))
+	for iz in NZR:
+		for ix in NXR:
+			var a := iz * (NXR + 1) + ix
+			idx.append_array(PackedInt32Array([a, a + 1, a + NXR + 1, a + 1, a + NXR + 2, a + NXR + 1]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = norms
+	arrays[Mesh.ARRAY_COLOR] = cols
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = Realms.material(zone)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.extra_cull_margin = 60.0
+	add_child(mi)
+	(row["nodes"] as Array).append(mi)
+
+
+func _flush_realm(row: Dictionary, zone: String, j: int, z0: float) -> void:
+	if not Realms.is_realm(zone):
+		_row_eyes = []
+		_eye_count = 0
+		return
+	if zone == "mandala":
+		for k in 3:
+			_rp_add("ring", 20.0 * sin(float(j) * 1.9 + float(k) * 2.1), z0 - 14.0 - 26.0 * float(k), 1.5, 0.0, 1.0)
+	if Realms.has_roof(zone):
+		for k in 16:
+			var hx := _rng.randf_range(-70.0, 70.0)
+			var hz := z0 - _rng.randf_range(44.0, ROW_GAP)
+			_rp_add("stalactite", hx, hz, _rng.randf_range(0.8, 2.2), _rng.randf() * TAU, 1.0, _roof_y(hx, hz, z0, _gen_lip))
+		_build_roof(row, zone, z0)
+	if not _row_eyes.is_empty():
+		row["eyes"] = _row_eyes
+		for e in _row_eyes:
+			(row["nodes"] as Array).append(e["root"])
+	_row_eyes = []
+	_eye_count = 0
+	for id in _rp:
+		var d: Dictionary = _rp[id]
+		var xs: Array[Transform3D] = []
+		for t in (d["xf"] as Array):
+			xs.append(t)
+		var cs := PackedColorArray()
+		for c in (d["col"] as Array):
+			cs.append(c)
+		_add_mm(row, Realms.mesh(String(id)), xs, cs, Realms.material(zone))
+	_rp.clear()
+
+
+## Per physics tick: the rule of the realm you are in, the name when you arrive, and the eyes watching you.
+func _realm_tick(delta: float) -> void:
+	if _cut_dx != 0.0 and spos.z <= _cut_z:
+		spos.x = clampf(spos.x + _cut_dx, -(W_HALF - 4.0), W_HALF - 4.0)
+		_cut_dx = 0.0
+		_toast("CUT-UP", Color(0.98, 0.84, 0.2))
+	var zn := _zone_at(spos.z)
+	if zn != _realm_now:
+		_realm_now = zn
+		if Realms.is_realm(zn):
+			var nf := Realms.discover(zn)
+			realms_seen[zn] = true
+			if nf > 0:
+				_toast("NEW REALM %d/%d: %s" % [nf, Realms.IDS.size(), Realms.NAMES[zn]], Color(1.0, 0.7, 1.0))
+			else:
+				_toast(String(Realms.NAMES[zn]), Color(0.95, 0.8, 1.0))
+	# darkness inside a roofed realm, and the lights coming on 42 m in
+	var roofed := Realms.has_roof(zn)
+	if roofed:
+		Realms.cave_expo = float((Realms.ROOF[zn] as Dictionary)["expo"])
+		var sj := int(floor(-spos.z / ROW_GAP))
+		if spos.z <= -ROW_GAP * float(sj) - 42.0 and _reveal_j != sj:
+			_reveal_j = sj
+			Realms.flash = 1.0
+			_toast(String((Realms.ROOF[zn] as Dictionary)["reveal"]), Color(0.9, 1.0, 0.9))
+	Realms.cave_k = move_toward(Realms.cave_k, 1.0 if roofed else 0.0, delta * (1.1 if roofed else 0.8))
+	Realms.flash = move_toward(Realms.flash, 0.0, delta * 0.7)
+	Realms.apply_cave()
+	_grip_mul = 1.0
+	_drag_mul = 1.0
+	match zn:
+		"glowcave":
+			_drag_mul = 0.92
+		"lava":
+			_drag_mul = 0.8                                       # hot and fast
+		"abyss":
+			_drag_mul = 1.25                                      # heavy going
+		"highway":
+			_grip_mul = 0.5                                       # slick: the board drifts
+			_drag_mul = 0.85
+		"hive":
+			_drag_mul = 1.0 + 0.4 * sin(_age * 5.5)               # the heartbeat: surge, then drag
+		"melt":
+			_grip_mul = 0.75
+	var look := _steer_gaze if _eye_on else steer
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if not r.has("eyes"):
+			continue
+		for e in (r["eyes"] as Array):
+			var root: Node3D = e["root"]
+			if not is_instance_valid(root):
+				continue
+			var d: float = spos.z - float(e["z"])
+			if d < -10.0 or d > 110.0:
+				continue
+			var sc: float = e["sc"]
+			var iris: Node3D = e["iris"]
+			var dir := Vector3(spos.x - float(e["x"]), 0.3, maxf(d, 0.0) + 2.0).normalized()
+			iris.position = Vector3(0.0, 7.0, 0.0) + dir * 1.8
+			iris.basis = Basis.looking_at(-dir, Vector3.UP)
+			if bool(e["seen"]):
+				e["c"] = minf(float(e["c"]) + delta * 3.0, 1.0)
+				root.scale = Vector3(sc, sc * (1.0 - 0.75 * float(e["c"])), sc)
+				iris.visible = float(e["c"]) < 0.5
+				continue
+			var lat := float(e["x"]) - spos.x
+			var toward := absf(look) > 0.25 and (signf(lat) == signf(look) or absf(lat) < 5.0)
+			e["t"] = clampf(float(e["t"]) + (delta if (d > 4.0 and d < 55.0 and toward) else -delta * 1.5), 0.0, 1.0)
+			if float(e["t"]) >= 0.5:
+				e["seen"] = true
+				var ob: PackedFloat32Array = r["obs"]
+				ob[int(e["oi"]) + 2] = 0.0
+				_gain(30)
+				_toast("SEEN", Color(0.6, 1.0, 0.9))
+
+
 func _near_gap(row: Dictionary, x: float, pad: float) -> bool:
 	for g in row["gaps"]:
 		if absf(x - float(g["x"])) < float(g["w"]) * 0.5 + pad:
@@ -534,6 +912,64 @@ func _near_gap(row: Dictionary, x: float, pad: float) -> bool:
 
 
 ## Lost in a corridor? Glowing breadcrumbs lead from the board to the nearest opening of the next barrier.
+var _rib: MeshInstance3D
+var _rib_im: ImmediateMesh
+
+
+## Glowing ribbons on the snow from the board to every opening of the next barrier, in the colour of its sign. The one your eyes have chosen is bright and wide,
+## the rest stay faint but visible, so the fork is always there to read: nothing else is drawn on the ground.
+func _update_ribbons() -> void:
+	if _rib == null:
+		_rib_im = ImmediateMesh.new()
+		_rib = MeshInstance3D.new()
+		_rib.mesh = _rib_im
+		var rm := StandardMaterial3D.new()                       # normal blending, not additive: additive washes out to white on bright snow
+		rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		rm.vertex_color_use_as_albedo = true
+		rm.no_depth_test = false
+		_rib.material_override = rm
+		_rib.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_rib.extra_cull_margin = 600.0
+		add_child(_rib)
+	_rib_im.clear_surfaces()
+	if _finished or _in_air or _paused:
+		return
+	var row: Dictionary = {}
+	var bz := -1.0e9
+	for j in _rows:
+		var r: Dictionary = _rows[j]
+		if r["has_row"] and not r["passed"] and float(r["z"]) < spos.z - 10.0 and float(r["z"]) > spos.z - 200.0 and float(r["z"]) > bz:
+			bz = float(r["z"])
+			row = r
+	if row.is_empty():
+		return
+	var sx := spos.x + vel.x * 0.3
+	var sz := spos.z - 8.0
+	for g in row["gaps"]:
+		var zn: Dictionary = ZONES[String(g.get("leads", "rush"))]
+		var col: Color = zn.get("scol", zn["col"])
+		var chosen := is_same(g, _aim)
+		var a := 0.9 if chosen else (0.5 if _aim.is_empty() else 0.2)
+		var w := 1.5 if chosen else 0.9
+		var gx: float = g["x"]
+		_rib_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		var n := 18
+		for i in n + 1:
+			var u := float(i) / float(n)
+			var x := lerpf(sx, gx, u * u * (3.0 - 2.0 * u))
+			var z := lerpf(sz, bz, u)
+			var al := a * smoothstep(0.0, 0.2, u) * (0.65 + 0.35 * sin(_age * 6.0 - u * 16.0)) * (1.0 + 0.8 * smoothstep(0.85, 1.0, u))
+			var ww := w * (0.6 + 0.8 * u)
+			var c := Color(col.r, col.g, col.b, clampf(al, 0.0, 1.0))
+			_rib_im.surface_set_color(c)
+			_rib_im.surface_add_vertex(Vector3(x - ww, terrain_h(x - ww, z) + 0.25, z))
+			_rib_im.surface_set_color(c)
+			_rib_im.surface_add_vertex(Vector3(x + ww, terrain_h(x + ww, z) + 0.25, z))
+		_rib_im.surface_end()
+
+
 func _update_crumbs(delta: float) -> void:
 	var row: Dictionary = {}
 	var bz := -1.0e9
@@ -681,6 +1117,9 @@ func _read_params() -> void:
 	var df: String = q.call("diff")
 	if df != "":
 		d["diff"] = clampf(float(df), 0.3, 2.0)
+	var rlm: String = q.call("realm")
+	if Realms.is_realm(rlm) or rlm == "all":
+		_force_realm = rlm                                       # ?realm=hive : nothing but that realm (for looking at one); ?realm=all : realms only
 	var zs: String = q.call("zones")
 	if zs != "":
 		var zd: Dictionary = {}
@@ -717,8 +1156,8 @@ func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz
 		_layout_spread(gaps, gx, d, 2 + (1 if _rng.randf() < 0.5 else 0))
 		row["layout"] = "spread"
 		return
-	if _cur_zone == "tunnel" or _cur_zone == "bend":
-		_layout_near(gaps, gx, d, 9.0 if _cur_zone == "tunnel" else 12.0, 14.0 if _cur_zone == "tunnel" else 18.0)
+	if _cur_zone == "tunnel" or _cur_zone == "bend" or _cur_zone == "hive":
+		_layout_near(gaps, gx, d, 9.0 if _cur_zone != "bend" else 12.0, 14.0 if _cur_zone != "bend" else 18.0)
 		row["layout"] = "near"
 		return
 	var roll := _rng.randf()
@@ -774,6 +1213,14 @@ func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz
 				if ok:
 					_add_gate(gaps, ex4, ew, false)
 					break
+	if gaps.size() < 2:
+		# a barrier is always a choice: never a single door
+		var sd2 := -signf(gx) if absf(gx) > 12.0 else (1.0 if _rng.randf() < 0.5 else -1.0)
+		var ex5 := clampf(gx + sd2 * _rng.randf_range(22.0, 30.0), -46.0, 46.0)
+		if absf(ex5 - gx) < 18.0:
+			ex5 = clampf(gx - sd2 * _rng.randf_range(22.0, 30.0), -46.0, 46.0)
+		_add_gate(gaps, ex5, _gate_w(d), false)
+		layout = "pair"
 	row["layout"] = layout
 
 
@@ -1996,7 +2443,7 @@ func _physics_process(delta: float) -> void:
 			vel += fwd * (MIN_SPEED - spd) * 1.2 * delta        # never stalls: always pushes the way the board points, never along a sideways or backward slide
 		vel += -G * g / (1.0 + g.length_squared()) * delta
 		var sp := vel.length()
-		var drag := DRAG * (0.55 if tucking else 1.0) * lerpf(1.0, 0.5, prog) * (0.3 if _boost_t > 0.0 else 1.0)          # less drag the further you go: the hill keeps pulling harder
+		var drag := DRAG * _drag_mul * (0.55 if tucking else 1.0) * lerpf(1.0, 0.5, prog) * (0.3 if _boost_t > 0.0 else 1.0)          # less drag the further you go: the hill keeps pulling harder
 		if _boost_t > 0.0 and spd < SPEED_CAP:
 			vel += fwd * 7.0 * delta                                  # a boost pushes along where the board points
 		var fr := 0.22 + (3.0 if _finished else 0.0)
@@ -2008,7 +2455,7 @@ func _physics_process(delta: float) -> void:
 		var old_sp := vel.length()
 		var along := vel.dot(fwd)
 		var lat := vel.dot(right)
-		var lat_new := lat * exp(-GRIP * (0.75 if tucking else 1.0) * delta)
+		var lat_new := lat * exp(-GRIP * _grip_mul * (0.75 if tucking else 1.0) * delta)
 		along += absf(lat - lat_new) * 0.6 * signf(along if absf(along) > 0.01 else 1.0)          # a carve costs some speed
 		vel = fwd * along + right * lat_new
 		if vel.length() > old_sp:
@@ -2044,6 +2491,7 @@ func _physics_process(delta: float) -> void:
 		if spos.y <= gh:
 			_land(maxf(gvy - vy, 0.0), gh, gvy)
 	_gh_prev = gh
+	_realm_tick(delta)
 	_collide()
 	_collect_buffs()
 	_update_eye_actions(delta)
@@ -2216,7 +2664,12 @@ func _update_rows() -> void:
 				if bool(params.get("lazy", true)):
 					_good_x = float(via["x"])                         # the next stretch is built around where you came through, not around where the safe line was
 				_gate_open = true
-				if _pending_zone != "" and ZONES.has(_pending_zone):
+				var cut_dx := float(r.get("cut", 0.0))
+				if cut_dx != 0.0:
+					_cut_z = float(r["z"]) - 7.0                          # spliced once you are clear of both lines of the barrier
+					_cut_dx = cut_dx
+					_good_x = clampf(_good_x + cut_dx, -42.0, 42.0)       # the next stretch is built around where you will come out
+				if _pending_zone != "" and ZONES.has(_pending_zone) and not Realms.is_realm(_pending_zone):
 					var zi: Dictionary = ZONES[_pending_zone]
 					_toast(String(zi["name"]), zi["col"])
 			var rg := String(r.get("region", "pines"))
@@ -2342,6 +2795,16 @@ func _restart() -> void:
 	_pending_bend = 0.0
 	_gate_open = true
 	zones_seen = {}
+	_zone_by_j.clear()
+	_rp.clear()
+	_row_eyes = []
+	_eye_count = 0
+	_realm_now = ""
+	_cut_dx = 0.0
+	_reveal_j = -1
+	Realms.cave_k = 0.0
+	Realms.flash = 0.0
+	realms_seen = {}
 	Engine.time_scale = 1.0
 	_slowmo_t = 0.0
 	_air_moves.clear()
@@ -3609,6 +4072,7 @@ func _update_focus(delta: float) -> void:
 	_menu_arm_t = maxf(_menu_arm_t - delta, 0.0)
 	_runlog.tick(self, delta)
 	_update_crumbs(delta)
+	_update_ribbons()
 	_update_aim(delta)
 	_update_buff_aim(delta)
 	_trace_tick(delta)
@@ -3655,7 +4119,7 @@ func _update_aim(delta: float) -> void:
 		var tol := maxf(float(sc["hw"]) * 1.15, 0.12 * vs.x * clampf(68.0 / maxf(cam.fov, 40.0), 0.55, 1.0))          # a wider view packs the gates closer together on screen: look more precisely
 		var dd := absf(c.x - cx) / tol
 		if is_same(g, _aim):
-			dd *= 0.7
+			dd *= 0.85                                           # a little stickiness against jitter, not enough to hold you on the near one
 		if dd < best_d:
 			best_d = dd
 			best = g

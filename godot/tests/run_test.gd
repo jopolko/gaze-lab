@@ -75,6 +75,7 @@ func _ready() -> void:
 	var rig: RunRig = level._dh as RunRig
 	rig.view_fp = false                  # the older checks measure the third-person camera; first person has its own checks below
 	rig.balls_enabled = false            # the older simulations have no snowballs; they have their own checks below
+	rig.weird = 0.0                     # the older checks measure the original zones; the strange places have their own checks at the end
 	_check(rig != null and Game.run_mode and Game.downhill_mode and rig.cam.current, "carve rig starts, owns the camera")
 	_check(rig.lane_ctl == 2, "gaze steering is continuous (STEER)")
 	_check(not rig._rows.is_empty() and rig._chunks.size() >= 3, "course and terrain chunks exist (%d segments)" % rig._rows.size())
@@ -1439,6 +1440,44 @@ func _ready() -> void:
 		_check(gm > 11.0 and rig._crumb_a > 0.9, "lost far from every opening, glowing breadcrumbs light the way (%.0f m off, strength %.2f)" % [gm, rig._crumb_a])
 	rig.gate_assist = true
 	rig.avoid_enabled = true
+
+	# ---- the realms: every one generates, the roofed ones have a roof and darkness, and every barrier is a choice
+	rig.set_physics_process(false)
+	rig.weird = 1.0
+	var realm_ok := true
+	var roofs_ok := true
+	var choice_ok := true
+	for rid in Realms.IDS:
+		rig._force_realm = rid
+		rig.apply_params({})
+		rig._restart()
+		rig.balls_enabled = false
+		for rj in range(rig._next_j, 14):
+			rig._gen_segment(rj)
+		var nin := 0
+		for rj2 in rig._zone_by_j:
+			if rig._zone_by_j[rj2] == rid:
+				nin += 1
+		if nin < 6:
+			realm_ok = false
+		for rj3 in rig._rows:
+			var rrow: Dictionary = rig._rows[rj3]
+			if rrow["has_row"] and (rrow["gaps"] as Array).size() < 2:
+				choice_ok = false
+			if rrow["zone"] == rid and Realms.has_roof(rid):
+				var has_roof_node := false
+				for nd in rrow["nodes"]:
+					if is_instance_valid(nd) and nd is MeshInstance3D and (nd as MeshInstance3D).mesh is ArrayMesh and (nd as MeshInstance3D).material_override == Realms.material(rid):
+						has_roof_node = true
+				if not has_roof_node:
+					roofs_ok = false
+	rig._force_realm = ""
+	_check(realm_ok, "all %d realms generate real stretches" % Realms.IDS.size())
+	_check(roofs_ok, "the roofed realms have a roof")
+	_check(choice_ok, "every barrier offers at least two openings")
+	rig.weird = 0.0
+	rig.apply_params({})
+	rig._restart()
 
 	# ---- leaving restores the player camera
 	level.load_level(6)
