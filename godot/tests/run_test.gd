@@ -1499,6 +1499,10 @@ func _ready() -> void:
 		gt._eye_follow(aim_cam, Vector2(avs.x * 0.9, avs.y * 0.5), 0.1)
 	var look_r: Vector2 = gt._eye_look
 	gt._eye_look = Vector2.ZERO
+	for fi4 in 10:
+		gt._eye_follow(aim_cam, Vector2(avs.x * 0.9, avs.y * 0.5), 0.1)
+	var look_1s: Vector2 = gt._eye_look
+	gt._eye_look = Vector2.ZERO
 	for fi2 in 30:
 		gt._eye_follow(aim_cam, Vector2(avs.x * 0.5, avs.y * 0.5), 0.1)
 	var look_c: Vector2 = gt._eye_look
@@ -1510,6 +1514,7 @@ func _ready() -> void:
 	gt._eye_look_out = Vector2.ZERO
 	Game.peek_eye_aim = false
 	Game.peek_eye_look = Vector2.ZERO
+	_check(look_1s.x < -0.25, "a hard look to the side turns the view a good way in one second (%.2f rad)" % look_1s.x)
 	_check(look_r.x < -0.2 and absf(look_r.y) < 0.05, "aiming by eye: looking to the right turns the view right (yaw %.2f)" % look_r.x)
 	_check(absf(look_c.x) < 0.01 and absf(look_c.y) < 0.01, "looking at the middle leaves the view where it is")
 	_check(look_u.y > 0.2 and absf(look_u.x) < 0.05, "looking up pitches the view up (%.2f)" % look_u.y)

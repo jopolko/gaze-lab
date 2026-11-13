@@ -772,25 +772,28 @@ func _peek_gaze(rd: float) -> void:
 		_eye_follow(cam, gp, rd)
 	# 1. lock: stare at a baddy you can actually see
 	var best: EnemyAI = null
-	var bd := _snap()
-	for n in get_tree().get_nodes_in_group("enemies"):
-		var e := n as EnemyAI
-		if e == null or e.dying or not e.cover or not e._exposed_to_player():
-			continue
-		var pt := e.global_position + Vector3.UP * e.s
-		if cam.is_position_behind(pt):
-			continue
-		var d := cam.unproject_position(pt).distance_to(gp)
-		if d < bd:
-			bd = d
-			best = e
+	if Game.peek_eye_aim:
+		best = _eye_pick(cam, gp)
+	else:
+		var bd := _snap()
+		for n in get_tree().get_nodes_in_group("enemies"):
+			var e := n as EnemyAI
+			if e == null or e.dying or not e.cover or not e._exposed_to_player():
+				continue
+			var pt := e.global_position + Vector3.UP * e.s
+			if cam.is_position_behind(pt):
+				continue
+			var d := cam.unproject_position(pt).distance_to(gp)
+			if d < bd:
+				bd = d
+				best = e
 	if best != null:
 		if best == _peek_target:
 			_peek_dwell += rd
 		else:
 			_peek_target = best
 			_peek_dwell = 0.0
-		if _peek_dwell >= 0.3 and peek_lock != best:
+		if _peek_dwell >= (0.15 if Game.peek_eye_aim else 0.3) and peek_lock != best:
 			peek_lock = best
 			AimAssist.locked = best
 			Game.sfx(&"pop", best.global_position)
@@ -861,6 +864,43 @@ func _peek_fire() -> void:
 		Game.peek_shot.emit(&"blink")
 
 
+## Eye mode: which baddy are the eyes pointing at? Every exposed baddy gets a tolerance sized to how big it looks on screen (never less than a fifth of the screen width: the reading
+## is coarse), the nearest to the gaze wins, and the one already held is favoured so a flicker does not drop it. If nothing is under the gaze but you are looking hard to one
+## side, it is the nearest exposed baddy on that side: far ones are always reachable, however far the reading is from them.
+func _eye_pick(cam: Camera3D, gp: Vector2) -> EnemyAI:
+	var vs := get_viewport().get_visible_rect().size
+	var c := vs * 0.5
+	var best: EnemyAI = null
+	var bscore := 1.0e9
+	var side_best: EnemyAI = null
+	var side_d := 1.0e9
+	var hard := absf(gp.x - c.x) / vs.x > 0.3
+	for n in get_tree().get_nodes_in_group("enemies"):
+		var e := n as EnemyAI
+		if e == null or e.dying or not e.cover or not e._exposed_to_player():
+			continue
+		var mid := e.global_position + Vector3.UP * e.s
+		if cam.is_position_behind(mid):
+			continue
+		var sp := cam.unproject_position(mid)
+		var half_h := absf(cam.unproject_position(e.global_position + Vector3.UP * 1.8 * e.s).y - cam.unproject_position(e.global_position).y) * 0.5
+		var tol := maxf(half_h * 1.6 + 60.0, 0.2 * vs.x)
+		var dx := absf(sp.x - gp.x)
+		var dy := absf(sp.y - gp.y) * 0.6
+		var score := sqrt(dx * dx + dy * dy) / tol
+		if e == peek_lock:
+			score *= 0.6
+		if score < bscore:
+			bscore = score
+			best = e
+		if hard and signf(sp.x - c.x) == signf(gp.x - c.x) and dx < side_d:
+			side_d = dx
+			side_best = e
+	if best != null and bscore < 1.0:
+		return best
+	return side_best
+
+
 ## Aiming by eye, the view follows. The gaze is only a hint: a baddy near it becomes the point the view is turned toward (the game focuses in), otherwise the view
 ## drifts toward where you look, and it settles when you look at the middle. Turn rate is a fraction of the remaining angle per second, so a noisy reading
 ## wobbles the view very little. The crosshair stays in the middle, as with the head.
@@ -869,24 +909,20 @@ func _eye_follow(cam: Camera3D, gp: Vector2, rd: float) -> void:
 	var c := vs * 0.5
 	var p := gp
 	var focus := false
-	var near := _nearest_exposed(cam, gp, _snap())
-	if not near.is_empty():
-		var e := near["e"] as EnemyAI
-		p = gp.lerp(cam.unproject_position(e.global_position + Vector3.UP * 0.9 * e.s), 0.8)
-		focus = true
-	elif peek_lock != null and is_instance_valid(peek_lock) and not cam.is_position_behind(peek_lock.global_position):
-		p = cam.unproject_position(peek_lock.global_position + Vector3.UP * 0.9 * peek_lock.s)
+	var fe: EnemyAI = _peek_target if (_peek_target != null and is_instance_valid(_peek_target)) else peek_lock          # the baddy you are looking at starts pulling the view at once, the lock confirms it
+	if fe != null and is_instance_valid(fe) and not fe.dying and not cam.is_position_behind(fe.global_position):
+		p = cam.unproject_position(fe.global_position + Vector3.UP * 0.9 * fe.s)
 		focus = true
 	var off := (p - c) / vs
-	var dz := 0.02 if focus else 0.07
+	var dz := 0.015 if focus else 0.07
 	var ox := signf(off.x) * maxf(absf(off.x) - dz, 0.0)
 	var oy := signf(off.y) * maxf(absf(off.y) - dz, 0.0)
 	var th := tan(deg_to_rad(cam.fov) * 0.5)
 	var ax := atan(2.0 * ox * th * vs.x / vs.y)
 	var ay := atan(2.0 * oy * th)
-	var gain := 3.2 if focus else 1.6
-	_eye_look.x = clampf(_eye_look.x - ax * gain * rd, -0.7, 0.7)          # looking right turns the view right, which is a negative yaw
-	_eye_look.y = clampf(_eye_look.y - ay * gain * rd, -0.5, 0.5)          # looking up pitches the view up
+	var k := 1.0 - exp(-rd / 0.15) if focus else (2.2 + 3.0 * maxf(absf(off.x), absf(off.y))) * rd          # focused: close on it (a fraction of the angle left, 0.15 s time constant); otherwise a steady drift toward the gaze
+	_eye_look.x = clampf(_eye_look.x - ax * k, -0.7, 0.7)          # looking right turns the view right, which is a negative yaw
+	_eye_look.y = clampf(_eye_look.y - ay * k, -0.5, 0.5)          # looking up pitches the view up
 	if not focus and ox == 0.0 and oy == 0.0:
 		_eye_look = _eye_look.move_toward(Vector2.ZERO, 0.12 * rd)             # nothing to look at and looking at the middle: the view slowly comes home
 	_eye_look_out = _eye_look_out.lerp(_eye_look, 1.0 - exp(-rd / 0.1))
