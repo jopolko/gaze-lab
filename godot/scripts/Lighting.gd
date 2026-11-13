@@ -62,7 +62,7 @@ func setup(p_level: MainLevel, p_rig: RunRig, id: String, dyn: bool, snow: bool)
 			l.shadow_enabled = false
 			rig.add_child(l)
 			_gate_lights.append(l)
-	floor_tier = 1 if Game.touch_mode else 0
+	floor_tier = 1 if (Game.touch_mode or OS.has_feature("web")) else 0          # the art is flat colour and soft light: the phone tier is the look, on desktop too
 	tier = clampi(maxi(floor_tier, 1 if OS.has_feature("web") else 0), 0, 3)          # a web build starts one step down and climbs only if it can hold the frame rate
 	_applied = false
 	if _snow != null:
@@ -96,6 +96,21 @@ func setup(p_level: MainLevel, p_rig: RunRig, id: String, dyn: bool, snow: bool)
 		rig.add_child(_snow)
 
 
+var _expo_base: float = -1.0
+
+
+## Inside a roofed realm the whole picture is dimmed (the glowing things are boosted to make up for it, see Realms.apply_cave).
+func _apply_cave_exposure() -> void:
+	var env: Environment = level.world_env.environment
+	if Realms.cave_k > 0.001:
+		if _expo_base < 0.0:
+			_expo_base = env.tonemap_exposure
+		env.tonemap_exposure = _expo_base * lerpf(1.0, Realms.cave_expo, Realms.cave_k)
+	elif _expo_base >= 0.0:
+		env.tonemap_exposure = _expo_base
+		_expo_base = -1.0
+
+
 func _ease(t: float) -> float:
 	return t * t * (3.0 - 2.0 * t)
 
@@ -123,6 +138,7 @@ func _process(delta: float) -> void:
 		_applied = true
 		_apply_tier()                                   # a phone starts at its floor tier: apply it, do not wait for the first change
 	_governor(delta)
+	_apply_cave_exposure()
 	var lit := theme_id == "alpine"                 # the other looks are unshaded: lights would cost frame rate and change nothing
 	_rider.visible = lit and tier < 3
 	for gl in _gate_lights:
@@ -178,11 +194,12 @@ func _governor(delta: float) -> void:
 
 func _apply_tier() -> void:
 	if _snow != null:
-		_snow.emitting = tier == 0
-		_snow.visible = tier == 0
+		var snow_ok := tier == 0 or (tier == 1 and not Game.touch_mode)          # desktop keeps the falling snow at the phone tier: it is cheap
+		_snow.emitting = snow_ok
+		_snow.visible = snow_ok
 	var fx: ThemeFX = level.get_node_or_null("ThemeFX") as ThemeFX
 	if fx != null and fx.post != null:
-		fx.post.trails_ok = tier < 1
+		fx.post.trails_ok = tier < 1 or (tier == 1 and not Game.touch_mode)
 		fx.post.set_look(Themes.post_mode(theme_id) if tier < 3 else 0, fx.post.amount)
 	var env: Environment = level.world_env.environment
 	if tier >= 2:
@@ -192,7 +209,7 @@ func _apply_tier() -> void:
 	if vp != null:
 		# a big desktop window has several times the pixels of a phone: draw the 3D picture at about a million pixels at most (the HUD stays sharp)
 		var px := maxf(float(vp.get_visible_rect().size.x * vp.get_visible_rect().size.y), 1.0)
-		var cap := clampf(sqrt(1.15e6 / px), 0.5, 1.0) if OS.has_feature("web") else 1.0
+		var cap := clampf(sqrt(0.95e6 / px), 0.5, 1.0) if OS.has_feature("web") else 1.0
 		vp.scaling_3d_scale = minf([1.0, 1.0, 0.8, 0.65][tier], cap)
 	# draw distance for trees and rocks: the cheapest big saving there is
 	rig.veg_range = [0.0, 280.0, 190.0, 130.0][tier]

@@ -615,6 +615,10 @@ func _chunk_tint(_j: int) -> Color:
 	return Color.WHITE
 
 
+func _ground_color(_j: int, _x: float, _z: float, c: Color) -> Color:
+	return c
+
+
 func _build_chunk(j: int) -> MeshInstance3D:
 	const NX := 60
 	const NZ := 34
@@ -648,6 +652,7 @@ func _build_chunk(j: int) -> MeshInstance3D:
 			var c := Color(0.97, 0.98, 1.0).lerp(Color(0.8, 0.86, 0.97), clampf(0.35 * t + 0.1 * stripe, 0.0, 1.0))
 			if absf(x) > W_HALF:
 				c = c.lerp(Color(0.8, 0.84, 0.88), 0.3)
+			c = _ground_color(j, x, z, c)
 			cols.append(c * _chunk_tint(j))
 	for iz in NZ:
 		for ix in NX:
