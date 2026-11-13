@@ -63,7 +63,7 @@ func setup(p_level: MainLevel, p_rig: RunRig, id: String, dyn: bool, snow: bool)
 			rig.add_child(l)
 			_gate_lights.append(l)
 	floor_tier = 1 if Game.touch_mode else 0
-	tier = clampi(maxi(floor_tier, tier), 0, 3)
+	tier = clampi(maxi(floor_tier, 1 if OS.has_feature("web") else 0), 0, 3)          # a web build starts one step down and climbs only if it can hold the frame rate
 	_applied = false
 	if _snow != null:
 		_snow.queue_free()
@@ -190,7 +190,10 @@ func _apply_tier() -> void:
 	env.adjustment_enabled = tier < 1                 # colour grading is a whole extra pass over the picture: the first thing a phone gives up
 	var vp := rig.get_viewport()
 	if vp != null:
-		vp.scaling_3d_scale = [1.0, 1.0, 0.8, 0.65][tier]
+		# a big desktop window has several times the pixels of a phone: draw the 3D picture at about a million pixels at most (the HUD stays sharp)
+		var px := maxf(float(vp.get_visible_rect().size.x * vp.get_visible_rect().size.y), 1.0)
+		var cap := clampf(sqrt(1.15e6 / px), 0.5, 1.0) if OS.has_feature("web") else 1.0
+		vp.scaling_3d_scale = minf([1.0, 1.0, 0.8, 0.65][tier], cap)
 	# draw distance for trees and rocks: the cheapest big saving there is
 	rig.veg_range = [0.0, 280.0, 190.0, 130.0][tier]
 	for n in rig.get_children():

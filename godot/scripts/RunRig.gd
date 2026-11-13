@@ -2756,6 +2756,15 @@ func _toggle_view() -> void:
 	_toast("FIRST PERSON" if view_fp else "THIRD PERSON", Color(0.9, 0.95, 1.0))
 
 
+var _menu_arm_t: float = 0.0
+
+
+## A MENU button under the view toggle. Two taps (the first says SURE?), so a stray touch cannot throw a run away.
+func _menu_rect() -> Rect2:
+	var r := _view_rect()
+	return Rect2(r.position.x - 14.0 * _hud_scale(), r.position.y + r.size.y + 10.0 * _hud_scale(), r.size.x + 14.0 * _hud_scale(), r.size.y)
+
+
 func _view_rect() -> Rect2:
 	var s := get_viewport().get_visible_rect().size
 	var k := _hud_scale()
@@ -3583,6 +3592,9 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 		_ctext(font, ty, _trk_text, 46 if big else 30, Color(1.0, 0.88, 0.35, a))
 		if _trk_comment_t > 0.0 and _trk_comment != "":
 			_ctext(font, ty + 52.0 * k, _trk_comment, 24, Color(1.0, 1.0, 1.0, clampf(_trk_comment_t / 0.5, 0.0, 1.0)))
+	var mrect2 := _menu_rect()
+	_hud.draw_rect(mrect2, Color(0.8, 0.3, 0.3, 0.7) if _menu_arm_t > 0.0 else Color(0.05, 0.12, 0.25, 0.5))
+	_text(font, mrect2.position + Vector2(6.0 * k, 21.0 * k), "SURE?" if _menu_arm_t > 0.0 else "MENU", 18, Color(1, 1, 1, 0.9))
 	var vr := _view_rect()
 	_hud.draw_rect(vr, Color(0.05, 0.12, 0.25, 0.5))
 	_text(font, vr.position + Vector2(6.0 * k, 21.0 * k), "1ST" if view_fp else "3RD", 18, Color(1, 1, 1, 0.9))
@@ -3594,6 +3606,7 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 func _update_focus(delta: float) -> void:
 	var pf0 := Time.get_ticks_usec()
 	super._update_focus(delta)
+	_menu_arm_t = maxf(_menu_arm_t - delta, 0.0)
 	_runlog.tick(self, delta)
 	_update_crumbs(delta)
 	_update_aim(delta)
@@ -3711,6 +3724,15 @@ func _input(event: InputEvent) -> void:
 			vpos = (event as InputEventMouseButton).position
 		elif event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
 			vpos = (event as InputEventScreenTouch).position
+		if vpos.is_finite() and _menu_rect().has_point(vpos):
+			if Time.get_ticks_msec() - _view_msec > 300:
+				_view_msec = Time.get_ticks_msec()
+				if _menu_arm_t > 0.0:
+					_return_to_menu()
+				else:
+					_menu_arm_t = 2.5
+			get_viewport().set_input_as_handled()
+			return
 		if vpos.is_finite() and _view_rect().has_point(vpos):
 			if Time.get_ticks_msec() - _view_msec > 300:
 				_view_msec = Time.get_ticks_msec()
