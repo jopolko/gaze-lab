@@ -1479,6 +1479,42 @@ func _ready() -> void:
 	rig.apply_params({})
 	rig._restart()
 
+	# ---- peek: aim by head (the default, unchanged) or by eye, and the accuracy numbers
+	AimStats.reset()
+	for ae in [1.0, 2.0, 3.0, 4.0, 10.0]:
+		AimStats.shot("eyes", ae)
+	AimStats.shot("eyes", -1.0)
+	AimStats.hit("eyes")
+	AimStats.fixation("eyes", 2.0)
+	AimStats.fixation("eyes", 6.0)
+	var asum := AimStats.summary("eyes")
+	_check(not Game.peek_eye_aim, "aiming by head is the default in Peek")
+	_check(int(asum["shots"]) == 6 and int(asum["unaimed"]) == 1 and int(asum["hits"]) == 1 and absf(float(asum["fire_err_median"]) - 3.0) < 0.01, "the aim numbers count shots, unaimed shots and hits, and give the median error")
+	_check(absf(float(asum["fix_err_p90"]) - 6.0) < 0.01 and int(asum["fix_samples"]) == 2, "the gaze error is kept apart from the shot error (90th percentile %.1f)" % float(asum["fix_err_p90"]))
+	var gt := get_tree().get_first_node_in_group("gaze") as GazeTargeting
+	var aim_cam := level.player.camera
+	var avs := get_viewport().get_visible_rect().size
+	Game.peek_eye_aim = true
+	for fi in 30:
+		gt._eye_follow(aim_cam, Vector2(avs.x * 0.9, avs.y * 0.5), 0.1)
+	var look_r: Vector2 = gt._eye_look
+	gt._eye_look = Vector2.ZERO
+	for fi2 in 30:
+		gt._eye_follow(aim_cam, Vector2(avs.x * 0.5, avs.y * 0.5), 0.1)
+	var look_c: Vector2 = gt._eye_look
+	gt._eye_look = Vector2.ZERO
+	for fi3 in 30:
+		gt._eye_follow(aim_cam, Vector2(avs.x * 0.5, avs.y * 0.05), 0.1)
+	var look_u: Vector2 = gt._eye_look
+	gt._eye_look = Vector2.ZERO
+	gt._eye_look_out = Vector2.ZERO
+	Game.peek_eye_aim = false
+	Game.peek_eye_look = Vector2.ZERO
+	_check(look_r.x < -0.2 and absf(look_r.y) < 0.05, "aiming by eye: looking to the right turns the view right (yaw %.2f)" % look_r.x)
+	_check(absf(look_c.x) < 0.01 and absf(look_c.y) < 0.01, "looking at the middle leaves the view where it is")
+	_check(look_u.y > 0.2 and absf(look_u.x) < 0.05, "looking up pitches the view up (%.2f)" % look_u.y)
+	AimStats.reset()
+
 	# ---- leaving restores the player camera
 	level.load_level(6)
 	await _frames(5)

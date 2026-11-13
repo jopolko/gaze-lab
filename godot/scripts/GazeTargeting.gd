@@ -57,6 +57,12 @@ var _wink_cd: float = 0.0
 var _walk_move: Vector2 = Vector2.ZERO
 var _lvl: int = -1
 var _gaze_px: Vector2 = Vector2.ZERO
+## Peek accuracy: a short history of the gaze (so a blink shot uses where you looked just BEFORE the lid closed), and shots waiting to be scored.
+var _gh: Array = []
+var _pending: Array = []
+var _stat_shots: int = 0
+var _eye_look: Vector2 = Vector2.ZERO
+var _eye_look_out: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -64,6 +70,7 @@ func _ready() -> void:
 	player = (get_parent() as MainLevel).player
 	pan_enabled = not Game.demo_mode   # the demo arena is faced forward; gaze never spins the view
 	GazeProvider.blinked.connect(_on_blink)
+	Game.peek_shot.connect(_on_peek_shot)
 	GazeProvider.winked.connect(_on_wink)
 	GazeProvider.mouth_opened.connect(_on_mouth)
 	GazeProvider.brows_raised.connect(_on_brows)
@@ -75,6 +82,8 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	Game.peek_eye_look = Vector2.ZERO
+	AimStats.save()
 	if bullet_time:
 		Engine.time_scale = 1.0
 
@@ -107,6 +116,9 @@ func _process(delta: float) -> void:
 		_peek_gaze(rd)
 	elif peek_lock != null or _peek_target != null:
 		_peek_clear()
+	if not Game.peek_mode:
+		Game.peek_eye_look = Vector2.ZERO
+	_score_pending(rd)
 	if not GazeProvider.active or player == null or player.dead or GazeProvider.calibrating:
 		if target != null or not tags.is_empty() or bullet_time or waypoint != Vector3.INF:
 			reset()
@@ -708,6 +720,21 @@ func _draw_peek_hud(ci: Control) -> void:
 	ci.draw_string_outline(font, Vector2(x0, y0 - 12.0), tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 6, Color(0, 0, 0, 0.9))
 	ci.draw_string(font, Vector2(x0, y0 - 12.0), tip, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 1, 1, 0.9))
 	_draw_peek_eyes(ci, font)
+	_draw_aim_panel(ci, font)
+
+
+func _draw_aim_panel(ci: Control, font: Font) -> void:
+	var br := _aim_btn_rect(ci.size)
+	var on := Game.peek_eye_aim
+	ci.draw_rect(br, Color(0.1, 0.45, 0.3, 0.75) if on else Color(0.35, 0.28, 0.08, 0.75))
+	ci.draw_string(font, br.position + Vector2(10.0, 26.0), "AIM: EYES  (tap / M)" if on else "AIM: HEAD  (tap / M)", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.95))
+	var y := ci.size.y - 52.0
+	for m in ["head", "eyes"]:
+		var t := AimStats.line(m)
+		var col := Color(1, 1, 1, 0.95) if (m == "eyes") == on else Color(1, 1, 1, 0.45)
+		ci.draw_string_outline(font, Vector2(12.0, y), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5, Color(0, 0, 0, 0.9))
+		ci.draw_string(font, Vector2(12.0, y), t, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, col)
+		y += 18.0
 
 
 # --------------------------------------------------------------------------
@@ -729,11 +756,20 @@ func _peek_clear() -> void:
 func _peek_gaze(rd: float) -> void:
 	_sniff_cd = maxf(_sniff_cd - rd, 0.0)
 	if not _peek_eyes_live():
+		_eye_look = Vector2.ZERO
+		_eye_look_out = Vector2.ZERO
+		Game.peek_eye_look = Vector2.ZERO
 		if peek_lock != null or _peek_target != null:
 			_peek_clear()
 		return
 	var cam := player.camera
 	var gp := GazeProvider.gaze * get_viewport().get_visible_rect().size
+	var now_s := float(Time.get_ticks_msec()) / 1000.0
+	_gh.append([now_s, gp])
+	while _gh.size() > 2 and now_s - float((_gh[0] as Array)[0]) > 1.0:
+		_gh.remove_at(0)
+	if Game.peek_eye_aim:
+		_eye_follow(cam, gp, rd)
 	# 1. lock: stare at a baddy you can actually see
 	var best: EnemyAI = null
 	var bd := _snap()
@@ -766,6 +802,11 @@ func _peek_gaze(rd: float) -> void:
 	if peek_lock != null and (not is_instance_valid(peek_lock) or peek_lock.dying or not peek_lock._exposed_to_player()):
 		peek_lock = null
 		AimAssist.locked = null
+	# the tracker's own error: while locked on a baddy you are looking at it, so the distance from the gaze reading to it is the reading's error
+	if peek_lock != null and is_instance_valid(peek_lock):
+		var fp := peek_lock.global_position + Vector3.UP * peek_lock.s
+		if not cam.is_position_behind(fp):
+			AimStats.fixation("eyes", cam.unproject_position(fp).distance_to(gp) / get_viewport().get_visible_rect().size.x * 100.0)
 	# 2. snuffle: rest your gaze on a rock and it tells you whether something hides behind it
 	_peek_sniff(rd, cam, gp)
 
@@ -808,12 +849,175 @@ func _peek_sniff(rd: float, cam: Camera3D, gp: Vector2) -> void:
 
 
 func _peek_fire() -> void:
+	if Game.peek_eye_aim:
+		_peek_fire_eyes()
+		return
 	if player == null or player.dead or peek_lock == null or not is_instance_valid(peek_lock) or not _peek_eyes_live():
 		return
 	var w := player.weapons.current_weapon()
 	if w == null or not w.is_ready():
 		return
-	w.fire_at(peek_lock.global_position + Vector3.UP * 0.9 * peek_lock.s, peek_lock)
+	if w.fire_at(peek_lock.global_position + Vector3.UP * 0.9 * peek_lock.s, peek_lock):
+		Game.peek_shot.emit(&"blink")
+
+
+## Aiming by eye, the view follows. The gaze is only a hint: a baddy near it becomes the point the view is turned toward (the game focuses in), otherwise the view
+## drifts toward where you look, and it settles when you look at the middle. Turn rate is a fraction of the remaining angle per second, so a noisy reading
+## wobbles the view very little. The crosshair stays in the middle, as with the head.
+func _eye_follow(cam: Camera3D, gp: Vector2, rd: float) -> void:
+	var vs := get_viewport().get_visible_rect().size
+	var c := vs * 0.5
+	var p := gp
+	var focus := false
+	var near := _nearest_exposed(cam, gp, _snap())
+	if not near.is_empty():
+		var e := near["e"] as EnemyAI
+		p = gp.lerp(cam.unproject_position(e.global_position + Vector3.UP * 0.9 * e.s), 0.8)
+		focus = true
+	elif peek_lock != null and is_instance_valid(peek_lock) and not cam.is_position_behind(peek_lock.global_position):
+		p = cam.unproject_position(peek_lock.global_position + Vector3.UP * 0.9 * peek_lock.s)
+		focus = true
+	var off := (p - c) / vs
+	var dz := 0.02 if focus else 0.07
+	var ox := signf(off.x) * maxf(absf(off.x) - dz, 0.0)
+	var oy := signf(off.y) * maxf(absf(off.y) - dz, 0.0)
+	var th := tan(deg_to_rad(cam.fov) * 0.5)
+	var ax := atan(2.0 * ox * th * vs.x / vs.y)
+	var ay := atan(2.0 * oy * th)
+	var gain := 3.2 if focus else 1.6
+	_eye_look.x = clampf(_eye_look.x - ax * gain * rd, -0.7, 0.7)          # looking right turns the view right, which is a negative yaw
+	_eye_look.y = clampf(_eye_look.y - ay * gain * rd, -0.5, 0.5)          # looking up pitches the view up
+	if not focus and ox == 0.0 and oy == 0.0:
+		_eye_look = _eye_look.move_toward(Vector2.ZERO, 0.12 * rd)             # nothing to look at and looking at the middle: the view slowly comes home
+	_eye_look_out = _eye_look_out.lerp(_eye_look, 1.0 - exp(-rd / 0.1))
+	Game.peek_eye_look = _eye_look_out
+
+
+## Blink in eye mode: the view has already followed your gaze, so fire at the locked baddy, or else the one nearest where you were looking just before the lid closed.
+func _peek_fire_eyes() -> void:
+	if player == null or player.dead or not _peek_eyes_live():
+		return
+	var w := player.weapons.current_weapon()
+	if w == null or not w.is_ready():
+		return
+	var cam := player.camera
+	var gp := _gaze_before_blink()
+	var near := _nearest_exposed(cam, gp, _snap())
+	if peek_lock != null and is_instance_valid(peek_lock) and not peek_lock.dying:
+		near = {"e": peek_lock, "d": 0.0}
+	var fired := false
+	if not near.is_empty():
+		var e := near["e"] as EnemyAI
+		fired = w.fire_at(e.global_position + Vector3.UP * 0.9 * e.s, e)
+	else:
+		var cp := get_viewport().get_visible_rect().size * 0.5
+		var from := cam.project_ray_origin(cp)
+		var dirn := cam.project_ray_normal(cp)
+		var q := PhysicsRayQueryParameters3D.create(from, from + dirn * 120.0, Game.MASK_WORLD | Game.MASK_ENEMY | Game.MASK_PROPS)
+		var hit := cam.get_world_3d().direct_space_state.intersect_ray(q)
+		fired = w.fire_at(hit["position"] if not hit.is_empty() else from + dirn * 120.0, null)
+	if fired:
+		Game.peek_shot.emit(&"blink")
+
+
+## Median gaze over the 0.45 s up to 0.12 s ago: a blink drags the iris reading down as the lid closes, so the last 0.12 s are not trusted.
+func _gaze_before_blink() -> Vector2:
+	var now_s := float(Time.get_ticks_msec()) / 1000.0
+	var xs: Array = []
+	var ys: Array = []
+	for h in _gh:
+		var age := now_s - float((h as Array)[0])
+		if age >= 0.12 and age <= 0.45:
+			xs.append(((h as Array)[1] as Vector2).x)
+			ys.append(((h as Array)[1] as Vector2).y)
+	if xs.size() < 3:
+		return GazeProvider.gaze * get_viewport().get_visible_rect().size
+	xs.sort()
+	ys.sort()
+	return Vector2(float(xs[xs.size() / 2]), float(ys[ys.size() / 2]))
+
+
+func _nearest_exposed(cam: Camera3D, p: Vector2, max_px: float) -> Dictionary:
+	var best: EnemyAI = null
+	var bd := max_px
+	for n in get_tree().get_nodes_in_group("enemies"):
+		var e := n as EnemyAI
+		if e == null or e.dying or not e.cover or not e._exposed_to_player():
+			continue
+		var pt := e.global_position + Vector3.UP * e.s
+		if cam.is_position_behind(pt):
+			continue
+		var d := cam.unproject_position(pt).distance_to(p)
+		if d < bd:
+			bd = d
+			best = e
+	return {} if best == null else {"e": best, "d": bd}
+
+
+## A shot was fired: record how far from the nearest baddy you were aiming (HEAD: the middle of the screen, EYES: the gaze), and check 0.8 s later if it was hurt.
+func _on_peek_shot(src: StringName) -> void:
+	if not Game.peek_mode or player == null or player.dead:
+		return
+	var mode := "eyes" if Game.peek_eye_aim else "head"
+	var vs := get_viewport().get_visible_rect().size
+	var p := vs * 0.5          # both modes aim with the middle of the screen (the view follows the head, or follows the eyes), so the errors compare
+	var near := _nearest_exposed(player.camera, p, vs.x * 0.5)
+	if near.is_empty():
+		AimStats.shot(mode, -1.0)
+		return
+	AimStats.shot(mode, float(near["d"]) / vs.x * 100.0)
+	var e := near["e"] as EnemyAI
+	_pending.append({"e": e, "hp": e.health, "t": 0.8, "mode": mode})
+	_stat_shots += 1
+	if _stat_shots % 10 == 0:
+		AimStats.save()
+
+
+func _score_pending(rd: float) -> void:
+	for i in range(_pending.size() - 1, -1, -1):
+		var pd: Dictionary = _pending[i]
+		var e: Variant = pd["e"]
+		pd["t"] = float(pd["t"]) - rd
+		if not is_instance_valid(e) or (e as EnemyAI).dying or (e as EnemyAI).health < float(pd["hp"]) - 0.001:
+			AimStats.hit(String(pd["mode"]))
+			_pending.remove_at(i)
+		elif float(pd["t"]) <= 0.0:
+			_pending.remove_at(i)
+
+
+## HEAD <-> EYES. The head-tracked Peek is the default and is untouched when this is off.
+func toggle_peek_aim() -> void:
+	Game.peek_eye_aim = not Game.peek_eye_aim
+	_eye_look = Vector2.ZERO
+	_eye_look_out = Vector2.ZERO
+	Game.peek_eye_look = Vector2.ZERO
+	AimStats.save()
+	Game.banner_requested.emit("AIM WITH YOUR EYES" if Game.peek_eye_aim else "AIM WITH YOUR HEAD", Color(0.5, 1.0, 0.7) if Game.peek_eye_aim else Color(1.0, 0.85, 0.4), 1.6)
+
+
+func _aim_btn_rect(vs: Vector2) -> Rect2:
+	return Rect2(12.0, vs.y - 150.0, 230.0, 40.0)
+
+
+func _input(event: InputEvent) -> void:
+	if not Game.peek_mode:
+		return
+	if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo:
+		var kc := (event as InputEventKey).keycode
+		if kc == KEY_M:
+			toggle_peek_aim()
+		elif kc == KEY_K:
+			DisplayServer.clipboard_set(AimStats.report())
+			Game.banner_requested.emit("AIM NUMBERS COPIED", Color(0.8, 0.9, 1.0), 1.4)
+		return
+	var pos := Vector2.INF
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		pos = (event as InputEventMouseButton).position
+	elif event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		pos = (event as InputEventScreenTouch).position
+	if pos.is_finite() and _aim_btn_rect(get_viewport().get_visible_rect().size).has_point(pos):
+		toggle_peek_aim()
+		get_viewport().set_input_as_handled()
 
 
 func _peek_swap() -> void:

@@ -14,6 +14,7 @@ signal dh_started(cfg: Dictionary)          # the Downhill menu: go, with these 
 signal sfx_requested(sfx: StringName, world_pos: Vector3)
 signal chaos_changed(score: int)
 signal pad_changed(using_gamepad: bool)
+signal peek_shot(source: StringName)          # a shot fired in the Peek level (for the accuracy numbers)
 
 # Collision *masks* (bit values) for the four physics layers.
 const MASK_WORLD := 1    # layer 1
@@ -33,6 +34,10 @@ var touch_fire: bool = false
 var touch_alt: bool = false
 ## Peek-and-blast level: head lean moves the player out from cover, mouse/keyboard shoot.
 var peek_mode: bool = false
+## Peek level: aim with the eyes instead of the head. Off by default, so the head-tracked Peek is exactly as it was. In eye mode the gaze is a hint: the game turns the view
+## toward it and focuses in on the baddy it points at (peek_eye_look is that turn, yaw / pitch in radians, used in place of the head turn), and the crosshair stays in the middle.
+var peek_eye_aim: bool = false
+var peek_eye_look: Vector2 = Vector2.ZERO
 ## Nod-energy flight prototype (level 7): chin down gathers, snap up blasts, snap down slams.
 var flight_mode: bool = false
 ## Downhill run (level 8). Also sets flight_mode so it shares the chin / lean input and touch layout.

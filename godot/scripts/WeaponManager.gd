@@ -95,6 +95,7 @@ func _process(delta: float) -> void:
 	var down := Game.touch_fire if Game.touch_mode else Input.is_action_pressed(&"fire")
 	if down and not _prev_fire:
 		w.primary_pressed()
+		Game.peek_shot.emit(&"click")
 	if down:
 		w.primary_held(delta)
 	if _prev_fire and not down:

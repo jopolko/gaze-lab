@@ -468,7 +468,7 @@ func _process(delta: float) -> void:
 	var peek_y := 0.0
 	if Game.peek_mode and rail_lock:
 		var pk := GazeProvider.peek_offset_current()
-		var plook := GazeProvider.peek_look(delta)
+		var plook := GazeProvider.peek_look(delta) if not Game.peek_eye_aim else Game.peek_eye_look          # aiming by eye: the game turns the view toward the gaze; the lean still works
 		peek_rot = Vector3(plook.y, plook.x, -pk.x * 0.05)     # head turn / nod, and a little roll into the lean
 		peek_y = clampf(pk.y, -0.9, 0.3)                      # stooping lowers the eyes without pitching at the ground
 	camera.rotation = Vector3(_pitch_pos + nx * s * ang + peek_rot.x, ny * s * ang + peek_rot.y, _roll + nz * s * ang + peek_rot.z)
