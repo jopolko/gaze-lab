@@ -37,6 +37,7 @@ var _saved: Dictionary = {}
 var _shown: int = -1
 ## AUTO (loop): after trying every setting once, stay on the best, light every second gate to keep measuring it, and every EXPLOIT_N barriers
 ## try a challenger for 2*PER lit gates; it takes over only if it clearly does better than the incumbent's recent record.
+var monitor: bool = false             # just watch: a target gate is lit, every barrier gets a verdict, nothing is changed (the normal way to measure intent against what the board did)
 var loop: bool = false
 var phase: String = "explore"
 var note: String = ""
@@ -86,10 +87,14 @@ func config_index() -> int:
 
 ## Which barriers carry a lit gate: all of them while testing, every second one while just using the best setting.
 func should_light(j: int) -> bool:
+	if monitor:
+		return true
 	return phase != "exploit" or j % 2 == 0
 
 
 func config_name() -> String:
+	if monitor:
+		return "live"
 	return String((CONFIGS[config_index()] as Dictionary)["name"])
 
 
@@ -108,7 +113,8 @@ func start() -> void:
 	summary = []
 	best = ""
 	_shown = -1
-	_apply(0)
+	if not monitor:
+		_apply(0)
 
 
 func _apply(ci: int) -> void:
@@ -140,6 +146,17 @@ func pick_target(gaps: Array, allowed: Array = []) -> int:
 
 
 func record(trial: Dictionary) -> void:
+	if monitor:
+		trial["i"] = trial_i
+		trial["ci"] = 0
+		trial["cfg"] = "live"
+		trial["phase"] = "monitor"
+		results.append(trial)
+		while results.size() > 200:
+			results.remove_at(0)
+		trial_i += 1
+		note = ""
+		return
 	trial["i"] = trial_i
 	trial["ci"] = config_index()
 	trial["cfg"] = config_name()

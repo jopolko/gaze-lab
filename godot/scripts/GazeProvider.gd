@@ -252,6 +252,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep tracking while a menu pauses the game
 	_load_opts()
 	if OS.has_feature("web"):
+		JavaScriptBridge.eval("try{navigator.getBattery&&navigator.getBattery().then(function(b){var u=function(){window.__gazeBatt=Math.round(b.level*100);window.__gazeChg=b.charging};u();b.addEventListener('levelchange',u);b.addEventListener('chargingchange',u)})}catch(e){}")
 		JavaScriptBridge.eval("try{fetch('/gaze-lab/profiles.json',{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(j){window.__gazeFleet=j}).catch(function(){})}catch(e){}")
 	add_child.call_deferred(GazeOptions.new())      # the in-game EYE OPTIONS panel (shows itself only in Peek and Downhill)
 	if OS.has_feature("web"):
@@ -274,6 +275,8 @@ func _ready() -> void:
 			JavaScriptBridge.eval("try{localStorage.removeItem('gazelab_dev')}catch(e){}")
 		if q.contains("noauto"):
 			auto_on = false
+		if q.contains("notargets"):
+			targets_on = false
 		if q.contains("share=1"):
 			set_share(true)                                  # a link from the person running the test: sharing the numbers is already agreed, no question asked
 		elif q.contains("share=0"):
@@ -677,6 +680,7 @@ func _process(delta: float) -> void:
 					gaze = Vector2(_kx.step(c.x, rd, fresh_k), _ky.step(c.y, rd, fresh_k)).clamp(Vector2.ZERO, Vector2.ONE)
 				else:
 					gaze = Vector2(_fx.filter(c.x, rd), _fy.filter(c.y, rd)).clamp(Vector2.ZERO, Vector2.ONE)
+				_pre_hold = gaze                       # the filtered gaze before any hold: what the jitter rule judges, so the hold cannot make itself look unnecessary
 				if hold_on:
 					# fixation hold: small movements inside a dead zone are ignored, a bigger one drags the zone along, a jump moves it at once
 					var hd := gaze - _hold_pt
@@ -750,6 +754,7 @@ func _gestures(blink_l: float, blink_r: float, mouth: float, brows: float, now: 
 
 
 func _emit_blink(now: float) -> void:
+	_blink_count += 1
 	blinked.emit()
 	if now - _last_blink_t < 0.7:
 		double_blinked.emit()
@@ -872,10 +877,12 @@ var geo_win: int = 5                   # readings in the median that comes befor
 var opt_pick: int = 0                  # Downhill gate choice: 0 = the gate nearest your gaze within a tolerance (as before), 1 = gaze zones with hysteresis
 var gate_log: Array = []               # one entry per barrier passed in Downhill: where the gates were, where you looked, where you went
 var _hold_pt: Vector2 = Vector2(0.5, 0.5)
+var _pre_hold: Vector2 = Vector2(0.5, 0.5)
 var _sweep_lin: Array = []
 var tune_request: bool = false         # the panel (or ?tune) asks the Downhill rig to start a tuning session
 var tune_summary: Array = []
 var tune_trials: Array = []
+var targets_on: bool = true           # while this is in development one gate per barrier is marked as the TARGET: the only certain way to know what the player meant, so intent can be measured against what the board did
 var auto_on: bool = true               # the silent doctor (GazeDoctor) and the health rules: on for everybody, nobody has to know about it
 var dev_mode: bool = false             # ?dev, ?who= or a remembered dev flag: the EYE OPTIONS panel and the on-screen AUTO messages are only for testers
 var doctor := GazeDoctor.new()
@@ -891,6 +898,8 @@ var auto_log: Array = []
 var capture_on: bool = false
 var capture_n: int = 0
 const CAPTURE_MAX := 300
+var barrier_count: int = 0             # gate records made this visit (health says how many, so a missing record is told apart from a lost one)
+var run_state_fn: Callable = Callable()     # set by the Downhill rig: what the run is doing, added to every health sample
 var tune_phase: String = ""            # set by the rig: while a setting is being tested (explore / challenge) the AUTO rules keep their hands off
 var health: Dictionary = {}            # the latest health sample (every 5 s): frame rate, tracker rate, latency, jitter, how much of the screen the gaze covers
 var _h_ft := PackedFloat32Array()
@@ -1191,16 +1200,27 @@ func _health_tick(rd: float) -> void:
 				_h_gy.remove_at(0)
 			if _h_prev_raw.is_finite():
 				_h_dr.append(_last_g.distance_to(_h_prev_raw))
-				_h_do.append(gaze.distance_to(_h_prev_out))
+				_h_do.append(_pre_hold.distance_to(_h_prev_out))
 				if _h_dr.size() > 50:
 					_h_dr.remove_at(0)
 					_h_do.remove_at(0)
 			_h_prev_raw = _last_g
-			_h_prev_out = gaze
+			_h_prev_out = _pre_hold
 	_h_clock += rd
 	if _h_clock >= 5.0:
 		_h_clock = 0.0
 		_health_sample()
+
+
+func _count_over(a: PackedFloat32Array, ms: float) -> int:
+	var n := 0
+	for v in a:
+		if v > ms:
+			n += 1
+	return n
+
+
+var _blink_count: int = 0
 
 
 func _quiet_mean(a: PackedFloat32Array) -> float:
@@ -1228,11 +1248,26 @@ func _health_sample() -> void:
 	health = {"gameFps": int(Engine.get_frames_per_second()), "frameP95ms": snappedf(_pctl(_h_ft, 0.95), 0.1), "trackerFps": snappedf(float(_pkt_times.size()) / 2.0, 0.1),
 		"latencyMs": int(trk_lat_ms), "modelMs": int(trk_inf_ms), "confidence": snappedf(confidence, 0.01), "face": snappedf(face_size, 0.01),
 		"jitterRaw": snappedf(_quiet_mean(_h_dr), 0.001), "jitterOut": snappedf(_quiet_mean(_h_do), 0.001), "spanX": snappedf(span.x, 0.01), "spanY": snappedf(span.y, 0.01),
-		"device": device_tag(), "view": [int(get_viewport().get_visible_rect().size.x), int(get_viewport().get_visible_rect().size.y)], "camera": cam_label(), "mode": app_id(), "app": app_id(), "eyeAim": Game.peek_eye_aim, "gaze": [snappedf(gaze.x, 0.01), snappedf(gaze.y, 0.01)], "eyeLook": [snappedf(Game.peek_eye_look.x, 0.01), snappedf(Game.peek_eye_look.y, 0.01)], "offset": [snappedf(bias.bias.x, 0.01), snappedf(bias.bias.y, 0.01)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01)], "locked": bias.cal_locked, "kalman": kal_on, "hold": hold_on, "median": geo_win, "pick": opt_pick, "auto": auto_on}
-	if backend == Backend.CAMERA:
-		post_stream("health", health)
-		if auto_on:
-			_auto_rules()
+		"device": device_tag(), "view": [int(get_viewport().get_visible_rect().size.x), int(get_viewport().get_visible_rect().size.y)], "camera": cam_label(), "mode": app_id(), "app": app_id(), "barriers": barrier_count, "postFail": int(JavaScriptBridge.eval("window.__gazePostFail || 0")) if OS.has_feature("web") else 0, "run": run_state_fn.call() if run_state_fn.is_valid() else {}, "eyeAim": Game.peek_eye_aim, "gaze": [snappedf(gaze.x, 0.01), snappedf(gaze.y, 0.01)], "eyeLook": [snappedf(Game.peek_eye_look.x, 0.01), snappedf(Game.peek_eye_look.y, 0.01)], "offset": [snappedf(bias.bias.x, 0.01), snappedf(bias.bias.y, 0.01)], "scale": [snappedf(bias.scale_lo.x, 0.01), snappedf(bias.scale_hi.x, 0.01)], "locked": bias.cal_locked, "kalman": kal_on, "hold": hold_on, "median": geo_win, "pick": opt_pick, "auto": auto_on}
+	health["ft"] = {"p50": snappedf(_pctl(_h_ft, 0.5), 0.1), "p99": snappedf(_pctl(_h_ft, 0.99), 0.1), "over50": _count_over(_h_ft, 50.0)}
+	health["head"] = [snappedf(head_rpy.x, 0.01), snappedf(head_rpy.y, 0.01), snappedf(head_rpy.z, 0.01)]
+	health["eih"] = [snappedf(eih.x, 0.001), snappedf(eih.y, 0.001)]
+	health["blinks"] = _blink_count
+	health["kalmanJumps"] = _kx.jumps + _ky.jumps
+	health["params"] = {"linger": snappedf(p_linger, 0.01), "pull": snappedf(p_pull, 0.01), "carve": snappedf(p_carve, 0.01), "reach": snappedf(p_reach, 0.01)}
+	health["applied"] = applied
+	health["tuner"] = tuner_state
+	health["sweep"] = {"done": sweep_done, "tried": _sweep_tried, "active": sweep_active}
+	health["doctorActions"] = doctor.actions_done
+	health["targets"] = targets_on
+	health["opts"] = {"stretch": bias.stretch_on, "learn": bias.learn_on}
+	if OS.has_feature("web"):
+		var ex: Variant = JSON.parse_string(str(JavaScriptBridge.eval("(function(){var o={};try{o.bright=window.__gazeBright?Math.round(window.__gazeBright()):-1;var s=window.__gazeStats||{};o.camW=s.vw||0;o.camH=s.vh||0;o.camFps=s.cfps||0;o.roi=s.roi||0;var c=navigator.connection;if(c){o.net=c.effectiveType;o.rtt=c.rtt;o.down=c.downlink}o.vis=document.visibilityState;o.batt=window.__gazeBatt===undefined?-1:window.__gazeBatt;o.chg=!!window.__gazeChg}catch(e){}return JSON.stringify(o)})()")))
+		if ex is Dictionary:
+			health["env"] = ex
+	post_stream("health", health)
+	if backend == Backend.CAMERA and auto_on:
+		_auto_rules()
 
 
 ## Who is testing, which visit, and on what: every logged line carries all three, so sessions from different people and devices never mix.
@@ -1389,7 +1424,7 @@ func post_stream(kind: String, d: Dictionary) -> void:
 		o["hw"] = hw_info()
 	o["kind"] = kind
 	o["t"] = snappedf(float(Time.get_ticks_msec()) / 1000.0, 0.1)
-	JavaScriptBridge.eval("(function(){var dev=(location.hostname==='localhost'||location.port==='8443');var ok=dev;var off=false;try{off=localStorage.getItem('gazelab_share')==='0'}catch(e){}ok=ok||!off;if(!ok)return;fetch(dev?'/tune':'/gaze-lab/log.php',{method:'POST',body:" + JSON.stringify(JSON.stringify(o)) + "}).catch(function(){})})()")
+	JavaScriptBridge.eval("(function(){var dev=(location.hostname==='localhost'||location.port==='8443');var ok=dev;var off=false;try{off=localStorage.getItem('gazelab_share')==='0'}catch(e){}ok=ok||!off;if(!ok)return;fetch(dev?'/tune':'/gaze-lab/log.php',{method:'POST',body:" + JSON.stringify(JSON.stringify(o)) + "}).then(function(r){if(!r.ok)window.__gazePostFail=(window.__gazePostFail||0)+1}).catch(function(){window.__gazePostFail=(window.__gazePostFail||0)+1})})()")
 
 
 func _auto_say(msg: String, banner: bool = true) -> void:
@@ -1415,8 +1450,8 @@ func doctor_event(e: Dictionary) -> void:
 
 ## The rules AUTO applies on top of the lit-gate testing, each one small and reversible (every change is announced and logged).
 func _auto_rules() -> void:
-	if tune_phase == "explore" or tune_phase == "challenge":
-		return
+	if tune_phase == "explore" or tune_phase == "challenge" or tuner_state == "running":
+		return                                 # something is being tested: nothing else changes under it
 	var h := health
 	var tf := float(h["trackerFps"])
 	if tf > 0.0 and tf < 9.0 and geo_win > 3:
@@ -1478,12 +1513,14 @@ func _auto_rules() -> void:
 
 
 func opt_defs() -> Array:
-	return [["auto", "AUTO-FIX (silent doctor + rules)"], ["kalman", "Kalman filter"], ["stab", "Phone-motion stabiliser"], ["stretch", "Spread stretching"], ["learn", "Auto offset learning"],
+	return [["targets", "Target gate (intent for the logs)"], ["auto", "AUTO-FIX (silent doctor + rules)"], ["kalman", "Kalman filter"], ["stab", "Phone-motion stabiliser"], ["stretch", "Spread stretching"], ["learn", "Auto offset learning"],
 		["hold", "Fixation hold (dead zone)"], ["median", "Median window"], ["headw", "Head weight"], ["pick", "Gate pick (Downhill)"]]
 
 
 func opt_value(key: String) -> Variant:
 	match key:
+		"targets":
+			return targets_on
 		"auto":
 			return auto_on
 		"kalman":
@@ -1520,6 +1557,8 @@ func opt_label(key: String) -> String:
 
 func opt_set(key: String, v: Variant) -> void:
 	match key:
+		"targets":
+			targets_on = bool(v)
 		"auto":
 			auto_on = bool(v)
 		"kalman":
@@ -1618,6 +1657,8 @@ func _load_opts() -> void:
 			var key: String = d[0]
 			var v: Variant = cf.get_value("opts", key)
 			match key:
+				"targets":
+					targets_on = bool(v)
 				"auto":
 					auto_on = bool(v)
 				"kalman":

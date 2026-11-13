@@ -19,8 +19,23 @@ MAX_BODY = 32 * 1024
 KEEP = ("kind", "t", "who", "sid", "app", "device", "hw", "gameFps", "frameP95ms", "trackerFps", "latencyMs", "modelMs", "confidence", "face", "jitterRaw", "jitterOut", "spanX", "spanY",
         "mode", "kalman", "hold", "median", "pick", "auto", "view", "camera", "eyeAim", "gaze", "eyeLook", "offset", "scale", "locked", "msg", "event", "issue", "evidence", "action", "before",
         "after", "verdict", "row", "n", "gates", "cur_med", "cur_min", "cur_max", "looked", "aim", "went", "steer", "pick", "aim_end", "flips", "lost", "lock_t", "verdict", "target", "look_cur",
-        "look_gaze", "aim_t", "cfg", "phase", "i", "ci", "key", "value", "by")
+        "look_gaze", "aim_t", "cfg", "phase", "i", "ci", "key", "value", "by", "knob", "kept", "chosen", "default_score", "log", "class", "applied", "baseline", "score_now", "score", "kinds", "went_kind", "what", "x", "v", "eye", "run", "barriers", "postFail", "aimed", "eyes_on_it", "locked_on_it")
 _hits = {}
+
+
+def clean(v, depth=0):
+    """Any field is welcome, but only small plain values: no images, no long strings, no deep nesting."""
+    if depth > 5:
+        return None
+    if isinstance(v, dict):
+        return {("".join(c for c in str(k) if c.isalnum() or c in "-_")[:40]): clean(x, depth + 1) for k, x in list(v.items())[:300]}
+    if isinstance(v, list):
+        return [clean(x, depth + 1) for x in v[:300]]
+    if isinstance(v, str):
+        return None if v.startswith("data:") else v[:400]
+    if isinstance(v, (int, float, bool)) or v is None:
+        return v
+    return None
 
 
 def safe(x):
@@ -51,7 +66,7 @@ class H(http.server.BaseHTTPRequestHandler):
             self.send_response(400)
             self.end_headers()
             return
-        rec = {k: d[k] for k in KEEP if k in d}
+        rec = clean(d)
         folder = os.path.join(ROOT, safe(d.get("who", "unnamed")))
         os.makedirs(folder, exist_ok=True)
         with open(os.path.join(folder, datetime.date.today().strftime("%Y%m%d") + ".jsonl"), "a", encoding="utf-8") as f:

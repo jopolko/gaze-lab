@@ -2657,6 +2657,7 @@ func _crash(msg: String, ctx: String = "") -> void:
 	crashes += 1
 	_clean = false
 	crash_log.append("%s at z=%.0f x=%.1f v=%.1f %s" % [msg, spos.z, spos.x, vel.length(), ctx])
+	GazeProvider.post_stream("crash", {"what": msg, "dist": int(-spos.z), "x": snappedf(spos.x, 0.1), "v": snappedf(vel.length(), 0.1), "steer": snappedf(_steer_gaze, 0.01), "aimed": not _aim.is_empty(), "eye": _eye_on})
 	hurt_t = 1.1
 	vel *= 0.3
 	chain = 0
@@ -4199,6 +4200,31 @@ func _alog_push(row: Dictionary, via: Dictionary) -> void:
 		k += 1
 	var e := {"row": rows_passed, "n": gx.size(), "gates": gx, "cur_med": snappedf(med, 0.01), "cur_min": snappedf(float(srt[0]) if not srt.is_empty() else 0.5, 0.01), "cur_max": snappedf(float(srt[srt.size() - 1]) if not srt.is_empty() else 0.5, 0.01),
 		"looked": near, "aim": _alog.get("aim", -1), "went": went, "steer": _alog.get("steer", 0.0), "pick": GazeProvider.opt_pick}
+	var kinds: Array = []
+	var gws: Array = []
+	for gk in row["gaps"]:
+		kinds.append(str((gk as Dictionary).get("kind", "")))
+		gws.append(snappedf(float((gk as Dictionary).get("w", 0.0)), 0.1))
+	e["kinds"] = kinds
+	e["gw"] = gws
+	e["opts"] = {"kalman": GazeProvider.kal_on, "hold": GazeProvider.hold_on, "median": GazeProvider.geo_win, "pick": GazeProvider.opt_pick, "stretch": GazeProvider.bias.stretch_on, "learn": GazeProvider.bias.learn_on, "locked": GazeProvider.bias.cal_locked, "targets": GazeProvider.targets_on}
+	e["params"] = {"linger": snappedf(GazeProvider.p_linger, 0.01), "pull": snappedf(GazeProvider.p_pull, 0.01), "carve": snappedf(GazeProvider.p_carve, 0.01), "reach": snappedf(GazeProvider.p_reach, 0.01), "assist": snappedf(assist_level, 0.01)}
+	e["chain"] = {"ref_x": snappedf(_ref_x, 0.001), "steer_scale": snappedf(_steer_scale, 0.001), "reach": snappedf(reach, 0.01), "zone": snappedf(_zone_scale, 0.01), "off": snappedf(_off_now, 0.001)}
+	e["head"] = [snappedf(GazeProvider.head_rpy.x, 0.01), snappedf(GazeProvider.head_rpy.y, 0.01), snappedf(GazeProvider.head_rpy.z, 0.01)]
+	e["spd"] = snappedf(vel.length(), 0.1)
+	var tr: Array = []
+	var cs_all: Array = _alog.get("cs", [])
+	var stp := maxi(int(ceil(float(cs_all.size()) / 24.0)), 1)
+	for ti in range(0, cs_all.size(), stp):
+		tr.append(snappedf(float(cs_all[ti]), 0.01))
+	e["trace"] = tr                                          # where the gaze cursor was across the approach, about 24 samples
+	if _tune != null and _tune.monitor and int(row.get("tune_t", -1)) >= 0:
+		e["target"] = int(row["tune_t"])
+	e["went_kind"] = str(via.get("kind", ""))
+	GazeProvider.barrier_count += 1
+	if str(via.get("kind", "")) == "trap":
+		# a dead end: was it the gate the eyes were on and the game had locked, or did the board end up there against the gaze?
+		GazeProvider.post_stream("deadend", {"row": rows_passed, "gates": gx, "looked": near, "aim_end": _alog.get("aim_end", -1), "went": went, "kinds": kinds, "eyes_on_it": near == went, "locked_on_it": int(_alog.get("aim_end", -1)) == went, "cur_med": snappedf(med, 0.01)})
 	e["aim_end"] = _alog.get("aim_end", -1)
 	e["flips"] = _alog.get("flips", 0)
 	e["lost"] = _alog.get("lost", 0)
@@ -4224,14 +4250,22 @@ var _sweep_hooked: bool = false
 var _auto_sweep_tried: bool = false
 
 
+## What the run itself is doing right now, sent with every health sample: if gate records are missing this says whether the run is moving, paused, on eye control or not.
+func _run_state() -> Dictionary:
+	var lt: Node = get_parent().get_node_or_null("Lighting") if get_parent() != null else null
+	return {"d": int(-spos.z), "v": snappedf(vel.length(), 0.1), "rows": rows_passed, "crashes": crashes, "eye": _eye_on, "paused": _paused, "done": _finished, "aimed": not _aim.is_empty(), "x": snappedf(spos.x, 0.1), "assist": snappedf(assist_level, 0.01),
+		"tier": (lt as DhLighting).tier if lt != null else -1, "tierChanges": (lt as DhLighting).tier_changes if lt != null else 0, "zone": _cur_zone, "diff": snappedf(diff, 0.01), "score": score}
+
+
 func _on_sweep(active: bool) -> void:
 	set_physics_process(not active)
 
 
-func _tune_start() -> void:
-	if GazeProvider.backend == GazeProvider.Backend.CAMERA and not GazeProvider.sweep_done and not GazeProvider.sweep_active:
+func _tune_start(monitor: bool = false) -> void:
+	if not monitor and GazeProvider.backend == GazeProvider.Backend.CAMERA and not GazeProvider.sweep_done and not GazeProvider.sweep_active:
 		GazeProvider.start_sweep()                          # one four-second sweep first: the gaze scale and offset measured, not guessed
 	_tune = GazeTune.new()
+	_tune.monitor = monitor
 	_tune.loop = false
 	_tune.start()
 	_tune_acc = {}
@@ -4342,15 +4376,49 @@ func _ctext_at(font: Font, pos: Vector2, text: String, size: int, color: Color) 
 	_hud.draw_string(font, q, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 
+## A small pointer above every gate of the next barrier, over the scenery: gates must be easy to find whatever stands in front of them (the target has its own big ring).
+func _draw_gate_marks(s: Vector2, k: float) -> void:
+	var row: Dictionary = {}
+	var bz := 1.0e9
+	for kk in _rows:
+		var r: Dictionary = _rows[kk]
+		var d := spos.z - float(r["z"])
+		if r["has_row"] and not r["passed"] and d > 14.0 and d < 190.0 and d < bz:
+			bz = d
+			row = r
+	if row.is_empty():
+		return
+	for g in row["gaps"]:
+		var sc := _gap_screen(row, g)
+		if sc.is_empty():
+			continue
+		var p: Vector2 = sc["c"]
+		if p.x < -20.0 or p.x > s.x + 20.0:
+			continue
+		var sz := clampf(float(sc["hw"]) * 0.28, 7.0 * k, 20.0 * k)
+		var tip := p + Vector2(0.0, -float(sc["hw"]) * 0.75 - 6.0 * k)
+		var pts := PackedVector2Array([tip, tip + Vector2(-sz, -sz * 1.5), tip + Vector2(sz, -sz * 1.5)])
+		_hud.draw_colored_polygon(PackedVector2Array([tip + Vector2(0, 2.0 * k), tip + Vector2(-sz - 2.0 * k, -sz * 1.5 - 2.0 * k), tip + Vector2(sz + 2.0 * k, -sz * 1.5 - 2.0 * k)]), Color(0, 0, 0, 0.55))
+		_hud.draw_colored_polygon(pts, Color(1, 1, 1, 0.85))
+
+
 func _draw_tune(font: Font, s: Vector2, k: float) -> void:
+	_draw_gate_marks(s, k)
 	if _tune == null:
 		return
 	if _tune.active:
-		if _tune.loop:
+		if _tune.monitor:
+			var seen := mini(_tune.results.size(), 20)
+			var got := 0
+			for ri in seen:
+				if str((_tune.results[_tune.results.size() - 1 - ri] as Dictionary)["verdict"]) == "followed":
+					got += 1
+			_ctext(font, s.y * 0.17, "TARGET   followed %d of the last %d" % [got, seen] if seen > 0 else "TARGET", 22, Color(1.0, 0.45, 0.9, 0.95))
+		elif _tune.loop:
 			_ctext(font, s.y * 0.17, "AUTO  %s     %s" % [_tune.phase, _tune.config_name()], 22, Color(0.7, 0.9, 1.0, 0.9))
 		else:
 			_ctext(font, s.y * 0.17, "TUNE %d / %d     %s" % [mini(_tune.trial_i + 1, _tune.total()), _tune.total(), _tune.config_name()], 22, Color(1, 1, 1, 0.9))
-		_ctext(font, s.y * 0.17 + 28.0 * k, "look at the WHITE gate", 20, Color(1, 1, 1, 0.75))
+		_ctext(font, s.y * 0.17 + 28.0 * k, "look at the PINK gate", 20, Color(1, 1, 1, 0.8))
 		var row: Dictionary = _tune_acc.get("row", {})
 		if not row.is_empty() and row.has("tune_t") and int(row["tune_t"]) >= 0:
 			var sc := _gap_screen(row, (row["gaps"] as Array)[int(row["tune_t"])])
@@ -4386,11 +4454,17 @@ func _update_aim(delta: float) -> void:
 	if not _sweep_hooked:
 		_sweep_hooked = true
 		GazeProvider.sweep_changed.connect(_on_sweep)
+		GazeProvider.run_state_fn = _run_state
 	if GazeProvider.tune_request:
 		GazeProvider.tune_request = false
-		_tune_start()
+		_tune_start(false)
+	elif GazeProvider.targets_on and (_tune == null or (_tune.done and not _tune.active)):
+		_tune_start(true)                                   # the normal case in development: a target gate is marked on every barrier, so what the player meant is known
+	elif not GazeProvider.targets_on and _tune != null and _tune.monitor:
+		_tune.active = false
+		_tune = null
 	# the silent doctor: off while a lit-gate tuning session is running (it would be tuning the tuning), and it may ask for one calibration sweep
-	GazeProvider.doctor.enabled = GazeProvider.auto_on and not (_tune != null and _tune.active)
+	GazeProvider.doctor.enabled = GazeProvider.auto_on and not (_tune != null and _tune.active and not _tune.monitor)
 	# (the calibration sweep the doctor or the first good camera frames ask for is started by GazeProvider, the same in every app)
 	GazeProvider.tune_phase = _tune.phase if (_tune != null and _tune.active) else ""
 	_tune_msg_t = maxf(_tune_msg_t - delta, 0.0)
