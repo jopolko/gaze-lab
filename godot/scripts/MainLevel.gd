@@ -50,7 +50,9 @@ var _loading: bool = false
 func _ready() -> void:
 	randomize()
 	if Game.demo_mode:
-		start_level = 6        # the web demo opens on the Peek Range; ?level=eyes gives the eye-control arena
+		start_level = 11       # the bare address opens Downhill; ?level=peek gives the Peek Range, ?level=eyes the eye-control arena
+		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=peek"):
+			start_level = 6
 		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=eyes"):
 			start_level = 5
 		if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("level=flight"):

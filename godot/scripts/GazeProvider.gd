@@ -215,6 +215,11 @@ var _calib: Vector2 = Vector2.ZERO
 var _last_packet_msec: int = -100000
 var _fx := OneEuro.new()
 var _fy := OneEuro.new()
+var geo_win: int = 1                   # readings in the median that comes before the offset and the final filter (?median=N, 1 = none): the Kalman filter rejects outliers itself
+var kal_on: bool = true                 # the Kalman gaze filter (position + velocity, a far jump needs a second reading to agree), with no median in front of it: tested better than the One Euro + 5-reading median; ?nokalman restores that
+var _kx := GazeKalman.new()
+var _ky := GazeKalman.new()
+var _kal_pending: bool = false           # a new camera reading arrived since the filter last used one
 var _closed: bool = false
 var _close_t: float = 0.0
 var _last_blink_t: float = -10.0
@@ -238,6 +243,12 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep tracking while a menu pauses the game
 	if OS.has_feature("web"):
 		var q := str(JavaScriptBridge.eval("window.location.search"))
+		if q.contains("nokalman"):
+			kal_on = false
+			geo_win = 5                          # the old chain: a 5-reading median, then One Euro
+		var mq := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('median') || ''"))
+		if mq != "":
+			geo_win = clampi(int(mq), 1, 9)
 		if q.contains("flipyaw"):
 			_head_sign.x = -1.0
 		if q.contains("flippitch"):
@@ -274,6 +285,8 @@ func set_backend(b: Backend) -> void:
 	backend = b
 	_fx.reset()
 	_fy.reset()
+	_kx.reset()
+	_ky.reset()
 	if b == Backend.UDP:
 		if _udp == null:
 			_udp = PacketPeerUDP.new()
@@ -388,6 +401,7 @@ func ingest(d: Dictionary) -> void:
 		_update_nod()
 	_last_packet_msec = Time.get_ticks_msec()
 	if _frame_fresh:
+		_kal_pending = true
 		_pkt_times.append(_last_packet_msec)
 	while not _pkt_times.is_empty() and _last_packet_msec - _pkt_times[0] > 2000:
 		_pkt_times.remove_at(0)
@@ -626,7 +640,12 @@ func _process(delta: float) -> void:
 					c = _predict(_full)
 				elif _geo_ok and not _calibrated:
 					c = _geo_out
-				gaze = Vector2(_fx.filter(c.x, rd), _fy.filter(c.y, rd)).clamp(Vector2.ZERO, Vector2.ONE)
+				if kal_on:
+					var fresh_k := _kal_pending
+					_kal_pending = false
+					gaze = Vector2(_kx.step(c.x, rd, fresh_k), _ky.step(c.y, rd, fresh_k)).clamp(Vector2.ZERO, Vector2.ONE)
+				else:
+					gaze = Vector2(_fx.filter(c.x, rd), _fy.filter(c.y, rd)).clamp(Vector2.ZERO, Vector2.ONE)
 
 
 func _poll_udp() -> void:
@@ -1084,7 +1103,7 @@ func _geo_push(g: Vector2, openness: float = 0.0, head: Vector2 = Vector2.INF) -
 	_geo_buf.append(Vector3(g.x, g.y, openness))
 	if has_head:
 		_hbuf.append(head)
-	if _geo_buf.size() > 5:
+	while _geo_buf.size() > geo_win:
 		_geo_buf.remove_at(0)
 	if _hbuf.size() > 7:
 		_hbuf.remove_at(0)
