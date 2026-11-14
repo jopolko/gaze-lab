@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><script>
+// Load the game with counters on shader work: open /prof.html, play, then read window.__sp in the console.
+(function () {
+  var sp = window.__sp = { programs: 0, shaders: 0, ms: 0, t0: performance.now(), log: [] };
+  var P = WebGL2RenderingContext.prototype;
+  ['compileShader', 'linkProgram', 'getShaderParameter', 'getProgramParameter', 'getProgramInfoLog', 'getShaderInfoLog', 'getUniformLocation', 'getUniformBlockIndex', 'useProgram'].forEach(function (n) {
+    var o = P[n];
+    P[n] = function () {
+      var a = performance.now(); var r = o.apply(this, arguments); var d = performance.now() - a; sp.ms += d;
+      if (n === 'linkProgram') { sp.programs++; sp.log.push(Math.round(a - sp.t0)); }
+      if (n === 'compileShader') sp.shaders++;
+      return r;
+    };
+  });
+  sp.gaps = []; var last = performance.now();
+  (function tick() { var n = performance.now(); if (n - last > 250) sp.gaps.push([Math.round(last - sp.t0), Math.round(n - last)]); last = n; requestAnimationFrame(tick); })();
+  sp.summary = function () { var b = {}; sp.log.forEach(function (t) { var k = Math.floor(t / 5000) * 5; b[k] = (b[k] || 0) + 1; }); return JSON.stringify({ programs: sp.programs, shaders: sp.shaders, shaderMs: Math.round(sp.ms), linkedPer5s: b, frozen: sp.gaps, frozenMs: sp.gaps.reduce(function (x, g) { return x + g[1]; }, 0), now: Math.round(performance.now() - sp.t0) }); };
+  fetch('index.html' + location.search).then(function (r) { return r.text(); }).then(function (t) { document.open(); document.write(t); document.close(); });
+})();
+</script>

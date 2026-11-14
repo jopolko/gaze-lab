@@ -16,9 +16,9 @@ extends RefCounted
 ##   abyss     JELLY ABYSS     a deep, roofed dark with drifting glowing jellyfish and coral. Heavy going.
 ## The roofed realms dim the whole picture while you are inside (exposure) and the glowing things are boosted to make up for it, so they are the light.
 
-const IDS := ["highway", "interzone", "hive", "eyes", "melt", "mandala", "glowcave", "crystal", "lava", "abyss"]
+const IDS := ["highway", "interzone", "hive", "eyes", "melt", "mandala", "glowcave", "crystal", "lava", "abyss", "canyon", "mammoth"]
 const NAMES := {"highway": "DESERT HIGHWAY", "interzone": "INTERZONE", "hive": "THE HIVE", "eyes": "ORCHARD OF EYES", "melt": "THE MELT", "mandala": "MANDALA DROP",
-	"glowcave": "GLOW GROTTO", "crystal": "CRYSTAL VAULT", "lava": "LAVA TUBE", "abyss": "JELLY ABYSS"}
+	"glowcave": "GLOW GROTTO", "crystal": "CRYSTAL VAULT", "lava": "LAVA TUBE", "abyss": "JELLY ABYSS", "canyon": "RED CANYON", "mammoth": "MAMMOTH GARDEN"}
 const ROOF := {
 	"glowcave": {"col": Color(0.12, 0.08, 0.22), "expo": 0.4, "reveal": "THE GROTTO WAKES"},
 	"crystal": {"col": Color(0.08, 0.12, 0.24), "expo": 0.5, "reveal": "THE VAULT LIGHTS"},
@@ -55,6 +55,8 @@ const KITS := {
 	"crystal": {"solid": ["crystal", "crystal", "stalag"], "scene": ["crystal", "crystal", "vine"], "glow": 1.1},
 	"lava": {"solid": ["lavarock", "lavarock", "stalag"], "scene": ["lavafall", "lavarock", "stalag"], "glow": 0.9},
 	"abyss": {"solid": ["coral", "stalag", "coral"], "scene": ["jelly", "jelly", "coral"], "glow": 1.0},
+	"canyon": {"solid": ["lavarock", "stalag", "pillar"], "scene": ["lavarock", "pillar", "stalag", "lavarock"], "glow": 0.18},
+	"mammoth": {"solid": ["glowshroom", "blob", "stalk"], "scene": ["glowshroom", "frond", "frond", "vine", "stalk", "mush"], "glow": 0.55},
 }
 const RADIUS := {"cactus": 1.0, "pole": 0.6, "pillar": 1.0, "arch_leg": 1.0, "rib": 1.3, "pipe": 1.1, "eyeball": 1.6, "stalk": 0.9, "blob": 1.8, "mush": 1.6, "petal": 1.7,
 	"glowshroom": 1.2, "crystal": 1.5, "stalag": 1.5, "lavarock": 1.5, "coral": 1.4}
@@ -103,6 +105,10 @@ static func tint(zone: String, rng: RandomNumberGenerator) -> Color:
 			return Color.from_hsv(rng.randf_range(0.0, 0.1), rng.randf_range(0.8, 1.0), 1.0)
 		"abyss":
 			return Color.from_hsv(rng.randf_range(0.45, 0.62), rng.randf_range(0.6, 0.9), 1.0)
+		"canyon":
+			return Color.from_hsv(rng.randf_range(0.02, 0.09), rng.randf_range(0.55, 0.85), rng.randf_range(0.7, 1.0))
+		"mammoth":
+			return Color.from_hsv([0.28, 0.33, 0.15, 0.85, 0.5][rng.randi() % 5], rng.randf_range(0.55, 0.9), 1.0)
 	return Color.from_hsv(rng.randf_range(0.28, 0.4), rng.randf_range(0.08, 0.25), rng.randf_range(0.7, 0.95))          # hive: bone and green-grey
 
 
@@ -148,6 +154,14 @@ static func ground(zone: String, x: float, z: float, zc: float, base: Color) -> 
 			var petals := 0.5 + 0.5 * sin(ang * 8.0 + r * 0.05)
 			var rings := 0.5 + 0.5 * sin(r * 0.55)
 			return Color.from_hsv(fposmod(r * 0.012 + petals * 0.18, 1.0), 0.8 - 0.35 * rings, 0.55 + 0.45 * rings)
+		"canyon":
+			var band := 0.5 + 0.5 * sin(z * 0.11 + sin(x * 0.05) * 1.6)
+			var strata := floorf((band + 0.5 + 0.5 * sin(x * 0.04 + z * 0.02)) * 3.0) / 3.0
+			return Color(0.55, 0.2, 0.1).lerp(Color(0.95, 0.55, 0.25), strata).lerp(Color(0.99, 0.82, 0.55), 0.35 * smoothstep(0.75, 1.0, band))
+		"mammoth":
+			var moss := 0.5 + 0.5 * sin(x * 0.09 + sin(z * 0.05) * 2.2) * sin(z * 0.06 - x * 0.04)
+			var spot := smoothstep(0.82, 0.95, sin(x * 0.45) * sin(z * 0.41))
+			return Color(0.1, 0.32, 0.14).lerp(Color(0.45, 0.85, 0.25), moss).lerp(Color(1.0, 0.4, 0.75), spot * 0.8)
 		"glowcave":
 			var pool := smoothstep(0.35, 0.75, sin(x * 0.085 + sin(z * 0.06) * 2.0) * sin(z * 0.07 - x * 0.03))
 			return Color(0.2, 0.14, 0.34).lerp(Color(0.2, 1.0, 0.8), pool)

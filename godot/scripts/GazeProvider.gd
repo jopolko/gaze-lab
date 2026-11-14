@@ -146,6 +146,8 @@ var _pk_out: Vector3 = Vector3.ZERO
 var _kb_cur: Vector3 = Vector3.ZERO
 var _look_out: Vector2 = Vector2.ZERO
 var _last_g: Vector2 = Vector2(0.5, 0.5)
+var last_pkt: Dictionary = {}          # the newest tracker packet as it arrived (the sweep test logs it whole)
+var pkt_count: int = 0                 # fresh tracker packets so far
 var _last_hd: Vector2 = Vector2.ZERO
 var _last_open: float = 0.0
 var _zp: float = 1.0                              # one-sided spreads of vertical movement (down / up)
@@ -170,9 +172,15 @@ var direct: Vector2 = Vector2(0.5, 0.5)     # the geometry gaze straight from th
 var direct_ok: bool = false
 var eih: Vector2 = Vector2(0.5, 0.5)        # where the iris sits INSIDE the eye opening (0..1 across / down): your eyes only, a head turn does not move it
 var eih_ok: bool = false
+var mix := EyeMix.new()                     # phones: the three sideways eye readings blended by how steady each is for this player
+var mix_on: bool = true                     # ?nomix turns the blend off to compare, ?mix forces it on a laptop
+var mix_force: bool = false
+var mix_x: float = 0.5
+var _mfx := OneEuro.new()
 var _efx := OneEuro.new()
 var _efy := OneEuro.new()
 var _eih_t: float = 0.0
+var _mix_t: float = 0.0
 var _direct_t: float = 0.0
 var _dfx := OneEuro.new()
 var _dfy := OneEuro.new()
@@ -241,6 +249,7 @@ var calibrating: bool:
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS   # keep tracking while a menu pauses the game
+	add_child.call_deferred(Telemetry.new())      # passive diagnostics: it only watches
 	if OS.has_feature("web"):
 		var q := str(JavaScriptBridge.eval("window.location.search"))
 		if q.contains("nokalman"):
@@ -255,12 +264,18 @@ func _ready() -> void:
 			_head_sign.y = -1.0
 		if q.contains("nopm"):
 			pm_on = false
+		if q.contains("nomix"):
+			mix_on = false
+		elif q.contains("mix"):
+			mix_force = true
 		if q.contains("headw="):
 			head_weight = clampf(float(q.split("headw=")[1].split("&")[0]), 0.0, 1.0)
 	_dfx.min_cutoff = 2.0
 	_dfy.min_cutoff = 2.0
 	_dfx.beta = 3.0
 	_efx.min_cutoff = 3.0
+	_mfx.min_cutoff = 3.0
+	_mfx.beta = 6.0
 	_efy.min_cutoff = 3.0
 	_efx.beta = 6.0
 	_efy.beta = 6.0
@@ -314,6 +329,9 @@ func ingest(d: Dictionary) -> void:
 	if d.has("n") and d["n"] != null:
 		_frame_fresh = int(d["n"]) != _last_frame_n
 		_last_frame_n = int(d["n"])
+	last_pkt = d
+	if _frame_fresh:
+		pkt_count += 1
 	confidence = clampf(float(d.get("conf", 1.0)), 0.0, 1.0)
 	if d.has("ew") and d["ew"] != null:
 		var ew: Array = d["ew"]
@@ -362,6 +380,18 @@ func ingest(d: Dictionary) -> void:
 					if _full.size() >= 2:
 						_track_conv(float(_full[0]), float(_full[1]))
 		_geo_limb = d.has("glimb") and int(d["glimb"]) == 1
+		if _frame_fresh and d.has("bx"):
+			var mlx := NAN
+			if d.has("lx") and d["lx"] != null:
+				mlx = float(d["lx"])
+				if pm_on and pm.active:
+					mlx = pm.correct(Vector2(mlx, 0.5)).x
+			var mo := mix.add(float(d["bx"]), float(d["x"]), mlx)
+			var mtn := _now()
+			var mdt := clampf(mtn - _mix_t, 0.005, 0.5)
+			_mix_t = mtn
+			if not (pm_on and pm.holding() and _eih_frozen_t > 0.0 and _eih_frozen_t < 0.4):
+				mix_x = _mfx.filter(mo, mdt)
 		if _frame_fresh and d.has("lx") and d.has("ly") and d["lx"] != null and d["ly"] != null:
 			_limb_buf.append(Vector2(float(d["lx"]), float(d["ly"])))
 			var tn2 := _now()
@@ -411,6 +441,16 @@ func ingest(d: Dictionary) -> void:
 			Game.banner("Camera ready. No calibration needed: look around and it learns your centre. (C = optional dot calibration)", Color(0.5, 1.0, 0.6), 4.0)
 		else:
 			start_calibration()
+
+
+## The sideways eye reading the steering uses (iris-in-eye units: 0.5 = centre, falls when you look right). On a phone it is the blend of the three
+## readings (see EyeMix); on a laptop it is the iris-edge fit, unchanged.
+func eye_x() -> float:
+	return mix_x if mix_used() else eih.x
+
+
+func mix_used() -> bool:
+	return mix_on and (Game.touch_mode or mix_force) and mix.ready
 
 
 ## True when a tracker is feeding us (or we're simulating with the mouse).
@@ -608,6 +648,12 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	# the mouse pointer is only ever hidden (captured) while a first-person level is being played; any menu, pause, other level or level exit shows it again
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var fps_level := not (Game.peek_mode or Game.flight_mode or Game.downhill_mode or Game.trance_mode or Game.gaze_test_mode or Game.run_mode)
+		var captured_ok := (fps_level or (Game.peek_mode and backend == Backend.MOUSE)) and not get_tree().paused and not Game.touch_mode
+		if not captured_ok:
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if not active and not Game.peek_mode and not Game.flight_mode and not (Game.trance_mode or Game.gaze_test_mode):
 		return
 	var rd := delta / maxf(Engine.time_scale, 0.05)

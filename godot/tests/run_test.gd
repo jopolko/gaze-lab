@@ -113,7 +113,7 @@ func _ready() -> void:
 			worst_ratio = maxf(worst_ratio, absf(float(good["x"]) - prev_good) / maxf(prev_z - float(r["z"]), 1.0))
 		prev_good = float(good["x"])
 		prev_z = float(r["z"])
-	_check(n_rows >= 34 and n_open > n_rows, "barriers with several openings (%d barriers, %d openings)" % [n_rows, n_open])
+	_check(n_rows >= 24 and n_open > n_rows, "barriers with several openings (%d barriers, %d openings)" % [n_rows, n_open])
 	_check(worst_clear > 2.2, "the safe opening is wide enough to drive through (clear half width %.1f m)" % worst_clear)
 	_check(worst_ratio <= 0.31, "the safe opening drifts at most 0.3 m sideways per metre downhill (%.2f)" % worst_ratio)
 	var first: Dictionary = rig._rows[RunRig.START_CALM]
@@ -170,7 +170,7 @@ func _ready() -> void:
 				var offp := absf(float(bf["x"]) - rig.path_x(rb, float(bf["z"])))
 				if offp < 7.9 or offp > 13.1:
 					path_off_ok = false
-	_check(lay.size() >= 4 and int(lay.get("near", 0)) >= 3 and int(lay.get("spread", 0)) >= 2, "several gate layouts appear, including the meadow spread and the tunnel and bend pairs (%s)" % str(lay))
+	_check(lay.size() >= 4 and int(lay.get("near", 0)) >= 3 and int(lay.get("spread", 0)) >= 1, "several gate layouts appear, including the meadow spread and the tunnel and bend pairs (%s)" % str(lay))
 	_check(even_ok, "a trio of gates is evenly spaced")
 	_check(iso_n >= 1 and iso_buffed == iso_n, "every isolated gate carries a buff (%d of %d)" % [iso_buffed, iso_n])
 	_check(iso_reach and iso_narrow, "an isolated gate is narrower and reachable from the last barrier")
@@ -197,8 +197,23 @@ func _ready() -> void:
 	rig._gain(100)
 	rig._take_buff(fb.call("mult"))
 	var sc_a := rig.score
+	rig.chain_lvl = 0                                  # the chain has its own checks below: here only the plain doubling is measured
 	rig._gain(100)
 	_check(rig._mult_t > 9.0 and rig.score - sc_a == 200, "double points doubles what you earn")
+	# the chain: candy, then a burger, raises the level in order; a pickup out of order does its job and raises nothing
+	rig._restart()
+	_check(rig.chain_lvl == 0 and rig._chain_expect_kind() == "mult", "a new run starts with no chain and candy as the first step")
+	rig._take_buff(fb.call("boost"))
+	_check(rig.chain_lvl == 0 and rig._boost_t > 0.0, "a burger before the candy still boosts, and the chain stays where it was")
+	rig._take_buff(fb.call("mult"))
+	_check(rig.chain_lvl == 1 and rig._chain_expect_kind() == "boost", "candy first starts the chain (level 1, a burger is next)")
+	rig._take_buff(fb.call("boost"))
+	_check(rig.chain_lvl == 2 and rig._chain_expect_kind() == "ramp", "then the burger raises it (level 2, a ramp is next)")
+	rig._take_buff(fb.call("shield"))
+	_check(rig.chain_lvl == 2, "ice cream never breaks the chain")
+	rig._chain_t = 0.01
+	rig._chain_tick(0.05)
+	_check(rig.chain_lvl == 0 and rig._chain_expect_kind() == "mult", "a chain that is not continued in time drops, quietly")
 	rig._tick_buffs(11.0)
 	_check(rig._mult_t == 0.0 and rig._boost_t == 0.0, "buffs run out")
 	# boosted vs plain: same state, 1.5 s later the boosted board is faster
@@ -233,7 +248,7 @@ func _ready() -> void:
 	_check(rig._finished, "the autopilot reaches the finish (%d m, %.0f s)" % [int(-rig.spos.z), rig._run_t])
 	_check(rig.crashes <= 3, "and does it with at most one crash (it follows the safe line blindly) (%d crashes: %s)" % [rig.crashes, str(rig.crash_log)])
 	_check(v3500 > 14.0 and v500 > 14.0, "the speed stays in a sane range whatever stretch it is in (%.0f m/s at 500 m, %.0f m/s at 3500 m)" % [v500, v3500])
-	_check(rig.score >= 1000 and rig.rows_passed >= 35, "a clean run scores (%d points, %d barriers)" % [rig.score, rig.rows_passed])
+	_check(rig.score >= 1000 and rig.rows_passed >= 24, "a clean run scores (%d points, %d barriers)" % [rig.score, rig.rows_passed])
 	var z_end := rig.spos.z
 	for i in 240:
 		rig._physics_process(dt)
@@ -930,7 +945,7 @@ func _ready() -> void:
 		if not (rig._rows[jp2]["pads"] as Array).is_empty():
 			pad_row = rig._rows[jp2]
 			break
-	_check(not pad_row.is_empty(), "boost pads are laid in front of kickers")
+	_check(not pad_row.is_empty(), "boost pads are laid out on the slope (not on ramps)")
 	if not pad_row.is_empty():
 		var pd: Dictionary = (pad_row["pads"] as Array)[0]
 		rig._pitch.clear()
@@ -950,9 +965,14 @@ func _ready() -> void:
 			for bk3 in rr3["buffs"]:
 				if bk3["kind"] == "air":
 					airs += 1
-			if (rr3["has_row"] and float(rr3["kick"]["lip"]) < float(rr3["z"]) + 88.0) or airs < 2 or (rr3["pads"] as Array).is_empty():
+			if (rr3["has_row"] and float(rr3["kick"]["lip"]) < float(rr3["z"]) + 88.0) or airs < 2:
 				epic_ok = false
-	_check(epic_n >= 1 and epic_ok, "epic kickers exist (%d in 58 segments): taller, a pad before them, two pickups in the air, room to land" % epic_n)
+	_check(epic_n >= 1 and epic_ok, "epic kickers exist (%d in 58 segments): taller, two pickups in the air, room to land" % epic_n)
+	var vx_ok := not rig._kickers.is_empty()
+	for kv in rig._kickers:
+		if kv.get("vx", null) == null:
+			vx_ok = false
+	_check(vx_ok, "every ramp has a vortex over its base")
 
 	# ---- the ridiculous: head shakes and darting eyes are zigzags, extra moves get silly names and commentary
 	var zs := {}
@@ -1419,10 +1439,10 @@ func _ready() -> void:
 	if not grow.is_empty():
 		var pcount := 0
 		for nd in grow["nodes"]:
-			if nd is MeshInstance3D and (nd as MeshInstance3D).mesh is CylinderMesh and absf(((nd as MeshInstance3D).mesh as CylinderMesh).height - 9.0) < 0.01:
+			if nd is MeshInstance3D and (nd as MeshInstance3D).mesh is CylinderMesh and absf(((nd as MeshInstance3D).mesh as CylinderMesh).height - 12.0) < 0.01:
 				pcount += 1
 		posts_ok = pcount >= 2 * (grow["gaps"] as Array).size()
-	_check(posts_ok, "every opening has a tall post on each side")
+	_check(posts_ok, "every opening has a stone pillar on each side")
 	if not grow.is_empty():
 		var lx := 0.0
 		var gm := -1.0

@@ -3,3 +3,12 @@ build/
 *.import
 *.tmp
 .claude/
+
+# private or local-only: dev certificate and key, player logs and camera frames, deploy script (server details)
+godot/tools/dev-cert.pem
+godot/tools/dev-key.pem
+godot/tools/logs/
+godot/tools/frames/
+godot/tools/tune_results.jsonl
+godot/tools/deploy.sh
+godot/tools/vps/

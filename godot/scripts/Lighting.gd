@@ -208,9 +208,9 @@ func _apply_tier() -> void:
 	var vp := rig.get_viewport()
 	if vp != null:
 		# a big desktop window has several times the pixels of a phone: draw the 3D picture at about a million pixels at most (the HUD stays sharp)
-		var px := maxf(float(vp.get_visible_rect().size.x * vp.get_visible_rect().size.y), 1.0)
-		var cap := clampf(sqrt(0.95e6 / px), 0.5, 1.0) if OS.has_feature("web") else 1.0
-		vp.scaling_3d_scale = minf([1.0, 1.0, 0.8, 0.65][tier], cap)
+		var px := RScale.full_px()
+		var cap := clampf(sqrt((0.95e6 if Game.touch_mode else 2.1e6) / px), 0.5, 1.0) if OS.has_feature("web") else 1.0          # a phone: about a million pixels; a laptop: up to full HD
+		RScale.set_scale(vp, minf([1.0, 1.0, 0.8, 0.65][tier], cap))
 	# draw distance for trees and rocks: the cheapest big saving there is
 	rig.veg_range = [0.0, 280.0, 190.0, 130.0][tier]
 	for n in rig.get_children():

@@ -489,7 +489,7 @@ func particles(pos: Vector3, box_size: Vector3, amount: int, life: float, gravit
 	m.height = size * 2.0
 	m.radial_segments = 6
 	m.rings = 3
-	var mat := StandardMaterial3D.new()
+	var mat := Mats.flat()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.albedo_color = color
 	m.material = mat

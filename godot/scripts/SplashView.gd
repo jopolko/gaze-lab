@@ -54,11 +54,11 @@ func _draw() -> void:
 	# emblem
 	var c := Vector2(w * 0.5, h * (0.24 if not portrait else 0.2))
 	var r := 120.0 * s
-	draw_arc(c + Vector2(0, 20.0 * s), r, deg_to_rad(150.0), deg_to_rad(390.0), 48, white, 12.0 * s, true)
+	Draw2D.arc(self, c + Vector2(0, 20.0 * s), r, deg_to_rad(150.0), deg_to_rad(390.0), 48, white, 12.0 * s, true)
 	var peaks := PackedVector2Array([c + Vector2(-84, 66) * s, c + Vector2(-36, -14) * s, c + Vector2(-4, 34) * s, c + Vector2(30, -34) * s, c + Vector2(84, 66) * s])
-	draw_colored_polygon(peaks, white)
-	draw_arc(c + Vector2(50, -48) * s, 13.0 * s, 0.0, TAU, 24, white, 6.0 * s, true)
-	draw_circle(c + Vector2(50, -48) * s, 4.0 * s, white)
+	Draw2D.poly(self, peaks, white)
+	Draw2D.arc(self, c + Vector2(50, -48) * s, 13.0 * s, 0.0, TAU, 24, white, 6.0 * s, true)
+	Draw2D.circle(self, c + Vector2(50, -48) * s, 4.0 * s, white)
 	# title
 	var tsz := int(110.0 * s)
 	var title := "DOWNHILL"
@@ -66,7 +66,7 @@ func _draw() -> void:
 	var ty := h * (0.50 if not portrait else 0.36)
 	draw_string_outline(font, Vector2(w * 0.5 - tw * 0.5, ty), title, HORIZONTAL_ALIGNMENT_LEFT, -1, tsz, int(10.0 * s), Color(0.05, 0.08, 0.25, 0.8 * fade))
 	draw_string(font, Vector2(w * 0.5 - tw * 0.5, ty), title, HORIZONTAL_ALIGNMENT_LEFT, -1, tsz, white)
-	var sub := "S T E E R   B Y   E Y E"
+	var sub := "STEER WITH YOUR EYES!  MAKE FACES!"
 	var ssz := int(26.0 * s)
 	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, ssz).x
 	draw_string(font, Vector2(w * 0.5 - sw * 0.5, ty + 42.0 * s), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, ssz, Color(1, 1, 1, 0.9 * fade))
@@ -85,8 +85,8 @@ func _draw() -> void:
 		if a <= 0.0:
 			continue
 		var cc := Vector2(cx, cy)
-		draw_circle(cc, rr, Color(0.04, 0.06, 0.2, 0.40 * a))
-		draw_arc(cc, rr, 0.0, TAU, 40, Color(1, 1, 1, 0.8 * a), 2.5 * s, true)
+		Draw2D.circle(self, cc, rr, Color(0.04, 0.06, 0.2, 0.40 * a))
+		Draw2D.arc(self, cc, rr, 0.0, TAU, 40, Color(1, 1, 1, 0.8 * a), 2.5 * s, true)
 		_icon(i, cc, rr / 34.0 * 0.78, Color(1, 1, 1, a))
 		var label: String = ICONS[i]
 		var lsz := int(20.0 * s)
@@ -105,41 +105,41 @@ func _icon(i: int, c: Vector2, u: float, col: Color) -> void:
 	var lw := 4.5 * u
 	match i:
 		0:   # STEER: two eyes looking aside, an arrow
-			draw_arc(c + Vector2(-13, -6) * u, 11.0 * u, 0.0, TAU, 20, col, lw * 0.7, true)
-			draw_arc(c + Vector2(13, -6) * u, 11.0 * u, 0.0, TAU, 20, col, lw * 0.7, true)
-			draw_circle(c + Vector2(-8, -5) * u, 4.5 * u, col)
-			draw_circle(c + Vector2(18, -5) * u, 4.5 * u, col)
-			draw_polyline(PackedVector2Array([c + Vector2(-12, 20) * u, c + Vector2(18, 20) * u]), col, lw, true)
-			draw_polyline(PackedVector2Array([c + Vector2(10, 13) * u, c + Vector2(19, 20) * u, c + Vector2(10, 27) * u]), col, lw, true)
+			Draw2D.arc(self, c + Vector2(-13, -6) * u, 11.0 * u, 0.0, TAU, 20, col, lw * 0.7, true)
+			Draw2D.arc(self, c + Vector2(13, -6) * u, 11.0 * u, 0.0, TAU, 20, col, lw * 0.7, true)
+			Draw2D.circle(self, c + Vector2(-8, -5) * u, 4.5 * u, col)
+			Draw2D.circle(self, c + Vector2(18, -5) * u, 4.5 * u, col)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(-12, 20) * u, c + Vector2(18, 20) * u]), col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(10, 13) * u, c + Vector2(19, 20) * u, c + Vector2(10, 27) * u]), col, lw, true)
 		1:   # LOCK: an eye on a gate
-			draw_arc(c, 18.0 * u, 0.0, TAU, 24, col, lw, true)
-			draw_circle(c, 5.0 * u, col)
+			Draw2D.arc(self, c, 18.0 * u, 0.0, TAU, 24, col, lw, true)
+			Draw2D.circle(self, c, 5.0 * u, col)
 			for d in [Vector2(0, -28), Vector2(0, 28), Vector2(-28, 0), Vector2(28, 0)]:
 				draw_line(c + d * u * 0.72, c + d * u, col, lw, true)
 		2:   # JUMP: a ramp and an arrow up
-			draw_polyline(PackedVector2Array([c + Vector2(-26, 22) * u, c + Vector2(16, 22) * u, c + Vector2(16, -6) * u, c + Vector2(-26, 22) * u]), col, lw, true)
-			draw_polyline(PackedVector2Array([c + Vector2(20, -8) * u, c + Vector2(30, -26) * u]), col, lw, true)
-			draw_polyline(PackedVector2Array([c + Vector2(20, -26) * u, c + Vector2(31, -26) * u, c + Vector2(31, -14) * u]), col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(-26, 22) * u, c + Vector2(16, 22) * u, c + Vector2(16, -6) * u, c + Vector2(-26, 22) * u]), col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(20, -8) * u, c + Vector2(30, -26) * u]), col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(20, -26) * u, c + Vector2(31, -26) * u, c + Vector2(31, -14) * u]), col, lw, true)
 		3:   # SPIN: a circling arrow around a board
-			draw_arc(c, 22.0 * u, deg_to_rad(40.0), deg_to_rad(330.0), 28, col, lw, true)
-			draw_polyline(PackedVector2Array([c + Vector2(-30, -6) * u, c + Vector2(-20, 6) * u, c + Vector2(-10, -4) * u]), col, lw, true)
-			draw_arc(c + Vector2(0, 6) * u, 12.0 * u, 0.0, TAU, 16, col, lw * 0.6, true)
+			Draw2D.arc(self, c, 22.0 * u, deg_to_rad(40.0), deg_to_rad(330.0), 28, col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(-30, -6) * u, c + Vector2(-20, 6) * u, c + Vector2(-10, -4) * u]), col, lw, true)
+			Draw2D.arc(self, c + Vector2(0, 6) * u, 12.0 * u, 0.0, TAU, 16, col, lw * 0.6, true)
 		4:   # EAT: a burger
-			draw_arc(c + Vector2(0, -4) * u, 24.0 * u, PI, TAU, 20, col, lw, true)
+			Draw2D.arc(self, c + Vector2(0, -4) * u, 24.0 * u, PI, TAU, 20, col, lw, true)
 			draw_line(c + Vector2(-26, -4) * u, c + Vector2(26, -4) * u, col, lw, true)
 			draw_line(c + Vector2(-24, 6) * u, c + Vector2(24, 6) * u, col, lw, true)
-			draw_polyline(PackedVector2Array([c + Vector2(-24, 14) * u, c + Vector2(24, 14) * u, c + Vector2(20, 24) * u, c + Vector2(-20, 24) * u, c + Vector2(-24, 14) * u]), col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(-24, 14) * u, c + Vector2(24, 14) * u, c + Vector2(20, 24) * u, c + Vector2(-20, 24) * u, c + Vector2(-24, 14) * u]), col, lw, true)
 		5:   # SHIELD
-			draw_polyline(PackedVector2Array([c + Vector2(0, -26) * u, c + Vector2(22, -17) * u, c + Vector2(22, 3) * u, c + Vector2(0, 28) * u, c + Vector2(-22, 3) * u, c + Vector2(-22, -17) * u, c + Vector2(0, -26) * u]), col, lw, true)
-			draw_circle(c + Vector2(0, -2) * u, 6.0 * u, col)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(0, -26) * u, c + Vector2(22, -17) * u, c + Vector2(22, 3) * u, c + Vector2(0, 28) * u, c + Vector2(-22, 3) * u, c + Vector2(-22, -17) * u, c + Vector2(0, -26) * u]), col, lw, true)
+			Draw2D.circle(self, c + Vector2(0, -2) * u, 6.0 * u, col)
 		6:   # BRACE: a ball hits, speed lines
-			draw_arc(c + Vector2(8, 0) * u, 20.0 * u, 0.0, TAU, 24, col, lw, true)
-			draw_polyline(PackedVector2Array([c + Vector2(-6, -6) * u, c + Vector2(4, 0) * u, c + Vector2(-6, 6) * u]), col, lw, true)
+			Draw2D.arc(self, c + Vector2(8, 0) * u, 20.0 * u, 0.0, TAU, 24, col, lw, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(-6, -6) * u, c + Vector2(4, 0) * u, c + Vector2(-6, 6) * u]), col, lw, true)
 			for yy in [-14.0, 2.0, 18.0]:
 				draw_line(c + Vector2(-30, yy) * u, c + Vector2(-16, yy) * u, col, lw, true)
 		7:   # FACE: a goofy face, tongue out
-			draw_arc(c, 26.0 * u, 0.0, TAU, 28, col, lw, true)
+			Draw2D.arc(self, c, 26.0 * u, 0.0, TAU, 28, col, lw, true)
 			draw_line(c + Vector2(-12, -8) * u, c + Vector2(-12, -1) * u, col, lw, true)
 			draw_line(c + Vector2(12, -8) * u, c + Vector2(12, -1) * u, col, lw, true)
-			draw_arc(c + Vector2(0, 4) * u, 14.0 * u, deg_to_rad(20.0), deg_to_rad(160.0), 12, col, lw, true)
+			Draw2D.arc(self, c + Vector2(0, 4) * u, 14.0 * u, deg_to_rad(20.0), deg_to_rad(160.0), 12, col, lw, true)
 			draw_line(c + Vector2(4, 18) * u, c + Vector2(4, 26) * u, col, lw * 1.2, true)

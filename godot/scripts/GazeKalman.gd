@@ -11,8 +11,8 @@ extends RefCounted
 ## then lags behind it for half a second. So a reading far outside what the filter expected is held at arm's length once (it could
 ## be a glitch), and if the NEXT reading agrees (same side, also far), the filter snaps to the new place at once.
 
-var r: float = 0.0025         # variance of one reading (screen fraction squared): about 5% of the screen of noise per reading
-var qa: float = 1.2           # how hard the gaze can accelerate between readings (screen fractions per second squared)
+var r: float = 0.0018         # variance of one reading (screen fraction squared): about 5% of the screen of noise per reading
+var qa: float = 2.0           # how hard the gaze can accelerate between readings (screen fractions per second squared)
 var fade: float = 0.30        # seconds for the velocity to fade away when no reading confirms it
 var gate: float = 2.8         # a reading this many standard deviations from the prediction is a possible jump
 var min_jump: float = 0.07    # ...and at least this far in screen terms (below it, always plain filtering)
@@ -82,7 +82,7 @@ func step(z: float, dt: float, fresh: bool) -> float:
 			return x
 		_pend = z
 		_pend_n = 1
-		rr = r * 9.0                     # the first far reading only nudges
+		rr = r * 4.0                     # the first far reading is trusted a good deal (a glance to the next gate should not wait for a second reading)
 	else:
 		_pend_n = 0
 	s = _p00 + rr

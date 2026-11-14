@@ -94,7 +94,7 @@ static func pick(wave: int) -> StringName:
 # Primitive helpers
 # --------------------------------------------------------------------------
 static func mat(color: Color, glow: float = 0.0) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
+	var m := Mats.lit()
 	m.albedo_color = color
 	m.roughness = 0.6
 	if glow > 0.0:

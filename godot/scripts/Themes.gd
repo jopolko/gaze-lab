@@ -413,10 +413,8 @@ static func theme_data(id: String) -> Dictionary:
 
 
 static func make_shader(code: String) -> ShaderMaterial:
-	var sh := Shader.new()
-	sh.code = code.replace("//HSV", HSV)
 	var m := ShaderMaterial.new()
-	m.shader = sh
+	m.shader = Mats.shader(code.replace("//HSV", HSV))          # shared: the title backdrop and the run use the same look, and must not build its shaders twice
 	return m
 
 

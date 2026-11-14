@@ -31,7 +31,6 @@ const MODES := {
 
 var _status: Label
 var _cam_btn: Button
-var _alt_btn: Button
 var _title: Label
 var _desc: Label
 var _lines: Array[Label] = []
@@ -87,8 +86,6 @@ func _ready() -> void:
 
 	_cam_btn = _button(Color(0.9, 0.3, 0.25), 32, 88.0)
 	_cam_btn.pressed.connect(_start.bind(true))
-	_alt_btn = _button(Color(0.25, 0.45, 0.8), 22, 60.0)
-	_alt_btn.pressed.connect(_start.bind(false))
 	_note = _label(17, Color(1, 1, 1, 0.6))
 	_status = _label(20, Color(1.0, 0.85, 0.3))
 	_refresh()
@@ -164,8 +161,7 @@ func _refresh() -> void:
 	for i in _lines.size():
 		_lines[i].text = String(ls[i]) if i < ls.size() else ""
 		_lines[i].visible = i < ls.size()
-	_cam_btn.text = "START WITH CAMERA"
-	_alt_btn.text = "PLAY WITHOUT CAMERA"
+	_cam_btn.text = "START"
 	_note.text = String(d["nokeys"]) + "\nThe camera never leaves your device."
 	for idx: int in _mode_btns:
 		(_mode_btns[idx] as Button).modulate = Color(1, 0.9, 0.4) if idx == m else Color(1, 1, 1, 0.6)

@@ -98,7 +98,7 @@ func choose_theme(id: String) -> void:
 	# materials
 	var gm := Themes.ground_material(id)
 	if gm == null:
-		var sm3 := StandardMaterial3D.new()
+		var sm3 := Mats.lit()
 		sm3.vertex_color_use_as_albedo = true
 		sm3.roughness = 1.0
 		sm3.metallic_specular = 0.0
@@ -108,7 +108,7 @@ func choose_theme(id: String) -> void:
 		terrain.material_override = gm
 	var vm := Themes.veg_material(id)
 	if vm == null:
-		var vm3 := StandardMaterial3D.new()
+		var vm3 := Mats.lit()
 		vm3.vertex_color_use_as_albedo = true
 		vm3.roughness = 1.0
 		vm3.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -179,7 +179,7 @@ func _build_world() -> void:
 	vp.add_child(rocks)
 	pyramids = MeshInstance3D.new()
 	pyramids.mesh = Themes.pyramid_mesh()
-	var pm := StandardMaterial3D.new()
+	var pm := Mats.lit()
 	pm.vertex_color_use_as_albedo = true
 	pm.cull_mode = BaseMaterial3D.CULL_DISABLED
 	pm.roughness = 1.0
@@ -200,7 +200,7 @@ func _build_world() -> void:
 			post_mesh.radial_segments = 6
 			var mi := MeshInstance3D.new()
 			mi.mesh = post_mesh
-			var m := StandardMaterial3D.new()
+			var m := Mats.flat()
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			mi.material_override = m
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

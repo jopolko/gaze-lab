@@ -229,7 +229,7 @@ func _build_header() -> void:
 	tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.add_child(tb)
 	_title = _label("DOWNHILL", 52, Color(1.0, 0.9, 0.4), tb)
-	_sub = _label("Steer with your eyes. Pick a look, a course, and go.", 20, Color(1, 1, 1, 0.8), tb)
+	_sub = _label("Steer with your eyes! Make faces! Pick a look, a course, and go.", 20, Color(1, 1, 1, 0.8), tb)
 	_more = _button("OTHER GAMES", 18, h)
 	_more.pressed.connect(_other_games)
 

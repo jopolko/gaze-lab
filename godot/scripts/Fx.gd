@@ -29,7 +29,7 @@ static func confetti(ctx: Node, pos: Vector3, amount: int = 60, size: float = 1.
 	p.color_initial_ramp = g
 	var m := BoxMesh.new()
 	m.size = Vector3(0.09, 0.09, 0.02) * size
-	var mat := StandardMaterial3D.new()
+	var mat := Mats.flat()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.vertex_color_use_as_albedo = true
 	m.material = mat
@@ -86,7 +86,7 @@ static func _ring(ctx: Node, pos: Vector3, radius: float, color: Color = Color(1
 	var s := SphereMesh.new()
 	s.radius = 0.5
 	s.height = 1.0
-	var mat := StandardMaterial3D.new()
+	var mat := Mats.glass()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.albedo_color = color

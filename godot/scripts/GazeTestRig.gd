@@ -18,6 +18,7 @@ var player: PlayerController
 var cam: Camera3D
 var results: Array[Dictionary] = []
 var done: bool = false
+var sweep: SweepTest = null
 
 var _hud: Control
 var _cells: Array[Vector2] = []
@@ -48,6 +49,9 @@ func setup(p_player: PlayerController) -> void:
 		for c in COLS:
 			_cells.append(Vector2(lerpf(0.08, 0.92, float(c) / float(COLS - 1)), lerpf(0.16, 0.84, float(r) / float(ROWS - 1))))
 	_rng.randomize()
+	if OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('sweep')")):
+		sweep = SweepTest.new()                  # ?level=gaze&sweep: the moving-dot recording instead of the fixed dots
+		layer.add_child(sweep)
 	GazeProvider.bias.reset()
 	GazeProvider.bias.exp_span = Vector2(0.76, 0.62)
 	restart()
@@ -77,6 +81,8 @@ func target() -> Vector2:
 
 func _process(delta: float) -> void:
 	_age += delta
+	if sweep != null:
+		return
 	var g := TrackerBridge.gaze
 	_hist.append(g)
 	if _hist.size() > 30:

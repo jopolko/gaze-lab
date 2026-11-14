@@ -15,12 +15,13 @@ extends DownhillRig
 
 const FINISH_Z := -4200.0
 const PULL_RAMP := 3500.0            # metres until the hill is at full pull
-const AIM_LINGER := 0.22             # seconds your eyes must stay on an opening before it latches
+const AIM_LINGER := 0.14             # seconds your eyes must stay on an opening before it latches
 const AIM_MIN_DIST := 14.0
-const AIM_MAX_DIST := 190.0          # the choice starts early: you can pick a gate while it is still a long way off
+const AIM_MAX_DIST := 125.0          # kept at the distance the tracking was tested with (the realms commit had raised it to 190)
 const START_CALM := 2                # the first segments are open snow
 const MIN_SPEED := 14.0
 
+var show_reticle: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("reticle")
 var carve_assist: float = 1.0        # how hard a latched opening pulls the board: it is the main control, the raw look only trims
 var aim_enabled: bool = true         # tests: switch the opening choice off to check the raw look-trim alone
 var _aim_cx: float = -1.0           # your look, smoothed over ~0.2 s, for choosing an opening (the raw cursor jitters by several percent of the screen)
@@ -46,6 +47,7 @@ func setup(p_player: PlayerController) -> void:
 	lane_ctl = 2
 	lane_mode = true
 	super.setup(p_player)
+	Telemetry.set_rig(self)
 	name = "RunRig"
 	_load_view_pref()
 	_read_params()
@@ -63,7 +65,10 @@ func setup(p_player: PlayerController) -> void:
 		elif rsq != "":
 			_rs_pin = clampf(float(rsq), 0.3, 1.0)
 			_rs = _rs_pin
-			get_viewport().scaling_3d_scale = _rs
+			RScale.set_scale(get_viewport(), _rs)
+		elif not Game.touch_mode:
+			_rs = 1.0                                      # a laptop or desktop in the browser: full sharpness (measured 55-60 fps on built-in Intel graphics once the scaled depth copy was gone, see RScale)
+			RScale.set_scale(get_viewport(), _rs)
 
 
 # --------------------------------------------------------------------------
@@ -112,7 +117,7 @@ func _gen_segment(j: int) -> void:
 	var z0 := -ROW_GAP * float(j)
 	var d := _course_diff(z0)
 	var post_air := _force_far_next
-	var rz := z0 - _rng.randf_range(50.0, 60.0) if _force_far_next else z0 - _rng.randf_range(26.0, 60.0)
+	var rz := z0 - _rng.randf_range(70.0, 92.0) if _force_far_next else z0 - _rng.randf_range(36.0, 92.0)
 	_force_far_next = false
 	# now and then a segment has no barrier at all: an air segment, with an epic kicker at the top and room to land
 	_region_step(j)
@@ -144,7 +149,7 @@ func _gen_segment(j: int) -> void:
 	var prev_x := _good_x
 	var prev_rz := _last_rz
 	if has_row:
-		var shift := clampf((_last_rz - rz) * 0.30, 8.0, 14.0 if post_air else 36.0)          # after a jump you land close to where you left the line: the next gate is not far off it          # the safe opening moves at most a third of the distance since the last barrier: always reachable
+		var shift := clampf((_last_rz - rz) * 0.30, 8.0, 14.0 if post_air else 44.0)          # after a jump you land close to where you left the line: the next gate is not far off it          # the safe opening moves at most a third of the distance since the last barrier: always reachable
 		_last_rz = rz
 		if zone == "bend":
 			var bside := _pending_bend if _pending_bend != 0.0 else (1.0 if _good_x < 0.0 else -1.0)
@@ -207,6 +212,10 @@ func _gen_segment(j: int) -> void:
 			else:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, sx, sz, _rng.randf_range(0.8, 1.3), true)
 	_place_kicker(row, obs, prev_rz, rz, z0, has_row, j, air_seg)
+	# boost pads live out on the slope now, not on ramps (the vortex does the ramps): now and then one lies on the safe line a little after a barrier
+	if has_row and not air_seg and _rng.randf() < 0.12:
+		var pdz := rz - _rng.randf_range(24.0, 40.0)
+		_make_pad(row, path_x(row, pdz) + _rng.randf_range(-3.0, 3.0), pdz, false)
 	if has_row:
 		_place_buffs(row, d, prev_rz, rz)
 		_make_signs(row, rz)
@@ -238,7 +247,10 @@ func _gen_segment(j: int) -> void:
 	if z0 > finish_z and z0 - ROW_GAP <= finish_z:
 		_make_finish(row)
 	_rows[j] = row
-	_chunks[j] = _build_chunk(j)
+	if _gen_sliced:
+		_chunk_jobs.append(_chunk_job_new(j))                  # the ground mesh is built over the next few frames, a few milliseconds each
+	else:
+		_chunks[j] = _build_chunk(j)
 	_update_mist(z0 - ROW_GAP)
 	if has_row and bool(params.get("lazy", true)):
 		_gate_open = false                                    # the next stretch is built when you go through this barrier
@@ -292,6 +304,8 @@ const ZONES := {
 	"melt": {"m": 1.1, "w": 1.0, "singles": 0.8, "walls": 0.0, "path_buff": 0.35, "col": Color(0.4, 1.0, 0.8), "scol": Realms.SIGN_COL, "name": "THE MELT"},
 	"mandala": {"m": 2.0, "w": 1.15, "singles": 0.9, "walls": 0.0, "path_buff": 0.2, "col": Color(1.0, 0.7, 1.0), "scol": Realms.SIGN_COL, "name": "MANDALA DROP"},
 	# the roofed ones: caves and chambers, dark inside, lit by what grows or burns there
+	"canyon": {"m": 1.3, "w": 1.1, "singles": 1.4, "walls": 22.0, "path_buff": 0.35, "col": Color(1.0, 0.55, 0.25), "scol": Realms.SIGN_COL, "name": "RED CANYON"},
+	"mammoth": {"m": 0.9, "w": 1.2, "singles": 1.5, "walls": 0.0, "path_buff": 0.45, "col": Color(0.55, 1.0, 0.35), "scol": Realms.SIGN_COL, "name": "MAMMOTH GARDEN"},
 	"glowcave": {"m": 1.0, "w": 1.1, "singles": 1.6, "walls": 0.0, "path_buff": 0.4, "col": Color(0.3, 1.0, 0.8), "scol": Realms.SIGN_COL, "name": "GLOW GROTTO"},
 	"crystal": {"m": 1.15, "w": 1.0, "singles": 1.4, "walls": 0.0, "path_buff": 0.3, "col": Color(0.6, 0.9, 1.0), "scol": Realms.SIGN_COL, "name": "CRYSTAL VAULT"},
 	"lava": {"m": 1.5, "w": 0.9, "singles": 2.2, "walls": 0.0, "path_buff": 0.15, "col": Color(1.0, 0.45, 0.1), "scol": Realms.SIGN_COL, "name": "LAVA TUBE"},
@@ -308,16 +322,16 @@ const FOOD_BY_ZONE := {
 	"forest": {"boost": 0.15, "shield": 0.4, "mult": 0.2, "donut": 0.25},          # trees everywhere: a boost here is a gamble, a shield is not
 	"drop": {"boost": 0.1, "shield": 0.3, "mult": 0.3, "donut": 0.3},              # already fast enough: the sensible gifts are the ones that do not add speed
 }
-const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 0.8, "air": 0.9, "forest": 0.8, "drop": 0.5,
-	"highway": 0.8, "interzone": 0.8, "hive": 0.7, "eyes": 0.8, "melt": 0.7, "mandala": 0.7, "glowcave": 1.0, "crystal": 0.9, "lava": 0.8, "abyss": 0.8}
+const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 1.4, "air": 0.9, "forest": 0.8, "drop": 0.5,
+	"highway": 0.8, "interzone": 0.8, "hive": 0.7, "eyes": 0.8, "melt": 0.7, "mandala": 0.7, "glowcave": 1.0, "crystal": 0.9, "lava": 0.8, "abyss": 0.8, "canyon": 1.0, "mammoth": 1.0}
 
 ## Regions: the world comes in stretches of four to seven zones with a character of their own (which zones are likely, and the colour of the snow). A banner says when you cross into one.
 const REGIONS := {
-	"pines": {"name": "PINE VALLEY", "tint": Color(1.0, 1.0, 1.0), "w": {"forest": 1.8, "flat": 1.1}},
+	"pines": {"name": "PINE VALLEY", "tint": Color(1.0, 1.0, 1.0), "w": {"forest": 1.8, "flat": 1.1, "mammoth": 1.2, "canyon": 0.6}},
 	"glacier": {"name": "THE GLACIER", "tint": Color(0.78, 0.9, 1.0), "w": {"tunnel": 1.8, "drop": 1.3, "flat": 0.5}},
 	"ember": {"name": "EMBER RIDGE", "tint": Color(1.0, 0.86, 0.78), "w": {"rush": 1.5, "drop": 1.8, "bend": 1.3, "flat": 0.5}},
-	"blossom": {"name": "BLOSSOM FIELDS", "tint": Color(1.0, 0.9, 0.96), "w": {"flat": 1.9, "forest": 1.1, "air": 1.4, "tunnel": 0.4}},
-	"dusk": {"name": "DUSK CANYON", "tint": Color(0.86, 0.84, 1.0), "w": {"bend": 1.8, "tunnel": 1.3, "rush": 1.1, "air": 0.5}},
+	"blossom": {"name": "BLOSSOM FIELDS", "tint": Color(1.0, 0.9, 0.96), "w": {"flat": 1.9, "forest": 1.1, "air": 1.4, "tunnel": 0.4, "mammoth": 3.0}},
+	"dusk": {"name": "DUSK CANYON", "tint": Color(0.86, 0.84, 1.0), "w": {"bend": 1.8, "tunnel": 1.3, "rush": 1.1, "air": 0.5, "canyon": 3.2}},
 	"fever": {"name": "THE FEVER", "tint": Color(1.0, 0.9, 1.0), "w": {"highway": 2.4, "interzone": 2.4, "hive": 2.2, "eyes": 2.4, "melt": 2.2, "mandala": 2.2, "flat": 0.4, "forest": 0.3}},
 	"under": {"name": "THE UNDERWORLD", "tint": Color(0.9, 0.9, 1.0), "w": {"glowcave": 3.0, "crystal": 2.6, "lava": 2.2, "abyss": 2.4, "flat": 0.3, "forest": 0.3, "rush": 0.5}},
 }
@@ -387,6 +401,9 @@ func _region_step(j: int) -> void:
 	regions_seen[_region] = int(regions_seen.get(_region, 0)) + 1
 
 
+var _gen_sliced: bool = false           # true only for the stretch built when you pass a gate while playing
+
+
 func _chunk_tint(j: int) -> Color:
 	if _rows.has(j):
 		return (REGIONS[String((_rows[j] as Dictionary).get("region", "pines"))] as Dictionary)["tint"]
@@ -451,6 +468,48 @@ func _pick_for_gate(zone: String) -> String:
 
 
 ## The sign above a gate: a coloured beacon you can see from afar and a symbol for the kind of stretch it leads to.
+## A stone archway as one mesh: a half ring of rectangular section (inner radius r_in, outer radius r_out, depth along the direction of travel), cached by size.
+var _arch_cache: Dictionary = {}
+
+
+func _arch_mesh(r_in: float, r_out: float, depth: float) -> ArrayMesh:
+	var key := "%.1f_%.1f_%.1f" % [r_in, r_out, depth]
+	if _arch_cache.has(key):
+		return _arch_cache[key]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := 16
+	var hz := depth * 0.5
+	for i in n:
+		var a0 := PI * float(i) / float(n)
+		var a1 := PI * float(i + 1) / float(n)
+		var c0 := Vector2(cos(a0), sin(a0))
+		var c1 := Vector2(cos(a1), sin(a1))
+		var o0f := Vector3(c0.x * r_out, c0.y * r_out, hz)
+		var o1f := Vector3(c1.x * r_out, c1.y * r_out, hz)
+		var i0f := Vector3(c0.x * r_in, c0.y * r_in, hz)
+		var i1f := Vector3(c1.x * r_in, c1.y * r_in, hz)
+		var o0b := Vector3(o0f.x, o0f.y, -hz)
+		var o1b := Vector3(o1f.x, o1f.y, -hz)
+		var i0b := Vector3(i0f.x, i0f.y, -hz)
+		var i1b := Vector3(i1f.x, i1f.y, -hz)
+		for q in [[i0f, i1f, o1f, o0f], [o0b, o1b, i1b, i0b], [o0f, o1f, o1b, o0b], [i0b, i1b, i1f, i0f]]:
+			var qa: Vector3 = q[0]
+			var qb: Vector3 = q[1]
+			var qc: Vector3 = q[2]
+			var qd: Vector3 = q[3]
+			st.add_vertex(qa)
+			st.add_vertex(qb)
+			st.add_vertex(qc)
+			st.add_vertex(qa)
+			st.add_vertex(qc)
+			st.add_vertex(qd)
+	st.generate_normals()
+	var m := st.commit()
+	_arch_cache[key] = m
+	return m
+
+
 func _make_signs(row: Dictionary, rz: float) -> void:
 	for g in row["gaps"]:
 		var zn: String = g.get("leads", "rush")
@@ -462,23 +521,55 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 		root.global_position = Vector3(gx, terrain_h(gx, rz) + 9.5, rz + 0.5)
 		(row["nodes"] as Array).append(root)
 		var mat := _fx_mat("solid", col, 2.4)
+		var vk := 1.3 if Game.touch_mode else 1.0                       # a phone screen is small: everything about a gate is drawn bigger
 		var cm := CylinderMesh.new()
-		cm.top_radius = 0.3
-		cm.bottom_radius = 0.45
-		cm.height = 22.0
-		cm.radial_segments = 6
-		_mi(root, cm, _fx_mat("add", Color(col.r, col.g, col.b, 0.45)), Vector3(0, -8.0, 0))
-		# a tall post on each side of the opening, so a gap is visible over the trees and from the side
+		cm.top_radius = 0.7 * vk
+		cm.bottom_radius = 1.5 * vk
+		cm.height = 120.0
+		cm.radial_segments = 8
+		_mi(root, cm, _fx_mat("add", Color(0.55, 0.95, 1.0, 0.32)), Vector3(0, 50.0, 0))
+		# a stone pillar on each side of the opening with a capital and a base, joined by an archway: a gap reads as a gate over the trees from a long way off
 		var gw: float = float(g.get("w", 10.0))
+		var stone := _fx_mat("solid", Color(0.12, 0.15, 0.24), 0.55)
+		var half_open: float = gw * 0.5 + 1.0
+		var spring: float = 11.0
 		for psx in [-1.0, 1.0]:
-			var post := CylinderMesh.new()
-			post.top_radius = 0.28
-			post.bottom_radius = 0.36
-			post.height = 9.0
-			post.radial_segments = 6
-			var ppx: float = gx + float(psx) * gw * 0.5
-			var pn2 := _mi(self, post, mat, Vector3(ppx, terrain_h(ppx, rz) + 4.5, rz))
-			(row["nodes"] as Array).append(pn2)
+			var ppx: float = gx + float(psx) * (half_open + 0.9)
+			var gy: float = terrain_h(ppx, rz)
+			var pil := CylinderMesh.new()
+			pil.top_radius = 0.95
+			pil.bottom_radius = 1.15
+			pil.height = spring + 1.0
+			pil.radial_segments = 10
+			(row["nodes"] as Array).append(_mi(self, pil, stone, Vector3(ppx, gy + (spring + 1.0) * 0.5 - 0.5, rz)))
+			var cap := BoxMesh.new()
+			cap.size = Vector3(3.0, 0.9, 3.0)
+			(row["nodes"] as Array).append(_mi(self, cap, stone, Vector3(ppx, gy + spring + 0.6, rz)))
+			var base := BoxMesh.new()
+			base.size = Vector3(3.0, 1.0, 3.0)
+			(row["nodes"] as Array).append(_mi(self, base, stone, Vector3(ppx, gy + 0.2, rz)))
+		var arch_y: float = terrain_h(gx, rz) + spring + 1.0
+		var arch_mat := (_fx_mat("solid", Color(0.7, 1.0, 1.0), 3.6) as StandardMaterial3D).duplicate() as StandardMaterial3D          # its own material: the arch can turn gold when it holds the next step of the chain
+		var arch := _mi(self, _arch_mesh(half_open - 0.6, half_open + 1.7 * vk, 2.2 * vk), arch_mat, Vector3(gx, arch_y, rz))
+		(row["nodes"] as Array).append(arch)
+		g["arch_mat"] = arch_mat
+		g["arch_col"] = arch_mat.albedo_color
+		var offer := ""
+		for bb in row["buffs"]:
+			var bkind := String(bb.get("kind", ""))
+			if (bkind == "safe" or bkind == "gate") and absf(float(bb["x"]) - gx) < 3.0 and float(bb["z"]) >= rz - 1.0 and float(bb["z"]) < rz + 90.0:
+				offer = String(bb["t"])
+				break
+		g["offer"] = offer
+		if offer != "" and BUFF_COL.has(offer):
+			var gem := PrismMesh.new()
+			gem.size = Vector3(2.4 * vk, 3.2 * vk, 2.4 * vk)
+			var gc: Color = BUFF_COL[offer]
+			var gm := _fx_mat("solid", gc, 3.4)
+			(row["nodes"] as Array).append(_mi(self, gem, gm, Vector3(gx, arch_y + half_open + 2.4, rz)))
+		var sm := BoxMesh.new()
+		sm.size = Vector3(gw, 0.2, 1.4)
+		(row["nodes"] as Array).append(_mi(self, sm, _fx_mat("add", Color(col.r, col.g, col.b, 0.75)), Vector3(gx, terrain_h(gx, rz) + 0.2, rz)))
 		match zn:
 			"rush":
 				for vi in 2:
@@ -655,11 +746,9 @@ func _zone_at(z: float) -> String:
 	return String(_zone_by_j.get(int(floor(-z / ROW_GAP)), ""))
 
 
-func _build_chunk(j: int) -> MeshInstance3D:
-	var mi := super._build_chunk(j)
+func _chunk_post(j: int, mi: MeshInstance3D) -> void:
 	if Realms.is_realm(String(_zone_by_j.get(j, ""))):
 		mi.material_override = Realms.ground_material()          # a realm has its own ground, whatever theme is on
-	return mi
 
 
 func _ground_color(j: int, x: float, z: float, c: Color) -> Color:
@@ -704,6 +793,8 @@ func _roof_y(x: float, z: float, z0: float, lip: bool) -> float:
 func _realm_prop(x: float, z: float, s: float, solid: bool, obs: PackedFloat32Array) -> void:
 	var id := Realms.pick(_cur_zone, not solid, _rng)
 	var sc := s if solid else clampf(s * 0.2, 1.0, 2.6)
+	if _cur_zone == "mammoth":
+		sc *= 2.2 if not solid else 1.5                          # strange mammoth plants
 	if Realms.has_roof(_cur_zone):
 		var into := _gen_z0 - z                                   # metres into this stretch
 		if not solid and into < 42.0 and id != "stalag":
@@ -923,7 +1014,7 @@ func _update_ribbons() -> void:
 		_rib_im = ImmediateMesh.new()
 		_rib = MeshInstance3D.new()
 		_rib.mesh = _rib_im
-		var rm := StandardMaterial3D.new()                       # normal blending, not additive: additive washes out to white on bright snow
+		var rm := Mats.glass(true)                       # normal blending, not additive: additive washes out to white on bright snow
 		rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		rm.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -948,11 +1039,12 @@ func _update_ribbons() -> void:
 	var sx := spos.x + vel.x * 0.3
 	var sz := spos.z - 8.0
 	for g in row["gaps"]:
-		var zn: Dictionary = ZONES[String(g.get("leads", "rush"))]
-		var col: Color = zn.get("scol", zn["col"])
+		var col := Color(0.7, 1.0, 1.0)
+		if String(g.get("offer", "")) == _chain_expect_kind():
+			col = Color(1.0, 0.82, 0.25)
 		var chosen := is_same(g, _aim)
-		var a := 0.9 if chosen else (0.5 if _aim.is_empty() else 0.2)
-		var w := 1.5 if chosen else 0.9
+		var a := 0.95 if chosen else (0.7 if _aim.is_empty() else 0.4)
+		var w := 1.7 if chosen else 1.1
 		var gx: float = g["x"]
 		_rib_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 		var n := 18
@@ -1302,6 +1394,7 @@ func _fx_mat(kind: String, col: Color, energy: float = 1.8) -> StandardMaterial3
 		return _fxm[key]
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.disable_fog = true
 	m.albedo_color = col
 	if kind == "solid":
 		m.emission_enabled = true
@@ -1395,7 +1488,7 @@ func _food_mat(col: Color, glow: float = 0.35) -> StandardMaterial3D:
 	var key := "food_%s_%.2f" % [col.to_html(false), glow]
 	if _fxm.has(key):
 		return _fxm[key]
-	var m := StandardMaterial3D.new()
+	var m := Mats.lit()
 	m.albedo_color = col
 	m.roughness = 0.5
 	m.emission_enabled = true
@@ -1426,6 +1519,58 @@ func _cyl(r: float, h: float) -> CylinderMesh:
 ##   shield  ICE CREAM   a waffle cone with two scoops and a cherry
 ##   mult    CANDY       a wrapped sweet with twisted ends
 ##   donut   DONUT       pink frosting and sprinkles
+## More looks for the same four jobs: a speed item may be a burger, a pizza slice, a hot dog or a taco; ice cream a cone or a popsicle; candy a wrapped sweet, a lollipop or gumdrops;
+## a donut a donut or a cupcake. The colour still says what it does (orange speed, cyan ice, purple candy, pink donut), the shape is only for fun. True when a variant was built.
+func _food_variant(body: Node3D, t: String, vr: int) -> bool:
+	match t:
+		"boost":
+			if vr == 1:        # pizza slice
+				var sl := _fm(body, PrismMesh.new(), Color(1.0, 0.78, 0.25), Vector3(0, 0.0, 0), Vector3(1.0, 1.0, 1.0))
+				(sl.mesh as PrismMesh).size = Vector3(1.9, 2.2, 0.28)
+				sl.rotation.z = PI
+				for pi in 4:
+					_fm(body, _sphere_mesh(0.2), Color(0.8, 0.12, 0.1), Vector3(-0.35 + 0.28 * float(pi % 2) * 1.2, 0.55 - 0.4 * float(pi), 0.16), Vector3(1.0, 1.0, 0.4))
+				_fm(body, _cyl(1.0, 0.16), Color(0.85, 0.55, 0.2), Vector3(0, 0.95, 0), Vector3(1.0, 1.0, 0.5))
+				return true
+			if vr == 2:        # hot dog
+				_fm(body, _cyl(0.5, 2.1), Color(0.95, 0.7, 0.35), Vector3(0, -0.15, 0), Vector3(1.0, 1.0, 1.0)).rotation.z = PI * 0.5
+				_fm(body, _cyl(0.32, 2.4), Color(0.8, 0.28, 0.18), Vector3(0, 0.1, 0), Vector3(1.0, 1.0, 1.0)).rotation.z = PI * 0.5
+				_fm(body, _cyl(0.1, 2.2), Color(1.0, 0.85, 0.1), Vector3(0, 0.4, 0.0), Vector3(1.0, 1.0, 1.0)).rotation.z = PI * 0.5
+				return true
+			if vr == 3:        # taco
+				var shell := _fm(body, _torus(0.45, 1.0), Color(1.0, 0.8, 0.3), Vector3(0, 0, 0), Vector3(1.0, 0.7, 1.0))
+				shell.rotation.x = PI * 0.5
+				for ti in 5:
+					_fm(body, _sphere_mesh(0.22), [Color(0.4, 0.85, 0.2), Color(0.9, 0.2, 0.15), Color(1.0, 0.9, 0.3)][ti % 3], Vector3(-0.6 + 0.3 * float(ti), 0.5, 0.0), Vector3(1.0, 0.8, 1.0))
+				return true
+		"shield":
+			if vr == 1:        # popsicle
+				_fm(body, _cyl(0.12, 0.8), Color(0.9, 0.75, 0.5), Vector3(0, -1.0, 0), Vector3(1.0, 1.0, 1.0))
+				var pop := _fm(body, BoxMesh.new(), Color(0.5, 0.9, 1.0), Vector3(0, 0.1, 0), Vector3(1.0, 1.0, 1.0))
+				(pop.mesh as BoxMesh).size = Vector3(1.0, 1.7, 0.5)
+				_fm(body, _sphere_mesh(0.5), Color(0.5, 0.9, 1.0), Vector3(0, 0.95, 0), Vector3(1.0, 0.7, 0.5))
+				return true
+		"mult":
+			if vr == 1:        # lollipop
+				_fm(body, _cyl(0.08, 1.7), Color(1, 1, 1), Vector3(0, -0.7, 0), Vector3(1.0, 1.0, 1.0))
+				_fm(body, _sphere_mesh(0.85), Color(0.95, 0.25, 0.75), Vector3(0, 0.55, 0), Vector3(1.0, 1.0, 0.45))
+				var sw := _fm(body, _torus(0.45, 0.62), Color(1.0, 0.95, 0.4), Vector3(0, 0.55, 0.1), Vector3(1.0, 1.0, 1.0))
+				sw.rotation.x = PI * 0.5
+				return true
+			if vr == 2:        # gumdrops
+				var gc: Array = [Color(0.95, 0.25, 0.75), Color(0.3, 0.9, 1.0), Color(1.0, 0.85, 0.25)]
+				for gi in 3:
+					_fm(body, _sphere_mesh(0.48), gc[gi], Vector3(-0.7 + 0.7 * float(gi), -0.15 + 0.35 * float(gi % 2), 0), Vector3(1.0, 0.8, 1.0))
+				return true
+		"donut":
+			if vr == 1:        # cupcake
+				_fm(body, _cyl(0.7, 0.8), Color(0.75, 0.45, 0.25), Vector3(0, -0.45, 0), Vector3(1.0, 1.0, 1.0))
+				_fm(body, _sphere_mesh(0.8), Color(0.98, 0.45, 0.72), Vector3(0, 0.25, 0), Vector3(1.0, 0.85, 1.0))
+				_fm(body, _sphere_mesh(0.22), Color(0.9, 0.1, 0.15), Vector3(0, 0.95, 0), Vector3(1.0, 1.0, 1.0))
+				return true
+	return false
+
+
 func _make_item(t: String) -> Dictionary:
 	var col: Color = BUFF_COL[t]
 	var root := Node3D.new()
@@ -1437,7 +1582,10 @@ func _make_item(t: String) -> Dictionary:
 	var body := Node3D.new()
 	spin.add_child(body)
 	body.scale = Vector3(1.3, 1.3, 1.3)
-	match t:
+	var built := _food_variant(body, t, _fx_rng.randi() % 4)
+	match ("skip" if built else t):
+		"skip":
+			pass
 		"boost":
 			_fm(body, _sphere_mesh(1.0), Color(0.93, 0.62, 0.28), Vector3(0, -0.62, 0), Vector3(1.0, 0.42, 1.0))
 			_fm(body, _cyl(1.02, 0.3), Color(0.36, 0.18, 0.09), Vector3(0, -0.22, 0))
@@ -1617,8 +1765,154 @@ func _place_buffs(row: Dictionary, d: float, prev_rz: float, rz: float) -> void:
 			break
 
 
+# --------------------------------------------------------------------------
+# The chain. The game is about picking the right thing to go for, in the right order: CANDY (x2) first, because it multiplies what follows, then a BURGER (speed),
+# then a RAMP (the launch), then a FACE or a trick in the air. Each step taken in order within a few seconds raises the chain level (1 to 4), and every level makes the
+# next pickups, the launch and the points bigger. A different pickup still does its own job: it just does not raise the level and costs you nothing. ICE CREAM and DONUT
+# are the recovery items: they never break the chain and they buy a few seconds. The next step is marked on the item itself, so the choice is never a puzzle.
+# --------------------------------------------------------------------------
+const CHAIN_ORDER := ["mult", "boost", "ramp", "air"]
+const CHAIN_WINDOW := 9.0
+var chain_step: int = 0                   # index in CHAIN_ORDER of the thing to take next
+var chain_lvl: int = 0                    # 0 .. 4
+var _chain_t: float = 0.0                 # seconds left to take the next step before the chain drops
+var _chain_flash: float = 0.0
+
+
+func _chain_expect_kind() -> String:
+	return String(CHAIN_ORDER[chain_step])
+
+
+func _chain_k() -> float:
+	return 1.0 + 0.25 * float(chain_lvl)
+
+
+func _chain_hit(kind: String) -> void:
+	if kind == _chain_expect_kind():
+		chain_lvl = mini(chain_lvl + 1, 4)
+		chain_step = (chain_step + 1) % CHAIN_ORDER.size()
+		_chain_t = CHAIN_WINDOW
+		_chain_flash = 1.0
+	elif (kind == "shield" or kind == "donut") and chain_lvl > 0:
+		_chain_t = minf(_chain_t + 3.0, CHAIN_WINDOW + 3.0)
+
+
+## The arches say what the gate offers. The colour of the arch is where the gate leads (its realm), the gem on top is the item waiting in front of it (the item's own colour:
+## purple candy, orange burger, cyan ice cream, pink donut), and the arch that has the NEXT step of the chain turns gold and pulses.
+var _arch_hl_t: float = 0.0
+
+
+func _arch_highlight(delta: float) -> void:
+	_arch_hl_t -= delta
+	if _arch_hl_t > 0.0:
+		return
+	_arch_hl_t = 0.12
+	var want := _chain_expect_kind()
+	var pulse := 0.5 + 0.5 * sin(_age * 6.0)
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if not r["has_row"] or r["passed"]:
+			continue
+		if spos.z - float(r["z"]) > 260.0:
+			continue
+		for g in r["gaps"]:
+			var am: Variant = g.get("arch_mat", null)
+			if am == null or not is_instance_valid(am):
+				continue
+			var mat := am as StandardMaterial3D
+			if String(g.get("offer", "")) == want:
+				mat.albedo_color = Color(1.0, 0.82, 0.25)
+				mat.emission = Color(1.0, 0.78, 0.2)
+				mat.emission_energy_multiplier = 2.6 + 2.4 * pulse
+			else:
+				var bc: Color = g.get("arch_col", Color.WHITE)
+				mat.albedo_color = bc
+				mat.emission = bc
+				mat.emission_energy_multiplier = 2.4
+
+
+func _chain_tick(delta: float) -> void:
+	_chain_flash = maxf(_chain_flash - 2.0 * delta, 0.0)
+	_arch_highlight(delta)
+	if chain_lvl > 0:
+		_chain_t -= delta
+		if _chain_t <= 0.0:
+			chain_lvl = 0
+			chain_step = 0
+
+
+func _chain_color(i: int) -> Color:
+	match i:
+		0:
+			return BUFF_COL["mult"]
+		1:
+			return BUFF_COL["boost"]
+		2:
+			return Color(0.9, 0.95, 1.0)
+	return Color(1.0, 0.88, 0.3)
+
+
+## Where the next step of the chain is in the world (INF when it is not something you can see: the air step).
+func _chain_target_pos(kind: String) -> Vector3:
+	var best := Vector3.INF
+	var best_dz := 1.0e9
+	if kind == "mult" or kind == "boost":
+		for k in _rows:
+			for b in (_rows[k] as Dictionary)["buffs"]:
+				if b["taken"] or String(b["t"]) != kind or float(b.get("arm", 0.0)) > 0.0:
+					continue
+				var dz := spos.z - float(b["z"])
+				if dz < 6.0 or dz > 230.0 or dz >= best_dz:
+					continue
+				best_dz = dz
+				best = Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 4.2 + float(b.get("lift", 0.0)), float(b["z"]))
+	elif kind == "ramp":
+		for kk in _kickers:
+			var lipz: float = float(kk["z"]) - float(kk["len"])
+			var dz2 := spos.z - lipz
+			if dz2 < 6.0 or dz2 > 260.0 or dz2 >= best_dz:
+				continue
+			best_dz = dz2
+			best = Vector3(float(kk["x"]), terrain_h(float(kk["x"]), lipz) + 5.0, lipz)
+	return best
+
+
+## The chain on screen: four dots in order (the next one big and pulsing), a pip for each level, and a thin bar for the time left. No words. The next step is also ringed in the world.
+func _draw_chain(s: Vector2, k: float, m: float) -> void:
+	var cx0 := s.x * 0.5 - 60.0 * k
+	var cy0 := m + 34.0 * k
+	for i in 4:
+		var c := _chain_color(i)
+		var pos := Vector2(cx0 + float(i) * 40.0 * k, cy0)
+		if i == chain_step:
+			var rr := (11.0 + 2.5 * sin(_age * 8.0) + 5.0 * _chain_flash) * k
+			Draw2D.circle(_hud, pos, rr + 3.0 * k, Color(0, 0, 0, 0.6))
+			Draw2D.circle(_hud, pos, rr, Color(c.r, c.g, c.b, 1.0))
+		elif chain_lvl > 0 and i < chain_step:
+			Draw2D.circle(_hud, pos, 7.0 * k, Color(c.r, c.g, c.b, 0.9))
+		else:
+			Draw2D.circle(_hud, pos, 7.0 * k, Color(c.r, c.g, c.b, 0.3))
+	for li in 4:
+		var on := li < chain_lvl
+		_hud.draw_rect(Rect2(cx0 + (float(li) * 14.0 - 8.0) * k + 0.0, cy0 + 20.0 * k, 11.0 * k, 5.0 * k), Color(1.0, 0.85, 0.3, 0.95) if on else Color(1, 1, 1, 0.2))
+	if chain_lvl > 0:
+		var fw := 120.0 * k
+		_hud.draw_rect(Rect2(cx0 - 10.0 * k, cy0 + 29.0 * k, fw, 3.0 * k), Color(1, 1, 1, 0.15))
+		_hud.draw_rect(Rect2(cx0 - 10.0 * k, cy0 + 29.0 * k, fw * clampf(_chain_t / CHAIN_WINDOW, 0.0, 1.0), 3.0 * k), Color(1.0, 0.85, 0.3, 0.9))
+	var tp := _chain_target_pos(_chain_expect_kind())
+	if tp.is_finite() and not cam.is_position_behind(tp):
+		var sc := cam.unproject_position(tp)
+		if sc.x > 0.0 and sc.x < s.x and sc.y > 0.0 and sc.y < s.y:
+			var c2 := _chain_color(chain_step)
+			var pr := (24.0 + 4.0 * sin(_age * 8.0)) * k
+			Draw2D.arc(_hud, sc, pr, 0.0, TAU, 32, Color(0, 0, 0, 0.6), 7.0 * k)
+			Draw2D.arc(_hud, sc, pr, 0.0, TAU, 32, Color(c2.r, c2.g, c2.b, 0.95), 4.0 * k)
+			var tri := PackedVector2Array([sc + Vector2(0, -pr - 18.0 * k), sc + Vector2(-9.0 * k, -pr - 30.0 * k), sc + Vector2(9.0 * k, -pr - 30.0 * k)])
+			Draw2D.poly(_hud, tri, Color(c2.r, c2.g, c2.b, 0.95))
+
+
 func _gain(pts: int) -> void:
-	score += pts * (2 if _mult_t > 0.0 else 1)
+	score += int(float(pts) * (2.0 if _mult_t > 0.0 else 1.0) * _chain_k())
 
 
 func _tick_buffs(delta: float) -> void:
@@ -1855,10 +2149,10 @@ func _take_buff(b: Dictionary) -> void:
 	_flash = 0.25
 	match t:
 		"boost":
-			_boost_t = BOOST_S
+			_boost_t = BOOST_S + 0.8 * float(chain_lvl)
 			var fwd := Vector2(sin(heading), -cos(heading))
 			var sp0 := vel.length()
-			vel += fwd * 6.0
+			vel += fwd * (6.0 + 1.5 * float(chain_lvl))
 			if vel.length() > maxf(SPEED_CAP, sp0):
 				vel = vel.normalized() * maxf(SPEED_CAP, sp0)
 			_toast("BURGER BOOST!", BUFF_COL["boost"])
@@ -1868,7 +2162,7 @@ func _take_buff(b: Dictionary) -> void:
 			_toast("ICE SHIELD!", BUFF_COL["shield"])
 			Game.sfx(&"buff_shield")
 		"mult":
-			_mult_t = MULT_S
+			_mult_t = MULT_S + 2.0 * float(chain_lvl)
 			shown = "x2"
 			_toast("SUGAR RUSH x2!", BUFF_COL["mult"])
 			Game.sfx(&"buff_mult")
@@ -1877,6 +2171,7 @@ func _take_buff(b: Dictionary) -> void:
 			_gain(160)
 			_toast("DONUT!", BUFF_COL["donut"])
 			Game.sfx(&"loot")
+	_chain_hit(t)
 	_buff_pop(b, shown)
 	if is_same(_buff_tgt, b):
 		_buff_tgt = {}
@@ -1972,12 +2267,13 @@ func _update_buff_aim(delta: float) -> void:
 			if b["taken"] or float(b.get("arm", 0.0)) > 0.0:
 				continue
 			var dz := spos.z - float(b["z"])
-			if dz < 8.0 or dz > 95.0 or absf(float(b["x"]) - spos.x) > 0.34 * dz + 4.0:
+			var is_next := String(b["t"]) == _chain_expect_kind()
+			if dz < 8.0 or dz > (150.0 if is_next else 95.0) or absf(float(b["x"]) - spos.x) > (0.46 * dz + 6.0 if is_next else 0.34 * dz + 4.0):
 				continue
 			var wp := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.7 + float(b.get("lift", 0.0)), float(b["z"]))
 			if cam.is_position_behind(wp):
 				continue
-			var dd := absf(cam.unproject_position(wp).x - cx) / (0.1 * vs.x)
+			var dd := absf(cam.unproject_position(wp).x - cx) / (0.1 * vs.x * (1.6 if is_next else 1.0))
 			if is_same(b, _buff_tgt):
 				dd *= 0.7
 			if dd < best_d:
@@ -1989,7 +2285,7 @@ func _update_buff_aim(delta: float) -> void:
 			_buff_cand_t = 0.0
 		elif is_same(best, _buff_cand):
 			_buff_cand_t += delta
-			if _buff_cand_t >= AIM_LINGER:
+			if _buff_cand_t >= AIM_LINGER * (0.5 if String(best["t"]) == _chain_expect_kind() else 1.0):
 				_buff_tgt = best
 				_buff_cand = {}
 				_buff_cand_t = 0.0
@@ -2232,11 +2528,11 @@ func _guard_path(delta: float, s_in: float) -> float:
 			var px := spos.x + vel.x * 0.7 + s_in * 4.0
 			var bd2 := 1.0e9
 			for g in row["gaps"]:
-				var dd := absf(float(g["x"]) - px) * (0.6 if is_same(g, _wall_gap) else 1.0)
-				if _eye_on and absf(_steer_gaze) > 0.2 and signf(float(g["x"]) - spos.x) == signf(_steer_gaze):
-					dd *= lerpf(1.0, 0.55, _a())
+				var dd := absf(float(g["x"]) - px) * (0.85 if is_same(g, _wall_gap) else 1.0)
+				if _eye_on and absf(_steer_gaze) > 0.12 and signf(float(g["x"]) - spos.x) == signf(_steer_gaze):
+					dd *= lerpf(1.0, 0.3, _a())                  # a look to one side is a strong vote for the gates on that side, however far they are
 				if _intent_amt > 0.2 and signf(float(g["x"]) - spos.x) == _intent_dir:
-					dd *= lerpf(1.0, 0.5, _intent_amt)          # a look to one side is a vote for the gates on that side, even when it is too rough to pick one
+					dd *= lerpf(1.0, 0.35, _intent_amt)          # a look to one side is a vote for the gates on that side, even when it is too rough to pick one
 				if dd < bd2:
 					bd2 = dd
 					tgt = g
@@ -2287,6 +2583,13 @@ func _guard_path(delta: float, s_in: float) -> float:
 					_toast("EASING OFF TO MAKE IT", Color(0.8, 0.9, 1.0))          # the help says so when it does more than a carve
 		var yield_to_buff := _buff_w * clampf((bd - (wall_near + 8.0)) / 10.0, 0.0, 1.0)       # a buff you are looking at wins until the barrier is close
 		add += w * want * (1.0 - 0.6 * absf(s_in)) * (1.0 - 0.85 * yield_to_buff)
+		# a last-moment save: the gate you chose is about to be missed by a few metres, so the board is nudged the rest of the way (never from far off: that is the carve's job above)
+		if eyes_chose and bd < 38.0 and spd_w > 1.0:
+			var xp := spos.x + vel.x * (bd / spd_w)
+			var inner := maxf(float(tgt["w"]) * 0.5 - 1.8, 1.0)
+			var over := absf(xp - float(tgt["x"])) - inner
+			if over > 0.0 and over < 9.0:
+				add += signf(float(tgt["x"]) - xp) * clampf(over / 5.0, 0.0, 1.0) * 0.55 * (1.0 - 0.6 * absf(s_in))
 		gate_done = true
 	if not gate_done:
 		add += carve_assist * _assist_conf() * _aim_w * _aim_want * (1.0 - 0.6 * absf(s_in))
@@ -2315,7 +2618,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 			_swerve_idle += delta
 			if _swerve_idle > 0.6:
 				_swerving = false
-	return add + av
+	return add + av + _ball_evade() * (1.0 - 0.5 * absf(s_in))
 
 
 var _rs: float = 1.0                 # 3D render scale: the game and the face model share one GPU, so the game gives up pixels before the tracker starves
@@ -2349,7 +2652,7 @@ func _render_governor(delta: float) -> void:
 			# the last drop in resolution bought less than 12% more frames: the game is not pixel-bound, so stop trading looks for nothing
 			_rs = 1.0
 			_rs_off = true
-			get_viewport().scaling_3d_scale = 1.0
+			RScale.set_scale(get_viewport(), 1.0)
 			_log_ev("render scale did not raise the frame rate (%d fps): back to full" % int(f))
 			return
 		_rs_drop_fps = f
@@ -2357,14 +2660,14 @@ func _render_governor(delta: float) -> void:
 	elif f > 57.0:
 		_rs = minf(_rs + 0.05, 1.0)
 		_rs_drop_fps = 0.0
-	get_viewport().scaling_3d_scale = _rs
+	RScale.set_scale(get_viewport(), _rs)
 
 
 func _exit_tree() -> void:
 	Engine.time_scale = 1.0
 	var vp := get_viewport()
 	if vp != null:
-		vp.scaling_3d_scale = 1.0
+		RScale.set_scale(vp, 1.0)
 
 
 func _physics_process(delta: float) -> void:
@@ -2401,7 +2704,7 @@ func _physics_process(delta: float) -> void:
 	var eye_s := _eye_lp
 	# A webcam gaze is a slow, noisy signal (a few percent of the screen of jitter), so the eyes CHOOSE the opening and the board carves to it; free steering from the
 	# raw look only trims (0.6 with nothing chosen, 0.15 once an opening is locked).
-	var eye_gain := lerpf(0.6, 0.15, _aim_w) * lerpf(1.0, 0.5, _a() * _aim_w)
+	var eye_gain := lerpf(0.7, 0.35, _aim_w) * lerpf(1.0, 0.6, _a() * _aim_w)
 	var s_in := key + (eye_s * eye_gain if _eye_on else clampf(pk.x / 1.8, -1.0, 1.0))
 	if _eye_on:
 		s_in += _intent_dir * _intent_amt * 0.38                     # the board starts toward a look at once; the settled gaze and the chosen gate take over
@@ -2425,14 +2728,14 @@ func _physics_process(delta: float) -> void:
 		steer = 0.0
 	var prev_ss := _steer_s
 	_steer_s = lerpf(_steer_s, steer, 1.0 - exp(-steer_rate * delta))
-	_steer_s = move_toward(prev_ss, _steer_s, lerpf(12.0, 5.0, _a()) * delta)          # the wheel cannot be whipped: a smooth sweep, whatever the eyes do
+	_steer_s = move_toward(prev_ss, _steer_s, lerpf(10.0, 4.5, _a()) * delta)          # the wheel cannot be whipped: a smooth sweep, whatever the eyes do (slower than before: the board waggled)
 	steer = _steer_s
 	var tuck := nod_p < -0.10 and not _finished
 	tucking = tuck and grounded
 	braking = false
 	gliding = false
 	var theta_t := steer * THETA_MAX
-	heading += (theta_t - heading) * (1.0 - exp(-delta / (0.18 if grounded else 0.35)))
+	heading += (theta_t - heading) * (1.0 - exp(-delta / (0.22 if grounded else 0.4)))
 	var fwd := Vector2(sin(heading), -cos(heading))
 	var right := Vector2(cos(heading), sin(heading))
 	var prev := spos
@@ -2497,6 +2800,8 @@ func _physics_process(delta: float) -> void:
 	_update_eye_actions(delta)
 	_update_pads()
 	_update_ramps(delta)
+	_vortex_drive(delta)
+	_chain_tick(delta)
 	_update_balls(delta)
 	_update_tricks(delta, key, pk)
 	_animate_buffs()
@@ -2504,8 +2809,11 @@ func _physics_process(delta: float) -> void:
 	if not _finished and spos.z <= finish_z:
 		_finish()
 	if _gate_open and int(float(_next_j) * ROW_GAP) < int(-spos.z + AHEAD):
+		_gen_sliced = true
 		_gen_segment(_next_j)
+		_gen_sliced = false
 		_next_j += 1
+	_chunk_pump()
 	_cleanup()
 	_pf_phys = _pf(_pf_phys, pf0)
 
@@ -2583,7 +2891,7 @@ func _ring_bell(ox: float, oz: float, orad: float) -> void:
 		return
 	var n := MeshInstance3D.new()
 	n.mesh = _m_rock
-	var mat := StandardMaterial3D.new()
+	var mat := Mats.lit()
 	mat.albedo_color = Color(0.75, 0.82, 0.95)
 	mat.metallic = 0.9
 	mat.roughness = 0.25
@@ -2658,6 +2966,9 @@ func _update_rows() -> void:
 					if absf(spos.x - float(g2["x"])) < bdx:
 						bdx = absf(spos.x - float(g2["x"]))
 						via = g2
+			Telemetry.barrier({"row": int(r["j"]), "gaps": (r["gaps"] as Array).size(), "hit": not chosen.is_empty() and not bool(r["crash"]), "eyes": _eye_on, "locked": r.has("eyes_gap") and not (r["eyes_gap"] as Dictionary).is_empty(),
+				"mine": is_same(r.get("eyes_gap", {}), chosen), "dx": snappedf(spos.x - float(via["x"]) if not via.is_empty() else 0.0, 0.1), "spd": int(vel.length()), "zone": String(r.get("zone", "")),
+				"cur": snappedf(_cursor_px.x / maxf(get_viewport().get_visible_rect().size.x, 1.0), 0.01), "chain": chain_lvl})
 			if not via.is_empty():
 				_pending_zone = String(via.get("leads", ""))
 				_pending_bend = float(via.get("bend", 0.0))
@@ -2722,6 +3033,7 @@ func _finish() -> void:
 
 
 func _restart() -> void:
+	_guide_done = false
 	ag = {"eyes": 0, "auto": 0, "wrong": 0, "in": 0.0, "as": 0.0, "eng": 0.0, "idle": 0.0}
 	_engage = 1.0
 	_idle_t = 0.0
@@ -2773,6 +3085,9 @@ func _restart() -> void:
 	shield = 0
 	_boost_t = 0.0
 	_mult_t = 0.0
+	chain_lvl = 0
+	chain_step = 0
+	_chain_t = 0.0
 	buffs_spawned = 0
 	buffs_got = 0
 	buff_log = {}
@@ -2891,6 +3206,45 @@ func _can_eat() -> bool:
 	return (not eat_enabled) or wide_override or _age - _wide_last < 0.5
 
 
+## Snowballs are things to get away from, not things to look at. Two things do that for you: the board slips out of the way of a ball that is about to hit (a smooth sideways push, stronger the
+## closer it gets, like it does for trees), and ducking your chin still braces. You can also outrun it (a burger) or carve away yourself. Returns the sideways steering to add.
+func _ball_evade() -> float:
+	var best := 0.0
+	var best_w := 0.0
+	for b in _balls:
+		if b["done"]:
+			continue
+		var dz0 := spos.z - float(b["z"])
+		if dz0 < -6.0 or dz0 > 70.0:
+			continue
+		var dmin := 1.0e9
+		var tmin := 0.0
+		var side := 0.0
+		var tau := 0.15
+		while tau <= 2.6:
+			var px := spos.x + vel.x * tau
+			var pz := spos.z + vel.y * tau
+			var qx := float(b["x"]) + float(b["vx"]) * tau
+			var qz := float(b["z"]) + float(b["vz"]) * tau
+			var d := Vector2(px - qx, pz - qz).length()
+			if d < dmin:
+				dmin = d
+				tmin = tau
+				side = px - qx
+			tau += 0.15
+		var reach := BALL_R + 1.1 + 3.2
+		if dmin >= reach:
+			continue
+		if absf(side) < 0.6:
+			side = -signf(float(b["vx"])) if float(b["vx"]) != 0.0 else (1.0 if spos.x < 0.0 else -1.0)           # dead on: go the way the ball came from, there is room behind it
+		var urgency := clampf(1.9 / maxf(tmin, 0.4), 0.35, 1.0)
+		var w := (1.0 - dmin / reach) * urgency
+		if w > best_w:
+			best_w = w
+			best = signf(side) * clampf(0.25 + 0.75 * w, 0.0, 0.95)
+	return best if (avoid_enabled and not _braced()) else 0.0
+
+
 func _braced() -> bool:
 	return squint_override or _age - _squint_last < 0.45
 
@@ -2898,7 +3252,7 @@ func _braced() -> bool:
 func _update_eye_actions(delta: float) -> void:
 	if _wide_now():
 		_wide_last = _age
-	var sq := _squint_now()
+	var sq := squint_override                                            # blinking and squinting with your eyes no longer brace (it did not feel right); a chin duck does. Only the test switch counts here.
 	var tk := nod_p < -0.10                                              # ducking your chin braces too: it is the one signal that is always reliable
 	_squinting_now = (sq or tk) and not _balls.is_empty()               # only means something while a snowball is about: a stray one costs nothing
 	if _squinting_now:
@@ -3110,6 +3464,72 @@ var trick_charge_override: bool = false
 
 
 ## On a ramp, tuck (chin down, or S) to charge; the pop at the lip is bigger the longer you held it. Or just ride the pads and let the ramp do the work.
+# --------------------------------------------------------------------------
+# The jump vortex: a swirl hanging over the base of every ramp. Come near it and an invisible suction lines you up with the ramp and speeds you up to launch speed by itself, so
+# the ramp is something you pick (look at the swirl: it reaches much further to the side) and not something you have to steer onto. No boost pad is needed.
+# --------------------------------------------------------------------------
+const VX_LAUNCH := 46.0                   # m/s the vortex brings you to by the lip
+const VX_ACCEL := 34.0
+var _vx_spin: float = 0.0
+var _vx_active_t: float = 0.0
+
+
+func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bool) -> void:
+	var col := Color(0.95, 0.35, 1.0) if not epic else Color(0.3, 0.9, 1.0)
+	var rings: Array = []
+	for ri in 4:
+		var tm := TorusMesh.new()
+		tm.inner_radius = 2.2 - 0.45 * float(ri)
+		tm.outer_radius = 2.7 - 0.45 * float(ri)
+		var node := _mi(self, tm, _fx_mat("add", Color(col.r, col.g, col.b, 0.8 - 0.12 * float(ri))), Vector3(kx, terrain_h(kx, kz + 8.0) + 5.0, kz + 8.0))
+		node.rotation.x = PI * 0.5
+		node.scale = Vector3(1.0 + 0.55 * float(ri), 1.0 + 0.55 * float(ri), 1.0)
+		(row["nodes"] as Array).append(node)
+		rings.append(node)
+	k["vx"] = rings
+	k["vx_col"] = col
+
+
+## Per physics frame: spin the swirls and, when you are in reach of one, pull you onto the ramp and up to launch speed.
+func _vortex_drive(delta: float) -> void:
+	_vx_spin += delta
+	var vs := get_viewport().get_visible_rect().size
+	var cx := _aim_cx if _aim_cx >= 0.0 else _cursor_px.x
+	var active := false
+	for k in _kickers:
+		var rings: Variant = k.get("vx", null)
+		var kx: float = float(k["x"])
+		var kz: float = float(k["z"])
+		var lipz: float = kz - float(k["len"])
+		var dz := spos.z - kz
+		if rings != null and dz < 260.0 and dz > -40.0:
+			var gi := 0
+			for rn in (rings as Array):
+				if is_instance_valid(rn):
+					(rn as Node3D).rotation.y = _vx_spin * (2.2 + 0.7 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)
+				gi += 1
+		if dz > 70.0 or spos.z < lipz or not grounded:
+			continue
+		# reach: a little way either side of the ramp, much more when you are looking at the swirl
+		var wp := Vector3(kx, terrain_h(kx, kz + 8.0) + 5.0, kz + 8.0)
+		var looking := false
+		if not cam.is_position_behind(wp):
+			looking = _eye_on and absf(cam.unproject_position(wp).x - cx) < 0.13 * vs.x
+		var reach := float(k["w"]) * 0.5 + (16.0 if looking else 3.5)
+		var dx := kx - spos.x
+		if absf(dx) > reach:
+			continue
+		active = true
+		vel.x += clampf(dx * 1.8, -10.0, 10.0) * delta * (1.0 - clampf(absf(dx) / reach, 0.0, 0.8))
+		var fwd_sp := -vel.y
+		if fwd_sp < VX_LAUNCH:
+			vel.y -= minf(VX_ACCEL * delta, VX_LAUNCH - fwd_sp)
+	if active:
+		_vx_active_t = 0.25
+	else:
+		_vx_active_t = maxf(_vx_active_t - delta, 0.0)
+
+
 func _update_ramps(delta: float) -> void:
 	var on_ramp := false
 	var crossed := false
@@ -3128,6 +3548,8 @@ func _update_ramps(delta: float) -> void:
 	elif not crossed:
 		_ramp_charge = move_toward(_ramp_charge, 0.0, delta * (0.6 if on_ramp else 2.5))
 	if crossed:
+		vy += 1.5 * float(chain_lvl)                      # a longer chain launches harder
+		_chain_hit("ramp")
 		if _ramp_charge > 0.15:
 			vy += 3.0 * _ramp_charge
 			pops_done += 1
@@ -3412,6 +3834,7 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 		if air:
 			rise *= sky_rise                                   # air stretches throw you at the sky
 		_kickers.append({"x": kx, "z": kz, "len": KICK_LEN, "w": KICK_W, "rise": rise, "epic": epic})
+		_make_vortex(row, _kickers[_kickers.size() - 1], kx, kz, epic)
 		kick_log.append("%.0f/%.0f%s" % [kz, kx, "E" if epic else ""])
 		row["kick"] = {"x": kx, "z": kz, "lip": lipz, "epic": epic}
 		kickers_built += 1
@@ -3437,11 +3860,7 @@ func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz:
 			(row["nodes"] as Array).append(pn)
 			var flag := _mi(pn, _quad(1.4 if not epic else 2.2), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, pole.height * 0.42, 0.0))
 			flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var pad_n := 0
-		for pz in ([kz + 26.0, kz + 10.0, kz - KICK_LEN * 0.5, lipz + 4.0] if air else [kz + 10.0, kz - KICK_LEN * 0.5, lipz + 4.0]):
-			if air or (pad_n == 0 and pz == lipz + 4.0) or _rng.randf() < 0.65:
-				_make_pad(row, kx, pz, true)
-				pad_n += 1
+		# no boost pads on a ramp any more: the vortex does that job, and boosts live in the pickups
 		if epic or _rng.randf() < 0.8:
 			var trail: Array = [Vector2(kx, kz + 18.0), Vector2(kx, kz + 10.0), Vector2(kx, kz + 2.0)]
 			_spawn_buff(row, _pick_buff(true), kx, lipz - 9.0, trail, "air", 2.4)
@@ -3679,11 +4098,12 @@ func _add_move(id: String) -> void:
 	if _air_moves.has(id):
 		return
 	_air_moves.append(id)
+	_chain_hit("air")
 	var nm := ""
 	if id.begins_with("face_") and FACES.has(id.substr(5)):
 		nm = String(FACES[id.substr(5)]["name"])
 		Game.sfx(&"honk" if _fx_rng.randf() < 0.5 else &"boing")
-		_toast("+%d  %s" % [int(FACES[id.substr(5)]["pts"]), nm], Color(1.0, 0.85, 0.3))
+		_toast("+%d  %s" % [int(FACES[id.substr(5)]["pts"]), nm], Color(1.0, 0.85, 0.3), "face")
 	match id:
 		"shake":
 			nm = _pick(SHAKE_NAMES)
@@ -4010,12 +4430,111 @@ func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
 			continue
 		var sp2 := cam.unproject_position(wp)
 		var dist := maxf(spos.z - float(b2["z"]), 0.0)
-		var near := dist < 30.0
-		var t2 := "DUCK / SQUINT!" if near and not _braced() else ("BRACED" if near else "SNOWBALL")
-		var c2 := Color(1.0, 0.55, 0.4) if near and not _braced() else Color(0.8, 0.95, 1.0)
-		var w2 := font.get_string_size(t2, HORIZONTAL_ALIGNMENT_LEFT, -1, int(24.0 * k)).x
-		_text(font, sp2 + Vector2(-w2 * 0.5, 0.0), t2, 24, c2)
-		_hud.draw_arc(sp2 + Vector2(0, 40.0 * k), 22.0 * k, 0.0, TAU, 24, Color(c2.r, c2.g, c2.b, 0.8), 3.0 * k)
+		var near := dist < 45.0
+		var c2 := Color(1.0, 0.45, 0.3) if near and not _braced() else Color(0.8, 0.95, 1.0)
+		var tri := PackedVector2Array([sp2 + Vector2(0, -22.0 * k), sp2 + Vector2(-18.0 * k, 10.0 * k), sp2 + Vector2(18.0 * k, 10.0 * k)])
+		Draw2D.poly(_hud, tri, Color(c2.r, c2.g, c2.b, 0.9))
+		_hud.draw_rect(Rect2(sp2 + Vector2(-2.5 * k, -10.0 * k), Vector2(5.0 * k, 11.0 * k)), Color(0.1, 0.05, 0.05, 0.95))
+		if near and not _braced():
+			var away := signf(spos.x - float(b2["x"]))
+			if away == 0.0:
+				away = 1.0
+			for ci in 2:
+				var ax := sp2.x + away * (30.0 + 16.0 * float(ci)) * k
+				var ay := sp2.y - 4.0 * k
+				_hud.draw_line(Vector2(ax, ay) + Vector2(-away * 8.0 * k, -10.0 * k), Vector2(ax, ay), Color(1, 1, 1, 0.9 - 0.3 * float(ci)), 4.0 * k)
+				_hud.draw_line(Vector2(ax, ay) + Vector2(-away * 8.0 * k, 10.0 * k), Vector2(ax, ay), Color(1, 1, 1, 0.9 - 0.3 * float(ci)), 4.0 * k)
+
+
+## A simple picture of each face the game asks for, so the prompt can be read at a glance: a round face with the one feature that matters drawn big.
+func _face_icon(c: Vector2, r: float, kind: String) -> void:
+	var skin := Color(1.0, 0.88, 0.3)
+	var ink := Color(0.12, 0.08, 0.05)
+	var white := Color(1, 1, 1)
+	var red := Color(0.95, 0.25, 0.3)
+	Draw2D.circle(_hud, c, r + 3.0, Color(0, 0, 0, 0.75))
+	Draw2D.circle(_hud, c, r, skin)
+	var ex := r * 0.36
+	var ey := -r * 0.22
+	var ew := r * 0.9
+	match kind:
+		"tongue":
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.1, ink)
+			_hud.draw_rect(Rect2(c + Vector2(-r * 0.42, r * 0.22), Vector2(r * 0.84, r * 0.14)), ink)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.52), r * 0.22, red)
+			_hud.draw_rect(Rect2(c + Vector2(-r * 0.22, r * 0.26), Vector2(r * 0.44, r * 0.26)), red)
+		"smile":
+			for sx in [-1.0, 1.0]:
+				Draw2D.arc(_hud, c + Vector2(float(sx) * ex, ey + r * 0.08), r * 0.14, PI, TAU, 10, ink, r * 0.07)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.02), r * 0.62, 0.12 * PI, 0.88 * PI, 20, ink, r * 0.09)
+		"shock":
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.2, white)
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.08, ink)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.45), r * 0.2, ink)
+		"pain":
+			for sx in [-1.0, 1.0]:
+				var p0 := c + Vector2(float(sx) * ex, ey)
+				_hud.draw_line(p0 + Vector2(-r * 0.14, -r * 0.14), p0 + Vector2(r * 0.14, r * 0.14), ink, r * 0.08)
+				_hud.draw_line(p0 + Vector2(-r * 0.14, r * 0.14), p0 + Vector2(r * 0.14, -r * 0.14), ink, r * 0.08)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.75), r * 0.42, 1.18 * PI, 1.82 * PI, 16, ink, r * 0.09)
+		"wide":
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.27, white)
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.1, ink)
+			_hud.draw_line(c + Vector2(-r * 0.3, r * 0.5), c + Vector2(r * 0.3, r * 0.5), ink, r * 0.07)
+		"cross":
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.24, white)
+				Draw2D.circle(_hud, c + Vector2(float(sx) * (ex - r * 0.14), ey), r * 0.09, ink)
+			_hud.draw_line(c + Vector2(-r * 0.3, r * 0.5), c + Vector2(r * 0.3, r * 0.5), ink, r * 0.07)
+		"squint":
+			_hud.draw_line(c + Vector2(ex - r * 0.16, ey), c + Vector2(ex + r * 0.16, ey), ink, r * 0.09)
+			Draw2D.circle(_hud, c + Vector2(-ex, ey), r * 0.24, ink)
+			_hud.draw_line(c + Vector2(-r * 0.95, -r * 0.5), c + Vector2(r * 0.7, -r * 0.05), ink, r * 0.06)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.4), r * 0.3, 0.1 * PI, 0.9 * PI, 12, ink, r * 0.07)
+		"puff":
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.1, ink)
+				Draw2D.circle(_hud, c + Vector2(float(sx) * r * 0.62, r * 0.28), r * 0.3, skin.lightened(0.15))
+				Draw2D.arc(_hud, c + Vector2(float(sx) * r * 0.62, r * 0.28), r * 0.3, 0.0, TAU, 14, ink, r * 0.05)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.4), r * 0.1, ink)
+		"kiss":
+			for sx in [-1.0, 1.0]:
+				Draw2D.arc(_hud, c + Vector2(float(sx) * ex, ey + r * 0.06), r * 0.14, PI, TAU, 10, ink, r * 0.07)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.42), r * 0.17, red)
+			Draw2D.circle(_hud, c + Vector2(r * 0.62, -r * 0.5), r * 0.14, red)
+			Draw2D.circle(_hud, c + Vector2(r * 0.84, -r * 0.5), r * 0.14, red)
+		"sneer":
+			Draw2D.circle(_hud, c + Vector2(-ex, ey), r * 0.1, ink)
+			Draw2D.circle(_hud, c + Vector2(ex, ey), r * 0.1, ink)
+			_hud.draw_line(c + Vector2(-ex - r * 0.2, ey - r * 0.2), c + Vector2(-ex + r * 0.2, ey - r * 0.08), ink, r * 0.08)
+			_hud.draw_line(c + Vector2(ex - r * 0.2, ey - r * 0.08), c + Vector2(ex + r * 0.2, ey - r * 0.22), ink, r * 0.08)
+			_hud.draw_line(c + Vector2(-r * 0.4, r * 0.5), c + Vector2(r * 0.1, r * 0.48), ink, r * 0.08)
+			_hud.draw_line(c + Vector2(r * 0.1, r * 0.48), c + Vector2(r * 0.42, r * 0.3), ink, r * 0.08)
+		"crazy":
+			for sx in [-1.0, 1.0]:
+				var p1 := c + Vector2(float(sx) * ex, ey)
+				Draw2D.circle(_hud, p1, r * 0.25, white)
+				Draw2D.arc(_hud, p1, r * 0.17, 0.0, 1.5 * TAU, 16, ink, r * 0.05)
+				Draw2D.arc(_hud, p1, r * 0.08, 0.0, 1.5 * TAU, 10, ink, r * 0.05)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.35), r * 0.4, 0.1 * PI, 0.9 * PI, 16, ink, r * 0.08)
+		"shake":
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.1, ink)
+			_hud.draw_line(c + Vector2(-r * 0.3, r * 0.45), c + Vector2(r * 0.3, r * 0.45), ink, r * 0.07)
+			for sx2 in [-1.0, 1.0]:
+				var tip := c + Vector2(float(sx2) * r * 1.5, 0.0)
+				_hud.draw_line(c + Vector2(float(sx2) * r * 1.1, 0.0), tip, white, r * 0.1)
+				_hud.draw_line(tip, tip + Vector2(-float(sx2) * r * 0.22, -r * 0.2), white, r * 0.1)
+				_hud.draw_line(tip, tip + Vector2(-float(sx2) * r * 0.22, r * 0.2), white, r * 0.1)
+		_:
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * ex, ey), r * 0.1, ink)
+			_hud.draw_line(c + Vector2(-r * 0.3, r * 0.45), c + Vector2(r * 0.3, r * 0.45), ink, r * 0.07)
+	if ew < 0.0:
+		return
 
 
 func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
@@ -4025,14 +4544,17 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 		var by := s.y * 0.8
 		_hud.draw_rect(Rect2(bx, by, bw, 14.0 * k), Color(0.05, 0.1, 0.2, 0.6))
 		_hud.draw_rect(Rect2(bx, by, bw * _ramp_charge, 14.0 * k), Color(1.0, 0.7 + 0.25 * _ramp_charge, 0.2, 0.95))
-		_ctext(font, by - 8.0 * k, "CHARGING: pop at the lip" if _ramp_charge < 0.95 else "FULL CHARGE!", 22, Color(1, 1, 1, 0.9))
+		_ctext(font, by - 8.0 * k, "pop at the lip" if _ramp_charge < 0.95 else "FULL CHARGE", 16, Color(1, 1, 1, 0.8))
 	if face_kind != "":
 		var fk2 := _hud_scale()
 		var pulse := 1.0 + 0.06 * sin(_age * 14.0)
-		var py := s.y * 0.22
-		_hud.draw_rect(Rect2(0.0, py - 44.0 * fk2, s.x, 140.0 * fk2), Color(0.6, 0.1, 0.45, 0.35))
-		_ctext(font, py, face_open, int(26.0 * pulse), Color(1.0, 1.0, 1.0, 0.95))
-		_ctext(font, py + 50.0 * fk2, String(FACES[face_kind]["say"]), int(46.0 * pulse), Color(1.0, 0.92, 0.3, 1.0))
+		var py := s.y * 0.12
+		_hud.draw_rect(Rect2(0.0, py - 34.0 * fk2, s.x, 156.0 * fk2), Color(0.6, 0.1, 0.45, 0.4))
+		_ctext(font, py, face_open, int(24.0 * pulse), Color(1.0, 1.0, 1.0, 0.95))
+		var say := String(FACES[face_kind]["say"])
+		var sw := font.get_string_size(say, HORIZONTAL_ALIGNMENT_LEFT, -1, int(58.0 * pulse * fk2)).x
+		_ctext(font, py + 58.0 * fk2, say, int(58.0 * pulse), Color(1.0, 0.92, 0.3, 1.0))
+		_face_icon(Vector2(s.x * 0.5 - sw * 0.5 - 64.0 * fk2, py + 38.0 * fk2), 40.0 * fk2, face_kind)
 		var fw := 260.0 * fk2
 		var fx := s.x * 0.5 - fw * 0.5
 		_hud.draw_rect(Rect2(fx, py + 66.0 * fk2, fw, 10.0 * fk2), Color(0.05, 0.05, 0.1, 0.6))
@@ -4041,7 +4563,7 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 	if _trk_text_t > 0.0 and _trk_text != "":
 		var a := clampf(_trk_text_t / 0.5, 0.0, 1.0)
 		var big := _trk_text_t > 0.3 and not _in_air
-		var ty := s.y * (0.27 if big else 0.34)
+		var ty := s.y * (0.52 if big else 0.58)
 		if _trk_burst_t > 0.0:
 			var u := 1.0 - _trk_burst_t / 0.7
 			var rad := (150.0 + 90.0 * u) * k
@@ -4051,10 +4573,8 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 				var ang := float(si) * TAU / 24.0 + _age * 0.8
 				var rr := rad * (1.0 if si % 2 == 0 else 0.62)
 				pts.append(c0 + Vector2(cos(ang), sin(ang)) * rr)
-			_hud.draw_colored_polygon(pts, Color(1.0, 0.45, 0.1, 0.55 * clampf(_trk_burst_t / 0.4, 0.0, 1.0)))
-		_ctext(font, ty, _trk_text, 46 if big else 30, Color(1.0, 0.88, 0.35, a))
-		if _trk_comment_t > 0.0 and _trk_comment != "":
-			_ctext(font, ty + 52.0 * k, _trk_comment, 24, Color(1.0, 1.0, 1.0, clampf(_trk_comment_t / 0.5, 0.0, 1.0)))
+			Draw2D.poly(_hud, pts, Color(1.0, 0.45, 0.1, 0.55 * clampf(_trk_burst_t / 0.4, 0.0, 1.0)))
+		_ctext(font, ty, _trk_text, 28 if big else 22, Color(1.0, 0.88, 0.35, a * 0.9))
 	var mrect2 := _menu_rect()
 	_hud.draw_rect(mrect2, Color(0.8, 0.3, 0.3, 0.7) if _menu_arm_t > 0.0 else Color(0.05, 0.12, 0.25, 0.5))
 	_text(font, mrect2.position + Vector2(6.0 * k, 21.0 * k), "SURE?" if _menu_arm_t > 0.0 else "MENU", 18, Color(1, 1, 1, 0.9))
@@ -4107,7 +4627,7 @@ func _update_aim(delta: float) -> void:
 	var vs := get_viewport().get_visible_rect().size
 	if _aim_cx < 0.0:
 		_aim_cx = _cursor_px.x
-	_aim_cx = lerpf(_aim_cx, _cursor_px.x, 1.0 - exp(-delta / 0.18))
+	_aim_cx = lerpf(_aim_cx, _cursor_px.x, 1.0 - exp(-delta / 0.10))
 	var cx := _aim_cx
 	var best: Dictionary = {}
 	var best_d := 1.0e9
@@ -4123,18 +4643,21 @@ func _update_aim(delta: float) -> void:
 		if dd < best_d:
 			best_d = dd
 			best = g
-	if best_d >= 1.0 and absf(_steer_gaze) > 0.5:
-		# a hard look to one side with no gate under it: the outermost gate on that side. The far ones are always reachable this way, however small they are on screen.
-		var side := signf(_steer_gaze)
-		var far_g: Dictionary = {}
-		var far_d := 6.0
+	if best_d >= 1.0:
+		# no gate under the gaze point: the gate nearest to where you are looking, whichever it is. The far ones stay reachable this way, however small they are on screen, and a gaze that is
+		# a bit off or noisy no longer sends you to the outermost gate on one side.
+		var zg: Dictionary = {}
+		var zgd := 1.0e9
 		for g2 in row["gaps"]:
-			var dx2 := (float(g2["x"]) - spos.x) * side
-			if dx2 > far_d:
-				far_d = dx2
-				far_g = g2
-		if not far_g.is_empty():
-			best = far_g
+			var zsc := _gap_screen(row, g2)
+			if zsc.is_empty():
+				continue
+			var zdx := absf((zsc["c"] as Vector2).x - cx)
+			if zdx < zgd:
+				zgd = zdx
+				zg = g2
+		if not zg.is_empty():
+			best = zg
 			best_d = 0.9
 	if best_d < 1.0:
 		if is_same(best, _aim):
@@ -4284,12 +4807,197 @@ func _draw_pops(font: Font, s: Vector2, k: float) -> void:
 		var u := clampf(float(pp["t"]) / 0.8, 0.0, 1.0)
 		var e := 1.0 - pow(1.0 - u, 3.0)
 		var c2: Color = pp["col"]
-		_hud.draw_arc(sc, (14.0 + 120.0 * e) * k, 0.0, TAU, 32, Color(c2.r, c2.g, c2.b, 1.0 - u), 5.0 * k * (1.0 - u) + 1.0)
+		Draw2D.arc(_hud, sc, (14.0 + 120.0 * e) * k, 0.0, TAU, 32, Color(c2.r, c2.g, c2.b, 1.0 - u), 5.0 * k * (1.0 - u) + 1.0)
 		for ri in 10:
 			var ang := float(ri) * TAU / 10.0 + 0.3
 			var d := Vector2(cos(ang), sin(ang))
 			_hud.draw_line(sc + d * (20.0 + 90.0 * e) * k, sc + d * (30.0 + 150.0 * e) * k, Color(1.0, 1.0, 0.9, 1.0 - u), 3.0 * k * (1.0 - u) + 1.0)
-		_text(font, sc + Vector2(-24.0 * k, (-30.0 - 60.0 * e) * k), String(pp["text"]), 30, Color(c2.r * 0.4 + 0.6, c2.g * 0.4 + 0.6, c2.b * 0.4 + 0.6, 1.0 - u * u))
+		_text(font, sc + Vector2(-18.0 * k, (-24.0 - 40.0 * e) * k), String(pp["text"]), 18, Color(c2.r * 0.4 + 0.6, c2.g * 0.4 + 0.6, c2.b * 0.4 + 0.6, 1.0 - u * u))
+
+
+# --------------------------------------------------------------------------
+# The set-up guide: pictures, no sentences. For the first seconds of a run on a phone, five round icons show what the tracker needs: your face at a good size, good light, the phone
+# upright, the phone steady, a face it can find. Green is fine; amber pulses and shows which way to move (arrows) so the fix is obvious. If a problem lasts during play, only that
+# one icon comes back, small, in the corner. It reads the same flags the diagnostics write down.
+# --------------------------------------------------------------------------
+const GUIDE_SHOW_S := 14.0
+var _guide_ok_t: float = 0.0
+var _guide_done: bool = false
+
+
+func _guide_status() -> Dictionary:
+	var st := {"dist": 0.0, "light": 0.0, "angle": 0.0, "steady": 0.0, "face": 0.0}
+	if Telemetry.inst == null:
+		return st
+	var fl: Dictionary = Telemetry.inst.flags
+	for code in fl:
+		var secs := float(fl[code])
+		match String(code):
+			"too_far", "too_close":
+				st["dist"] = maxf(float(st["dist"]), secs)
+			"dark_face", "overexposed_face", "backlit_face", "flat_picture", "side_light", "eye_glare":
+				st["light"] = maxf(float(st["light"]), secs)
+			"bad_angle", "phone_flat", "squint":
+				st["angle"] = maxf(float(st["angle"]), secs)
+			"phone_shaking":
+				st["steady"] = maxf(float(st["steady"]), secs)
+			"no_face", "cam_stalled":
+				st["face"] = maxf(float(st["face"]), secs)
+	return st
+
+
+func _guide_icon(id: String, c: Vector2, r: float, bad: bool, k: float) -> void:
+	var col := Color(1.0, 0.72, 0.2) if bad else Color(0.4, 0.95, 0.5)
+	var pulse := 1.0 + (0.08 * sin(_age * 9.0) if bad else 0.0)
+	var rr := r * pulse
+	Draw2D.circle(_hud, c, rr + 3.0 * k, Color(0, 0, 0, 0.65))
+	Draw2D.circle(_hud, c, rr, Color(col.r * 0.25, col.g * 0.25, col.b * 0.25, 0.9))
+	Draw2D.arc(_hud, c, rr, 0.0, TAU, 28, col, 3.0 * k)
+	var u := rr * 0.5
+	match id:
+		"dist":
+			Draw2D.circle(_hud, c, u * 0.8, col)                                       # a face
+			var too_far := GazeProvider.face_size < 0.2
+			for sx in [-1.0, 1.0]:
+				var tip := c + Vector2(float(sx) * u * (0.9 if too_far else 1.6), 0.0)
+				var tail := c + Vector2(float(sx) * u * (1.6 if too_far else 0.9), 0.0)
+				if bad:
+					_hud.draw_line(tail, tip, Color(1, 1, 1), 2.5 * k)
+					_hud.draw_line(tip, tip + Vector2(float(sx) * u * (0.35 if not too_far else -0.35), -u * 0.3), Color(1, 1, 1), 2.5 * k)
+					_hud.draw_line(tip, tip + Vector2(float(sx) * u * (0.35 if not too_far else -0.35), u * 0.3), Color(1, 1, 1), 2.5 * k)
+		"light":
+			Draw2D.circle(_hud, c, u * 0.6, col)                                        # a bulb with rays
+			for ri in 8:
+				var a := float(ri) * TAU / 8.0
+				_hud.draw_line(c + Vector2(cos(a), sin(a)) * u * 0.9, c + Vector2(cos(a), sin(a)) * u * 1.3, col, 2.5 * k)
+			if bad:
+				_hud.draw_line(c + Vector2(-u * 0.3, 0), c + Vector2(u * 0.3, 0), Color(0.1, 0.1, 0.1), 3.0 * k)
+		"angle":
+			var tw := u * 1.0
+			var th := u * 1.7
+			var tl := (0.5 * sin(_age * 3.0) if bad else 0.0)                         # a phone: upright when fine, rocking when it is not
+			var pts := PackedVector2Array()
+			for cr in [Vector2(-tw, -th), Vector2(tw, -th), Vector2(tw, th), Vector2(-tw, th)]:
+				pts.append(c + (cr as Vector2).rotated(tl) * 0.7)
+			pts.append(pts[0])
+			Draw2D.pline(_hud, pts, col, 3.0 * k)
+			Draw2D.circle(_hud, c + Vector2(0, -th * 0.55).rotated(tl) * 0.7, u * 0.12, col)
+		"steady":
+			var tw2 := u * 0.7
+			var th2 := u * 1.3
+			var off := Vector2(sin(_age * 22.0) * u * 0.25, 0.0) if bad else Vector2.ZERO
+			_hud.draw_rect(Rect2(c - Vector2(tw2, th2) * 0.8 + off, Vector2(tw2, th2) * 1.6), col, false, 3.0 * k)
+			if bad:
+				for wi in 2:
+					Draw2D.arc(_hud, c + Vector2(u * 1.15, 0.0), u * (0.35 + 0.3 * float(wi)), -0.9, 0.9, 8, col, 2.0 * k)
+					Draw2D.arc(_hud, c - Vector2(u * 1.15, 0.0), u * (0.35 + 0.3 * float(wi)), PI - 0.9, PI + 0.9, 8, col, 2.0 * k)
+		"face":
+			Draw2D.arc(_hud, c, u * 1.1, 0.0, TAU, 20, col, 3.0 * k)
+			Draw2D.circle(_hud, c + Vector2(-u * 0.4, -u * 0.25), u * 0.14, col)
+			Draw2D.circle(_hud, c + Vector2(u * 0.4, -u * 0.25), u * 0.14, col)
+			Draw2D.arc(_hud, c + Vector2(0, u * 0.1), u * 0.6, 0.2 * PI, 0.8 * PI, 10, col, 2.5 * k)
+
+
+## The set-up ring: one picture that says where your face should be and what the light is doing, with no words.
+##   the fixed ring      where the face belongs
+##   the coloured ring   your face: smaller than the fixed ring = too far, bigger = too close; they match when the distance is right
+##   the dot and line    which way your head is turned or tipped: bring the dot to the middle
+##   the sun             where troublesome light is: above = behind you, left / right = from that side, on the eyes = glare on glasses, hollow = too dark
+## Everything turns green when it is good. `c` centre, `r` radius of the fixed ring. Returns true when nothing needs fixing.
+func _draw_positioner(c: Vector2, r: float, k: float, alpha: float) -> bool:
+	var P := GazeProvider
+	var good := Color(0.4, 0.95, 0.5, alpha)
+	var warn := Color(1.0, 0.72, 0.2, alpha)
+	var seen := P._camera_fresh() and P.confidence >= 0.3 and P.face_size > 0.05
+	Draw2D.circle(_hud, c, r * 1.75, Color(0.03, 0.07, 0.15, 0.6 * alpha))
+	Draw2D.arc(_hud, c, r, 0.0, TAU, 40, Color(1, 1, 1, 0.55 * alpha), 2.0 * k, true)
+	Draw2D.arc(_hud, c, r * 0.3, 0.0, TAU, 20, Color(1, 1, 1, 0.35 * alpha), 1.5 * k, true)
+	if not seen:
+		# no face in the picture: a face outline that pulses
+		var pu := 0.85 + 0.12 * sin(_age * 6.0)
+		Draw2D.arc(_hud, c, r * 0.7 * pu, 0.0, TAU, 28, warn, 3.0 * k, true)
+		Draw2D.circle(_hud, c + Vector2(-r * 0.25, -r * 0.15) * pu, r * 0.08, warn)
+		Draw2D.circle(_hud, c + Vector2(r * 0.25, -r * 0.15) * pu, r * 0.08, warn)
+		Draw2D.arc(_hud, c + Vector2(0, r * 0.05) * pu, r * 0.36 * pu, 0.2 * PI, 0.8 * PI, 10, warn, 2.5 * k)
+		return false
+	var fs := P.face_size
+	var dist_ok := fs >= POS_FACE_MIN and fs <= POS_FACE_MAX
+	var fr := r * clampf(fs / POS_FACE_IDEAL, 0.35, 1.7)
+	Draw2D.arc(_hud, c, fr, 0.0, TAU, 40, good if dist_ok else warn, 4.0 * k, true)
+	var ang_ok := true
+	if P.head_rpy_ok:
+		var hv := Vector2(-rad_to_deg(P.head_rpy.x), rad_to_deg(P.head_rpy.y)) / POS_ANGLE_DEG
+		ang_ok = hv.length() <= 1.0
+		var dp := c + hv.limit_length(1.5) * r
+		var dcol := good if ang_ok else warn
+		_hud.draw_line(c, dp, Color(dcol.r, dcol.g, dcol.b, 0.7 * alpha), 2.5 * k, true)
+		Draw2D.circle(_hud, dp, 8.0 * k, Color(0, 0, 0, 0.6 * alpha))
+		Draw2D.circle(_hud, dp, 6.0 * k, dcol)
+	var li := Telemetry.light_issue(Telemetry.inst._light) if Telemetry.inst != null else ""
+	if li != "":
+		var sp := c + Vector2(0.0, -r * 1.25)                         # behind you / too bright / too dark / flat: above the ring
+		match li:
+			"side_l":
+				sp = c + Vector2(r * 1.25, 0.0)                          # the left half of the camera picture is your right, and the ring is a mirror
+			"side_r":
+				sp = c + Vector2(-r * 1.25, 0.0)
+			"glare":
+				sp = c + Vector2(0.0, -r * 0.3)
+		var su := r * (0.2 + 0.02 * sin(_age * 7.0))
+		if li == "dark" or li == "flat":
+			Draw2D.arc(_hud, sp, su, 0.0, TAU, 16, warn, 2.5 * k, true)
+			_hud.draw_line(sp + Vector2(-su, su) * 1.2, sp + Vector2(su, -su) * 1.2, warn, 2.5 * k, true)
+		else:
+			Draw2D.circle(_hud, sp, su, warn)
+			var rays := 1.9 if li == "bright" or li == "glare" else 1.55
+			for ri in 8:
+				var a := float(ri) * TAU / 8.0 + _age * 0.6
+				_hud.draw_line(sp + Vector2(cos(a), sin(a)) * su * 1.25, sp + Vector2(cos(a), sin(a)) * su * rays, warn, 2.5 * k, true)
+	return dist_ok and ang_ok and li == ""
+
+
+const POS_FACE_IDEAL := 0.30         # face width as a share of the camera picture when the distance is right
+const POS_FACE_MIN := 0.17
+const POS_FACE_MAX := 0.50
+const POS_ANGLE_DEG := 20.0          # a head turned or tipped this far puts the dot on the ring
+const GUIDE_RAISE_S := 8.0           # seconds a set-up problem must last during play before the ring comes back
+var _pos_fade: float = 0.0
+
+
+func _draw_setup_guide(s: Vector2, k: float, delta_hint: float) -> void:
+	if Telemetry.inst != null:
+		Telemetry.inst.light_fast = false
+	if GazeProvider.backend != GazeProvider.Backend.CAMERA or _paused or _finished:
+		return
+	if not _guide_done and _age < GUIDE_SHOW_S:
+		# the start of a run: the set-up ring, low on the screen (the course stays visible above). It leaves as soon as everything has been fine for two seconds.
+		if Telemetry.inst != null:
+			Telemetry.inst.light_fast = true
+		_pos_fade = minf(_pos_fade + delta_hint * 4.0, 1.0)
+		var r0 := 46.0 * k
+		var fine := _draw_positioner(Vector2(s.x * 0.5, s.y * 0.76), r0, k, _pos_fade * clampf((GUIDE_SHOW_S - _age) / 0.6, 0.0, 1.0))
+		var st0 := _guide_status()
+		if float(st0["steady"]) > 0.0:
+			_guide_icon("steady", Vector2(s.x * 0.5 + r0 * 2.6, s.y * 0.76), 22.0 * k, true, k)
+			fine = false
+		_guide_ok_t = _guide_ok_t + delta_hint if fine else 0.0
+		if _guide_ok_t > 2.0:
+			_guide_done = true
+		return
+	# during play: nothing, unless the same problem has lasted a good while. Then the ring comes back small in the corner until it is fixed.
+	var st := _guide_status()
+	var worst := ""
+	var worst_t := GUIDE_RAISE_S
+	for key2 in st:
+		if float(st[key2]) >= worst_t:
+			worst_t = float(st[key2])
+			worst = String(key2)
+	if worst == "steady":
+		_guide_icon(worst, Vector2(s.x - 44.0 * k, 78.0 * k), 22.0 * k, true, k)
+	elif worst != "":
+		if Telemetry.inst != null:
+			Telemetry.inst.light_fast = true
+		_draw_positioner(Vector2(s.x - 56.0 * k, 96.0 * k), 24.0 * k, k * 0.6, 0.9)
 
 
 func _draw_hud_inner() -> void:
@@ -4335,7 +5043,7 @@ func _draw_hud_inner() -> void:
 					var csc := _gap_screen(rr, gg)
 					if not csc.is_empty():
 						var cc: Vector2 = csc["c"]
-						_hud.draw_arc(cc, 16.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_cand_t / AIM_LINGER, 0.0, 1.0), 24, Color(1.0, 1.0, 1.0, 0.85), 3.5 * k)
+						Draw2D.arc(_hud, cc, 16.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_cand_t / AIM_LINGER, 0.0, 1.0), 24, Color(1.0, 1.0, 1.0, 0.85), 3.5 * k)
 	# the buff you are looking at: a dwell arc while it is being picked, a ring once it has you
 	for bb in [_buff_cand, _buff_tgt]:
 		var bd2: Dictionary = bb
@@ -4347,43 +5055,45 @@ func _draw_hud_inner() -> void:
 		var bs := cam.unproject_position(bp)
 		var bcol: Color = BUFF_COL[bd2["t"]]
 		if is_same(bd2, _buff_tgt):
-			_hud.draw_arc(bs, 22.0 * k, 0.0, TAU, 28, Color(bcol.r, bcol.g, bcol.b, 0.35 + 0.5 * _buff_w), 4.0 * k)
+			Draw2D.arc(_hud, bs, 22.0 * k, 0.0, TAU, 28, Color(bcol.r, bcol.g, bcol.b, 0.35 + 0.5 * _buff_w), 4.0 * k)
 		else:
-			_hud.draw_arc(bs, 22.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_buff_cand_t / AIM_LINGER, 0.0, 1.0), 24, Color(1.0, 1.0, 1.0, 0.85), 3.5 * k)
-	# gaze reticle
-	if _eye_on and not _paused:
+			Draw2D.arc(_hud, bs, 22.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_buff_cand_t / AIM_LINGER, 0.0, 1.0), 24, Color(1.0, 1.0, 1.0, 0.85), 3.5 * k)
+	# gaze reticle: hidden in play (it jitters and draws the eye away from the course; the latched opening already shows what the game understood). ?reticle shows it.
+	if _eye_on and not _paused and show_reticle:
 		var cur_px := _cursor_px if _cursor_px != Vector2.ZERO else _gaze_px
 		for ti in _gaze_trail.size():
 			var ta := float(ti + 1) / float(_gaze_trail.size() + 1)
-			_hud.draw_circle(_gaze_trail[ti], 5.0 * k * ta, Color(1.0, 0.6, 0.1, 0.35 * ta))
-		_hud.draw_circle(cur_px, 15.0 * k, Color(1.0, 0.6, 0.1, 0.18))
-		_hud.draw_arc(cur_px, 15.0 * k, 0.0, TAU, 24, Color(1.0, 0.6, 0.1, 0.95), 3.5 * k)
-		_hud.draw_circle(cur_px, 4.5 * k, Color(1.0, 0.6, 0.1, 0.95))
+			Draw2D.circle(_hud, _gaze_trail[ti], 5.0 * k * ta, Color(1.0, 0.6, 0.1, 0.35 * ta))
+		Draw2D.circle(_hud, cur_px, 15.0 * k, Color(1.0, 0.6, 0.1, 0.18))
+		Draw2D.arc(_hud, cur_px, 15.0 * k, 0.0, TAU, 24, Color(1.0, 0.6, 0.1, 0.95), 3.5 * k)
+		Draw2D.circle(_hud, cur_px, 4.5 * k, Color(1.0, 0.6, 0.1, 0.95))
 	# progress bar (top centre), score (top left), eyes status (top right)
 	var bw := minf(s.x * 0.34, 420.0 * k)
 	var bx := s.x * 0.5 - bw * 0.5
 	_hud.draw_rect(Rect2(bx, m, bw, 10.0 * k), Color(0.05, 0.12, 0.25, 0.5))
 	_hud.draw_rect(Rect2(bx, m, bw * progress(), 10.0 * k), Color(1.0, 0.85, 0.35, 0.95))
 	_hud.draw_rect(Rect2(bx + bw - 3.0 * k, m - 4.0 * k, 3.0 * k, 18.0 * k), Color(1, 1, 1, 0.9))
-	_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 34, Color(1, 1, 1))
+	_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 26, Color(1, 1, 1, 0.95))
+	_draw_chain(s, k, m)
+	_draw_setup_guide(s, k, get_process_delta_time())
 	var by := m + 52.0 * k
 	if _boost_t > 0.0:
-		_text(font, Vector2(m, by), "BOOST %.1f" % _boost_t, 20, BUFF_COL["boost"])
-		by += 26.0 * k
+		_text(font, Vector2(m, by), "BOOST %.1f" % _boost_t, 15, BUFF_COL["boost"])
+		by += 20.0 * k
 	if _mult_t > 0.0:
-		_text(font, Vector2(m, by), "x2 POINTS %.1f" % _mult_t, 20, BUFF_COL["mult"])
-		by += 26.0 * k
+		_text(font, Vector2(m, by), "x2 POINTS %.1f" % _mult_t, 15, BUFF_COL["mult"])
+		by += 20.0 * k
 	if shield > 0:
-		_text(font, Vector2(m, by), "SHIELD", 20, BUFF_COL["shield"])
+		_text(font, Vector2(m, by), "SHIELD", 15, BUFF_COL["shield"])
 	var eye_txt := "EYES OFF"
 	if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 		eye_txt = "EYES"
 	elif GazeProvider.backend == GazeProvider.Backend.MOUSE and not Game.touch_mode:
 		eye_txt = "MOUSE EYES"
 	var ecol := Color(0.5, 1.0, 0.6) if _eye_on else Color(1, 1, 1, 0.55)
-	var ew := font.get_string_size(eye_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(20.0 * k)).x
-	_text(font, Vector2(s.x - m - ew, m + 18.0 * k), eye_txt, 20, ecol)
-	_text(font, Vector2(m, s.y - m - 30.0 * k), "%d km/h" % int(vel.length() * 3.6), 30, Color(1, 1, 1))
+	var ew := font.get_string_size(eye_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14.0 * k)).x
+	_text(font, Vector2(s.x - m - ew, m + 16.0 * k), eye_txt, 14, Color(ecol.r, ecol.g, ecol.b, ecol.a * 0.8))
+	_text(font, Vector2(m, s.y - m - 30.0 * k), "%d km/h" % int(vel.length() * 3.6), 20, Color(1, 1, 1, 0.8))
 	if show_perf:
 		var lt: Node = get_parent().get_node_or_null("Lighting") if get_parent() != null else null
 		var qt := (lt as DhLighting).tier if lt != null else 0
@@ -4397,17 +5107,25 @@ func _draw_hud_inner() -> void:
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
 		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 40.0 * k), pt, 18, pcol)
 	if chain > 0:
-		_text(font, Vector2(m, s.y - m), "FLOW x%.1f" % groove, 22, Color(1.0, 0.85, 0.3))
+		_text(font, Vector2(m, s.y - m), "FLOW x%.1f" % groove, 16, Color(1.0, 0.85, 0.3, 0.9))
 	var dtxt := "%d m" % int(maxf(-spos.z, 0.0))
-	var dw := font.get_string_size(dtxt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(26.0 * k)).x
-	_text(font, Vector2(s.x - m - dw, s.y - m), dtxt, 26, Color(1, 1, 1, 0.85))
-	var ty := s.y * 0.2
+	var dw := font.get_string_size(dtxt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
+	_text(font, Vector2(s.x - m - dw, s.y - m), dtxt, 18, Color(1, 1, 1, 0.7))
+	var ty := s.y * 0.40
+	var ay := s.y - m - 54.0 * k
 	for t in _toasts:
 		var a2 := clampf(float(t["t"]) / 0.5, 0.0, 1.0)
 		var col2: Color = t["color"]
 		col2.a = a2
-		_ctext(font, ty, String(t["text"]), 30, col2)
-		ty += 38.0 * k
+		var tk := String(t.get("kind", "info"))
+		if tk == "face":
+			_ctext(font, s.y * 0.32, String(t["text"]), 44, col2)             # a face you pulled: the one thing that is loud
+		elif tk == "ach":
+			_text(font, Vector2(m, ay), String(t["text"]), 15, Color(col2.r, col2.g, col2.b, a2 * 0.8))
+			ay -= 20.0 * k
+		elif a2 > 0.0 and face_kind == "":
+			_ctext(font, ty, String(t["text"]), 20, Color(col2.r, col2.g, col2.b, a2 * 0.85))
+			ty += 26.0 * k
 	if _finished:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0.03, 0.07, 0.15, 0.55))
 		_ctext(font, s.y * 0.34, "FINISH", 64, Color(1.0, 0.9, 0.4))
@@ -4426,10 +5144,13 @@ func _draw_hud_inner() -> void:
 	if _coach_t > 0.0 and _coach_text != "":
 		var ca := clampf(_coach_t / 0.6, 0.0, 1.0)
 		var ccol := Color(0.5, 1.0, 0.6, ca) if _coach_good else Color(1.0, 0.85, 0.4, ca)
-		_ctext(font, s.y * 0.30, _coach_text, 24, ccol)
+		ccol.a *= 0.75
+		_ctext(font, s.y - m - 8.0 * k, _coach_text, 15, ccol)
 	var cmsg := GazeProvider.camera_message()
-	if String(cmsg["text"]) != "" and (_age < 12.0 or not GazeProvider._camera_fresh()):
-		_ctext(font, s.y * 0.12, String(cmsg["text"]), 20, cmsg["color"])
+	if String(cmsg["text"]) != "" and _coach_t <= 0.0 and (_age < 12.0 or not GazeProvider._camera_fresh()):
+		var cc3: Color = cmsg["color"]
+		cc3.a *= 0.75
+		_ctext(font, s.y - m - 8.0 * k, String(cmsg["text"]), 15, cc3)
 	if trace_on and not _paused:
 		_draw_trace(font, s, k)
 
@@ -5016,7 +5737,7 @@ func _draw_trace(font: Font, s: Vector2, k: float) -> void:
 		var pts := PackedVector2Array()
 		for i in 13:
 			pts.append(_tr_pursuit_pos(minf(_tr_t + float(i) * 0.1, TR_PURSUIT)) * s)
-		_hud.draw_polyline(pts, Color(cy.r, cy.g, cy.b, 0.35), 4.0 * k)
+		Draw2D.pline(_hud, pts, Color(cy.r, cy.g, cy.b, 0.35), 4.0 * k)
 	elif _tr_phase == 3:
 		var rp := PackedVector2Array()
 		var d := 6.0
@@ -5027,13 +5748,13 @@ func _draw_trace(font: Font, s: Vector2, k: float) -> void:
 				rp.append(p)
 			d += 7.0
 		if rp.size() > 1:
-			_hud.draw_polyline(rp, Color(cy.r, cy.g, cy.b, 0.6), 5.0 * k)
+			Draw2D.pline(_hud, rp, Color(cy.r, cy.g, cy.b, 0.6), 5.0 * k)
 	var bp := _tr_bead * s
-	_hud.draw_circle(bp, 26.0 * k, Color(cy.r, cy.g, cy.b, 0.35))
-	_hud.draw_arc(bp, 26.0 * k, 0.0, TAU, 28, Color(0, 0, 0, 0.8), 6.0 * k)
-	_hud.draw_arc(bp, 26.0 * k, 0.0, TAU, 28, Color(1, 1, 1, 0.95), 3.0 * k)
-	_hud.draw_circle(bp, 9.0 * k, Color(0, 0, 0, 0.8))
-	_hud.draw_circle(bp, 7.0 * k, Color(1, 1, 1, 1.0))
+	Draw2D.circle(_hud, bp, 26.0 * k, Color(cy.r, cy.g, cy.b, 0.35))
+	Draw2D.arc(_hud, bp, 26.0 * k, 0.0, TAU, 28, Color(0, 0, 0, 0.8), 6.0 * k)
+	Draw2D.arc(_hud, bp, 26.0 * k, 0.0, TAU, 28, Color(1, 1, 1, 0.95), 3.0 * k)
+	Draw2D.circle(_hud, bp, 9.0 * k, Color(0, 0, 0, 0.8))
+	Draw2D.circle(_hud, bp, 7.0 * k, Color(1, 1, 1, 1.0))
 	var title := ""
 	var left := 0.0
 	match _tr_phase:

@@ -375,9 +375,9 @@ func _draw() -> void:
 	var knob := _stick_pos if _stick_id != -1 else base
 	knob = base + (knob - base).limit_length(STICK_R)
 	if not (Game.peek_mode or Game.flight_mode or (Game.trance_mode or Game.gaze_test_mode)):
-		draw_circle(base, STICK_R, Color(0.1, 0.1, 0.2, 0.35))
-		draw_arc(base, STICK_R, 0.0, TAU, 48, Color(1, 1, 1, 0.8), 4.0)
-		draw_circle(knob, 42.0, Color(1, 1, 1, 0.45 if _stick_id == -1 else 0.75))
+		Draw2D.circle(self, base, STICK_R, Color(0.1, 0.1, 0.2, 0.35))
+		Draw2D.arc(self, base, STICK_R, 0.0, TAU, 48, Color(1, 1, 1, 0.8), 4.0)
+		Draw2D.circle(self, knob, 42.0, Color(1, 1, 1, 0.45 if _stick_id == -1 else 0.75))
 		if _stick_id == -1:
 			_text(font, base + Vector2(-34, -STICK_R - 14), "MOVE", 24)
 	# touch-as-eyes hint (only when no camera is driving the aim)
@@ -413,8 +413,8 @@ func _draw() -> void:
 				col = Color(0.95, 0.75, 0.2)
 			"eyes", "cam":
 				col = Color(0.2, 0.75, 0.85)
-		draw_circle(c, r, Color(col, 0.85 if down else 0.55))
-		draw_arc(c, r, 0.0, TAU, 48, Color(1, 1, 1, 0.95), 5.0)
+		Draw2D.circle(self, c, r, Color(col, 0.85 if down else 0.55))
+		Draw2D.arc(self, c, r, 0.0, TAU, 48, Color(1, 1, 1, 0.95), 5.0)
 		var label: String = String(b[1])
 		if Game.run_mode:
 			label = {"gather": "TUCK", "slam": "SLAM", "center": "RE-CENTRE", "cam": "CAMERA"}.get(id, label)          # Downhill words for the chin buttons: TUCK (hold: tuck, brace, charge a ramp), SLAM (a quick drop in the air)

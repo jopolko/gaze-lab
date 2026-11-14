@@ -15,7 +15,7 @@ extends Node3D
 
 const G := 9.8
 const SLOPE := 0.34
-const ROW_GAP := 85.0
+const ROW_GAP := 125.0
 const W_HALF := 58.0
 const GROUND_HALF := 150.0
 const FLAG_COLS := [Color(1.0, 0.5, 0.15), Color(0.2, 0.8, 0.9), Color(0.16, 0.16, 0.2)]
@@ -63,6 +63,8 @@ var spos: Vector3 = Vector3.ZERO
 var vel: Vector2 = Vector2(0.0, -10.0)       # horizontal velocity (x, z); downhill is -z
 var vy: float = 0.0
 var heading: float = 0.0
+var _vis_heading: float = 0.0
+var _cam_roll: float = 0.0
 var grounded: bool = true
 var air_t: float = 0.0
 var steer: float = 0.0
@@ -155,6 +157,7 @@ var _ref_y: float = 0.5
 var reach: float = 1.3                      # how far a look moves the reticle / the control (1.3: your eyes cover the whole screen without straining)
 var look_smooth: float = 0.07             # seconds: smooths the 12-30 readings a second into fluid motion at 60 fps
 var _offs_s: float = 0.0
+var _ex_mixed: bool = false
 var eyes_only: bool = true                 # control from where the IRIS sits in the eye opening (a head turn does not move it), scaled to YOUR glance size
 var _ex_sign: float = 1.0
 var _ex_yaw: float = 0.0
@@ -330,7 +333,7 @@ func _make_assets() -> void:
 	sc.radial_segments = 10
 	sc.rings = 1
 	_m_shadow = sc
-	_m_shadow_mat = StandardMaterial3D.new()
+	_m_shadow_mat = Mats.glass()
 	_m_shadow_mat.vertex_color_use_as_albedo = true
 	_m_shadow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_m_shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -343,22 +346,21 @@ func _make_assets() -> void:
 	_m_post.radial_segments = 6
 	_m_post.rings = 1
 	_m_bar = BoxMesh.new()
-	_m_veg = StandardMaterial3D.new()
+	_m_veg = Mats.lit()
 	_m_veg.vertex_color_use_as_albedo = true
 	_m_veg.roughness = 1.0
 	_m_veg.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_m_veg.metallic_specular = 0.0
-	var gsh := Shader.new()
-	gsh.code = GROUND_SHADER
+	var gsh := Mats.shader(GROUND_SHADER)
 	var gm := ShaderMaterial.new()
 	gm.shader = gsh
 	_m_ground = gm
 	for kind in ["open", "tight", "hop", "trap", "cycle", "late", "shut"]:
-		var m := StandardMaterial3D.new()
+		var m := Mats.flat()
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		m.albedo_color = _kind_color(kind)
 		_kind_mat[kind] = m
-	var wall := StandardMaterial3D.new()
+	var wall := Mats.glass(true)
 	wall.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	wall.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	wall.albedo_color = Color(1.0, 0.25, 0.2, 0.28)
@@ -523,7 +525,7 @@ func _gen_segment(j: int) -> void:
 
 
 func _flat_mat(c: Color) -> StandardMaterial3D:
-	var m := StandardMaterial3D.new()
+	var m := Mats.lit()
 	m.albedo_color = c
 	m.roughness = 1.0
 	return m
@@ -619,50 +621,94 @@ func _ground_color(_j: int, _x: float, _z: float, c: Color) -> Color:
 	return c
 
 
-func _build_chunk(j: int) -> MeshInstance3D:
-	const NX := 60
-	const NZ := 34
+## Ground chunks. Built in one go (the first stretches, tests) or in slices of a few milliseconds a frame while playing: building a stretch of terrain in one frame was the freeze every time
+## you went through a gate (about 25 ms on a laptop, over 100 ms on a phone). The terrain you drive on comes from terrain_h(), not from this mesh, so a chunk that appears a few frames
+## late (it is built about 500 m ahead) changes nothing you can feel.
+const CHUNK_NX := 60
+const CHUNK_NZ := 34
+const CHUNK_SLICE_US := 2500
+var _gen_epoch: int = 0                 # bumped whenever the course is torn down: a job that is still queued then is dropped
+var _chunk_jobs: Array = []
+
+
+func _chunk_post(_j: int, _mi: MeshInstance3D) -> void:
+	pass
+
+
+func _chunk_job_new(j: int) -> Dictionary:
+	return {"j": j, "stage": 0, "iz": -1, "heights": PackedFloat32Array(), "verts": PackedVector3Array(), "norms": PackedVector3Array(), "cols": PackedColorArray(), "mi": null, "epoch": _gen_epoch}
+
+
+## Advance one chunk job for at most budget_us microseconds (it always does at least one row). True when the mesh is finished and added to the scene.
+func _chunk_step(job: Dictionary, budget_us: int) -> bool:
+	var t0 := Time.get_ticks_usec()
+	var j: int = job["j"]
 	var z0 := -ROW_GAP * float(j)
-	var dz := ROW_GAP / float(NZ)
-	var dx := (GROUND_HALF * 2.0) / float(NX)
-	var heights := PackedFloat32Array()
-	for iz in range(-1, NZ + 2):
-		var z := z0 - dz * float(iz)
-		for ix in NX + 1:
-			heights.append(terrain_h(-GROUND_HALF + dx * float(ix), z))
-	var verts := PackedVector3Array()
-	var norms := PackedVector3Array()
-	var cols := PackedColorArray()
+	var dz := ROW_GAP / float(CHUNK_NZ)
+	var dx := (GROUND_HALF * 2.0) / float(CHUNK_NX)
+	var stride := CHUNK_NX + 1
+	if int(job["stage"]) == 0:
+		var heights: PackedFloat32Array = job["heights"]
+		var iz: int = job["iz"]
+		while iz < CHUNK_NZ + 2:
+			var z := z0 - dz * float(iz)
+			for ix in CHUNK_NX + 1:
+				heights.append(terrain_h(-GROUND_HALF + dx * float(ix), z))
+			iz += 1
+			if Time.get_ticks_usec() - t0 > budget_us:
+				job["iz"] = iz
+				job["heights"] = heights
+				return false
+		job["heights"] = heights
+		job["iz"] = 0
+		job["stage"] = 1
+	if int(job["stage"]) == 1:
+		var heights2: PackedFloat32Array = job["heights"]
+		var verts: PackedVector3Array = job["verts"]
+		var norms: PackedVector3Array = job["norms"]
+		var cols: PackedColorArray = job["cols"]
+		var iz2: int = job["iz"]
+		while iz2 < CHUNK_NZ + 1:
+			var z2 := z0 - dz * float(iz2)
+			for ix in CHUNK_NX + 1:
+				var x := -GROUND_HALF + dx * float(ix)
+				var row_i := (iz2 + 1) * stride
+				var h: float = heights2[row_i + ix]
+				var xl: int = maxi(ix - 1, 0)
+				var xr: int = mini(ix + 1, CHUNK_NX)
+				var gx: float = (heights2[row_i + xr] - heights2[row_i + xl]) / (dx * float(xr - xl))
+				var gz: float = (heights2[row_i - stride + ix] - heights2[row_i + stride + ix]) / (2.0 * dz)
+				verts.append(Vector3(x, h, z2))
+				norms.append(Vector3(-gx, 1.0, -gz).normalized())
+				var t := 0.5 + 0.5 * sin(x * 0.07 + z2 * 0.05) * sin(z2 * 0.021)
+				var stripe := 0.5 + 0.5 * sin(z2 * 0.9 + sin(x * 0.2) * 2.0)
+				var chev := 0.5 + 0.5 * sin(z2 * 0.5 + absf(x) * 0.2)          # long V marks pointing down the hill: you feel the speed, and the way the slope runs shows at a glance
+				var c := Color(0.97, 0.98, 1.0).lerp(Color(0.8, 0.86, 0.97), clampf(0.35 * t + 0.08 * stripe + 0.2 * chev * chev, 0.0, 1.0))
+				if absf(x) > W_HALF:
+					c = c.lerp(Color(0.8, 0.84, 0.88), 0.3)
+				c = _ground_color(j, x, z2, c)
+				cols.append(c * _chunk_tint(j))
+			iz2 += 1
+			if Time.get_ticks_usec() - t0 > budget_us:
+				job["iz"] = iz2
+				job["verts"] = verts
+				job["norms"] = norms
+				job["cols"] = cols
+				return false
+		job["verts"] = verts
+		job["norms"] = norms
+		job["cols"] = cols
+		job["stage"] = 2
 	var idx := PackedInt32Array()
-	var stride := NX + 1
-	for iz in NZ + 1:
-		var z := z0 - dz * float(iz)
-		for ix in NX + 1:
-			var x := -GROUND_HALF + dx * float(ix)
-			var row_i := (iz + 1) * stride
-			var h: float = heights[row_i + ix]
-			var xl: int = maxi(ix - 1, 0)
-			var xr: int = mini(ix + 1, NX)
-			var gx: float = (heights[row_i + xr] - heights[row_i + xl]) / (dx * float(xr - xl))
-			var gz: float = (heights[row_i - stride + ix] - heights[row_i + stride + ix]) / (2.0 * dz)
-			verts.append(Vector3(x, h, z))
-			norms.append(Vector3(-gx, 1.0, -gz).normalized())
-			var t := 0.5 + 0.5 * sin(x * 0.07 + z * 0.05) * sin(z * 0.021)
-			var stripe := 0.5 + 0.5 * sin(z * 0.9 + sin(x * 0.2) * 2.0)
-			var c := Color(0.97, 0.98, 1.0).lerp(Color(0.8, 0.86, 0.97), clampf(0.35 * t + 0.1 * stripe, 0.0, 1.0))
-			if absf(x) > W_HALF:
-				c = c.lerp(Color(0.8, 0.84, 0.88), 0.3)
-			c = _ground_color(j, x, z, c)
-			cols.append(c * _chunk_tint(j))
-	for iz in NZ:
-		for ix in NX:
-			var a := iz * stride + ix
+	for iz3 in CHUNK_NZ:
+		for ix3 in CHUNK_NX:
+			var a := iz3 * stride + ix3
 			idx.append_array(PackedInt32Array([a, a + 1, a + stride, a + 1, a + stride + 1, a + stride]))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = norms
-	arrays[Mesh.ARRAY_COLOR] = cols
+	arrays[Mesh.ARRAY_VERTEX] = job["verts"]
+	arrays[Mesh.ARRAY_NORMAL] = job["norms"]
+	arrays[Mesh.ARRAY_COLOR] = job["cols"]
 	arrays[Mesh.ARRAY_INDEX] = idx
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
@@ -671,7 +717,32 @@ func _build_chunk(j: int) -> MeshInstance3D:
 	mi.material_override = _m_ground
 	mi.extra_cull_margin = 30.0
 	add_child(mi)
+	job["mi"] = mi
+	return true
+
+
+func _build_chunk(j: int) -> MeshInstance3D:
+	var job := _chunk_job_new(j)
+	while not _chunk_step(job, 1000000000):
+		pass
+	var mi: MeshInstance3D = job["mi"]
+	_chunk_post(j, mi)
 	return mi
+
+
+## Called every physics frame: one queued ground chunk gets a few milliseconds of work.
+func _chunk_pump() -> void:
+	if _chunk_jobs.is_empty():
+		return
+	var job: Dictionary = _chunk_jobs[0]
+	if int(job["epoch"]) != _gen_epoch:
+		_chunk_jobs.pop_front()
+		return
+	if _chunk_step(job, CHUNK_SLICE_US):
+		_chunk_jobs.pop_front()
+		var mi: MeshInstance3D = job["mi"]
+		_chunk_post(int(job["j"]), mi)
+		_chunks[int(job["j"])] = mi
 
 
 func _build_sled() -> void:
@@ -1196,9 +1267,17 @@ func _input(event: InputEvent) -> void:
 		return
 
 
-func _toast(text: String, color: Color) -> void:
-	_toasts.append({"text": text, "color": color, "t": 2.2})
-	if _toasts.size() > 4:
+## kind "info" is a short message in the middle; kind "ach" is an achievement (points and a name), small, in the corner.
+func _toast(text: String, color: Color, kind: String = "info") -> void:
+	if kind == "info":
+		# one message at a time, never the same one twice in a row: nothing piles up on the screen
+		for tq in _toasts:
+			if String(tq.get("kind", "info")) == "info":
+				if String(tq["text"]) == text and float(tq["t"]) > 0.0:
+					return
+				tq["t"] = 0.0
+	_toasts.append({"text": text, "color": color, "t": 2.4 if kind == "info" else (3.0 if kind == "ach" else 2.0), "kind": kind})
+	if _toasts.size() > 5:
 		_toasts.remove_at(0)
 
 
@@ -1239,6 +1318,8 @@ func cleanup() -> void:
 		var c: Variant = _chunks[k]
 		if is_instance_valid(c):
 			(c as Node).queue_free()
+	_gen_epoch += 1
+	_chunk_jobs.clear()
 	_chunks.clear()
 
 
@@ -1260,12 +1341,17 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	ahead.y = terrain_h(ahead.x, ahead.z) + 1.0
 	if (ahead - cam.global_position).length() > 0.5:
 		cam.look_at(ahead, Vector3.UP)
-	cam.basis = cam.basis * Basis(Vector3(0, 0, 1), -steer * 0.14)
+	_cam_roll = lerpf(_cam_roll, -steer * 0.12, 1.0 - exp(-4.0 * delta))
+	cam.basis = cam.basis * Basis(Vector3(0, 0, 1), _cam_roll)
 	_shake = maxf(_shake - 1.6 * delta, 0.0)
 	cam.h_offset = randf_range(-1.0, 1.0) * _shake * 0.3
 	cam.v_offset = randf_range(-1.0, 1.0) * _shake * 0.3
 	_fov_punch = maxf(_fov_punch - 24.0 * delta, 0.0)
-	cam.fov = clampf(68.0 + (sp - 18.0) * 0.7, 66.0, 100.0) + _fov_punch
+	if Game.touch_mode:
+		# a phone is a short, wide screen: the camera's field of view is its height, so the usual 68-100 degrees shrinks everything ahead to specks. Zoom in: gates and paths are read from further off.
+		cam.fov = clampf(56.0 + (sp - 18.0) * 0.4, 54.0, 72.0) + _fov_punch * 0.6
+	else:
+		cam.fov = clampf(68.0 + (sp - 18.0) * 0.7, 66.0, 100.0) + _fov_punch
 
 
 func _process(delta: float) -> void:
@@ -1282,10 +1368,11 @@ func _process(delta: float) -> void:
 	# sled orientation: follow the ground normal, lean into the turn, tuck low
 	var g := _grad(spos.x, spos.z)
 	var n := Vector3(-g.x, 1.0, -g.y).normalized() if grounded else Vector3.UP.lerp(Vector3(-g.x, 1.0, -g.y).normalized(), 0.35).normalized()
-	var f := Vector3(sin(heading), 0.0, -cos(heading))
+	_vis_heading = lerp_angle(_vis_heading, heading, 1.0 - exp(-7.0 * delta))          # what you see of the board is eased a little more than what the physics does: no waggle
+	var f := Vector3(sin(_vis_heading), 0.0, -cos(_vis_heading))
 	f = (f - n * f.dot(n)).normalized()
 	_sled.global_transform = Transform3D(Basis(f.cross(n).normalized(), n, -f), spos)
-	_rider.rotation.z = lerpf(_rider.rotation.z, -steer * 0.45, 1.0 - exp(-10.0 * delta))
+	_rider.rotation.z = lerpf(_rider.rotation.z, -steer * 0.4, 1.0 - exp(-5.0 * delta))
 	_rider.scale.y = lerpf(_rider.scale.y, 0.62 if tucking else (1.12 if braking else 1.0), 1.0 - exp(-8.0 * delta))
 	_sled.visible = hurt_t <= 0.0 or int(_age * 14.0) % 2 == 0
 	_spray.emitting = grounded and vel.length() > 8.0
@@ -1316,7 +1403,8 @@ func _process(delta: float) -> void:
 	if _coach_t <= 0.0:
 		_coach_good = false
 	_hud.size = get_viewport().get_visible_rect().size
-	_hud.queue_redraw()
+	if Engine.get_frames_per_second() >= 45.0 or (Engine.get_process_frames() & 1) == 0:
+		_hud.queue_redraw()                                # on a slow machine the HUD is drawn every other frame: it is the biggest single part of a frame in a browser
 
 
 func _hud_scale() -> float:
@@ -1324,16 +1412,31 @@ func _hud_scale() -> float:
 	return 2.0 if portrait else (1.25 if Game.touch_mode else 1.0)
 
 
+## Text on the HUD is expensive in a browser (shaping and a stroked outline for every string, every frame). Widths are remembered, and small text gets a thinner outline.
+var _tw_cache: Dictionary = {}
+
+
+func _tw(font: Font, text: String, fs: int) -> float:
+	var key := "%d|%s" % [fs, text]
+	if _tw_cache.has(key):
+		return float(_tw_cache[key])
+	if _tw_cache.size() > 600:
+		_tw_cache.clear()
+	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	_tw_cache[key] = w
+	return w
+
+
 func _text(font: Font, pos: Vector2, text: String, size: int, color: Color) -> void:
 	var fs := int(float(size) * _hud_scale())
-	_hud.draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 7, Color(0, 0, 0, 0.9))
+	_hud.draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 7 if fs >= 30 else 3, Color(0, 0, 0, 0.9))
 	_hud.draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
 
 
 func _ctext(font: Font, y: float, text: String, size: int, color: Color) -> void:
 	var fs := int(float(size) * _hud_scale())
-	var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	_hud.draw_string_outline(font, Vector2(_hud.size.x * 0.5 - w * 0.5, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 7, Color(0, 0, 0, 0.9))
+	var w := _tw(font, text, fs)
+	_hud.draw_string_outline(font, Vector2(_hud.size.x * 0.5 - w * 0.5, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 7 if fs >= 30 else 3, Color(0, 0, 0, 0.9))
 	_hud.draw_string(font, Vector2(_hud.size.x * 0.5 - w * 0.5, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, color)
 
 
@@ -1369,14 +1472,14 @@ func _draw_hud() -> void:
 				var col := _kind_color(String(g["kind"])) if ok else Color(1.0, 0.35, 0.3)
 				if g["kind"] == "hop":
 					col = Color(1.0, 0.85, 0.2)
-				_hud.draw_arc(c, rad, 0.0, TAU, 24, col, 3.0 * k)
+				Draw2D.arc(_hud, c, rad, 0.0, TAU, 24, col, 3.0 * k)
 				var lab := _gap_text(g, r)
 				var lw := font.get_string_size(lab, HORIZONTAL_ALIGNMENT_LEFT, -1, int(20.0 * k)).x
 				_text(font, c + Vector2(-lw * 0.5, -rad - 8.0 * k), lab, 20, col)
 			elif float(g["dwell"]) > 0.0:
 				var dw := float(g["dwell"]) / _dwell_t
-				_hud.draw_arc(c, rad, 0.0, TAU, 24, Color(0.1, 0.2, 0.4, 0.55), 2.5 * k)
-				_hud.draw_arc(c, rad, -PI * 0.5, -PI * 0.5 + TAU * clampf(dw, 0.0, 1.0), 24, Color(1.0, 0.8, 0.2), 4.5 * k)
+				Draw2D.arc(_hud, c, rad, 0.0, TAU, 24, Color(0.1, 0.2, 0.4, 0.55), 2.5 * k)
+				Draw2D.arc(_hud, c, rad, -PI * 0.5, -PI * 0.5 + TAU * clampf(dw, 0.0, 1.0), 24, Color(1.0, 0.8, 0.2), 4.5 * k)
 	if lane_mode:
 		var lr: Dictionary = _pick_row
 		if not lr.is_empty():
@@ -1396,7 +1499,7 @@ func _draw_hud() -> void:
 						_hud.draw_line(Vector2(lc.x - bw * 0.7, by), Vector2(lc.x + bw * 0.7, by), Color(1.0, 1.0, 1.0, 0.65), 4.0 * k)
 				if String(lg["kind"]) == "late" and not lg["latched"] and spos.z - float(lr["z"]) < LATE_DIST + vel.length() * LATE_WARN + 25.0:
 					var pulse := 0.5 + 0.5 * sin(_age * 6.0)
-					_hud.draw_arc(lc, (16.0 + 8.0 * pulse) * k, 0.0, TAU, 28, Color(0.5, 0.9, 1.0, 0.35 + 0.3 * pulse), 3.0 * k)
+					Draw2D.arc(_hud, lc, (16.0 + 8.0 * pulse) * k, 0.0, TAU, 28, Color(0.5, 0.9, 1.0, 0.35 + 0.3 * pulse), 3.0 * k)
 		# gaze bar: the dead zone (light) and where your gaze (plus head turn) is right now, so you can see the tracker work
 		if _eye_on:
 			var bx0 := s.x * 0.5
@@ -1404,30 +1507,30 @@ func _draw_hud() -> void:
 			var by0 := m + 50.0 * k
 			_hud.draw_rect(Rect2(bx0 - bw0, by0 - 5.0 * k, bw0 * 2.0, 10.0 * k), Color(0.05, 0.12, 0.25, 0.45))
 			_hud.draw_rect(Rect2(bx0 - _zone * 2.0 * bw0 / 0.5 * 0.5, by0 - 5.0 * k, _zone * 2.0 * bw0 / 0.5 * 0.5 * 2.0, 10.0 * k), Color(1.0, 1.0, 1.0, 0.35))
-			_hud.draw_circle(Vector2(bx0 + (_steer_gaze if lane_ctl == 2 else clampf(_off_now / 0.5, -1.0, 1.0)) * bw0, by0), 6.0 * k, Color(1.0, 0.62, 0.15, 0.95))
+			Draw2D.circle(_hud, Vector2(bx0 + (_steer_gaze if lane_ctl == 2 else clampf(_off_now / 0.5, -1.0, 1.0)) * bw0, by0), 6.0 * k, Color(1.0, 0.62, 0.15, 0.95))
 		# lane indicator, top centre: three pills, the committed lane filled; a ring fills while you look aside
 		var px0 := s.x * 0.5 - 38.0 * k
 		_hud.draw_rect(Rect2(px0 - 26.0 * k, m - 4.0 * k, 38.0 * k * 2.0 + 52.0 * k, 40.0 * k), Color(0.05, 0.12, 0.25, 0.45))
 		for li in 3:
 			var pc := Vector2(px0 + 38.0 * k * float(li), m + 16.0 * k)
 			var lane_now := int(_target_row["fl"]) if (not _target_row.is_empty() and _target_row.has("fl")) else _lane
-			_hud.draw_circle(pc, 10.0 * k, Color(1.0, 1.0, 1.0, 0.7))
+			Draw2D.circle(_hud, pc, 10.0 * k, Color(1.0, 1.0, 1.0, 0.7))
 			if li == lane_now:
-				_hud.draw_arc(pc, 13.0 * k, 0.0, TAU, 20, Color(1.0, 0.62, 0.15, 0.7), 2.5 * k)
+				Draw2D.arc(_hud, pc, 13.0 * k, 0.0, TAU, 20, Color(1.0, 0.62, 0.15, 0.7), 2.5 * k)
 			if li == _lane:
-				_hud.draw_circle(pc, 7.5 * k, Color(1.0, 0.62, 0.15, 0.95))
+				Draw2D.circle(_hud, pc, 7.5 * k, Color(1.0, 0.62, 0.15, 0.95))
 			if _look_dir != 0 and li == _look_lane and li != _lane:
 				var need := LANE_DWELL if _step_first else LANE_REPEAT
-				_hud.draw_arc(pc, 13.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_step_t / need, 0.0, 1.0), 20, Color(1.0, 1.0, 1.0, 0.9), 3.5 * k)
+				Draw2D.arc(_hud, pc, 13.0 * k, -PI * 0.5, -PI * 0.5 + TAU * clampf(_step_t / need, 0.0, 1.0), 20, Color(1.0, 1.0, 1.0, 0.9), 3.5 * k)
 	# gaze cursor: a ring at the horizon where your eyes are (only the left / right part is used)
 	if _eye_on:
 		var cur_px := _cursor_px if (lane_ctl >= 2 and _cursor_px != Vector2.ZERO) else _gaze_px
 		for ti in _gaze_trail.size():
 			var ta := float(ti + 1) / float(_gaze_trail.size() + 1)
-			_hud.draw_circle(_gaze_trail[ti], 5.0 * k * ta, Color(1.0, 0.6, 0.1, 0.35 * ta))
-		_hud.draw_circle(cur_px, 15.0 * k, Color(1.0, 0.6, 0.1, 0.18))
-		_hud.draw_arc(cur_px, 15.0 * k, 0.0, TAU, 24, Color(1.0, 0.6, 0.1, 0.95), 3.5 * k)
-		_hud.draw_circle(cur_px, 4.5 * k, Color(1.0, 0.6, 0.1, 0.95))
+			Draw2D.circle(_hud, _gaze_trail[ti], 5.0 * k * ta, Color(1.0, 0.6, 0.1, 0.35 * ta))
+		Draw2D.circle(_hud, cur_px, 15.0 * k, Color(1.0, 0.6, 0.1, 0.18))
+		Draw2D.arc(_hud, cur_px, 15.0 * k, 0.0, TAU, 24, Color(1.0, 0.6, 0.1, 0.95), 3.5 * k)
+		Draw2D.circle(_hud, cur_px, 4.5 * k, Color(1.0, 0.6, 0.1, 0.95))
 	# the line your eyes set: from the board to the gate you locked
 	if not _lock.is_empty() and not _lock_row.is_empty():
 		var ls := _gap_screen(_lock_row, _lock)
@@ -1436,7 +1539,7 @@ func _draw_hud() -> void:
 			var lok := _forecast(_lock, _lock_row) == 1
 			var lcol := Color(0.3, 0.85, 0.45, 0.95) if lok else Color(1.0, 0.35, 0.3, 0.95)
 			_hud.draw_dashed_line(from, ls["c"], lcol, 4.0 * k, 14.0 * k)
-			_hud.draw_arc(ls["c"], 18.0 * k, 0.0, TAU, 28, lcol, 4.0 * k)
+			Draw2D.arc(_hud, ls["c"], 18.0 * k, 0.0, TAU, 28, lcol, 4.0 * k)
 	# score (top left) and eyes status (top right): that is all
 	_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 34, Color(1, 1, 1))
 	if lane_mode:
@@ -1485,7 +1588,7 @@ func _draw_hud() -> void:
 	var mid := gy + gh * 0.5
 	_hud.draw_rect(Rect2(gx, mid + 5.0 * k, 18.0 * k, gh * 0.5 - 5.0 * k), Color(0.3, 0.55, 1.0, 0.4))
 	_hud.draw_rect(Rect2(gx, gy, 18.0 * k, gh * 0.5 - 5.0 * k), Color(0.3, 1.0, 0.5, 0.35))
-	_hud.draw_circle(Vector2(gx + 9.0 * k, mid - clampf(nod_p / 0.40, -1.0, 1.0) * gh * 0.5), 9.0 * k, Color(1.0, 0.85, 0.3))
+	Draw2D.circle(_hud, Vector2(gx + 9.0 * k, mid - clampf(nod_p / 0.40, -1.0, 1.0) * gh * 0.5), 9.0 * k, Color(1.0, 0.85, 0.3))
 	if not _paused:
 		var pr := _pause_rect()
 		_hud.draw_rect(pr, Color(0.05, 0.12, 0.25, 0.5))
@@ -1532,7 +1635,7 @@ func _extra_kind() -> String:
 func _make_door(g: Dictionary, rz: float, row: Dictionary) -> MeshInstance3D:
 	var d := MeshInstance3D.new()
 	d.mesh = _m_bank
-	var m := StandardMaterial3D.new()
+	var m := Mats.flat()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	match String(g["kind"]):
 		"cycle":
@@ -1555,7 +1658,7 @@ func _make_door(g: Dictionary, rz: float, row: Dictionary) -> MeshInstance3D:
 func _make_screen(row: Dictionary, cx: float, rz: float) -> void:
 	var n := MeshInstance3D.new()
 	n.mesh = _m_bank
-	var m := StandardMaterial3D.new()
+	var m := Mats.glass(true)
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.albedo_color = Color(0.93, 0.95, 1.0, 0.9)
@@ -1824,7 +1927,7 @@ func _build_mountains() -> void:
 			_tri(st, base[j], rock, mid[j2], snow, mid[j], snow)
 			_tri(st, mid[j], snow, mid[j2], snow, apex, white)
 	st.generate_normals()
-	var mat := StandardMaterial3D.new()
+	var mat := Mats.lit()
 	mat.vertex_color_use_as_albedo = true
 	mat.roughness = 1.0
 	mat.metallic_specular = 0.0
@@ -1981,7 +2084,16 @@ func _seek_term() -> float:
 ## (a few percent of the eye width), so it is scaled to the size of YOUR normal glances (95th percentile of the last ~20 s, never below 6 x the fixation noise):
 ## a small glance then reaches the outer gates. It lingers (short smoothing) so a split-second look is noise-free, and returns screen-fraction units like the geometry offset.
 func _eyes_only_offs(delta: float, geo_offs: float) -> float:
-	var raw := -GazeProvider.eih.x * _ex_sign
+	var raw := -GazeProvider.eye_x() * _ex_sign
+	if GazeProvider.mix_used() != _ex_mixed:                # the source of the reading changed (the phone blend became ready): its centre and size are different, learn them again
+		_ex_mixed = GazeProvider.mix_used()
+		_ex_init = false
+		_ex_raw.clear()
+		_ex_abs.clear()
+		_ex_slow.clear()
+		_ex_dec = 0.0
+		_ex_c = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+		return 0.0
 	if _ex_full > 0.004 and not is_equal_approx(raw, _sacc_last_raw):
 		_sacc_last_raw = raw                               # a new tracker frame (the game runs faster than the camera)
 		sacc.push(_age, (raw - _ex_ref) / _ex_full)
@@ -1998,7 +2110,7 @@ func _eyes_only_offs(delta: float, geo_offs: float) -> float:
 	# direction check (mirror conventions are easy to get wrong): while the HEAD IS STILL, the iris-in-eye signal must agree with the geometry gaze.
 	# (During a head turn the eyes counter-rotate, so that moment would give the wrong answer: it is never used.)
 	var gx := GazeProvider.direct.x
-	var ex_now := -GazeProvider.eih.x
+	var ex_now := -GazeProvider.eye_x()
 	var yaw_now := GazeProvider.head_rpy.x
 	_ex_yaw += (yaw_now - _ex_yaw) * 0.05
 	if absf(yaw_now - _ex_yaw) < 0.015:
@@ -2595,6 +2707,11 @@ func _pause_action(id: String) -> void:
 			_pause_adv = true
 		"simple":
 			_pause_adv = false
+		"bad":
+			Telemetry.felt_bad("pause screen")
+			_copy_note = "thanks: noted"
+		"share":
+			Telemetry.set_sharing(not Telemetry.sharing())
 		"copy":
 			DisplayServer.clipboard_set(JSON.stringify(_pause_report(), "  "))
 			_copy_note = "report copied"
@@ -2674,9 +2791,9 @@ func _draw_pause_simple(font: Font, s: Vector2, k: float) -> void:
 	if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 		pt += "    CAM %.0f fps  %d ms" % [float(GazeProvider._pkt_times.size()) / 2.0, int(GazeProvider.trk_lat_ms)]
 	_ctext(font, s.y * 0.14 + 40.0 * k, pt, 18, Color(1, 1, 1, 0.7))
-	var labels := [["resume", "RESUME"], ["restart", "RESTART RUN"], ["menu", "RETURN TO MENU"], ["advanced", "ADVANCED: TRACKING MONITOR"]]
+	var labels := [["resume", "RESUME"], ["bad", "THAT FELT BAD"], ["restart", "RESTART RUN"], ["menu", "RETURN TO MENU"], ["advanced", "ADVANCED: TRACKING MONITOR"], ["share", "DIAGNOSTICS: " + ("ON" if Telemetry.sharing() else "OFF")]]
 	var bw := minf(s.x * 0.8, 560.0 * k)
-	var bh := 62.0 * k
+	var bh := 46.0 * k
 	var y := s.y * 0.30
 	for b in labels:
 		var br := Rect2((s.x - bw) * 0.5, y, bw, bh)
@@ -2759,7 +2876,7 @@ func _draw_pause(font: Font, s: Vector2, k: float) -> void:
 			var off := clampf((_gx_hist[q] - _gx_med) / 0.3, -1.0, 1.0)
 			pts.append(Vector2(gr.position.x + gw * float(q) / float(n - 1), midy - off * gh * 0.5))
 		if pts.size() > 1:
-			_hud.draw_polyline(pts, Color(1.0, 0.62, 0.15, 0.95), 2.0 * k)
+			Draw2D.pline(_hud, pts, Color(1.0, 0.62, 0.15, 0.95), 2.0 * k)
 	_text(font, Vector2(gr.position.x + 6.0 * k, gr.position.y + 16.0 * k), "right", 14, Color(1, 1, 1, 0.6))
 	_text(font, Vector2(gr.position.x + 6.0 * k, gr.end.y - 6.0 * k), "left", 14, Color(1, 1, 1, 0.6))
 	# little screen map: where the gaze is on your screen right now, and the three lanes
@@ -2773,7 +2890,7 @@ func _draw_pause(font: Font, s: Vector2, k: float) -> void:
 		_hud.draw_rect(Rect2(mrect.position.x + mrect.size.x * float(li) / 3.0, mrect.position.y, mrect.size.x / 3.0 - 1.0, mrect.size.y), Color(1.0, 0.62, 0.15, 0.22 if li == _lane else 0.07))
 	var gmap := _cursor_px if (lane_ctl >= 2 and _cursor_px != Vector2.ZERO) else _gaze_px
 	var gp := Vector2(mrect.position.x + clampf(gmap.x / maxf(s.x, 1.0), 0.0, 1.0) * mrect.size.x, mrect.position.y + clampf(gmap.y / maxf(s.y, 1.0), 0.0, 1.0) * mrect.size.y)
-	_hud.draw_circle(gp, 5.0 * k, Color(1.0, 0.62, 0.15, 1.0))
+	Draw2D.circle(_hud, gp, 5.0 * k, Color(1.0, 0.62, 0.15, 1.0))
 	_hud.draw_rect(mrect, Color(1, 1, 1, 0.35), false, 1.0)
 	y = (mrect.end.y if not landscape else maxf(gr.end.y, mrect.end.y)) + 20.0 * k
 	_text(font, Vector2(m, y + 14.0 * k), "Look left / right and watch the orange line leave the grey band: that is what steers. Vertical gaze is not used (looking down is the least accurate); nodding your chin handles speed.", 14, Color(1, 1, 1, 0.6))

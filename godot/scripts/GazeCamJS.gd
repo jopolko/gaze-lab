@@ -499,6 +499,18 @@ const MAIN := """
   window.addEventListener('pagehide', stopAll);
   window.addEventListener('beforeunload', stopAll);
   // Start the tracker worker. Resolves true when the model is loaded in it, false when workers / the model cannot be used (then the old in-page path runs).
+  // Which chip runs the face model is decided by the device, then by measurement, never by the player. First guess: phones the GPU, laptops / desktops the CPU. If the model is slow with a
+  // face in view (over 45 ms typical), the other chip is tried for a while and the faster one is kept, remembered per device (?cpu / ?gpu still force one for testing).
+  const DLG_KEY = 'gazelab_dlg3';
+  const dlgRec = () => { try { return JSON.parse(localStorage.getItem(DLG_KEY) || 'null') || {}; } catch (e) { return {}; } };
+  const dlgSave = (o) => { try { localStorage.setItem(DLG_KEY, JSON.stringify(o)); } catch (e) {} };
+  const defaultDlg = coarseNow ? 'gpu' : 'cpu';
+  const wantCpu = () => {
+    if (qs.has('cpu')) return true;
+    if (qs.has('gpu')) return false;
+    const r = dlgRec();
+    return (r.use || r.trying || defaultDlg) === 'cpu';
+  };
   function startWorker() {
     return new Promise((resolve) => {
       let done = false;
@@ -513,7 +525,7 @@ const MAIN := """
         const onm = (ev) => { const m = ev.data; if (m.type === 'ready') { if (m.dlg) window.__gazeStats.dlg = m.dlg; if (++ready >= need) fin(true); } else if (m.type === 'error') { window.__gazeWorkerError = m.msg; fin(false); } };
         const one = (e) => { window.__gazeWorkerError = String(e && e.message || e); fin(false); };
         worker.onerror = one; worker.onmessage = onm;
-        worker.postMessage({ type: 'init', role: 'model', env: envNow(), base: BASE, model: MODEL, cpu: qs.has('cpu') || (!qs.has('gpu') && !coarseNow) });   // laptops / desktops: the game owns the GPU, the face model runs on the CPU (?gpu to force the GPU; phones keep the GPU)
+        worker.postMessage({ type: 'init', role: 'model', env: envNow(), base: BASE, model: MODEL, cpu: wantCpu() });   // laptops / desktops: the game owns the GPU, the face model runs on the CPU (?gpu to force the GPU; phones keep the GPU)
         if (worker2) {
           worker2.onerror = one; worker2.onmessage = onm;
           worker2.postMessage({ type: 'init', role: 'build', env: envNow() });
@@ -561,7 +573,10 @@ const MAIN := """
       }
       const v = document.createElement('video');
       v.playsInline = true; v.muted = true; v.srcObject = stream;
+      window.__gazeVideo = v;                          // read-only hooks for the diagnostics: the picture (for lighting numbers) and the camera track (ended / muted)
+      try { if (window.__tlTrack) window.__tlTrack(stream.getVideoTracks()[0]); } catch (e) {}
       window.__gazeStatus = 'camera on';
+      window.__gazeDlgNote = () => (window.__gazeStats && window.__gazeStats.dlgNote) || '';
       // Small mirrored preview with the tracked iris points, bottom-centre, so you can see what the tracker sees (lighting, framing). Hidden from touch.
       const wrap = document.createElement('div');
       wrap.style.cssText = 'position:fixed;left:8px;bottom:8px;width:132px;height:99px;border-radius:10px;overflow:hidden;border:2px solid rgba(255,255,255,.7);opacity:.9;pointer-events:none;z-index:9999;background:#000';
@@ -574,7 +589,11 @@ const MAIN := """
       await v.play();                       // attached to the page first: required by iOS Safari
       const cx = cv.getContext('2d');
       window.__gazePreview = wrap;
+      // the live camera picture is never shown in a level; ?preview shows it for debugging
+      const showPrev = qs.has('preview');
+      wrap.style.visibility = showPrev ? 'visible' : 'hidden';
       const drawPts = (pts) => {
+        if (!showPrev) return;
         cx.clearRect(0, 0, 176, 132);
         if (!pts) return;
         cx.fillStyle = '#3f6';
@@ -621,6 +640,7 @@ const MAIN := """
         }
       }, 400);
       let last = -1, errShown = false, inflight = 0, busyAt = 0;
+      const dlgDet = []; let dlgN = 0;
       const DEPTH = 2;        // frames in the pipeline at once: one in the model worker, one being turned into a packet
       if (workerOk) {
         // The face model runs in the workers: this thread only snapshots a frame (cheap) and lets the game keep its frame rate.
@@ -635,6 +655,29 @@ const MAIN := """
           }
           else if (m.type === 'pkt') {
             inflight = Math.max(0, inflight - 1); window.__gaze = m.pkt; const S = window.__gazeStats; S.pk++; drawPts(m.pts);
+            // chip trial: model time with a face in view, after a short warm-up
+            if (m.pkt && m.pkt.conf > 0 && m.pkt.nx !== undefined && typeof m.det === 'number' && m.det > 0 && !qs.has('cpu') && !qs.has('gpu')) {
+              const r = dlgRec();
+              if (!r.use) {
+                dlgN++; if (dlgN > 12) dlgDet.push(m.det);
+                if (dlgDet.length >= 45) {
+                  dlgDet.sort((a, b) => a - b); const med = dlgDet[dlgDet.length >> 1];
+                  const cur = S.dlg ? String(S.dlg).toLowerCase() : (r.trying || defaultDlg), other = cur === 'cpu' ? 'gpu' : 'cpu';
+                  const again = () => setTimeout(() => { stopAll(); window.__gazeRunning = false; setTimeout(() => { window.__gazeStart(); }, 150); }, 200);
+                  if (!r.trying) {
+                    if (med <= 45) { dlgSave({ use: cur, ms: { [cur]: Math.round(med) } }); S.dlgNote = 'face model on the ' + cur.toUpperCase() + ': ' + Math.round(med) + ' ms, fine'; }
+                    else { dlgSave({ trying: other, first: cur, ms: { [cur]: Math.round(med) } }); S.dlgNote = 'face model slow on the ' + cur.toUpperCase() + ' (' + Math.round(med) + ' ms): trying the ' + other.toUpperCase(); again(); }
+                  } else {
+                    const ms = Object.assign({}, r.ms || {}, { [cur]: Math.round(med) });
+                    const first = r.first || other, win = (ms[cur] < ms[first] * 0.9) ? cur : first;
+                    dlgSave({ use: win, ms: ms });
+                    S.dlgNote = 'face model: ' + first.toUpperCase() + ' ' + ms[first] + ' ms, ' + cur.toUpperCase() + ' ' + ms[cur] + ' ms: keeping the ' + win.toUpperCase();
+                    if (win !== cur) again();
+                  }
+                  dlgDet.length = 0; dlgN = 0;
+                }
+              }
+            }
             // capture-to-page latency (frame grabbed -> packet back) and model time per frame, smoothed
             if (typeof m.t === 'number') { const l = performance.now() - m.t; S.lat = S.lat === undefined ? l : S.lat * 0.9 + l * 0.1; }
             if (typeof m.inf === 'number') { S.inf = S.inf === undefined ? m.inf : S.inf * 0.9 + m.inf * 0.1; }
