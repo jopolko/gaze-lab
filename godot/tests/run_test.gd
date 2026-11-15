@@ -113,7 +113,7 @@ func _ready() -> void:
 			worst_ratio = maxf(worst_ratio, absf(float(good["x"]) - prev_good) / maxf(prev_z - float(r["z"]), 1.0))
 		prev_good = float(good["x"])
 		prev_z = float(r["z"])
-	_check(n_rows >= 24 and n_open > n_rows, "barriers with several openings (%d barriers, %d openings)" % [n_rows, n_open])
+	_check(n_rows >= 16 and n_open > n_rows, "barriers with several openings (%d barriers, %d openings)" % [n_rows, n_open])
 	_check(worst_clear > 2.2, "the safe opening is wide enough to drive through (clear half width %.1f m)" % worst_clear)
 	_check(worst_ratio <= 0.31, "the safe opening drifts at most 0.3 m sideways per metre downhill (%.2f)" % worst_ratio)
 	var first: Dictionary = rig._rows[RunRig.START_CALM]
@@ -177,7 +177,7 @@ func _ready() -> void:
 	var per_row := float(buff_n) / float(maxi(rows_b, 1))
 	_check(per_row >= 0.6 and per_row <= 2.0, "buffs are semi-frequent (%.2f per barrier, %d beside the path)" % [per_row, path_n])
 	_check(all_clear, "no buff sits on a tree or rock")
-	_check(path_n >= 6 and path_off_ok, "path buffs sit 8-13 m off the safe line (%d)" % path_n)
+	_check(path_n >= 3 and path_off_ok, "path buffs sit 8-13 m off the safe line (%d)" % path_n)
 
 	# ---- buff effects
 	rig._restart()
@@ -248,7 +248,7 @@ func _ready() -> void:
 	_check(rig._finished, "the autopilot reaches the finish (%d m, %.0f s)" % [int(-rig.spos.z), rig._run_t])
 	_check(rig.crashes <= 3, "and does it with at most one crash (it follows the safe line blindly) (%d crashes: %s)" % [rig.crashes, str(rig.crash_log)])
 	_check(v3500 > 14.0 and v500 > 14.0, "the speed stays in a sane range whatever stretch it is in (%.0f m/s at 500 m, %.0f m/s at 3500 m)" % [v500, v3500])
-	_check(rig.score >= 1000 and rig.rows_passed >= 24, "a clean run scores (%d points, %d barriers)" % [rig.score, rig.rows_passed])
+	_check(rig.score >= 1000 and rig.rows_passed >= 16, "a clean run scores (%d points, %d barriers)" % [rig.score, rig.rows_passed])
 	var z_end := rig.spos.z
 	for i in 240:
 		rig._physics_process(dt)
@@ -1374,7 +1374,7 @@ func _ready() -> void:
 	rig.apply_params({"zones": {"air": 9.0, "rush": 1.0, "flat": 0.0, "tunnel": 0.0, "bend": 0.0}})
 	rig._restart()
 	rig.balls_enabled = false
-	for js in range(rig._next_j, 60):
+	for js in range(rig._next_j, 42):
 		rig._gen_segment(js)
 	var srow: Dictionary = {}
 	for js2 in rig._rows:
@@ -1439,10 +1439,10 @@ func _ready() -> void:
 	if not grow.is_empty():
 		var pcount := 0
 		for nd in grow["nodes"]:
-			if nd is MeshInstance3D and (nd as MeshInstance3D).mesh is CylinderMesh and absf(((nd as MeshInstance3D).mesh as CylinderMesh).height - 12.0) < 0.01:
+			if nd is MeshInstance3D and (nd as MeshInstance3D).mesh is CylinderMesh and absf(((nd as MeshInstance3D).mesh as CylinderMesh).top_radius - 1.8) < 0.01:
 				pcount += 1
 		posts_ok = pcount >= 2 * (grow["gaps"] as Array).size()
-	_check(posts_ok, "every opening has a stone pillar on each side")
+	_check(posts_ok, "every opening has a marble column on each side")
 	if not grow.is_empty():
 		var lx := 0.0
 		var gm := -1.0

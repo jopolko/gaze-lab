@@ -15,7 +15,7 @@ extends Node3D
 
 const G := 9.8
 const SLOPE := 0.34
-const ROW_GAP := 125.0
+const ROW_GAP := 180.0          # metres of hill per barrier on average (was 125): more room to choose, to carve and to meander
 const W_HALF := 58.0
 const GROUND_HALF := 150.0
 const FLAG_COLS := [Color(1.0, 0.5, 0.15), Color(0.2, 0.8, 0.9), Color(0.16, 0.16, 0.2)]
@@ -2347,12 +2347,12 @@ func _lane_tick(delta: float, vs: Vector2) -> void:
 	# With no barrier in range (the last 8 m before a gate, an air stretch, the calm start) the look still has to be read: this used to stop here, which froze the steering at
 	# its last value and showed the raw screen-gaze point as the cursor. On a phone that point sits in a corner, so the opening on that side was picked for the next barrier.
 	var no_row := target.is_empty()
-	if no_row and not (_eye_on and lane_ctl >= 2 and not lane_mode):
+	if no_row and not (_eye_on and lane_ctl >= 2):
 		return
 	if scout.is_empty():
 		scout = target
 	# the wall you are about to pass locks its lane (a carve needs room); your choice now applies to the wall after it
-	if lane_mode:
+	if lane_mode and not no_row:
 		target["fl"] = _lane
 	if _eye_on and lane_ctl >= 2:
 		_grace_t = LANE_GRACE

@@ -22,6 +22,9 @@ func _ready() -> void:
 	var dt := 1.0 / 60.0
 	var slow: Array = []
 	var all := PackedFloat32Array()
+	var max_h := 0.0
+	var air_now := 0.0
+	var air_max := 0.0
 	for i in 3600:
 		var nj := rig._next_j
 		var rp := rig.rows_passed
@@ -31,10 +34,14 @@ func _ready() -> void:
 		rig._physics_process(dt)
 		var ms := float(Time.get_ticks_usec() - t0) / 1000.0
 		all.append(ms)
+		max_h = maxf(max_h, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z))
+		air_now = 0.0 if rig.grounded else air_now + dt
+		air_max = maxf(air_max, air_now)
 		var got2 := rig.orbs_got + int(rig.get("buffs_got")) if rig.get("buffs_got") != null else rig.orbs_got
 		if ms > 4.0:
 			slow.append([ms, i, "built a stretch" if rig._next_j != nj else "", "passed a gate" if rig.rows_passed != rp else "", "picked up" if got2 != got else "", "ground jobs %d" % jobs])
 	all.sort()
+	print("GEN  highest above the snow %.1f m, longest time in the air %.1f s, distance %d m, crashes %d, barriers %d, kickers %s" % [max_h, air_max, int(-rig.spos.z), rig.crashes, rig.rows_passed, str(rig.kick_log)])
 	print("GEN  frames 3600   median %.2f ms   99th %.2f ms   worst %.2f ms" % [all[1800], all[3564], all[3599]])
 	slow.sort_custom(func(a, b): return float(a[0]) > float(b[0]))
 	for s in slow.slice(0, 25):

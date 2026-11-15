@@ -36,7 +36,7 @@ try {
   await shot('menu.jpg');
   for (let i = 0; i < 4; i++) { const before = await ev('__sp.programs'); await click(vw * 0.5, vh * 0.865); await sleep(5000); if ((await ev('__sp.programs')) > before) break; }   // START (again if the menu was not ready)
   await ev('__sp.slow.length = 0; __sp.frames = 0; 0');
-  await sleep(secs * 1000);
+  if (process.env.SHOTS) { for (let i = 0; i < secs; i++) { await sleep(1000); await shot('t' + i + '.jpg'); } } else await sleep(secs * 1000);
   const out = JSON.parse(await ev('__sp.summary(40)'));
   console.log(`play ${secs} s: ${out.frames} frames (${(out.frames / secs).toFixed(1)} fps), ${out.slowFrames} frames over 50 ms, programs ${out.programs}`);
   for (const s of out.slow) console.log(`  at ${s.at}s  ${s.ms} ms (graphics calls ${s.glMs} ms)  ${s.top.map((t) => `${t[0]} x${t[1]} ${t[2]}ms`).join(', ')}`);

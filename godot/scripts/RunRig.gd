@@ -123,7 +123,9 @@ func _gen_segment(j: int) -> void:
 	var z0 := -ROW_GAP * float(j)
 	var d := _course_diff(z0)
 	var post_air := _force_far_next
-	var rz := z0 - _rng.randf_range(70.0, 92.0) if _force_far_next else z0 - _rng.randf_range(36.0, 92.0)
+	# where in its stretch the barrier stands is random over a wide range, so the gap to the next one varies from about 80 m to about 280 m. However short, it is always
+	# makeable: the safe opening moves sideways by at most a third of the distance (see `shift` below).
+	var rz := z0 - _rng.randf_range(0.56, 0.74) * ROW_GAP if _force_far_next else z0 - _rng.randf_range(0.22, 0.78) * ROW_GAP
 	_force_far_next = false
 	# now and then a segment has no barrier at all: an air segment, with an epic kicker at the top and room to land
 	_region_step(j)
@@ -193,6 +195,11 @@ func _gen_segment(j: int) -> void:
 					_add_tree(cones, cone_cols, trunks, trunk_cols, obs, x, lz + _rng.randf_range(-0.6, 0.6), _rng.randf_range(0.8, 1.25), true)
 	row["px"] = prev_x
 	row["pz"] = prev_rz
+	if has_row and j > START_CALM:
+		var m_span := prev_rz - rz
+		if m_span > 70.0:
+			var m_amp := minf(0.10 * m_span, 17.0) * _rng.randf_range(0.55, 1.0) * (0.6 if float(zp["walls"]) > 0.0 else 1.0)
+			row["mz"] = Vector3(m_amp * (1.0 if _rng.randf() < 0.5 else -1.0), float(clampi(int(m_span / 70.0), 1, 3)), _rng.randf_range(0.0, PI * 0.5))
 	if zone == "interzone" and has_row and bool(params.get("lazy", true)):
 		var csgn := -signf(_good_x) if absf(_good_x) > 8.0 else (1.0 if _rng.randf() < 0.5 else -1.0)
 		row["cut"] = csgn * _rng.randf_range(9.0, 15.0)          # the world is spliced here: you come out sideways
@@ -205,8 +212,8 @@ func _gen_segment(j: int) -> void:
 		for i in n_single:
 			var sz := _rng.randf_range(rz + 9.0, minf(prev_rz - 9.0, -30.0))
 			var sx := _rng.randf_range(-W_HALF + 3.0, W_HALF - 3.0)
-			if absf(sx - path_x(row, sz)) < 9.0:
-				continue
+			if absf(sx - path_x(row, sz)) < 9.0 or absf(sx - chord_x(row, sz)) < 6.5:
+				continue                                          # the winding trail is clear, and so is the straight cut across its bends (a board that ignores the trail must not meet a tree planted on the direct line)
 			var in_air_zone := false
 			for az in _air_zones:
 				if sz < float(az["z0"]) and sz > float(az["z1"]) and absf(sx - float(az["x"])) < 16.0:
@@ -516,6 +523,42 @@ func _arch_mesh(r_in: float, r_out: float, depth: float) -> ArrayMesh:
 	return m
 
 
+var _gate_mats: Dictionary = {}
+
+
+## The three materials a gate is built from. Lit, so the sun and the caves shade them, with a little glow of their own so they still read as marble, gold and oak in the dark.
+func _gate_mat(kind: String) -> StandardMaterial3D:
+	if _gate_mats.has(kind):
+		return _gate_mats[kind]
+	var m := Mats.lit()
+	match kind:
+		"marble":
+			m.albedo_color = Color(0.93, 0.91, 0.86)
+			m.roughness = 0.28
+			m.metallic_specular = 0.7
+			m.emission = Color(0.93, 0.9, 0.84)
+			m.emission_energy_multiplier = 0.22
+		"gold":
+			m.albedo_color = Color(1.0, 0.76, 0.22)
+			m.metallic = 0.85
+			m.roughness = 0.25
+			m.emission = Color(1.0, 0.7, 0.15)
+			m.emission_energy_multiplier = 0.55
+		"oak":
+			m.albedo_color = Color(0.42, 0.25, 0.11)
+			m.roughness = 0.75
+			m.metallic_specular = 0.25
+			m.emission = Color(0.42, 0.24, 0.1)
+			m.emission_energy_multiplier = 0.25
+		_:
+			m.albedo_color = Color(0.5, 0.3, 0.13)
+			m.roughness = 0.6
+			m.emission = Color(0.75, 0.48, 0.2)
+			m.emission_energy_multiplier = 0.6
+	_gate_mats[kind] = m
+	return m
+
+
 func _make_signs(row: Dictionary, rz: float) -> void:
 	for g in row["gaps"]:
 		var zn: String = g.get("leads", "rush")
@@ -534,29 +577,55 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 		cm.height = 120.0
 		cm.radial_segments = 8
 		_mi(root, cm, _fx_mat("add", Color(0.55, 0.95, 1.0, 0.32)), Vector3(0, 50.0, 0))
-		# a stone pillar on each side of the opening with a capital and a base, joined by an archway: a gap reads as a gate over the trees from a long way off
+		# A REGAL GATE: two fluted marble columns on stepped gold plinths with gold capitals, an oak beam with a gold band laid across them, and above it an oak arch with a
+		# gold keystone. Tall enough to stand clear of the trees, so an opening reads as a gateway from the far end of the stretch.
 		var gw: float = float(g.get("w", 10.0))
-		var stone := _fx_mat("solid", Color(0.12, 0.15, 0.24), 0.55)
 		var half_open: float = gw * 0.5 + 1.0
-		var spring: float = 11.0
+		var spring: float = 20.0 * (1.1 if Game.touch_mode else 1.0)          # column height: well above the trees (about 7 m), so a gate is a landmark
+		var marble := _gate_mat("marble")
+		var gold := _gate_mat("gold")
+		var oak := _gate_mat("oak")
+		var gy_mid: float = terrain_h(gx, rz)
+		var top_y: float = gy_mid + spring
 		for psx in [-1.0, 1.0]:
-			var ppx: float = gx + float(psx) * (half_open + 0.9)
-			var gy: float = terrain_h(ppx, rz)
-			var pil := CylinderMesh.new()
-			pil.top_radius = 0.95
-			pil.bottom_radius = 1.15
-			pil.height = spring + 1.0
-			pil.radial_segments = 10
-			(row["nodes"] as Array).append(_mi(self, pil, stone, Vector3(ppx, gy + (spring + 1.0) * 0.5 - 0.5, rz)))
+			var ppx: float = gx + float(psx) * (half_open + 2.0)
+			var gy: float = terrain_h(ppx, rz) - 0.6
+			for step in 3:                                                   # stepped plinth, widest at the ground
+				var pl := BoxMesh.new()
+				var pw := 6.6 - 1.0 * float(step)
+				pl.size = Vector3(pw, 0.7, pw)
+				(row["nodes"] as Array).append(_mi(self, pl, gold if step == 2 else marble, Vector3(ppx, gy + 0.35 + 0.7 * float(step), rz)))
+			var shaft_h: float = top_y - (gy + 2.1)
+			var shaft := CylinderMesh.new()
+			shaft.top_radius = 1.2 * 1.5
+			shaft.bottom_radius = 2.15
+			shaft.height = shaft_h
+			shaft.radial_segments = 12
+			(row["nodes"] as Array).append(_mi(self, shaft, marble, Vector3(ppx, gy + 2.1 + shaft_h * 0.5, rz)))
+			for band in [0.08, 0.92]:                                        # gold rings near the foot and the head of the shaft
+				var ring := CylinderMesh.new()
+				ring.top_radius = 2.35
+				ring.bottom_radius = 2.35
+				ring.height = 0.7
+				ring.radial_segments = 12
+				(row["nodes"] as Array).append(_mi(self, ring, gold, Vector3(ppx, gy + 2.1 + shaft_h * float(band), rz)))
 			var cap := BoxMesh.new()
-			cap.size = Vector3(3.0, 0.9, 3.0)
-			(row["nodes"] as Array).append(_mi(self, cap, stone, Vector3(ppx, gy + spring + 0.6, rz)))
-			var base := BoxMesh.new()
-			base.size = Vector3(3.0, 1.0, 3.0)
-			(row["nodes"] as Array).append(_mi(self, base, stone, Vector3(ppx, gy + 0.2, rz)))
-		var arch_y: float = terrain_h(gx, rz) + spring + 1.0
-		var arch_mat := (_fx_mat("solid", Color(0.7, 1.0, 1.0), 3.6) as StandardMaterial3D).duplicate() as StandardMaterial3D          # its own material: the arch can turn gold when it holds the next step of the chain
-		var arch := _mi(self, _arch_mesh(half_open - 0.6, half_open + 1.7 * vk, 2.2 * vk), arch_mat, Vector3(gx, arch_y, rz))
+			cap.size = Vector3(6.0, 1.3, 6.0)
+			(row["nodes"] as Array).append(_mi(self, cap, gold, Vector3(ppx, top_y + 0.65, rz)))
+		var beam := BoxMesh.new()                                         # the oak beam across the two columns
+		beam.size = Vector3(2.0 * (half_open + 2.0) + 7.6, 2.6, 4.2)
+		(row["nodes"] as Array).append(_mi(self, beam, oak, Vector3(gx, top_y + 2.6, rz)))
+		var trim := BoxMesh.new()
+		trim.size = Vector3(beam.size.x + 0.8, 0.55, 4.7)
+		(row["nodes"] as Array).append(_mi(self, trim, gold, Vector3(gx, top_y + 4.15, rz)))
+		var key := PrismMesh.new()                                        # the keystone
+		key.size = Vector3(3.6, 4.0, 4.6)
+		var kn := _mi(self, key, gold, Vector3(gx, top_y + 2.4, rz))
+		kn.rotation.z = PI
+		(row["nodes"] as Array).append(kn)
+		var arch_y: float = top_y + 4.4
+		var arch_mat := (_gate_mat("oak_glow") as StandardMaterial3D).duplicate() as StandardMaterial3D          # its own material: the arch turns gold when it holds the next step of the chain
+		var arch := _mi(self, _arch_mesh(half_open + 0.2, half_open + 3.2 * vk, 3.6 * vk), arch_mat, Vector3(gx, arch_y, rz))
 		(row["nodes"] as Array).append(arch)
 		g["arch_mat"] = arch_mat
 		g["arch_col"] = arch_mat.albedo_color
@@ -1723,7 +1792,7 @@ func _place_buffs(row: Dictionary, d: float, prev_rz: float, rz: float) -> void:
 	# in front of an opening
 	for g in gaps:
 		var iso: bool = g.get("iso", false)
-		var p := 1.0 if iso else (0.22 if g["good"] else 0.16)
+		var p := 1.0 if iso else (0.45 if g["good"] else 0.35)          # stretches are longer now, so more of the gates carry an offer
 		if _rng.randf() >= p:
 			continue
 		var gx: float = g["x"]
@@ -2314,7 +2383,8 @@ func _update_buff_aim(delta: float) -> void:
 # Physics: the hill pulls, carving costs speed, the board turns on a short spring, momentum follows through grip
 # --------------------------------------------------------------------------
 ## The safe line toward a barrier: straight from the safe opening of the barrier before it to the safe opening of this one.
-func path_x(row: Dictionary, z: float) -> float:
+## The straight line from the last opening to the safe one (the trail, path_x, wanders either side of it).
+func chord_x(row: Dictionary, z: float) -> float:
 	var gx := 0.0
 	for g in row["gaps"]:
 		if g["good"]:
@@ -2323,6 +2393,24 @@ func path_x(row: Dictionary, z: float) -> float:
 	if span < 1.0:
 		return gx
 	return lerpf(float(row["px"]), gx, clampf((float(row["pz"]) - z) / span, 0.0, 1.0))
+
+
+func path_x(row: Dictionary, z: float) -> float:
+	var gx := 0.0
+	for g in row["gaps"]:
+		if g["good"]:
+			gx = float(g["x"])
+	var span := float(row["pz"]) - float(row["z"])
+	if span < 1.0:
+		return gx
+	var t := clampf((float(row["pz"]) - z) / span, 0.0, 1.0)
+	var x := lerpf(float(row["px"]), gx, t)
+	# the trail meanders: one to three bends between the two openings, fading to nothing at both ends so it still leaves and arrives dead on
+	var mz: Variant = row.get("mz")
+	if mz is Vector3:
+		var m: Vector3 = mz
+		x += m.x * sin(PI * t) * sin(PI * m.y * t + m.z)
+	return clampf(x, -(W_HALF - 8.0), W_HALF - 8.0)
 
 
 func _auto_steer() -> float:
@@ -2580,8 +2668,11 @@ func _guard_path(delta: float, s_in: float) -> float:
 			_glide_row = int(row["j"])
 			_glide_x = spos.x + vel.x * 0.45
 		# the aim point glides to the chosen gate (no jerk when the choice flips), but never slower than it takes to ARRIVE: a gate chosen late and far off must still be reached
-		var glide_need := absf(float(tgt["x"]) - _glide_x) / maxf(bd / spd_w - 0.7, 0.25)
-		_glide_x = move_toward(_glide_x, float(tgt["x"]), maxf(lerpf(40.0, 14.0, _a()), glide_need * 1.5) * delta)
+		var aim_x := float(tgt["x"])
+		if bool(tgt.get("good", false)) and bd > 34.0 and row.get("mz") is Vector3:
+			aim_x = path_x(row, spos.z - clampf(spd_w * 1.3, 20.0, 48.0))          # heading for the opening the trail leads to: follow the trail's bends, a little ahead of the board
+		var glide_need := absf(aim_x - _glide_x) / maxf(bd / spd_w - 0.7, 0.25)
+		_glide_x = move_toward(_glide_x, aim_x, maxf(lerpf(40.0, 14.0, _a()), glide_need * 1.5) * delta)
 		var t_gate := bd / maxf(spd_w, 1.0)
 		var want := clampf((_glide_x - (spos.x + vel.x * 0.45)) / 12.0, -0.9, 0.9)
 		# too far off to make the gap with a normal carve: give up speed instead of the line (a friendly brake, never a crash)
