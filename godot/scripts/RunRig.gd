@@ -80,6 +80,166 @@ func setup(p_player: PlayerController) -> void:
 # --------------------------------------------------------------------------
 # Terrain: the base slope, getting steeper with distance
 # --------------------------------------------------------------------------
+## One stretch of forest trail: the tree lines down both sides (solid: leave the trail and you hit them), forest behind them, and the slalom poles.
+func _gen_trail(row: Dictionary, z0: float, cones: Array[Transform3D], cone_cols: PackedColorArray, trunks: Array[Transform3D], trunk_cols: PackedColorArray,
+		rocks: Array[Transform3D], rock_cols: PackedColorArray, obs: PackedFloat32Array) -> void:
+	var z := z0
+	var z_end := maxf(z0 - ROW_GAP, finish_z + 6.0)
+	while z > z_end:
+		var s := -z
+		if s > 26.0:
+			var cx := trail_x(z)
+			var half := TRAIL_HALF + 2.5 * sin(s / 47.0 + _tr_p2)                       # the trail breathes: a little wider, a little narrower
+			for sd in [-1.0, 1.0]:
+				var ex: float = cx + float(sd) * (half + _rng.randf_range(0.0, 2.2))
+				if absf(ex) < W_HALF - 1.5:
+					if _rng.randf() < 0.1:
+						_add_rock(rocks, rock_cols, obs, ex + float(sd) * 1.5, z + _rng.randf_range(-1.0, 1.0), _rng.randf_range(1.2, 2.0), Color(0.55, 0.58, 0.64), _rng.randf_range(0.9, 1.4))
+					else:
+						_add_tree(cones, cone_cols, trunks, trunk_cols, obs, ex, z + _rng.randf_range(-1.0, 1.0), _rng.randf_range(0.95, 1.5), true)
+				for deep in 3:                                                         # the forest behind the front row: seen, never hit
+					var fx: float = cx + float(sd) * (half + 4.0 + _rng.randf_range(0.0, 34.0))
+					_add_tree(cones, cone_cols, trunks, trunk_cols, PackedFloat32Array(), fx, z + _rng.randf_range(-1.6, 1.6), _rng.randf_range(1.0, 1.9), false)
+		z -= 3.3
+	# slalom poles: one on the inside of every turn, at its tightest point
+	var poles: Array = []
+	var n0 := int(floor((-z0 / TRAIL_TURN_LEN + _tr_p1 - PI * 0.5) / PI))
+	for n in range(n0, n0 + 12):
+		var sp := (PI * 0.5 + float(n) * PI - _tr_p1) * TRAIL_TURN_LEN
+		var pz := -sp
+		if pz > z0 or pz <= z0 - ROW_GAP or sp < 150.0 or pz < finish_z + 30.0:
+			continue
+		var e := signf(sin(sp / TRAIL_TURN_LEN + _tr_p1))                               # +1: the trail is at its right-most here, so the turn is to the left and the pole stands on the left
+		var px := trail_x(pz) - e * 5.0
+		var pole := {"x": px, "z": pz, "e": e, "done": false, "n": _make_pole(row, px, pz, e, poles_total % 2 == 0)}
+		poles_total += 1
+		poles.append(pole)
+	row["poles"] = poles
+
+
+func _make_pole(row: Dictionary, x: float, z: float, e: float, red: bool) -> Node3D:
+	var root := Node3D.new()
+	add_child(root)
+	_place(root, Vector3(x, terrain_h(x, z), z))
+	(row["nodes"] as Array).append(root)
+	var col := Color(1.0, 0.22, 0.2) if red else Color(0.2, 0.5, 1.0)
+	var mat := _fx_mat("solid", col, 1.6)
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 0.16
+	shaft.bottom_radius = 0.2
+	shaft.height = 5.2
+	shaft.radial_segments = 6
+	_mi(root, shaft, mat, Vector3(0.0, 2.6, 0.0))
+	var flag := BoxMesh.new()                                         # the banner flies toward the side you pass on
+	flag.size = Vector3(2.6, 1.4, 0.12)
+	_mi(root, flag, mat, Vector3(e * 1.4, 4.3, 0.0))
+	var chev := PrismMesh.new()                                       # and a marker on the snow points the same way
+	chev.size = Vector3(2.4, 2.0, 0.3)
+	var cn := _mi(root, chev, _fx_mat("add", Color(col.r, col.g, col.b, 0.7)), Vector3(e * 3.4, 0.25, 0.0))
+	cn.rotation = Vector3(-PI * 0.5, 0.0, -e * PI * 0.5)
+	return root
+
+
+## Which side did the board pass each pole on, and how close?
+func _slalom_tick() -> void:
+	if not trail or _finished:
+		return
+	for kk in _rows:
+		var r: Dictionary = _rows[kk]
+		if not r.has("poles"):
+			continue
+		for pl in r["poles"]:
+			if pl["done"] or spos.z > float(pl["z"]):
+				continue
+			pl["done"] = true
+			var d := (spos.x - float(pl["x"])) * float(pl["e"])         # + = the right side of it
+			if d <= 0.0:
+				poles_wrong += 1
+				chain = maxi(chain - 2, 0)
+				groove = 1.0 + 0.25 * minf(float(chain), float(FLOW_MAX))
+				_toast("WRONG SIDE", Color(1.0, 0.6, 0.3))
+			elif d < 2.4:
+				poles_shaved += 1
+				poles_clean += 1
+				_gain(int(60.0 * groove))
+				_flow_up(2)
+				_toast("SHAVED IT", Color(0.4, 1.0, 0.7))
+				_burst(Vector3(float(pl["x"]), spos.y + 1.0, float(pl["z"])), Color(1, 1, 1), 16, 7.0, 0.5, 0.7)
+				Game.sfx(&"coin")
+			elif d < 8.0:
+				poles_clean += 1
+				_gain(int(30.0 * groove))
+				_flow_up()
+				Game.sfx(&"coin")
+			else:
+				_gain(10)
+				_flow_touch()
+
+
+## The next pole ahead, or {}.
+func _next_pole() -> Dictionary:
+	var best: Dictionary = {}
+	for kk in _rows:
+		var r: Dictionary = _rows[kk]
+		if not r.has("poles"):
+			continue
+		for pl in r["poles"]:
+			if not pl["done"] and (best.is_empty() or float(pl["z"]) > float(best["z"])):
+				best = pl
+	return best
+
+
+# --------------------------------------------------------------------------
+# FOREST TRAIL: a slalom run. No walls of trees across the hill and no doors in them: one trail, about 26 m wide, winding through forest that stands along both sides,
+# over rollers and crests, with a single slalom pole on the inside of every turn. The board follows the trail by itself; your eyes trim the line to shave the poles.
+# (?gates brings the old course back.)
+# --------------------------------------------------------------------------
+var trail: bool = OS.has_feature("web") and not str(JavaScriptBridge.eval("window.location.search")).contains("gates")
+const TRAIL_TURN_LEN := 30.0         # metres: the trail swings one way and back every 2 * PI * this (a turn about every 95 m)
+const TRAIL_TURN_AMP := 13.0         # metres either side of its slow line
+const TRAIL_DRIFT_LEN := 170.0
+const TRAIL_DRIFT_AMP := 9.0
+const TRAIL_SPEED := 23.5           # m/s
+const TRAIL_HALF := 13.0             # half the width of the open snow between the tree lines
+var _tr_p1: float = 0.0
+var _tr_p2: float = 0.0
+var _tr_p3: float = 0.0
+var _tr_p4: float = 0.0
+var poles_clean: int = 0
+var poles_shaved: int = 0
+var poles_wrong: int = 0
+var poles_total: int = 0
+
+
+func _trail_k(s: float) -> float:
+	return smoothstep(50.0, 170.0, s)          # the first metres run straight, then the turns grow in
+
+
+## Where the middle of the trail is (strip x) at strip z.
+func trail_x(z: float) -> float:
+	var s := maxf(-z, 0.0)
+	return _trail_k(s) * (TRAIL_TURN_AMP * sin(s / TRAIL_TURN_LEN + _tr_p1) + TRAIL_DRIFT_AMP * sin(s / TRAIL_DRIFT_LEN + _tr_p2))
+
+
+## How hard the trail is turning there, -1 .. +1 (+ = curving toward +x).
+func _trail_turn(z: float) -> float:
+	var s := maxf(-z, 0.0)
+	return -_trail_k(s) * sin(s / TRAIL_TURN_LEN + _tr_p1)
+
+
+## What the trail adds to the height of the ground: rollers and whoops along it, a bank on the outside of every turn, and the sides rising where the forest stands.
+func _trail_h(x: float, z: float) -> float:
+	var s := maxf(-z, 0.0)
+	var k := _trail_k(s)
+	var off := x - trail_x(z)
+	var h := k * (2.6 * sin(s / 23.0 + _tr_p3) + 1.15 * sin(s / 9.5 + _tr_p4))          # long rollers and short whoops: the crests lift you when you are fast
+	h -= 0.11 * _trail_turn(z) * clampf(off, -22.0, 22.0)                             # banked turns: the outside of the bend is higher
+	var side := absf(off) - (TRAIL_HALF - 3.0)
+	if side > 0.0:
+		h += minf(0.02 * side * side, 5.0)                                             # the forest floor climbs away from the trail
+	return h
+
+
 func terrain_h(x: float, z: float) -> float:
 	var u := maxf(-z, 0.0)
 	var h := _base_h(z) - 0.00002 * u * u
@@ -88,6 +248,8 @@ func terrain_h(x: float, z: float) -> float:
 	var ax := absf(x) - W_HALF
 	if ax > 0.0:
 		h += 0.0085 * ax * ax
+	if trail:
+		h += _trail_h(x, z)
 	if _zone_by_j.get(int(floor(-z / ROW_GAP)), "") == "melt":
 		var fz := fposmod(-z, ROW_GAP)
 		h += Realms.melt_h(x, z, smoothstep(0.0, 12.0, fz) * smoothstep(0.0, 12.0, ROW_GAP - fz))          # the ground rolls like liquid, easing in and out at the edges of the stretch
@@ -133,6 +295,8 @@ func _gen_segment(j: int) -> void:
 	_pending_zone = ""
 	if j < 3 or not ZONES.has(zone) or (zone == "air" and (_last_air or rz < finish_z + 300.0)):
 		zone = "rush"
+	if trail:
+		zone = ["forest", "rush", "flat", "forest", "rush", "forest"][_rng.randi() % 6] if j >= 2 else "rush"          # plain snow, but the pitch still varies: mellow, steady, steep
 	var zp: Dictionary = ZONES[zone]
 	_cur_zone = zone
 	_zone_by_j[j] = zone
@@ -144,7 +308,7 @@ func _gen_segment(j: int) -> void:
 	zones_seen[zone] = int(zones_seen.get(zone, 0)) + 1
 	var air_seg := zone == "air"
 	_last_air = air_seg
-	var has_row := j >= START_CALM and rz > finish_z + 40.0 and not air_seg
+	var has_row := j >= START_CALM and rz > finish_z + 40.0 and not air_seg and not trail          # a forest trail has no barriers across it
 	var row: Dictionary = {"j": j, "z": rz, "z0": z0, "gaps": [], "obs": PackedFloat32Array(), "banks": [], "nodes": [],
 		"passed": false, "crash": false, "has_row": has_row, "buffs": [], "pads": [], "layout": "none", "zone": zone, "region": _region}
 	var cones: Array[Transform3D] = []
@@ -224,7 +388,10 @@ func _gen_segment(j: int) -> void:
 				_add_rock(rocks, rock_cols, obs, sx, sz, _rng.randf_range(1.0, 1.6), Color(0.55, 0.58, 0.64), _rng.randf_range(0.9, 1.3))
 			else:
 				_add_tree(cones, cone_cols, trunks, trunk_cols, obs, sx, sz, _rng.randf_range(0.8, 1.3), true)
-	_place_kicker(row, obs, prev_rz, rz, z0, has_row, j, air_seg)
+	if trail:
+		_gen_trail(row, z0, cones, cone_cols, trunks, trunk_cols, rocks, rock_cols, obs)
+	else:
+		_place_kicker(row, obs, prev_rz, rz, z0, has_row, j, air_seg)
 	# boost pads live out on the slope now, not on ramps (the vortex does the ramps): now and then one lies on the safe line a little after a barrier
 	if has_row and not air_seg and _rng.randf() < 0.12:
 		var pdz := rz - _rng.randf_range(24.0, 40.0)
@@ -2720,6 +2887,19 @@ func _guard_path(delta: float, s_in: float) -> float:
 	if _finished or hurt_t > 0.0:
 		return 0.0
 	var add := 0.0
+	if trail:
+		# the board rides the trail by itself: it steers for the middle of the trail a little way ahead, leaning to the passing side of the next pole. Your look is added on
+		# top, so you choose how close to shave each pole, and a look held hard to one side will still take you off the trail.
+		var spd_t := maxf(-vel.y, MIN_SPEED)
+		# two parts: point the board the way the trail is heading a moment ahead (so it turns WITH the bend instead of chasing it), and correct for being off the line
+		var zf := spos.z - spd_t * 0.4
+		var ff := atan((trail_x(zf - 2.0) - trail_x(zf + 2.0)) / 4.0) / THETA_MAX
+		var tx := trail_x(spos.z - spd_t * 0.5)
+		var np := _next_pole()
+		if not np.is_empty() and spos.z - float(np["z"]) < 40.0:
+			tx = lerpf(tx, float(np["x"]) + float(np["e"]) * 4.0, 0.5)          # set up for the pole: about 4 m to its passing side
+		var t_want := clampf(ff + (tx - (spos.x + vel.x * 0.5)) / 11.0, -1.0, 1.0)
+		add += t_want * lerpf(0.75, 1.0, _a()) * (1.0 - 0.4 * absf(s_in))
 	# 1) the barrier ahead: commit to a gate
 	var row: Dictionary = {}
 	var bd := 1.0e9
@@ -2829,7 +3009,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 		add += _buff_w * _buff_want * (1.0 - 0.6 * absf(s_in))
 	# 2) a lone tree or rock on the way: swerve by just what is needed
 	var av := 0.0
-	if avoid_enabled:
+	if avoid_enabled and not trail:                      # on a forest trail the tree lines ARE the course: following the trail is the avoidance
 		var sp := maxf(-vel.y, 6.0)
 		var above := spos.y - terrain_h(spos.x, spos.z)
 		var far := _free_shift(clampf(95.0 / sp, 1.6, 2.4), sp, above, true)
@@ -3013,6 +3193,12 @@ func _physics_process(delta: float) -> void:
 			vel -= vel / sp2 * minf(DRAG * 0.4 * sp2 * sp2 * delta, sp2)
 		vel += right * steer * 3.0 * delta
 		air_t += delta
+	if trail and not _finished:
+		# slalom pace: the forest trail turns every 95 m, so the hill is held to about 85-105 km/h (it climbs a little as the run goes on)
+		var cap := TRAIL_SPEED + 6.0 * prog + (8.0 if _boost_t > 0.0 else 0.0)
+		var spn := vel.length()
+		if spn > cap:
+			vel *= 1.0 - minf(1.4 * delta * (spn - cap) / cap, 0.5)
 	if not _finished:
 		vel.y = minf(vel.y, -3.0)          # the hill always carries you down it: a slide off a tree can never turn into a run uphill
 	spos.x += vel.x * delta
@@ -3050,6 +3236,7 @@ func _physics_process(delta: float) -> void:
 	_update_tricks(delta, key, pk)
 	_animate_buffs()
 	_update_rows()
+	_slalom_tick()
 	_called_tick(delta)
 	if not _finished and spos.z <= finish_z:
 		_finish()
@@ -3180,6 +3367,13 @@ func _crash(msg: String, ctx: String = "") -> void:
 	crash_log.append("%s at z=%.0f x=%.1f v=%.1f %s" % [msg, spos.z, spos.x, vel.length(), ctx])
 	hurt_t = 1.1
 	vel *= 0.3
+	if trail:
+		# back onto the trail: a tree at the edge must not leave the board pinned among the trees, hitting the next one and the next
+		spos.x = lerpf(spos.x, trail_x(spos.z), 0.85)
+		vel.x = 0.0
+		heading = 0.0
+		_steer_s = 0.0
+		_steer_vel = 0.0
 	chain = 0
 	groove = 1.0
 	_shake = 0.9
@@ -3520,6 +3714,16 @@ func _warm_one(holder: Node3D, mesh: Mesh, m: Material, i: int, near: bool) -> v
 
 
 func _restart() -> void:
+	var trng := RandomNumberGenerator.new()
+	trng.randomize()
+	_tr_p1 = trng.randf_range(0.0, TAU)
+	_tr_p2 = trng.randf_range(0.0, TAU)
+	_tr_p3 = trng.randf_range(0.0, TAU)
+	_tr_p4 = trng.randf_range(0.0, TAU)
+	poles_clean = 0
+	poles_shaved = 0
+	poles_wrong = 0
+	poles_total = 0
 	TrailCurve.on = bend
 	_cam_strip_ok = false
 	if bend:
@@ -3872,7 +4076,7 @@ func _spawn_ball() -> void:
 
 
 func _update_balls(delta: float) -> void:
-	if balls_enabled and not _finished and _balls.is_empty() and spos.z < _next_ball_z and spos.z > finish_z + 260.0:
+	if balls_enabled and not trail and not _finished and _balls.is_empty() and spos.z < _next_ball_z and spos.z > finish_z + 260.0:
 		_spawn_ball()
 	for i in range(_balls.size() - 1, -1, -1):
 		var b: Dictionary = _balls[i]
@@ -5633,6 +5837,16 @@ func _draw_hud_inner() -> void:
 			var r1 := r0 + (0.03 + 0.12 * f) * rmax * (0.5 + sp_f)
 			var dir := Vector2(cos(a), sin(a))
 			_hud.draw_line(c0 + dir * r0, c0 + dir * r1, Color(1.0, 1.0, 1.0, 0.22 * sp_f * f), 2.0 * k)
+	if trail:
+		var np := _next_pole()
+		if not np.is_empty() and spos.z - float(np["z"]) < 140.0:
+			var pw := Vector3(float(np["x"]), terrain_h(float(np["x"]), float(np["z"])) + 6.6, float(np["z"]))
+			if not _behind(pw):
+				var pc := _unp(pw)
+				var pe := float(np["e"])
+				var bob := sin(_age * 8.0) * 4.0 * k
+				var a0 := pc + Vector2(pe * (14.0 * k + bob), 0.0)
+				Draw2D.poly(_hud, PackedVector2Array([a0 + Vector2(0.0, -12.0 * k), a0 + Vector2(0.0, 12.0 * k), a0 + Vector2(pe * 20.0 * k, 0.0)]), Color(1.0, 0.9, 0.2, 0.95))          # pass on this side
 	_draw_beacons(s, k)
 	_draw_called(k)
 	# the opening you have latched: two soft posts at its edges
@@ -5721,7 +5935,7 @@ func _draw_hud_inner() -> void:
 		# FLOW: the multiplier, big, with its clock underneath. The bar is what you watch: it empties in a few seconds and anything you do refills it.
 		var fsz := 26 + int(8.0 * _flow_bump)
 		var fcol := Color(1.0, 0.85, 0.3, 0.95).lerp(Color(1, 1, 1, 1), _flow_bump)
-		var fy := s.y - m - 54.0 * k
+		var fy := s.y - m - 84.0 * k
 		_text(font, Vector2(m, fy), "FLOW x%.1f" % groove, fsz, fcol)
 		var fw := 150.0 * k
 		var left := clampf(_flow_t / maxf(_flow_window, 0.1), 0.0, 1.0)
