@@ -1908,7 +1908,114 @@ func _arch_highlight(delta: float) -> void:
 				mat.emission_energy_multiplier = 2.4
 
 
+# --------------------------------------------------------------------------
+# FLOW: the multiplier you keep alive. Clean gates, landed tricks, pickups, dodges and faces push it up a level; everything you do, even a small pop off the snow, refills
+# its clock. Leave it alone for a few seconds and it starts dropping, a level at a time. The higher it is, the shorter the clock: at the top you have to keep moving.
+# (It used to climb with every gate and never fall until you crashed.)
+# --------------------------------------------------------------------------
+const FLOW_WINDOW := 5.0             # seconds of grace at the bottom level
+const FLOW_WINDOW_MIN := 2.6         # and at the top
+const FLOW_DRAIN_STEP := 0.7         # seconds per level once the clock has run out
+const FLOW_MAX := 8
+var _flow_t: float = 0.0
+var _flow_window: float = FLOW_WINDOW
+var _flow_bump: float = 0.0           # HUD: a flash when it goes up
+var flow_drops: int = 0
+
+
+## Something small happened: the clock is refilled, the level stays.
+func _flow_touch() -> void:
+	_flow_window = lerpf(FLOW_WINDOW, FLOW_WINDOW_MIN, clampf(float(chain) / float(FLOW_MAX), 0.0, 1.0))
+	_flow_t = _flow_window
+
+
+## Something worth a level happened.
+func _flow_up(levels: int = 1) -> void:
+	chain = mini(chain + levels, 24)
+	groove = 1.0 + 0.25 * minf(float(chain), float(FLOW_MAX))
+	best_flow = maxf(best_flow, groove)
+	_flow_bump = 1.0
+	_flow_touch()
+
+
+func _flow_tick(delta: float) -> void:
+	_flow_bump = maxf(_flow_bump - 3.0 * delta, 0.0)
+	if chain <= 0 or _finished or _paused:
+		return
+	_flow_t -= delta
+	if _flow_t <= 0.0:
+		chain = maxi(mini(chain, FLOW_MAX) - 1, 0)          # anything banked above the top level goes first
+		groove = 1.0 + 0.25 * float(chain)
+		flow_drops += 1
+		_flow_t = FLOW_DRAIN_STEP
+		_flow_window = maxf(_flow_window, FLOW_DRAIN_STEP)
+
+
+# --------------------------------------------------------------------------
+# POP: raise your eyebrows to hop off the snow (W or the up arrow without a camera). On a ramp, holding them up charges the launch instead, and the
+# pop happens at the lip. A pop is small, but it refills the flow clock: it is the thing you do between the big things.
+# --------------------------------------------------------------------------
+const POP_RISE := 0.2                # how far above your own resting level the eyebrows must go
+const POP_VY := 6.2                  # m/s off the snow: about 1.2 s in the air and 1.9 m up
+const POP_COOLDOWN := 1.0
+var brow_override: bool = false      # tests
+var pops_flat: int = 0
+var _brow_base: float = 0.0
+var _brow_ready: bool = false
+var _brow_was: bool = false
+var _pop_cd: float = 0.0
+var _brow_hint_t: float = 0.0
+var _brow_hinted: bool = false
+
+
+## Are the eyebrows up, judged against where this face's eyebrows normally sit?
+func _brows_up(delta: float) -> bool:
+	if brow_override or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		return true
+	if GazeProvider.backend != GazeProvider.Backend.CAMERA or not GazeProvider._camera_fresh():
+		return false
+	var b := float(GazeProvider.face.get("brows", 0.0))
+	if not _brow_ready:
+		_brow_base = b
+		_brow_ready = true
+	var up := b - _brow_base > POP_RISE
+	if not up:
+		_brow_base += (b - _brow_base) * minf(delta / 4.0, 1.0)          # the resting level follows slowly, and only while they are down
+	return up
+
+
+func _pop_tick(delta: float) -> void:
+	_pop_cd = maxf(_pop_cd - delta, 0.0)
+	_brow_hint_t = maxf(_brow_hint_t - delta, 0.0)
+	var up := _brows_up(delta)
+	var edge := up and not _brow_was
+	_brow_was = up
+	_brow_held = up
+	if not _brow_hinted and _age > 7.0 and _eye_on and not _finished:
+		_brow_hinted = true
+		_brow_hint_t = 4.0
+	if not edge or _finished or not grounded or hurt_t > 0.0 or _pop_cd > 0.0 or _on_ramp_now:
+		return
+	_pop_cd = POP_COOLDOWN
+	grounded = false
+	vy += POP_VY
+	air_t = 0.0
+	pops_flat += 1
+	_gain(15)
+	_flow_touch()
+	_brow_hint_t = 0.0
+	_fov_punch = maxf(_fov_punch, 2.5)
+	_burst(spos + Vector3(0, 0.3, 0), Color(0.95, 0.98, 1.0), 18, 6.0, 0.5, 0.8, Vector3(0, 1, 0.3), 60.0, -6.0)
+	Game.sfx(&"boing")
+
+
+var _brow_held: bool = false
+var _on_ramp_now: bool = false
+
+
 func _chain_tick(delta: float) -> void:
+	_flow_tick(delta)
+	_pop_tick(delta)
 	_chain_flash = maxf(_chain_flash - 2.0 * delta, 0.0)
 	_arch_highlight(delta)
 	if chain_lvl > 0:
@@ -2228,6 +2335,7 @@ func _process(delta: float) -> void:
 
 func _take_buff(b: Dictionary) -> void:
 	b["taken"] = true
+	_flow_up()
 	var n: Variant = b["n"]
 	if is_instance_valid(n):
 		(n as Node3D).visible = false
@@ -2285,6 +2393,7 @@ func _collect_buffs() -> void:
 					if is_instance_valid(on):
 						(on as Node3D).visible = false
 					orbs_got += 1
+					_flow_touch()
 					_gain(int(10.0 * groove))
 					if is_instance_valid(on):
 						_burst(Vector3(float(o["x"]), (on as Node3D).global_position.y, float(o["z"])), BUFF_COL["orb"], 6, 5.0, 0.45, 0.6)
@@ -3277,9 +3386,7 @@ func _update_rows() -> void:
 				pts += 30
 				_tight_n += 1
 				_toast("TIGHT", Color(0.4, 1.0, 0.7))
-			chain += 1
-			groove = 1.0 + 0.25 * minf(float(chain), 8.0)
-			best_flow = maxf(best_flow, groove)
+			_flow_up()
 			_gain(int(float(pts) * groove))
 			Game.sfx(&"coin")
 
@@ -3800,6 +3907,7 @@ func _update_balls(delta: float) -> void:
 				snow_dodged += 1
 				_gain(60)
 				_toast("DODGED", Color(0.7, 1.0, 0.8))
+				_flow_up()
 		if bz > spos.z + 70.0 or float(b["t"]) > 14.0 or b.get("gone", false):
 			if is_instance_valid(n):
 				(n as Node).queue_free()
@@ -3932,7 +4040,8 @@ func _update_ramps(delta: float) -> void:
 			if _ramp_prev_z > lipz and spos.z <= lipz:
 				crossed = true
 	_ramp_prev_z = spos.z
-	var tucking_in := nod_p < -0.10 or trick_charge_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN)
+	var tucking_in := nod_p < -0.10 or trick_charge_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or _brow_held          # chin down or eyebrows up: either one winds the launch up
+	_on_ramp_now = on_ramp
 	if on_ramp and grounded and tucking_in:
 		_ramp_charge = minf(_ramp_charge + delta / 0.9, 1.0)
 	elif not crossed:
@@ -4361,6 +4470,7 @@ func _face_tick(delta: float, alt: float) -> void:
 	if face_hold >= 0.3:
 		var id := "face_" + face_kind
 		face_done += 1
+		_flow_up()
 		face_seen[face_kind] = int(face_seen.get(face_kind, 0)) + 1
 		_add_move(id)
 		face_kind = ""
@@ -4747,9 +4857,7 @@ func _land_tricks() -> void:
 	if best_trick == "" or pts > int(best_trick.get_slice("|", 1)):
 		best_trick = "%s|%d" % [name, pts]
 	_gain(pts)
-	chain += 1
-	groove = 1.0 + 0.25 * minf(float(chain), 8.0)
-	best_flow = maxf(best_flow, groove)
+	_flow_up(2 if pts >= 400 else 1)
 	var shown := name
 	if shown.length() > 64:
 		shown = shown.substr(0, 61) + "..."
@@ -5610,7 +5718,28 @@ func _draw_hud_inner() -> void:
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
 		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 40.0 * k), pt, 18, pcol)
 	if chain > 0:
-		_text(font, Vector2(m, s.y - m), "FLOW x%.1f" % groove, 16, Color(1.0, 0.85, 0.3, 0.9))
+		# FLOW: the multiplier, big, with its clock underneath. The bar is what you watch: it empties in a few seconds and anything you do refills it.
+		var fsz := 26 + int(8.0 * _flow_bump)
+		var fcol := Color(1.0, 0.85, 0.3, 0.95).lerp(Color(1, 1, 1, 1), _flow_bump)
+		var fy := s.y - m - 54.0 * k
+		_text(font, Vector2(m, fy), "FLOW x%.1f" % groove, fsz, fcol)
+		var fw := 150.0 * k
+		var left := clampf(_flow_t / maxf(_flow_window, 0.1), 0.0, 1.0)
+		var low := left < 0.3
+		_hud.draw_rect(Rect2(m, fy + 8.0 * k, fw, 9.0 * k), Color(0.05, 0.1, 0.2, 0.6))
+		_hud.draw_rect(Rect2(m, fy + 8.0 * k, fw * left, 9.0 * k), Color(1.0, 0.35, 0.25, 0.95) if (low and int(_age * 8.0) % 2 == 0) else Color(1.0, 0.85, 0.3, 0.95))
+	if _brow_hint_t > 0.0:
+		# the one hint for the pop: an eyebrow icon and an up arrow, low in the middle
+		var hc := Vector2(s.x * 0.5, s.y * 0.7)
+		var ha := clampf(_brow_hint_t, 0.0, 1.0)
+		var hcol := Color(1, 1, 1, 0.9 * ha)
+		var lift := (sin(_age * 6.0) * 0.5 + 0.5) * 7.0 * k
+		for hs in [-1.0, 1.0]:
+			Draw2D.arc(_hud, hc + Vector2(float(hs) * 20.0 * k, 6.0 * k), 9.0 * k, 0.0, TAU, 16, hcol, 2.5 * k, true)                                   # eyes
+			Draw2D.arc(_hud, hc + Vector2(float(hs) * 20.0 * k, -2.0 * k - lift), 15.0 * k, PI * 1.2, PI * 1.8, 10, Color(1.0, 0.85, 0.3, ha), 4.0 * k, true)   # eyebrows, going up
+		var at := hc + Vector2(58.0 * k, -8.0 * k - lift)
+		Draw2D.poly(_hud, PackedVector2Array([at + Vector2(-9.0 * k, 8.0 * k), at + Vector2(9.0 * k, 8.0 * k), at + Vector2(0.0, -8.0 * k)]), Color(1.0, 0.85, 0.3, ha))
+		_text(font, Vector2(hc.x - font.get_string_size("POP", HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x * 0.5, hc.y + 44.0 * k), "POP", 18, hcol)
 	var dtxt := "%d m" % int(maxf(-spos.z, 0.0))
 	var dw := font.get_string_size(dtxt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
 	_text(font, Vector2(s.x - m - dw, s.y - m), dtxt, 18, Color(1, 1, 1, 0.7))
