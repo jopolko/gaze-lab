@@ -481,7 +481,7 @@ func _gen_segment(j: int) -> void:
 				bank.scale = Vector3(gw, 1.1, 2.4)
 				bank.material_override = _flat_mat(Color(0.88, 0.93, 1.0))
 				add_child(bank)
-				bank.global_position = Vector3(gx, terrain_h(gx, rz - 0.6) + 0.45, rz - 0.6)
+				_place(bank, Vector3(gx, terrain_h(gx, rz - 0.6) + 0.45, rz - 0.6))
 				(row["nodes"] as Array).append(bank)
 			g["marker"] = _make_marker(g, rz)
 			for fs in [-1.0, 1.0]:
@@ -560,6 +560,33 @@ func _add_rock(rocks: Array[Transform3D], cols: PackedColorArray, obs: PackedFlo
 		obs.append(1.0)
 
 
+# --------------------------------------------------------------------------
+# The winding trail (see TrailCurve): the game works on a straight strip; these put what it draws onto the curving line.
+# --------------------------------------------------------------------------
+## A strip point as a world point.
+func W(p: Vector3) -> Vector3:
+	return TrailCurve.w(p)
+
+
+## Put a node (made at the strip's orientation) where strip point p is in the world, turned with the trail there.
+func _place(n: Node3D, p: Vector3) -> void:
+	n.global_transform = Transform3D(TrailCurve.basis_at(p.z) * n.global_transform.basis, TrailCurve.w(p))
+
+
+## Move a node to strip point p in the world without touching how it is turned.
+func _wset(n: Node3D, p: Vector3) -> void:
+	n.global_position = TrailCurve.w(p)
+
+
+## Where a strip point is on the screen, and whether it is behind the camera.
+func _unp(p: Vector3) -> Vector2:
+	return cam.unproject_position(TrailCurve.w(p))
+
+
+func _behind(p: Vector3) -> bool:
+	return cam.is_position_behind(TrailCurve.w(p))
+
+
 func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedColorArray, mat: Material = null) -> void:
 	if xf.is_empty():
 		return
@@ -569,7 +596,7 @@ func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedCo
 	mm.mesh = mesh
 	mm.instance_count = xf.size()
 	for i in xf.size():
-		mm.set_instance_transform(i, xf[i])
+		mm.set_instance_transform(i, TrailCurve.xf(xf[i]))
 		mm.set_instance_color(i, cols[i])
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
@@ -588,7 +615,7 @@ func _make_marker(g: Dictionary, rz: float) -> Node3D:
 	var kind: String = g["kind"]
 	var m := Node3D.new()
 	add_child(m)
-	m.global_position = Vector3(gx, 0.0, rz)
+	_place(m, Vector3(gx, 0.0, rz))
 	m.visible = false
 	var mat: Material = _kind_mat[kind]
 	for sx in [-1.0, 1.0]:
@@ -597,20 +624,20 @@ func _make_marker(g: Dictionary, rz: float) -> Node3D:
 		post.mesh = _m_post
 		post.material_override = mat
 		m.add_child(post)
-		post.global_position = Vector3(gx + px, terrain_h(gx + px, rz) + 2.5, rz)
+		_wset(post, Vector3(gx + px, terrain_h(gx + px, rz) + 2.5, rz))
 	var bar := MeshInstance3D.new()
 	bar.mesh = _m_bar
 	bar.scale = Vector3(gw + 0.6, 0.4, 0.4)
 	bar.material_override = mat
 	m.add_child(bar)
-	bar.global_position = Vector3(gx, terrain_h(gx, rz) + 5.2, rz)
+	_wset(bar, Vector3(gx, terrain_h(gx, rz) + 5.2, rz))
 	if kind == "trap":
 		var wall := MeshInstance3D.new()
 		wall.mesh = _m_bar
 		wall.scale = Vector3(gw, 4.6, 0.15)
 		wall.material_override = _kind_mat["trapwall"]
 		m.add_child(wall)
-		wall.global_position = Vector3(gx, terrain_h(gx, rz) + 2.4, rz)
+		_wset(wall, Vector3(gx, terrain_h(gx, rz) + 2.4, rz))
 	return m
 
 
@@ -679,8 +706,8 @@ func _chunk_step(job: Dictionary, budget_us: int) -> bool:
 				var xr: int = mini(ix + 1, CHUNK_NX)
 				var gx: float = (heights2[row_i + xr] - heights2[row_i + xl]) / (dx * float(xr - xl))
 				var gz: float = (heights2[row_i - stride + ix] - heights2[row_i + stride + ix]) / (2.0 * dz)
-				verts.append(Vector3(x, h, z2))
-				norms.append(Vector3(-gx, 1.0, -gz).normalized())
+				verts.append(TrailCurve.w(Vector3(x, h, z2)))
+				norms.append(TrailCurve.dir(Vector3(-gx, 1.0, -gz).normalized(), z2))
 				var t := 0.5 + 0.5 * sin(x * 0.07 + z2 * 0.05) * sin(z2 * 0.021)
 				var stripe := 0.5 + 0.5 * sin(z2 * 0.9 + sin(x * 0.2) * 2.0)
 				var chev := 0.5 + 0.5 * sin(z2 * 0.5 + absf(x) * 0.2)          # long V marks pointing down the hill: you feel the speed, and the way the slope runs shows at a glance
@@ -1040,10 +1067,10 @@ func _gap_screen(row: Dictionary, g: Dictionary) -> Dictionary:
 	var gw: float = g["w"]
 	var rz: float = row["z"]
 	var wp := Vector3(gx, terrain_h(gx, rz) + 1.8, rz)
-	if cam.is_position_behind(wp):
+	if _behind(wp):
 		return {}
-	var c := cam.unproject_position(wp)
-	var e := cam.unproject_position(wp + Vector3(gw * 0.5, 0.0, 0.0))
+	var c := _unp(wp)
+	var e := _unp(wp + Vector3(gw * 0.5, 0.0, 0.0))
 	return {"c": c, "hw": absf(e.x - c.x)}
 
 
@@ -1180,7 +1207,7 @@ func _update_focus(delta: float) -> void:
 			if kd < 10.0 or kd > 240.0:
 				continue
 			var kp := Vector3(float(kk2["x"]), terrain_h(float(kk2["x"]), kz - 7.0) + 1.0, kz - 7.0)
-			if not cam.is_position_behind(kp) and absf(_gaze_px.x - cam.unproject_position(kp).x) < 0.06 * vs.x:
+			if not _behind(kp) and absf(_gaze_px.x - _unp(kp).x) < 0.06 * vs.x:
 				kick_interest = minf(kick_interest + delta, 20.0)
 	for k in _rows:
 		var r2: Dictionary = _rows[k]
@@ -1363,7 +1390,7 @@ func _process(delta: float) -> void:
 	_place_camera(delta)
 	_animate_doors(delta)
 	if _mtn != null:
-		_mtn.global_position = Vector3(spos.x, spos.y - 160.0, spos.z)
+		_wset(_mtn, Vector3(spos.x, spos.y - 160.0, spos.z))
 	_maybe_start_cal()
 	_update_focus(delta)
 	# sled orientation: follow the ground normal, lean into the turn, tuck low
@@ -1536,7 +1563,7 @@ func _draw_hud() -> void:
 	if not _lock.is_empty() and not _lock_row.is_empty():
 		var ls := _gap_screen(_lock_row, _lock)
 		if not ls.is_empty():
-			var from := cam.unproject_position(spos + Vector3(0.0, 1.4, 0.0))
+			var from := _unp(spos + Vector3(0.0, 1.4, 0.0))
 			var lok := _forecast(_lock, _lock_row) == 1
 			var lcol := Color(0.3, 0.85, 0.45, 0.95) if lok else Color(1.0, 0.35, 0.3, 0.95)
 			_hud.draw_dashed_line(from, ls["c"], lcol, 4.0 * k, 14.0 * k)
@@ -1651,7 +1678,7 @@ func _make_door(g: Dictionary, rz: float, row: Dictionary) -> MeshInstance3D:
 	g["gy"] = terrain_h(gx, rz)
 	var sy := 4.6 if g["closed"] else 0.05
 	d.scale = Vector3(float(g["w"]), sy, 1.6)
-	d.global_position = Vector3(gx, float(g["gy"]) + sy * 0.5, rz)
+	_place(d, Vector3(gx, float(g["gy"]) + sy * 0.5, rz))
 	(row["nodes"] as Array).append(d)
 	return d
 
@@ -1668,7 +1695,7 @@ func _make_screen(row: Dictionary, cx: float, rz: float) -> void:
 	n.scale = Vector3(36.0, 11.0, 5.0)
 	add_child(n)
 	var sz := rz + 40.0
-	n.global_position = Vector3(cx, terrain_h(cx, sz) + 5.5, sz)
+	_place(n, Vector3(cx, terrain_h(cx, sz) + 5.5, sz))
 	(row["nodes"] as Array).append(n)
 	row["screen"] = {"node": n, "mat": m, "cx": cx, "hw": 18.0, "z": sz, "alpha": 1.0}
 
@@ -2596,7 +2623,7 @@ func _make_coins(row: Dictionary, gaps: Array, rz: float) -> void:
 			n.material_override = _coin_mat
 			n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(n)
-			n.global_position = Vector3(cx, terrain_h(cx, cz) + 1.4, cz)
+			_place(n, Vector3(cx, terrain_h(cx, cz) + 1.4, cz))
 			(row["nodes"] as Array).append(n)
 			coins.append({"n": n, "x": cx, "z": cz, "taken": false})
 	row["coins"] = coins

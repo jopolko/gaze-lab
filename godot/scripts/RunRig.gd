@@ -279,7 +279,7 @@ func _make_finish(row: Dictionary) -> void:
 		post.material_override = red
 		post.scale = Vector3(2.4, 2.4, 2.4)
 		add_child(post)
-		post.global_position = Vector3(px, terrain_h(px, finish_z) + 6.0, finish_z)
+		_place(post, Vector3(px, terrain_h(px, finish_z) + 6.0, finish_z))
 		(row["nodes"] as Array).append(post)
 	for i in 12:
 		var bx := -22.0 + 4.0 * float(i)
@@ -288,7 +288,7 @@ func _make_finish(row: Dictionary) -> void:
 		seg.scale = Vector3(4.0, 1.8, 0.8)
 		seg.material_override = _flat_mat(Color(0.97, 0.97, 1.0) if i % 2 == 0 else Color(0.12, 0.12, 0.16))
 		add_child(seg)
-		seg.global_position = Vector3(bx, terrain_h(bx, finish_z) + 12.4, finish_z)
+		_place(seg, Vector3(bx, terrain_h(bx, finish_z) + 12.4, finish_z))
 		(row["nodes"] as Array).append(seg)
 
 
@@ -567,7 +567,7 @@ func _make_signs(row: Dictionary, rz: float) -> void:
 		var gx: float = g["x"]
 		var root := Node3D.new()
 		add_child(root)
-		root.global_position = Vector3(gx, terrain_h(gx, rz) + 9.5, rz + 0.5)
+		_place(root, Vector3(gx, terrain_h(gx, rz) + 9.5, rz + 0.5))
 		(row["nodes"] as Array).append(root)
 		var mat := _fx_mat("solid", col, 2.4)
 		var vk := 1.3 if Game.touch_mode else 1.0                       # a phone screen is small: everything about a gate is drawn bigger
@@ -901,7 +901,7 @@ func _realm_prop(x: float, z: float, s: float, solid: bool, obs: PackedFloat32Ar
 func _make_watcher(x: float, z: float, sc: float, obs: PackedFloat32Array) -> void:
 	var root := Node3D.new()
 	add_child(root)
-	root.global_position = Vector3(x, terrain_h(x, z), z)
+	_place(root, Vector3(x, terrain_h(x, z), z))
 	root.scale = Vector3.ONE * sc
 	var mat := Realms.material("eyes")
 	var body := MeshInstance3D.new()
@@ -936,7 +936,7 @@ func _build_roof(row: Dictionary, zone: String, z0: float) -> void:
 		var z := z0 - ROW_GAP * float(iz) / float(NZR)
 		for ix in NXR + 1:
 			var x := -145.0 + 290.0 * float(ix) / float(NXR)
-			verts.append(Vector3(x, _roof_y(x, z, z0, _gen_lip), z))
+			verts.append(W(Vector3(x, _roof_y(x, z, z0, _gen_lip), z)))
 			norms.append(Vector3(0.0, -1.0, 0.0))
 			var n := 0.5 + 0.5 * sin(x * 0.21 + z * 0.17) * sin(z * 0.13 - x * 0.11)
 			cols.append(base.lerp(base * 1.8, n))
@@ -1131,9 +1131,9 @@ func _update_ribbons() -> void:
 			var ww := w * (0.6 + 0.8 * u)
 			var c := Color(col.r, col.g, col.b, clampf(al, 0.0, 1.0))
 			_rib_im.surface_set_color(c)
-			_rib_im.surface_add_vertex(Vector3(x - ww, terrain_h(x - ww, z) + 0.25, z))
+			_rib_im.surface_add_vertex(W(Vector3(x - ww, terrain_h(x - ww, z) + 0.25, z)))
 			_rib_im.surface_set_color(c)
-			_rib_im.surface_add_vertex(Vector3(x + ww, terrain_h(x + ww, z) + 0.25, z))
+			_rib_im.surface_add_vertex(W(Vector3(x + ww, terrain_h(x + ww, z) + 0.25, z)))
 		_rib_im.surface_end()
 
 
@@ -1174,7 +1174,7 @@ func _update_crumbs(delta: float) -> void:
 		var cz := lerpf(spos.z - 6.0, bz, u)
 		var cx := lerpf(spos.x, float(gap["x"]), u * u * (3.0 - 2.0 * u))
 		cn2.visible = true
-		cn2.global_position = Vector3(cx, terrain_h(cx, cz) + 0.3, cz)
+		_place(cn2, Vector3(cx, terrain_h(cx, cz) + 0.3, cz))
 		var wave := 0.5 + 0.5 * sin(_age * 7.0 - float(ci2) * 0.9)
 		cn2.scale = Vector3.ONE * (0.5 + 0.9 * wave) * _crumb_a
 
@@ -1195,7 +1195,8 @@ void fragment() { ALBEDO = tint.rgb; ALPHA = tint.a * smoothstep(0.22, 0.62, UV.
 		_mist.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(_mist)
 	(_mist.material_override as ShaderMaterial).set_shader_parameter("tint", mist_color)
-	_mist.global_position = Vector3(0.0, terrain_h(0.0, z_end) + 50.0, z_end)
+	_wset(_mist, Vector3(0.0, terrain_h(0.0, z_end) + 50.0, z_end))
+	_mist.global_transform.basis = TrailCurve.basis_at(z_end)
 
 
 ## Spread layout for a meadow: several wide gates across the whole slope.
@@ -1494,7 +1495,10 @@ func _mi(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3 = Vector3.ZERO)
 	n.material_override = mat
 	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(n)
-	n.position = pos
+	if parent == self:
+		_place(n, pos)
+	else:
+		n.position = pos
 	return n
 
 
@@ -1757,7 +1761,7 @@ func _spawn_orb(row: Dictionary, x: float, z: float, t: String) -> Node3D:
 	n.material_override = _buff_mat["orb"]
 	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(n)
-	n.global_position = Vector3(x, terrain_h(x, z) + 1.3, z)
+	_place(n, Vector3(x, terrain_h(x, z) + 1.3, z))
 	(row["nodes"] as Array).append(n)
 	return n
 
@@ -1768,7 +1772,7 @@ func _spawn_buff(row: Dictionary, t: String, x: float, z: float, trail: Array, k
 	var it := _make_item(t)
 	var bn: Node3D = it["root"]
 	add_child(bn)
-	bn.global_position = Vector3(x, terrain_h(x, z) + 1.9 + lift, z)
+	_place(bn, Vector3(x, terrain_h(x, z) + 1.9 + lift, z))
 	(row["nodes"] as Array).append(bn)
 	var bc := MeshInstance3D.new()
 	bc.mesh = _buff_mesh["beacon"]
@@ -1973,8 +1977,8 @@ func _draw_chain(s: Vector2, k: float, m: float) -> void:
 		_hud.draw_rect(Rect2(cx0 - 10.0 * k, cy0 + 29.0 * k, fw, 3.0 * k), Color(1, 1, 1, 0.15))
 		_hud.draw_rect(Rect2(cx0 - 10.0 * k, cy0 + 29.0 * k, fw * clampf(_chain_t / CHAIN_WINDOW, 0.0, 1.0), 3.0 * k), Color(1.0, 0.85, 0.3, 0.9))
 	var tp := _chain_target_pos(_chain_expect_kind())
-	if tp.is_finite() and not cam.is_position_behind(tp):
-		var sc := cam.unproject_position(tp)
+	if tp.is_finite() and not _behind(tp):
+		var sc := _unp(tp)
 		if sc.x > 0.0 and sc.x < s.x and sc.y > 0.0 and sc.y < s.y:
 			var c2 := _chain_color(chain_step)
 			var pr := (24.0 + 4.0 * sin(_age * 8.0)) * k
@@ -2041,7 +2045,7 @@ func _burst(pos: Vector3, col: Color, n: int, speed: float, life: float, size: f
 	p.color_ramp = cr
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(p)
-	p.global_position = pos
+	_wset(p, pos)
 	p.emitting = true
 	get_tree().create_timer(life + 0.4).timeout.connect(p.queue_free)
 
@@ -2058,7 +2062,7 @@ func _ring(pos: Vector3, col: Color, r_end: float, dur: float, standing: bool) -
 	m.material_override = mat
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(m)
-	m.global_position = pos
+	_wset(m, pos)
 	if standing:
 		m.rotation.x = PI * 0.5
 	m.scale = Vector3.ONE * 0.3
@@ -2202,9 +2206,24 @@ func _view_juice() -> void:
 			_tip_pivot.rotation = Vector3(tf + _hop_vis_pitch + (0.2 if grabbing else 0.0) + 0.02 * sp, _tip_yaw + ts + _hop_vis_spin, _tip_roll)
 
 
+## THE WINDING TRAIL (see TrailCurve). On in the browser unless the address has ?straight; tests switch it on to check it.
+var bend: bool = OS.has_feature("web") and not str(JavaScriptBridge.eval("window.location.search")).contains("straight")
+var bend_strength: float = 1.0
+var _cam_strip: Transform3D
+var _cam_strip_ok: bool = false
+
+
 func _process(delta: float) -> void:
+	# the camera and the board are worked out on the straight strip exactly as before, then laid onto the trail's curve as the very last thing each frame
+	if TrailCurve.on and _cam_strip_ok:
+		cam.global_transform = _cam_strip
 	super._process(delta)
 	_juice(delta)
+	if TrailCurve.on:
+		_cam_strip = cam.global_transform
+		_cam_strip_ok = true
+		cam.global_transform = TrailCurve.xf(_cam_strip)
+		_sled.global_transform = TrailCurve.xf(_sled.global_transform)
 
 
 func _take_buff(b: Dictionary) -> void:
@@ -2268,7 +2287,7 @@ func _collect_buffs() -> void:
 					orbs_got += 1
 					_gain(int(10.0 * groove))
 					if is_instance_valid(on):
-						_burst((on as Node3D).global_position, BUFF_COL["orb"], 6, 5.0, 0.45, 0.6)
+						_burst(Vector3(float(o["x"]), (on as Node3D).global_position.y, float(o["z"])), BUFF_COL["orb"], 6, 5.0, 0.45, 0.6)
 			if b["taken"]:
 				continue
 			if b.get("kind", "") == "air":
@@ -2344,9 +2363,9 @@ func _update_buff_aim(delta: float) -> void:
 			if dz < 8.0 or dz > (150.0 if is_next else 95.0) or absf(float(b["x"]) - spos.x) > (0.46 * dz + 6.0 if is_next else 0.34 * dz + 4.0):
 				continue
 			var wp := Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.7 + float(b.get("lift", 0.0)), float(b["z"]))
-			if cam.is_position_behind(wp):
+			if _behind(wp):
 				continue
-			var dd := absf(cam.unproject_position(wp).x - cx) / (0.1 * vs.x * (1.6 if is_next else 1.0))
+			var dd := absf(_unp(wp).x - cx) / (0.1 * vs.x * (1.6 if is_next else 1.0))
 			if is_same(b, _buff_tgt):
 				dd *= 0.7
 			if dd < best_d:
@@ -3020,7 +3039,7 @@ func _ring_bell(ox: float, oz: float, orad: float) -> void:
 	add_child(n)
 	var sc := orad / 1.3
 	var base := Vector3(sc, sc * 1.1, sc)
-	n.global_position = Vector3(ox, terrain_h(ox, oz) + 0.7 * sc * 1.1, oz)
+	_place(n, Vector3(ox, terrain_h(ox, oz) + 0.7 * sc * 1.1, oz))
 	n.scale = base * 1.04
 	var tw := create_tween()
 	tw.tween_method(func(u: float) -> void:
@@ -3394,6 +3413,10 @@ func _warm_one(holder: Node3D, mesh: Mesh, m: Material, i: int, near: bool) -> v
 
 
 func _restart() -> void:
+	TrailCurve.on = bend
+	_cam_strip_ok = false
+	if bend:
+		TrailCurve.setup(randi(), bend_strength)
 	_guide_done = false
 	ag = {"eyes": 0, "auto": 0, "wrong": 0, "in": 0.0, "as": 0.0, "eng": 0.0, "idle": 0.0}
 	_engage = 1.0
@@ -3637,8 +3660,10 @@ func _eat_or_bounce(b: Dictionary) -> void:
 
 func _food_pos(b: Dictionary) -> Vector3:
 	var n: Variant = b["n"]
-	if is_instance_valid(n):
+	if is_instance_valid(n) and not TrailCurve.on:
 		return (n as Node3D).global_position
+	if is_instance_valid(n):
+		return Vector3(float(b["x"]), (n as Node3D).global_position.y, float(b["z"]))          # the game thinks on the straight strip: height from the node, the rest from the record
 	return Vector3(float(b["x"]), terrain_h(float(b["x"]), float(b["z"])) + 1.9, float(b["z"]))
 
 
@@ -3669,11 +3694,11 @@ func _bounce_food(b: Dictionary) -> void:
 	Game.sfx(&"boing")
 	if is_instance_valid(n):
 		var nn := n as Node3D
-		var s0 := nn.global_position
+		var s0 := Vector3(p0.x, nn.global_position.y, p0.z)
 		var tw := create_tween()
 		tw.tween_method(func(u: float) -> void:
 			if is_instance_valid(nn):
-				nn.global_position = Vector3(lerpf(s0.x, nx, u), lerpf(s0.y, ny, u) + sin(PI * u) * 9.0, lerpf(s0.z, nz, u)), 0.0, 1.0, 0.8)
+				_wset(nn, Vector3(lerpf(s0.x, nx, u), lerpf(s0.y, ny, u) + sin(PI * u) * 9.0, lerpf(s0.z, nz, u))), 0.0, 1.0, 0.8)
 		tw.tween_callback(func() -> void:
 			b["arm"] = 0.0
 			b["moving"] = false
@@ -3728,7 +3753,7 @@ func _spawn_ball() -> void:
 		for ex in [-0.9, 0.9]:
 			_mi(eyes, _sphere_mesh(0.5), _fx_mat("solid", Color(0.3, 1.0, 0.45), 3.0), Vector3(float(ex), 0.0, 0.0))
 		add_child(eyes)
-	n.global_position = Vector3(sx, terrain_h(sx, sz) + BALL_R, sz)
+	_place(n, Vector3(sx, terrain_h(sx, sz) + BALL_R, sz))
 	_balls.append({"n": n, "x": sx, "z": sz, "vx": vx, "vz": -vb, "t": 0.0, "done": false, "eyes": eyes})
 	snow_spawned += 1
 	_next_ball_z = spos.z - _fx_rng.randf_range(150.0, 230.0) * lerpf(1.0, 0.7, d)
@@ -3758,12 +3783,12 @@ func _update_balls(delta: float) -> void:
 			b["vz"] = lerpf(float(b["vz"]), clampf(want_vz, -34.0, -8.0), 0.15)
 		if is_instance_valid(n):
 			var nn := n as Node3D
-			nn.global_position = Vector3(bx, terrain_h(bx, bz) + BALL_R, bz)
+			_wset(nn, Vector3(bx, terrain_h(bx, bz) + BALL_R, bz))
 			nn.rotate_x(float(b["vz"]) * delta / BALL_R)
 			nn.rotate_z(-float(b["vx"]) * delta / BALL_R)
 			var ey: Variant = b.get("eyes")
 			if ey != null and is_instance_valid(ey):
-				(ey as Node3D).global_position = Vector3(bx, terrain_h(bx, bz) + BALL_R * 1.25, bz + BALL_R * 0.78)
+				_wset((ey as Node3D), Vector3(bx, terrain_h(bx, bz) + BALL_R * 1.25, bz + BALL_R * 0.78))
 		if not b["done"]:
 			var dx := spos.x - bx
 			var dz := spos.z - bz
@@ -3878,8 +3903,8 @@ func _vortex_drive(delta: float) -> void:
 		# reach: a little way either side of the ramp, much more when you are looking at the swirl
 		var wp := Vector3(kx, terrain_h(kx, kz + 8.0) + 5.0, kz + 8.0)
 		var looking := false
-		if not cam.is_position_behind(wp):
-			looking = _eye_on and absf(cam.unproject_position(wp).x - cx) < 0.13 * vs.x
+		if not _behind(wp):
+			looking = _eye_on and absf(_unp(wp).x - cx) < 0.13 * vs.x
 		var reach := float(k["w"]) * 0.5 + (16.0 if looking else 3.5)
 		var dx := kx - spos.x
 		if absf(dx) > reach:
@@ -4552,7 +4577,7 @@ func _spawn_snowman() -> void:
 	for ex in [-0.2, 0.2]:
 		_mi(n, _sphere_mesh(0.07), _food_mat(Color(0.05, 0.05, 0.08), 0.0), Vector3(float(ex), 3.5, 0.5))
 	add_child(n)
-	n.global_position = Vector3(sx, terrain_h(sx, sz) - 0.2, sz)
+	_place(n, Vector3(sx, terrain_h(sx, sz) - 0.2, sz))
 	n.scale = Vector3.ONE * 0.1
 	n.rotation.y = PI
 	var tw := create_tween()
@@ -4778,8 +4803,8 @@ func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
 					best = b
 		if not best.is_empty():
 			var bp := _food_pos(best) + Vector3(0, 2.8, 0)
-			if not cam.is_position_behind(bp):
-				var sc := cam.unproject_position(bp)
+			if not _behind(bp):
+				var sc := _unp(bp)
 				var can := _can_eat()
 				var txt := "CHOMP!" if can else "OPEN WIDE"
 				var col := Color(0.5, 1.0, 0.6) if can else Color(1.0, 0.9, 0.4)
@@ -4791,9 +4816,9 @@ func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
 		if b2["done"]:
 			continue
 		var wp := Vector3(float(b2["x"]), terrain_h(float(b2["x"]), float(b2["z"])) + BALL_R + 3.0, float(b2["z"]))
-		if cam.is_position_behind(wp):
+		if _behind(wp):
 			continue
-		var sp2 := cam.unproject_position(wp)
+		var sp2 := _unp(wp)
 		var dist := maxf(spos.z - float(b2["z"]), 0.0)
 		var near := dist < 45.0
 		var c2 := Color(1.0, 0.45, 0.3) if near and not _braced() else Color(0.8, 0.95, 1.0)
@@ -5269,9 +5294,9 @@ func _draw_pops(font: Font, s: Vector2, k: float) -> void:
 			_hud.draw_rect(Rect2(Vector2.ZERO, s).grow(-float(i) * 10.0 * k), Color(c.r, c.g, c.b, _pop_a * (0.2 - 0.026 * float(i))), false, 12.0 * k)
 	for pp in _hud_pops:
 		var p3: Vector3 = pp["p"]
-		if cam.is_position_behind(p3):
+		if _behind(p3):
 			continue
-		var sc := cam.unproject_position(p3)
+		var sc := _unp(p3)
 		var u := clampf(float(pp["t"]) / 0.8, 0.0, 1.0)
 		var e := 1.0 - pow(1.0 - u, 3.0)
 		var c2: Color = pp["col"]
@@ -5528,9 +5553,9 @@ func _draw_hud_inner() -> void:
 		if bd2.is_empty() or bd2["taken"]:
 			continue
 		var bp := Vector3(float(bd2["x"]), terrain_h(float(bd2["x"]), float(bd2["z"])) + 2.4, float(bd2["z"]))
-		if cam.is_position_behind(bp):
+		if _behind(bp):
 			continue
-		var bs := cam.unproject_position(bp)
+		var bs := _unp(bp)
 		var bcol: Color = BUFF_COL[bd2["t"]]
 		if is_same(bd2, _buff_tgt):
 			Draw2D.arc(_hud, bs, 22.0 * k, 0.0, TAU, 28, Color(bcol.r, bcol.g, bcol.b, 0.35 + 0.5 * _buff_w), 4.0 * k)
@@ -5736,9 +5761,9 @@ func _safe_x_at(z: float) -> float:
 
 func _tr_world_px(x: float, z: float, up: float) -> Vector2:
 	var wp := Vector3(x, terrain_h(x, z) + up, z)
-	if cam.is_position_behind(wp):
+	if _behind(wp):
 		return Vector2(-9999.0, -9999.0)
-	return cam.unproject_position(wp)
+	return _unp(wp)
 
 
 func _trace_tick(delta: float) -> void:

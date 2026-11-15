@@ -259,7 +259,7 @@ func _update_rider(delta: float) -> void:
 	_rider.light_color = col
 	_rider.light_energy = lerpf(_rider.light_energy, e, 1.0 - exp(-10.0 * delta))
 	pass
-	_rider.global_position = rig.spos + Vector3(0.0, 2.6, -2.5)
+	_rider.global_position = rig.W(rig.spos + Vector3(0.0, 2.6, -2.5))
 
 
 func _update_gate_lights(delta: float) -> void:
@@ -280,6 +280,6 @@ func _update_gate_lights(delta: float) -> void:
 			l.light_color = zc
 			var near := clampf(1.0 - (rig.spos.z - bz) / 240.0, 0.0, 1.0)
 			l.light_energy = lerpf(l.light_energy, 0.4 + 2.2 * near, 1.0 - exp(-6.0 * delta))
-			l.global_position = Vector3(gx, rig.terrain_h(gx, bz) + 4.0, bz + 4.0)
+			l.global_position = rig.W(Vector3(gx, rig.terrain_h(gx, bz) + 4.0, bz + 4.0))
 		else:
 			l.light_energy = lerpf(l.light_energy, 0.0, 1.0 - exp(-6.0 * delta))

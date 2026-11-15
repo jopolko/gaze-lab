@@ -17,6 +17,7 @@ func _ready() -> void:
 		await get_tree().physics_frame
 	var rig: RunRig = level._dh as RunRig
 	rig.set_physics_process(false)
+	rig.bend = OS.get_environment("BEND") != ""
 	rig._restart()
 	rig.autopilot = true
 	var dt := 1.0 / 60.0
@@ -33,6 +34,7 @@ func _ready() -> void:
 		var t0 := Time.get_ticks_usec()
 		rig._physics_process(dt)
 		var ms := float(Time.get_ticks_usec() - t0) / 1000.0
+		rig._process(dt)
 		all.append(ms)
 		max_h = maxf(max_h, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z))
 		air_now = 0.0 if rig.grounded else air_now + dt
@@ -41,6 +43,7 @@ func _ready() -> void:
 		if ms > 4.0:
 			slow.append([ms, i, "built a stretch" if rig._next_j != nj else "", "passed a gate" if rig.rows_passed != rp else "", "picked up" if got2 != got else "", "ground jobs %d" % jobs])
 	all.sort()
+	print("GEN  bend %s  board in the world %s (strip %s), trail heading %.0f deg" % [str(rig.bend), str(rig._sled.global_position.snapped(Vector3.ONE)), str(rig.spos.snapped(Vector3.ONE)), rad_to_deg(TrailCurve.heading(rig.spos.z))])
 	print("GEN  highest above the snow %.1f m, longest time in the air %.1f s, distance %d m, crashes %d, barriers %d, kickers %s" % [max_h, air_max, int(-rig.spos.z), rig.crashes, rig.rows_passed, str(rig.kick_log)])
 	print("GEN  frames 3600   median %.2f ms   99th %.2f ms   worst %.2f ms" % [all[1800], all[3564], all[3599]])
 	slow.sort_custom(func(a, b): return float(a[0]) > float(b[0]))
