@@ -190,8 +190,8 @@ static func melt_h(x: float, z: float, edge: float) -> float:
 static func ground_material() -> ShaderMaterial:
 	if _mats.has("_ground"):
 		return _mats["_ground"]
-	var sh := Shader.new()
-	sh.code = "shader_type spatial;
+	var m := ShaderMaterial.new()
+	m.shader = Mats.shader("shader_type spatial;
 render_mode cull_disabled;
 uniform float boost = 1.0;
 uniform float flash = 0.0;
@@ -202,9 +202,7 @@ void fragment() {
 	EMISSION = c * 0.7 * boost * (1.0 + flash * 0.8);
 	ROUGHNESS = 0.95;
 }
-"
-	var m := ShaderMaterial.new()
-	m.shader = sh
+")          # one shader for every realm: only the numbers differ
 	_mats["_ground"] = m
 	return m
 
@@ -212,8 +210,8 @@ void fragment() {
 static func material(zone: String) -> ShaderMaterial:
 	if _mats.has(zone):
 		return _mats[zone]
-	var sh := Shader.new()
-	sh.code = "shader_type spatial;
+	var m := ShaderMaterial.new()
+	m.shader = Mats.shader("shader_type spatial;
 render_mode cull_disabled;
 uniform float glow = 0.3;
 uniform float beat = 0.0;
@@ -234,9 +232,7 @@ void fragment() {
 	ROUGHNESS = 0.7;
 	EMISSION = (c * glow + c * rim * 0.5) * boost * (1.0 + flash * 1.5);
 }
-"
-	var m := ShaderMaterial.new()
-	m.shader = sh
+")          # one shader for every realm: only the numbers differ
 	var k: Dictionary = KITS[zone]
 	m.set_shader_parameter("glow", float(k.get("glow", 0.3)))
 	m.set_shader_parameter("beat", float(k.get("beat", 0.0)))

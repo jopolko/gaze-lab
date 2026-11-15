@@ -38,6 +38,9 @@ func _finish() -> void:
 	if _go or _t < 0.4:
 		return
 	_go = true
+	if OS.has_feature("web"):                                 # the first tap is the one moment a browser lets a page go full screen
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		JavaScriptBridge.eval("(function(){try{if(screen.orientation&&screen.orientation.lock){screen.orientation.lock('landscape').catch(function(){});}}catch(e){}})()")
 	done.emit()
 
 

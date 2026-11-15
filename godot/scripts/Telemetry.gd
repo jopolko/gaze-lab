@@ -48,7 +48,11 @@ func _ready() -> void:
 	_live = true
 
 
+static var _rig_wait: Object = null
+
+
 static func set_rig(r: Object) -> void:
+	_rig_wait = r                                      # the run can be set up before this node exists: it is picked up at the next tick
 	if inst != null:
 		inst.rig = r
 
@@ -101,6 +105,8 @@ func _pct(a: PackedFloat32Array, q: float) -> float:
 
 func _tick(dt: float) -> void:
 	var P := GazeProvider
+	if (rig == null or not is_instance_valid(rig)) and _rig_wait != null and is_instance_valid(_rig_wait):
+		rig = _rig_wait
 	var r := {"kind": "tick"}
 	var fps := float(_ft.size()) / maxf(dt, 0.001)
 	var f95 := _pct(_ft, 0.95)
@@ -151,6 +157,9 @@ func _tick(dt: float) -> void:
 		r["rawg"] = [snappedf(P._last_g.x, 0.01), snappedf(P._last_g.y, 0.01)]
 		r["state"] = P.camera_status
 		r["tr"] = _tr
+		r["mix"] = [1 if P.mix_used() else 0, snappedf(P.mix.value, 0.01), snappedf(float(P.mix.w[0]), 0.1), snappedf(float(P.mix.w[1]), 0.1), snappedf(float(P.mix.w[2]), 0.1)]          # phone eye blend: in use, value in glances, the three weights
+		if rig != null and is_instance_valid(rig):
+			r["ex"] = [float(rig.get("_ex_sign")), snappedf(float(rig.get("_ex_full")), 0.0001), snappedf(float(rig.get("_ex_ref")), 0.0001), snappedf(float(rig.get("_off_now")), 0.01)]          # steering: direction, glance size, centre, the look as the game reads it
 		_tr = []
 	if rig != null and is_instance_valid(rig):
 		r["pf"] = [snappedf(float(rig.get("_pf_phys")), 0.1), snappedf(float(rig.get("_pf_hud")), 0.1), snappedf(float(rig.get("_pf_focus")), 0.1)]          # where a game frame goes, ms: physics, HUD drawing, aim / focus

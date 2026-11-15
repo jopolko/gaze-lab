@@ -34,6 +34,27 @@ static func glass(two_sided: bool = false) -> StandardMaterial3D:
 	return m
 
 
+## Unlit, see-through, adds its colour to what is behind it (glows, rings, beams).
+static func glow() -> StandardMaterial3D:
+	var m := glass()
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	return m
+
+
+static var _keep: Array = []
+
+
+## Holds one material of every kind for the whole session. The engine throws a shader away when the last material using it is freed and builds it again
+## the next time one is made, so an effect that makes a material, shows it for a second and frees it (a ring at every gate, a burst at every pickup)
+## froze the picture every single time. With these kept, each kind is built once.
+static func keep_alive(extra: Array = []) -> void:
+	if _keep.is_empty():
+		_keep = [lit(), flat(), glass(), glass(true), glow()]
+	for m in extra:
+		if m != null and not _keep.has(m):
+			_keep.append(m)
+
+
 static var _shaders: Dictionary = {}
 
 

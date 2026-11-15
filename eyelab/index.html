@@ -1117,6 +1117,7 @@ $('btnFix').onclick = async () => {
     rows.push(E.name + ': noise ' + sd(xs).toFixed(2) + ' / ' + sd(ys).toFixed(2) + ' px  =  ' + (sd(xs) / pd).toFixed(1) + '° / ' + (sd(ys) / pd).toFixed(1) + '° (1 sigma, one frame)');
   }
   results.noise = { frames: samples.length, pxPerDeg: pd, est: out };
+  sendResults('noise');
   const best = Math.min(...EST.slice(2, 4).map((E) => out[E.key].sdXdeg));
   $('results').innerHTML = '<b>Noise test</b> (' + samples.length + ' frames, ' + pd.toFixed(3) + ' px per degree)<br>' + rows.join('<br>') +
     '<br><br>Averaging N frames cuts noise by about sqrt(N): e.g. 15 frames (0.5 s) gives roughly ' + (best / Math.sqrt(15)).toFixed(1) + '° from the best pixel-level detector.';
@@ -1169,6 +1170,7 @@ $('btnAcc').onclick = async () => {
       samples: perFrame.length });
   }
   results.accuracy = { screenPx: [vw, vh], screenCm: parseFloat($('scrW').value), distCm: dist, summary };
+  sendResults('accuracy');
   renderAccuracy(summary, vw, vh);
   setBusy(false); $('btnLive').disabled = false; $('btnCopy').disabled = false;
 };
@@ -1487,6 +1489,19 @@ $('btnFit').onclick = async () => {
   setBusy(false); $('btnCopy').disabled = false;
 };
 
+// Send the numbers (never pictures) from the noise and accuracy tests to the lab's own log, so a run on a phone can be read without copying text off the phone.
+function sendResults(what) {
+  try {
+    if (/[?&]noshare/.test(location.search)) return;
+    let who = ''; try { who = localStorage.getItem('gazelab_id') || ''; if (!who) { who = 'anon-' + Math.random().toString(16).slice(2, 8); localStorage.setItem('gazelab_id', who); } } catch (e) { who = 'anon-x'; }
+    const r3 = (v) => (typeof v === 'number' && isFinite(v)) ? Math.round(v * 1000) / 1000 : null;
+    const it = { kind: 'eyelab', what: what, ua: (navigator.userAgent || '').slice(0, 160), scr: [innerWidth, innerHeight, window.devicePixelRatio || 1], camera: results.camera };
+    if (results.noise) { it.noise = { frames: results.noise.frames, pxPerDeg: r3(results.noise.pxPerDeg), est: {} }; for (const k in results.noise.est) { const e = results.noise.est[k]; it.noise.est[k] = [r3(e.sdXpx), r3(e.sdYpx), r3(e.sdXdeg), r3(e.sdYdeg)]; } }
+    if (results.accuracy) { const a = results.accuracy; it.acc = { screenPx: a.screenPx, screenCm: r3(a.screenCm), distCm: r3(a.distCm), est: {} }; for (const e of a.summary) it.acc.est[e.key] = { frameMeanPx: r3(e.frameMeanPx), pointMeanPx: r3(e.pointMeanPx), pointP90Px: r3(e.pointP90Px), pointMeanDeg: r3(e.pointMeanDeg), pointXDeg: r3(e.pointXDeg), n: e.samples }; }
+    const body = JSON.stringify({ kind: 'batch', who: who, sid: (window.__elSid = window.__elSid || Math.random().toString(16).slice(2, 8)), device: (matchMedia('(pointer: coarse)').matches ? 'mobile' : 'desktop'), app: 'eyelab', items: [it] });
+    fetch('/gaze-lab/log.php', { method: 'POST', body: body, keepalive: true }).then((r) => { const st = $('status'); if (st && r.ok) st.textContent = 'results sent (numbers only)'; }).catch(() => {});
+  } catch (e) {}
+}
 $('btnCopy').onclick = async () => {
   const txt = JSON.stringify({ reach: reachReport(), results: results }, null, 1); window.__eyelab = results;
   $('json').hidden = false; $('json').textContent = txt;

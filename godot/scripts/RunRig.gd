@@ -25,7 +25,7 @@ var show_reticle: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("wi
 var carve_assist: float = 1.0        # how hard a latched opening pulls the board: it is the main control, the raw look only trims
 var aim_enabled: bool = true         # tests: switch the opening choice off to check the raw look-trim alone
 var _aim_cx: float = -1.0           # your look, smoothed over ~0.2 s, for choosing an opening (the raw cursor jitters by several percent of the screen)
-var autopilot: bool = false          # tests: steer toward the safe opening of the next barrier
+var autopilot: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("autopilot")          # tests (and ?autopilot): steer toward the safe opening of the next barrier
 var _aim: Dictionary = {}
 var _aim_row: Dictionary = {}
 var _cand: Dictionary = {}
@@ -48,6 +48,12 @@ func setup(p_player: PlayerController) -> void:
 	lane_mode = true
 	super.setup(p_player)
 	Telemetry.set_rig(self)
+	if OS.has_feature("web"):
+		var bq := str(JavaScriptBridge.eval("window.location.search"))
+		if bq.contains("nobeacons"):
+			beacons = false
+		elif bq.contains("beacons"):
+			beacons = true
 	name = "RunRig"
 	_load_view_pref()
 	_read_params()
@@ -1110,14 +1116,12 @@ func _update_mist(z_end: float) -> void:
 		var q := QuadMesh.new()
 		q.size = Vector2(560.0, 160.0)
 		_mist.mesh = q
-		var sh := Shader.new()
-		sh.code = "shader_type spatial;
+		var m := ShaderMaterial.new()
+		m.shader = Mats.shader("shader_type spatial;
 render_mode unshaded, cull_disabled;
 uniform vec4 tint : source_color = vec4(0.93, 0.96, 1.0, 0.97);
 void fragment() { ALBEDO = tint.rgb; ALPHA = tint.a * smoothstep(0.22, 0.62, UV.y); }
-"
-		var m := ShaderMaterial.new()
-		m.shader = sh
+")
 		_mist.material_override = m
 		_mist.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(_mist)
@@ -1977,7 +1981,7 @@ func _burst(pos: Vector3, col: Color, n: int, speed: float, life: float, size: f
 func _ring(pos: Vector3, col: Color, r_end: float, dur: float, standing: bool) -> void:
 	var m := MeshInstance3D.new()
 	m.mesh = _torus(0.9, 1.0)
-	var mat := StandardMaterial3D.new()
+	var mat := Mats.glow()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -2353,6 +2357,9 @@ var _sacc_conf_seen: int = 0
 var _sacc_ret_seen: int = 0
 var assist_level: float = 0.7             # AUTO-HELP, 0..1: how much the board does for you. The eyes say WHICH way (a side, a gate, a moment of attention); the board does the carving, early and smoothly.
 var _glide_x: float = 0.0
+var _steer_vel: float = 0.0
+var _ball_s: float = 0.0
+var _dbg_parts: Vector3 = Vector3.ZERO          # tests: what the path guard added this tick (gate pull, obstacle swerve, snowball dodge)
 var _glide_row: int = -999
 ## EARNED HELP. The board only helps while there is evidence you are steering it: a look to one side, a gate or pickup you are looking at, a key or a lean. Look at nothing
 ## for a moment and the help fades away (it comes back the instant you act), so a hands-off board does not play itself down the hill.
@@ -2563,6 +2570,10 @@ func _guard_path(delta: float, s_in: float) -> float:
 		var w := maxf(u * _engage, 0.35 * _a() * clampf((wall_far - bd) / 30.0, 0.0, 1.0))          # with help on, the board begins to commit early and gently; with no sign of you, it does not choose a gate for you
 		if eyes_chose:
 			w = maxf(carve_assist * _assist_conf() * _aim_w, w)
+		# close to the barrier the board commits: fully to a gate that is yours, and as far as the help level allows to one it picked for itself
+		var mine := eyes_chose or (row.has("eyes_gap") and is_same(row["eyes_gap"], tgt))
+		var urgency := clampf((2.5 - bd / maxf(spd_w, 1.0)) / 1.7, 0.0, 1.0)
+		w = maxf(w, urgency * (1.0 if mine else maxf(_engage, _a())))
 		_wall_w = w
 		# the aim point glides to the chosen gate instead of jumping when the choice changes: no jerk when the eyes flick between two gates
 		if _glide_row != int(row["j"]):
@@ -2571,6 +2582,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 		# the aim point glides to the chosen gate (no jerk when the choice flips), but never slower than it takes to ARRIVE: a gate chosen late and far off must still be reached
 		var glide_need := absf(float(tgt["x"]) - _glide_x) / maxf(bd / spd_w - 0.7, 0.25)
 		_glide_x = move_toward(_glide_x, float(tgt["x"]), maxf(lerpf(40.0, 14.0, _a()), glide_need * 1.5) * delta)
+		var t_gate := bd / maxf(spd_w, 1.0)
 		var want := clampf((_glide_x - (spos.x + vel.x * 0.45)) / 12.0, -0.9, 0.9)
 		# too far off to make the gap with a normal carve: give up speed instead of the line (a friendly brake, never a crash)
 		var miss := absf(float(tgt["x"]) - spos.x) - float(tgt["w"]) * 0.35
@@ -2582,14 +2594,15 @@ func _guard_path(delta: float, s_in: float) -> float:
 					_brake_toast_t = 4.0
 					_toast("EASING OFF TO MAKE IT", Color(0.8, 0.9, 1.0))          # the help says so when it does more than a carve
 		var yield_to_buff := _buff_w * clampf((bd - (wall_near + 8.0)) / 10.0, 0.0, 1.0)       # a buff you are looking at wins until the barrier is close
-		add += w * want * (1.0 - 0.6 * absf(s_in)) * (1.0 - 0.85 * yield_to_buff)
-		# a last-moment save: the gate you chose is about to be missed by a few metres, so the board is nudged the rest of the way (never from far off: that is the carve's job above)
-		if eyes_chose and bd < 38.0 and spd_w > 1.0:
-			var xp := spos.x + vel.x * (bd / spd_w)
-			var inner := maxf(float(tgt["w"]) * 0.5 - 1.8, 1.0)
-			var over := absf(xp - float(tgt["x"])) - inner
-			if over > 0.0 and over < 9.0:
-				add += signf(float(tgt["x"]) - xp) * clampf(over / 5.0, 0.0, 1.0) * 0.55 * (1.0 - 0.6 * absf(s_in))
+		add += w * want * (1.0 - (0.3 if mine else 0.6) * absf(s_in)) * (1.0 - 0.85 * yield_to_buff)
+		# The last half second is not left to chance: if the board is still set to clip the edge of the opening it is heading for, the snow carries it the final metre or two
+		# sideways (fully for a gate chosen with your eyes, even if your look has since moved on; as far as the help level allows for one the board picked). No steering kick.
+		var slide := 1.0 if mine else maxf(_engage, _a()) * w
+		if slide > 0.05 and bd > 0.5 and t_gate < 0.7:
+			var xp := spos.x + vel.x * t_gate
+			var over := absf(xp - float(tgt["x"])) - maxf(float(tgt["w"]) * 0.5 - 2.0, 0.8)
+			if over > 0.0 and over < 5.0:
+				spos.x += signf(float(tgt["x"]) - xp) * minf(over, 4.5 * slide * delta)
 		gate_done = true
 	if not gate_done:
 		add += carve_assist * _assist_conf() * _aim_w * _aim_want * (1.0 - 0.6 * absf(s_in))
@@ -2602,7 +2615,9 @@ func _guard_path(delta: float, s_in: float) -> float:
 		var above := spos.y - terrain_h(spos.x, spos.z)
 		var far := _free_shift(clampf(95.0 / sp, 1.6, 2.4), sp, above, true)
 		if absf(far.x) > 0.001:
-			av = clampf(far.x / 5.0, -0.9, 0.9)
+			# the same for a tree or rock ahead: the angle that carries the board the needed distance sideways in the time left, with a margin, instead of a fixed share of full lock
+			var av_v := absf(far.x) / maxf(far.y - 0.2, 0.3)
+			av = signf(far.x) * clampf(asin(clampf(av_v / maxf(vel.length(), 1.0), 0.0, 0.85)) / THETA_MAX * 1.35, minf(absf(far.x) / 12.0, 0.3), 0.9)
 			_swerve_idle = 0.0
 			if not _swerving:
 				_swerving = true
@@ -2618,7 +2633,12 @@ func _guard_path(delta: float, s_in: float) -> float:
 			_swerve_idle += delta
 			if _swerve_idle > 0.6:
 				_swerving = false
-	return add + av + _ball_evade() * (1.0 - 0.5 * absf(s_in))
+	# a snowball dodge eases in and out (it used to switch on and off within one tick, which threw the nose sideways and back)
+	_ball_s += (_ball_evade() - _ball_s) * (1.0 - exp(-delta / 0.18))
+	_dbg_parts = Vector3(add, av, _ball_s)
+	if not grounded:
+		add *= 0.3                                         # nothing to carve against in the air: do not wind the steering up for the landing
+	return add + av + _ball_s * (1.0 - 0.5 * absf(s_in))
 
 
 var _rs: float = 1.0                 # 3D render scale: the game and the face model share one GPU, so the game gives up pixels before the tracker starves
@@ -2671,7 +2691,9 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _paused:
+	if not _warmed:
+		_warm_shaders()
+	if _paused or _warming:
 		return
 	var pf0 := Time.get_ticks_usec()
 	_render_governor(delta)
@@ -2726,15 +2748,18 @@ func _physics_process(delta: float) -> void:
 			ag["idle"] = float(ag["idle"]) + delta
 	if _finished:
 		steer = 0.0
-	var prev_ss := _steer_s
-	_steer_s = lerpf(_steer_s, steer, 1.0 - exp(-steer_rate * delta))
-	_steer_s = move_toward(prev_ss, _steer_s, lerpf(10.0, 4.5, _a()) * delta)          # the wheel cannot be whipped: a smooth sweep, whatever the eyes do (slower than before: the board waggled)
+	# The steering eases in and eases out (a critically damped spring), so the board leans into a turn instead of snapping to it: a simple follow-with-a-speed-limit started and
+	# stopped abruptly, which is what read as waggle. About 0.35 s to get most of the way to a new line with help on, 0.25 s without.
+	var st_w := lerpf(13.0, 9.0, _a()) * (steer_rate / 9.0)
+	var st_acc := st_w * st_w * (steer - _steer_s) - 2.0 * st_w * _steer_vel
+	_steer_vel += st_acc * delta
+	_steer_s = clampf(_steer_s + _steer_vel * delta, -1.0, 1.0)
 	steer = _steer_s
 	var tuck := nod_p < -0.10 and not _finished
 	tucking = tuck and grounded
 	braking = false
 	gliding = false
-	var theta_t := steer * THETA_MAX
+	var theta_t := steer * THETA_MAX * (1.0 if grounded else 0.4)          # in the air the board stays close to the way it is flying, so it lands along its path and does not whip
 	heading += (theta_t - heading) * (1.0 - exp(-delta / (0.22 if grounded else 0.4)))
 	var fwd := Vector2(sin(heading), -cos(heading))
 	var right := Vector2(cos(heading), sin(heading))
@@ -2806,6 +2831,7 @@ func _physics_process(delta: float) -> void:
 	_update_tricks(delta, key, pk)
 	_animate_buffs()
 	_update_rows()
+	_called_tick(delta)
 	if not _finished and spos.z <= finish_z:
 		_finish()
 	if _gate_open and int(float(_next_j) * ROW_GAP) < int(-spos.z + AHEAD):
@@ -2947,6 +2973,135 @@ func _crash(msg: String, ctx: String = "") -> void:
 
 
 ## Scores a barrier the moment you cross it: the opening you went through, how close to its middle, and the flow chain.
+# --------------------------------------------------------------------------
+# CALLED GATE test (?called): the game marks one opening of every barrier, you look at it, and it records what your eyes said and which opening it understood.
+# Nothing about the steering or the course changes: it only draws the marker and writes a log (tools/called_report.py scores it).
+# --------------------------------------------------------------------------
+var called_mode: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("called")
+var called_res: Array = []           # one record per barrier
+var _call_rng := RandomNumberGenerator.new()
+var _call_rows: Array = []           # samples waiting to be posted
+var _call_acc: float = 0.0
+var _call_row: Dictionary = {}       # the barrier being called now
+
+
+func _call_index(row: Dictionary, g: Dictionary) -> int:
+	if g.is_empty():
+		return -1
+	var n := 0
+	for o in row["gaps"]:
+		if float(o["x"]) < float(g["x"]):
+			n += 1
+	return n
+
+
+func _called_tick(delta: float) -> void:
+	if not called_mode or _finished:
+		return
+	# the barrier ahead
+	var row: Dictionary = {}
+	var keys: Array = _rows.keys()
+	keys.sort()
+	for kk in keys:
+		var r: Dictionary = _rows[kk]
+		if r["has_row"] and not r["passed"] and spos.z - float(r["z"]) > 0.0:
+			row = r
+			break
+	if called_res.is_empty() and _call_row.is_empty() and not row.is_empty():
+		_call_rng.randomize()
+		_toast("TEST: look at the marked opening", Color(1.0, 0.9, 0.2))
+	if not row.is_empty() and not row.has("call"):
+		var gs: Array = row["gaps"]
+		row["call"] = gs[_call_rng.randi() % gs.size()]
+		row["call_t0"] = _age
+		row["call_lock_t"] = -1.0
+		row["call_first"] = -2
+	_call_row = row
+	# a barrier just passed: the result
+	for kk2 in keys:
+		var r2: Dictionary = _rows[kk2]
+		if not r2.has("call") or not r2["passed"] or r2.has("call_done"):
+			continue
+		r2["call_done"] = true
+		var through: Dictionary = {}
+		for g in r2["gaps"]:
+			if absf(spos.x - float(g["x"])) <= float(g["w"]) * 0.5 + 1.2:
+				through = g
+		var xs: Array = []
+		var srt: Array = (r2["gaps"] as Array).duplicate()
+		srt.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
+		for g2 in srt:
+			xs.append(snappedf(float(g2["x"]), 0.1))
+		var eg: Dictionary = r2.get("eyes_gap", {})
+		var rec := {"kind": "called_gate", "row": int(r2["j"]), "n": xs.size(), "call": _call_index(r2, r2["call"]), "eyes": _call_index(r2, eg), "first": int(r2["call_first"]), "through": _call_index(r2, through),
+			"lock_s": snappedf(float(r2["call_lock_t"]), 0.01), "seen_s": snappedf(_age - float(r2["call_t0"]), 0.01), "crash": bool(r2["crash"]), "xs": xs, "px": snappedf(spos.x, 0.1), "zone": String(r2.get("zone", ""))}
+		called_res.append(rec)
+		if Telemetry.inst != null:
+			Telemetry.inst._post(rec)
+	if row.is_empty():
+		return
+	# which opening the game holds right now, and the first time it holds the called one
+	var held: Dictionary = _aim if (not _aim.is_empty() and is_same(_aim_row, row)) else {}
+	if not held.is_empty():
+		if int(row["call_first"]) == -2:
+			row["call_first"] = _call_index(row, held)
+		if is_same(held, row["call"]) and float(row["call_lock_t"]) < 0.0:
+			row["call_lock_t"] = _age - float(row["call_t0"])
+	_call_acc += delta
+	if _call_acc < 0.1:
+		return
+	_call_acc = 0.0
+	var vs := get_viewport().get_visible_rect().size
+	var sxs: Array = []
+	var srt2: Array = (row["gaps"] as Array).duplicate()
+	srt2.sort_custom(func(a, b): return float(a["x"]) < float(b["x"]))
+	for g3 in srt2:
+		var sc := _gap_screen(row, g3)
+		var gi3 := (row["gaps"] as Array).find(g3)
+		if beacons and is_same(_bc_row, row) and gi3 >= 0 and gi3 < _bc_xs.size():
+			sxs.append(snappedf(float(_bc_xs[gi3]) / maxf(vs.x, 1.0), 0.001))
+		else:
+			sxs.append(snappedf((sc["c"] as Vector2).x / maxf(vs.x, 1.0), 0.001) if not sc.is_empty() else -1.0)
+	var P := GazeProvider
+	_call_rows.append([snappedf(_age, 0.01), int(row["j"]), snappedf(spos.z - float(row["z"]), 0.1), _call_index(row, row["call"]), _call_index(row, held), _call_index(row, _cand) if not _cand.is_empty() else -1,
+		snappedf(_cursor_px.x / maxf(vs.x, 1.0), 0.001), snappedf(_aim_cx / maxf(vs.x, 1.0), 0.001), snappedf(_steer_gaze, 0.01), snappedf(P.mix.value, 0.01), snappedf(P.eih.x, 0.0001),
+		snappedf(P.head_rpy.x, 0.001), 1 if P.mix_used() else 0, snappedf(spos.x, 0.1), sxs])
+	if _call_rows.size() >= 20:
+		_call_flush()
+
+
+func _call_flush() -> void:
+	if _call_rows.is_empty():
+		return
+	if Telemetry.inst != null:
+		Telemetry.inst._post({"kind": "called", "cols": "t,row,dist,call,held,cand,cursor,aimx,steer,mix,eih,yaw,mixed,x,gates", "rows": _call_rows})
+	_call_rows = []
+
+
+## The marker over the called opening: a bouncing arrow above it and a ring around it.
+func _draw_called(k: float) -> void:
+	if not called_mode or _call_row.is_empty() or not _call_row.has("call") or _call_row["passed"]:
+		return
+	var sc := _gap_screen(_call_row, _call_row["call"])
+	if sc.is_empty():
+		return
+	var c: Vector2 = sc["c"]
+	var hw := maxf(float(sc["hw"]), 10.0 * k)
+	if beacons and is_same(_bc_row, _call_row):
+		var ci := (_call_row["gaps"] as Array).find(_call_row["call"])
+		if ci >= 0 and ci < _bc_xs.size():
+			var sy := get_viewport().get_visible_rect().size.y
+			c = Vector2(float(_bc_xs[ci]), maxf(minf(sy * 0.30, c.y - 70.0 * k), 60.0 * k))            # the arrow points at the marker you look toward, not at the far-off opening
+			hw = 26.0 * k
+	var bob := sin(_age * 7.0) * 5.0 * k
+	var col := Color(1.0, 0.9, 0.2, 0.95)
+	var tip := c + Vector2(0.0, -hw * 0.9 - 26.0 * k + bob)
+	var sz := 22.0 * k
+	Draw2D.poly(_hud, PackedVector2Array([tip + Vector2(-sz, -sz * 1.5), tip + Vector2(sz, -sz * 1.5), tip]), col)
+	_hud.draw_rect(Rect2(tip + Vector2(-sz * 0.35, -sz * 2.6), Vector2(sz * 0.7, sz * 1.2)), col)
+	Draw2D.arc(_hud, c, hw * 1.05, 0.0, TAU, 32, Color(1.0, 0.9, 0.2, 0.8), 3.5 * k, true)
+
+
 func _update_rows() -> void:
 	for k in _rows:
 		var r: Dictionary = _rows[k]
@@ -2968,7 +3123,7 @@ func _update_rows() -> void:
 						via = g2
 			Telemetry.barrier({"row": int(r["j"]), "gaps": (r["gaps"] as Array).size(), "hit": not chosen.is_empty() and not bool(r["crash"]), "eyes": _eye_on, "locked": r.has("eyes_gap") and not (r["eyes_gap"] as Dictionary).is_empty(),
 				"mine": is_same(r.get("eyes_gap", {}), chosen), "dx": snappedf(spos.x - float(via["x"]) if not via.is_empty() else 0.0, 0.1), "spd": int(vel.length()), "zone": String(r.get("zone", "")),
-				"cur": snappedf(_cursor_px.x / maxf(get_viewport().get_visible_rect().size.x, 1.0), 0.01), "chain": chain_lvl})
+				"cur": snappedf(_cursor_px.x / maxf(get_viewport().get_visible_rect().size.x, 1.0), 0.01), "look": snappedf(_off_now, 0.01), "sg": snappedf(_steer_gaze, 0.01), "chain": chain_lvl})
 			if not via.is_empty():
 				_pending_zone = String(via.get("leads", ""))
 				_pending_bend = float(via.get("bend", 0.0))
@@ -3021,6 +3176,7 @@ func _update_rows() -> void:
 
 func _finish() -> void:
 	_finished = true
+	_call_flush()
 	_runlog.end_run(self, "finish")
 	_end_t = 0.0
 	if _best_time <= 0.0 or (_clean and _run_t < _best_time):
@@ -3030,6 +3186,120 @@ func _finish() -> void:
 	Game.sfx(&"boom")
 	_flash = 0.6
 	_toast("FINISH!", Color(1.0, 0.9, 0.4))
+
+
+## Builds every shader the run can need NOW, at the start, instead of the moment each thing first appears (a browser freezes the picture for 70 to 800 ms every time it
+## builds one: the first loot effect, the first realm, the first glow...). One tiny copy of each kind of material is drawn just in front of the camera for a few frames, once
+## as a single mesh and once as a batch (the two are different programs), next to a small light, then removed.
+var _warmed: bool = false
+var _warming: bool = false           # the board waits at the top while this runs
+var _warm_k: float = 0.0             # 0..1, for the bar
+
+
+func _warm_shaders() -> void:
+	if _warmed or cam == null:
+		return
+	_warmed = true
+	if not OS.has_feature("web"):
+		return                                             # only a browser builds shaders this slowly; tests and the desktop build go straight in
+	_warming = true
+	_warm_k = 0.0
+	Mats.keep_alive([_fx_mat("solid", Color.WHITE), _fx_mat("add", Color.WHITE), _fx_mat("halo", Color.WHITE), _fx_mat("ground", Color.WHITE), _fx_mat("spark", Color.WHITE)])
+	var lt := get_parent().get_node_or_null("Lighting") as DhLighting if get_parent() != null else null
+	if lt != null:
+		lt._cool = 20.0                                    # the pauses below are not the game being slow: the governor must not drop a tier over them
+		lt._bad = 0.0
+	var holder := Node3D.new()
+	cam.add_child(holder)
+	var lamp := OmniLight3D.new()
+	lamp.light_energy = 0.02
+	lamp.omni_range = 4.0
+	lamp.shadow_enabled = false
+	holder.add_child(lamp)
+	lamp.position = Vector3(0.0, -0.4, -3.0)
+	var mats: Array = [Mats.lit(), Mats.flat(), Mats.glass(), Mats.glass(true), Mats.glow(), _fx_mat("solid", Color.WHITE), _fx_mat("add", Color.WHITE), _fx_mat("halo", Color.WHITE),
+		_fx_mat("ground", Color.WHITE), _fx_mat("spark", Color.WHITE), Realms.ground_material(), _m_shadow_mat, _m_ground, _coin_mat]
+	for zn in Realms.KITS:
+		mats.append(Realms.material(String(zn)))
+		break
+	var box := BoxMesh.new()
+	var col_box := ArrayMesh.new()                    # a box with vertex colours, which the batches use
+	var arr := box.get_mesh_arrays()
+	var cols := PackedColorArray()
+	cols.resize((arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
+	cols.fill(Color.WHITE)
+	arr[Mesh.ARRAY_COLOR] = cols
+	col_box.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	# Each is drawn beside a small lamp and out of its reach ("lit by a lamp" and
+	# "not lit by a lamp" are different programs), as a single mesh and as a batch (different again).
+	var steps := 3.0
+	for f in 3:
+		await get_tree().process_frame                     # GET READY is on the screen before the picture stops
+	for i in mats.size():
+		var m: Material = mats[i]
+		if m != null:
+			for near in [true, false]:
+				_warm_one(holder, col_box, m, i, near)
+	_warm_k = 0.5
+	var puff := CPUParticles3D.new()
+	puff.mesh = _sphere_mesh(0.1)
+	puff.material_override = _fx_mat("spark", Color(1, 1, 1, 1))
+	puff.amount = 2
+	puff.emitting = true
+	holder.add_child(puff)
+	puff.position = Vector3(0.0, -0.4, -3.0)
+	for f in 12:
+		await get_tree().process_frame
+	# and each of those comes in two flavours: one for when colour grading or glow is on (the picture is finished in a pass afterwards) and one for when both
+	# are off (each material finishes its own colour). The quality governor switches between them when it changes tier, so build the other one too, then put it back.
+	var env: Environment = lt.level.world_env.environment if lt != null and lt.level != null and lt.level.world_env != null else null
+	if env != null:
+		var g0 := env.glow_enabled
+		var a0 := env.adjustment_enabled
+		if g0 or a0:
+			env.glow_enabled = false
+			env.adjustment_enabled = false
+		else:
+			env.adjustment_enabled = true
+		_warm_k = 0.8
+		for f in 12:
+			await get_tree().process_frame
+		env.glow_enabled = g0
+		env.adjustment_enabled = a0
+		lt._apply_tier()
+	if lt != null:
+		lt._cool = 6.0
+		lt._bad = 0.0
+	_warm_k = 1.0
+	await get_tree().process_frame
+	holder.queue_free()
+	_warming = false
+
+
+func _warm_one(holder: Node3D, mesh: Mesh, m: Material, i: int, near: bool) -> void:
+	var root := Node3D.new()
+	holder.add_child(root)
+	root.position = (Vector3(0.0, -0.4, -3.0) if near else Vector3(0.0, -2.0, -40.0)) + Vector3(float(i) * (0.008 if near else 0.06), 0.0, 0.0)
+	root.scale = Vector3.ONE * (0.004 if near else 0.03)
+	for shadow in [false, true]:
+		var mi := MeshInstance3D.new()
+		mi.mesh = mesh
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(mi)
+		mi.position = Vector3(0.0, 2.0 if shadow else 0.0, 0.0)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = 2
+	for q in 2:
+		mm.set_instance_transform(q, Transform3D(Basis.IDENTITY, Vector3(0.0, -2.0 - float(q), 0.0)))
+		mm.set_instance_color(q, Color.WHITE)
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.material_override = m
+	root.add_child(mmi)
 
 
 func _restart() -> void:
@@ -3074,6 +3344,7 @@ func _restart() -> void:
 	grounded = true
 	steer = 0.0
 	_steer_s = 0.0
+	_steer_vel = 0.0
 	_gh_prev = spos.y
 	_aim = {}
 	_aim_row = {}
@@ -3241,7 +3512,10 @@ func _ball_evade() -> float:
 		var w := (1.0 - dmin / reach) * urgency
 		if w > best_w:
 			best_w = w
-			best = signf(side) * clampf(0.25 + 0.75 * w, 0.0, 0.95)
+			# steer by just what it takes to be clear when the ball arrives: a ball seen early is a slight lean, only a late one is a hard swerve (it used to be at least a
+			# quarter of full lock the moment a ball came into range, whatever the distance)
+			var need_v := (reach - dmin + 0.6) / maxf(tmin - 0.15, 0.3)
+			best = signf(side) * clampf(asin(clampf(need_v / maxf(vel.length(), 1.0), 0.0, 0.85)) / THETA_MAX * 1.25, 0.06, 0.95)
 	return best if (avoid_enabled and not _braced()) else 0.0
 
 
@@ -4599,6 +4873,81 @@ func _update_focus(delta: float) -> void:
 	_pf_focus = _pf(_pf_focus, pf0)
 
 
+## TARGET MARKERS (phones by default, ?beacons on a laptop, ?nobeacons off): see _update_aim.
+var beacons: bool = Game.touch_mode
+const BEACON_MAX_DIST := 190.0       # markers appear as soon as the barrier does
+const BEACON_LEFT := 0.17            # where the outermost markers sit across the screen
+const BEACON_RIGHT := 0.83
+const GLANCE_WINDOW := 0.35          # seconds
+const GLANCE_MOVE := 0.07            # the look must cross this share of the screen within the window to count as a glance
+const GLANCE_HOLD := 0.7             # seconds a glance stays "fresh" for changing the choice
+var _bc_row: Dictionary = {}
+var _bc_xs: Array = []               # marker x in pixels, one per opening, in the order of row["gaps"]
+var _cx_hist: Array = []
+var _glance_t: float = 0.0
+
+
+## Where each opening's marker sits across the screen (pixels). Spread evenly while the openings are far and close together; as the barrier nears and the openings themselves
+## spread out, each marker slides onto its own opening.
+func _beacon_xs(row: Dictionary, vs: Vector2) -> Array:
+	var gs: Array = row["gaps"]
+	var n := gs.size()
+	var real: Array = []
+	var lo := 1.0e9
+	var hi := -1.0e9
+	var seen := 0
+	for g in gs:
+		var sc := _gap_screen(row, g)
+		var rx := (sc["c"] as Vector2).x / maxf(vs.x, 1.0) if not sc.is_empty() else -1.0
+		real.append(rx)
+		if rx >= 0.0:
+			lo = minf(lo, rx)
+			hi = maxf(hi, rx)
+			seen += 1
+	var slot_span := (BEACON_RIGHT - BEACON_LEFT) if n > 1 else 0.0
+	var k := 0.0
+	if seen == n and n > 1 and slot_span > 0.0:
+		k = clampf(((hi - lo) - 0.6 * slot_span) / (0.4 * slot_span), 0.0, 1.0)
+	var out: Array = []
+	for i in n:
+		var rank := 0
+		for o in gs:
+			if float(o["x"]) < float(gs[i]["x"]):
+				rank += 1
+		var slot := lerpf(BEACON_LEFT, BEACON_RIGHT, float(rank) / float(n - 1)) if n > 1 else 0.5
+		var x := lerpf(slot, float(real[i]), k) if float(real[i]) >= 0.0 else slot
+		out.append(x * vs.x)
+	return out
+
+
+## The markers: a ring per opening with a line down to it. The chosen one is filled; the one you are looking toward shows a dwell arc.
+func _draw_beacons(s: Vector2, k: float) -> void:
+	if not beacons or _bc_row.is_empty() or bool(_bc_row["passed"]) or _paused:
+		return
+	var gs: Array = _bc_row["gaps"]
+	if gs.size() != _bc_xs.size():
+		return
+	var r := 24.0 * k
+	for i in gs.size():
+		var g: Dictionary = gs[i]
+		var sc := _gap_screen(_bc_row, g)
+		var by := s.y * 0.30
+		if not sc.is_empty():
+			by = minf(by, (sc["c"] as Vector2).y - 70.0 * k)
+		var bp := Vector2(float(_bc_xs[i]), maxf(by, 60.0 * k))
+		var chosen := is_same(g, _aim)
+		var cand := is_same(g, _cand)
+		var col := Color(0.45, 1.0, 0.65, 0.95) if chosen else Color(1, 1, 1, 0.75)
+		if not sc.is_empty():
+			_hud.draw_line(bp + Vector2(0.0, r), sc["c"], Color(col.r, col.g, col.b, 0.55 if chosen else 0.28), (4.0 if chosen else 2.0) * k, true)
+		Draw2D.circle(_hud, bp, r + 3.0 * k, Color(0, 0, 0, 0.45))
+		if chosen:
+			Draw2D.circle(_hud, bp, r * (0.72 + 0.06 * sin(_age * 8.0)), Color(0.45, 1.0, 0.65, 0.9))
+		Draw2D.arc(_hud, bp, r, 0.0, TAU, 28, col, (4.5 if chosen else 3.0) * k, true)
+		if cand:
+			Draw2D.arc(_hud, bp, r * 0.6, -PI * 0.5, -PI * 0.5 + TAU * clampf(_cand_t / AIM_LINGER, 0.0, 1.0), 20, Color(1, 1, 1, 0.9), 4.0 * k)
+
+
 func _update_aim(delta: float) -> void:
 	if _paused:
 		return
@@ -4610,10 +4959,11 @@ func _update_aim(delta: float) -> void:
 		if not r["has_row"] or r["passed"]:
 			continue
 		var dist := spos.z - float(r["z"])
-		if dist < AIM_MIN_DIST or dist > AIM_MAX_DIST:
+		if dist < AIM_MIN_DIST or dist > (BEACON_MAX_DIST if beacons else AIM_MAX_DIST):
 			continue
 		row = r
 		break
+	_bc_row = {}
 	if row.is_empty() or not _eye_on or _finished or not aim_enabled or (trace_on and _tr_phase != 3):
 		_aim = {}
 		_aim_row = {}
@@ -4631,34 +4981,61 @@ func _update_aim(delta: float) -> void:
 	var cx := _aim_cx
 	var best: Dictionary = {}
 	var best_d := 1.0e9
-	for g in row["gaps"]:
-		var sc := _gap_screen(row, g)
-		if sc.is_empty():
-			continue
-		var c: Vector2 = sc["c"]
-		var tol := maxf(float(sc["hw"]) * 1.15, 0.12 * vs.x * clampf(68.0 / maxf(cam.fov, 40.0), 0.55, 1.0))          # a wider view packs the gates closer together on screen: look more precisely
-		var dd := absf(c.x - cx) / tol
-		if is_same(g, _aim):
-			dd *= 0.85                                           # a little stickiness against jitter, not enough to hold you on the near one
-		if dd < best_d:
-			best_d = dd
-			best = g
-	if best_d >= 1.0:
-		# no gate under the gaze point: the gate nearest to where you are looking, whichever it is. The far ones stay reachable this way, however small they are on screen, and a gaze that is
-		# a bit off or noisy no longer sends you to the outermost gate on one side.
-		var zg: Dictionary = {}
-		var zgd := 1.0e9
-		for g2 in row["gaps"]:
-			var zsc := _gap_screen(row, g2)
-			if zsc.is_empty():
+	# has the look just MOVED (a glance), or is it only sitting / drifting? Remembered for a moment, so a choice changes on a glance and never on a slow fade back to the middle.
+	_cx_hist.append(Vector2(_age, cx / maxf(vs.x, 1.0)))
+	while _cx_hist.size() > 2 and _age - (_cx_hist[1] as Vector2).x > GLANCE_WINDOW:
+		_cx_hist.remove_at(0)
+	if absf((_cx_hist[_cx_hist.size() - 1] as Vector2).y - (_cx_hist[0] as Vector2).y) > GLANCE_MOVE:
+		_glance_t = GLANCE_HOLD
+	_glance_t = maxf(_glance_t - delta, 0.0)
+	if beacons:
+		# TARGET MARKERS: every opening gets a marker, and the markers are spread wide across the screen however close together the openings look in the distance (two openings
+		# 30 m apart are under a tenth of the screen apart at 100 m: less than a phone can resolve). You pick by looking toward a marker; the nearest marker to your look wins.
+		_bc_row = row
+		_bc_xs = _beacon_xs(row, vs)
+		var gs: Array = row["gaps"]
+		for bi in gs.size():
+			var bdd := absf(float(_bc_xs[bi]) - cx)
+			if is_same(gs[bi], _aim):
+				bdd *= 0.8
+			if bdd < best_d:
+				best_d = bdd
+				best = gs[bi]
+		# with nothing chosen yet, a look that sits between two markers chooses neither (the board then takes its own line, as before): it takes a look toward one
+		var spacing := (BEACON_RIGHT - BEACON_LEFT) * vs.x / float(maxi(gs.size() - 1, 1))
+		best_d = 0.5 if (not _aim.is_empty() or best_d < 0.36 * spacing) else 1.2
+		# a choice you have made stays until you glance somewhere else: the look drifting back to the middle on its own does not undo it
+		if not _aim.is_empty() and is_same(_aim_row, row) and not is_same(best, _aim) and _glance_t <= 0.0:
+			best = _aim
+	else:
+		for g in row["gaps"]:
+			var sc := _gap_screen(row, g)
+			if sc.is_empty():
 				continue
-			var zdx := absf((zsc["c"] as Vector2).x - cx)
-			if zdx < zgd:
-				zgd = zdx
-				zg = g2
-		if not zg.is_empty():
-			best = zg
-			best_d = 0.9
+			var c: Vector2 = sc["c"]
+			var tol := maxf(float(sc["hw"]) * 1.15, 0.12 * vs.x * clampf(68.0 / maxf(cam.fov, 40.0), 0.55, 1.0))          # a wider view packs the gates closer together on screen: look more precisely
+			var dd := absf(c.x - cx) / tol
+			if is_same(g, _aim):
+				dd *= 0.85                                           # a little stickiness against jitter, not enough to hold you on the near one
+			if dd < best_d:
+				best_d = dd
+				best = g
+		if best_d >= 1.0:
+			# no gate under the gaze point: the gate nearest to where you are looking, whichever it is. The far ones stay reachable this way, however small they are on screen, and a gaze that is
+			# a bit off or noisy no longer sends you to the outermost gate on one side.
+			var zg: Dictionary = {}
+			var zgd := 1.0e9
+			for g2 in row["gaps"]:
+				var zsc := _gap_screen(row, g2)
+				if zsc.is_empty():
+					continue
+				var zdx := absf((zsc["c"] as Vector2).x - cx)
+				if zdx < zgd:
+					zgd = zdx
+					zg = g2
+			if not zg.is_empty():
+				best = zg
+				best_d = 0.9
 	if best_d < 1.0:
 		if is_same(best, _aim):
 			_cand = {}
@@ -5004,6 +5381,14 @@ func _draw_hud_inner() -> void:
 	var font := ThemeDB.fallback_font
 	var s := _hud.size
 	var k := _hud_scale()
+	if _warming:
+		# the short wait at the very start of the first run: a bar, so it reads as getting ready and not as a hang
+		var bw0 := minf(s.x * 0.4, 460.0 * k)
+		var bp := Vector2(s.x * 0.5 - bw0 * 0.5, s.y * 0.62)
+		_text(font, Vector2(s.x * 0.5 - font.get_string_size("GET READY", HORIZONTAL_ALIGNMENT_LEFT, -1, int(34.0 * k)).x * 0.5, bp.y - 26.0 * k), "GET READY", 34, Color(1, 1, 1, 0.95))
+		_hud.draw_rect(Rect2(bp, Vector2(bw0, 12.0 * k)), Color(0.05, 0.12, 0.25, 0.6))
+		_hud.draw_rect(Rect2(bp, Vector2(bw0 * _warm_k, 12.0 * k)), Color(1.0, 0.85, 0.35, 0.95))
+		return
 	var m := 24.0 * k
 	if hurt_t > 0.0:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(1.0, 0.1, 0.1, 0.22 * clampf(hurt_t, 0.0, 1.0)))
@@ -5024,6 +5409,8 @@ func _draw_hud_inner() -> void:
 			var r1 := r0 + (0.03 + 0.12 * f) * rmax * (0.5 + sp_f)
 			var dir := Vector2(cos(a), sin(a))
 			_hud.draw_line(c0 + dir * r0, c0 + dir * r1, Color(1.0, 1.0, 1.0, 0.22 * sp_f * f), 2.0 * k)
+	_draw_beacons(s, k)
+	_draw_called(k)
 	# the opening you have latched: two soft posts at its edges
 	if not _aim.is_empty() and not _aim_row.is_empty():
 		var asc := _gap_screen(_aim_row, _aim)

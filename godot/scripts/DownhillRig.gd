@@ -43,6 +43,7 @@ const LANE_ZONE := 0.13            # dead zone: look further than this (screen f
 const LANE_MARGIN := 0.04          # gate mode: your eyes must be this much (screen fraction) nearer another gate before it can win
 const LANE_DWELL := 0.25           # seconds of looking aside before the first step
 const LANE_REPEAT := 0.60          # seconds between further steps while you keep looking aside
+const PHONE_CENTRE_S := 3.5       # seconds: how quickly the centre of the look follows the reading on a hand-held phone
 const LANE_HEAD_GAIN := 0.012      # screen fraction per degree of head turn: turning toward where you want to go helps the eyes
 const STEER_SCALE_MIN := 0.10       # STEER control: a look this far (screen fraction) from your own centre is full steering at most; never more sensitive than this
 const STEER_SCALE_MAX := 0.30
@@ -2087,6 +2088,8 @@ func _eyes_only_offs(delta: float, geo_offs: float) -> float:
 	var raw := -GazeProvider.eye_x() * _ex_sign
 	if GazeProvider.mix_used() != _ex_mixed:                # the source of the reading changed (the phone blend became ready): its centre and size are different, learn them again
 		_ex_mixed = GazeProvider.mix_used()
+		if _ex_mixed:
+			_ex_sign = 1.0
 		_ex_init = false
 		_ex_raw.clear()
 		_ex_abs.clear()
@@ -2113,7 +2116,9 @@ func _eyes_only_offs(delta: float, geo_offs: float) -> float:
 	var ex_now := -GazeProvider.eye_x()
 	var yaw_now := GazeProvider.head_rpy.x
 	_ex_yaw += (yaw_now - _ex_yaw) * 0.05
-	if absf(yaw_now - _ex_yaw) < 0.015:
+	# The phone blend needs no direction check: its direction is fixed by how it is built and was verified against a moving dot. Checking it against the geometry gaze, which on a
+	# hand-held phone mostly follows the phone and the head, could flip the steering the wrong way round and pin the look to one side.
+	if absf(yaw_now - _ex_yaw) < 0.015 and not _ex_mixed:
 		_ex_c[5] += 1.0
 		var aa := 1.0 / minf(float(_ex_c[5]), 600.0)
 		if _ex_c[5] <= 1.0:
@@ -2137,6 +2142,12 @@ func _eyes_only_offs(delta: float, geo_offs: float) -> float:
 					_ex_dec = 0.0
 					return 0.0
 	var d := raw - _ex_ref
+	# A hand-held phone: the phone and the head keep shifting by a few degrees, and each shift moves the whole eye reading by about one glance. The slower rules below then leave
+	# the look parked on one side for tens of seconds (measured: read as full left for 20 s while the player looked ahead). So on a phone the centre follows the reading all the
+	# time, at a pace of a few seconds: a glance still registers at once and holds long enough to choose an opening (which then stays chosen), and a shift is forgotten quickly.
+	if _ex_mixed:
+		_ex_ref += d * minf(delta / PHONE_CENTRE_S, 1.0)
+		d = raw - _ex_ref
 	if absf(d) < 0.6 * _ex_full:
 		_ex_ref += d * minf(delta / (7.0 if RunLog.on_vehicle(vehicle_forced) else 20.0), 1.0)         # slow drift only while you look near the middle
 	# a lean (a streetcar, a tilted phone, a slumped shoulder) moves the whole reading by less than a glance, so the rules above never see it. Over a long ride you look left and
@@ -2333,7 +2344,10 @@ func _lane_tick(delta: float, vs: Vector2) -> void:
 		if dist >= commit:
 			scout = r
 			break
-	if target.is_empty():
+	# With no barrier in range (the last 8 m before a gate, an air stretch, the calm start) the look still has to be read: this used to stop here, which froze the steering at
+	# its last value and showed the raw screen-gaze point as the cursor. On a phone that point sits in a corner, so the opening on that side was picked for the next barrier.
+	var no_row := target.is_empty()
+	if no_row and not (_eye_on and lane_ctl >= 2 and not lane_mode):
 		return
 	if scout.is_empty():
 		scout = target
@@ -2504,6 +2518,8 @@ func _lane_tick(delta: float, vs: Vector2) -> void:
 		_lane = _seek_lane
 		_look_lane = _seek_lane
 		_look_dir = 0
+	if no_row:
+		return
 	var lane_t: int = int(target["fl"]) if target.has("fl") else _lane
 	for g2 in target["gaps"]:
 		if int(g2["lane"]) == lane_t:

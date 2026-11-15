@@ -46,7 +46,6 @@ var _int_row: Control
 var _status: Label
 var _reports_l: Label
 var _cam_btn: Button
-var _alt_btn: Button
 var _u: float = 1.0
 var _cols: int = -1
 var _last_vs: Vector2 = Vector2.ZERO
@@ -396,27 +395,17 @@ func _build_footer() -> void:
 	_footer.vertical = true
 	_root.add_child(_footer)
 	_cam_btn = Button.new()
-	_cam_btn.text = "START WITH CAMERA"
+	_cam_btn.text = "START"
 	_cam_btn.focus_mode = Control.FOCUS_NONE
 	for st in ["normal", "hover", "pressed", "focus"]:
 		var sb := _style(Color(0.92, 0.28, 0.24) if st != "hover" else Color(1.0, 0.4, 0.34), Color.WHITE, 22, 3)
 		_cam_btn.add_theme_stylebox_override(st, sb)
 	_cam_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_cam_btn.pressed.connect(_start.bind(true))
+	_cam_btn.pressed.connect(_start.bind(not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nocam"))))          # ?nocam: start with the mouse as your eyes (tests)
 	_footer.add_child(_cam_btn)
 	_texts.append([_cam_btn, 30])
 	_boxes.append([_cam_btn, 0.0, 84.0])
-	_alt_btn = Button.new()
-	_alt_btn.text = "PLAY WITHOUT CAMERA"
-	_alt_btn.focus_mode = Control.FOCUS_NONE
-	for st in ["normal", "hover", "pressed", "focus"]:
-		_alt_btn.add_theme_stylebox_override(st, _style(Color(0.2, 0.4, 0.8) if st != "hover" else Color(0.3, 0.5, 0.9), Color(1, 1, 1, 0.8), 22, 2))
-	_alt_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_alt_btn.pressed.connect(_start.bind(false))
-	_footer.add_child(_alt_btn)
-	_texts.append([_alt_btn, 22])
-	_boxes.append([_alt_btn, 0.0, 84.0])
-	_label("The camera never leaves your device.  No camera: A / D carve, mouse = your eyes.", 16, Color(1, 1, 1, 0.55), _root, true)
+	_label("The camera never leaves your device.  No camera? The mouse or your thumb steers instead.", 16, Color(1, 1, 1, 0.55), _root, true)
 
 
 static func Game_presets() -> Array:

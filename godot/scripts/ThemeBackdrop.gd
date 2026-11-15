@@ -213,7 +213,7 @@ func _build_world() -> void:
 		beam.height = 60.0
 		var bm := MeshInstance3D.new()
 		bm.mesh = beam
-		var bmat := StandardMaterial3D.new()
+		var bmat := Mats.glow()
 		bmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		bmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		bmat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
