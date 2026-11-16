@@ -158,6 +158,7 @@ var _ref_y: float = 0.5
 var reach: float = 1.3                      # how far a look moves the reticle / the control (1.3: your eyes cover the whole screen without straining)
 var look_smooth: float = 0.07             # seconds: smooths the 12-30 readings a second into fluid motion at 60 fps
 var _offs_s: float = 0.0
+var _ex_kit: bool = false
 var _ex_mixed: bool = false
 var eyes_only: bool = true                 # control from where the IRIS sits in the eye opening (a head turn does not move it), scaled to YOUR glance size
 var _ex_sign: float = 1.0
@@ -1312,7 +1313,9 @@ func _toast(text: String, color: Color, kind: String = "info") -> void:
 func _cleanup() -> void:
 	for k in _rows.keys():
 		var r: Dictionary = _rows[k]
-		if float(r["z"]) > spos.z + 90.0:
+		# a stretch that carries rails, jumps or treats stays until the board is past its far end: they can stand well beyond the stretch's own marker, and were being
+		# cleared away just as the board got to them
+		if float(r["z"]) > spos.z + 90.0 and ((r.get("feats", []) as Array).is_empty() or -ROW_GAP * float(int(k) + 1) > spos.z + 30.0):
 			for n in r["nodes"]:
 				if is_instance_valid(n):
 					(n as Node).queue_free()
@@ -1354,18 +1357,23 @@ func cleanup() -> void:
 # --------------------------------------------------------------------------
 # Camera + visuals + HUD
 # --------------------------------------------------------------------------
+var cam_back: float = 8.0          # how far behind the board, how high, and how far down the slope the camera looks
+var cam_h: float = 4.6
+var cam_ahead: float = 16.0
+
+
 func _place_camera(delta: float, snap: bool = false) -> void:
 	var sp := vel.length()
 	var vdir := vel / sp if sp > 1.0 else Vector2(0.0, -1.0)
 	_cdir = (_cdir.lerp(vdir, 1.0 - exp(-3.0 * delta))).normalized()
-	var back := Vector3(_cdir.x, 0.0, _cdir.y) * -8.0
-	var target := spos + back + Vector3(0.0, 4.6 + (0.5 if not grounded else 0.0), 0.0)
+	var back := Vector3(_cdir.x, 0.0, _cdir.y) * -cam_back
+	var target := spos + back + Vector3(0.0, cam_h + (0.5 if not grounded else 0.0), 0.0)
 	target.y = maxf(target.y, terrain_h(target.x, target.z) + 2.2)
 	if snap:
 		cam.global_position = target
 	else:
 		cam.global_position = cam.global_position.lerp(target, 1.0 - exp(-8.0 * delta))
-	var ahead := spos + Vector3(_cdir.x, 0.0, _cdir.y) * 16.0
+	var ahead := spos + Vector3(_cdir.x, 0.0, _cdir.y) * cam_ahead
 	ahead.y = terrain_h(ahead.x, ahead.z) + 1.0
 	if (ahead - cam.global_position).length() > 0.5:
 		cam.look_at(ahead, Vector3.UP)
@@ -2112,6 +2120,16 @@ func _seek_term() -> float:
 ## (a few percent of the eye width), so it is scaled to the size of YOUR normal glances (95th percentile of the last ~20 s, never below 6 x the fixation noise):
 ## a small glance then reaches the outer gates. It lingers (short smoothing) so a split-second look is noise-free, and returns screen-fraction units like the geometry offset.
 func _eyes_only_offs(delta: float, geo_offs: float) -> float:
+	if GazeProvider.kit_used():
+		# a phone: the STARGAZE reading already has its own centre, size and filter. Nothing is added here: a look that reaches +-1 there is the edge of the screen.
+		_ex_kit = true
+		if GazeProvider.kit.fitted():
+			return GazeProvider.kit.gaze_x * 0.385          # fitted on the dot: -1 .. +1 is the left and right edge of the screen
+		return GazeProvider.kit.x * 0.38
+	if _ex_kit:
+		_ex_kit = false
+		_ex_init = false
+		_ex_raw.clear()
 	var raw := -GazeProvider.eye_x() * _ex_sign
 	if GazeProvider.mix_used() != _ex_mixed:                # the source of the reading changed (the phone blend became ready): its centre and size are different, learn them again
 		_ex_mixed = GazeProvider.mix_used()
@@ -2834,10 +2852,10 @@ func _draw_pause_simple(font: Font, s: Vector2, k: float) -> void:
 	if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 		pt += "    CAM %.0f fps  %d ms" % [float(GazeProvider._pkt_times.size()) / 2.0, int(GazeProvider.trk_lat_ms)]
 	_ctext(font, s.y * 0.14 + 40.0 * k, pt, 18, Color(1, 1, 1, 0.7))
-	var labels := [["resume", "RESUME"], ["bad", "THAT FELT BAD"], ["restart", "RESTART RUN"], ["menu", "RETURN TO MENU"], ["advanced", "ADVANCED: TRACKING MONITOR"], ["share", "DIAGNOSTICS: " + ("ON" if Telemetry.sharing() else "OFF")]]
+	var labels := [["resume", "RESUME"], ["eyecheck", "EYE CHECK"], ["diag", "EYE CHART: " + ("ON" if bool(get("diag_on")) else "OFF")], ["bad", "THAT FELT BAD"], ["restart", "RESTART RUN"], ["menu", "RETURN TO MENU"], ["advanced", "ADVANCED: TRACKING MONITOR"], ["share", "DIAGNOSTICS: " + ("ON" if Telemetry.sharing() else "OFF")]]
 	var bw := minf(s.x * 0.8, 560.0 * k)
-	var bh := 46.0 * k
-	var y := s.y * 0.30
+	var bh := 38.0 * k
+	var y := s.y * 0.26
 	for b in labels:
 		var br := Rect2((s.x - bw) * 0.5, y, bw, bh)
 		var primary: bool = b[0] == "resume"
@@ -2845,7 +2863,7 @@ func _draw_pause_simple(font: Font, s: Vector2, k: float) -> void:
 		var tw := font.get_string_size(String(b[1]), HORIZONTAL_ALIGNMENT_LEFT, -1, int(24.0 * k)).x
 		_text(font, Vector2(br.position.x + (bw - tw) * 0.5, br.position.y + bh * 0.66), String(b[1]), 24, Color(1, 1, 1))
 		_pause_btns.append({"id": b[0], "r": br})
-		y += bh + 14.0 * k
+		y += bh + 9.0 * k
 
 
 func _draw_pause(font: Font, s: Vector2, k: float) -> void:

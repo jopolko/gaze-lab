@@ -157,6 +157,7 @@ func _tick(dt: float) -> void:
 		r["rawg"] = [snappedf(P._last_g.x, 0.01), snappedf(P._last_g.y, 0.01)]
 		r["state"] = P.camera_status
 		r["tr"] = _tr
+		r["kit"] = [1 if P.kit_used() else 0, snappedf(P.kit.x, 0.01), snappedf(P.kit.centre, 0.001), 1 if P.kit.held else 0, 1 if P.kit.fitted() else 0, snappedf(P.kit.gaze_x, 0.01), P.kit.zone]          # the STARGAZE sideways reading: in use, the look (-1 .. +1), its centre, held for a blink
 		r["mix"] = [1 if P.mix_used() else 0, snappedf(P.mix.value, 0.01), snappedf(float(P.mix.w[0]), 0.1), snappedf(float(P.mix.w[1]), 0.1), snappedf(float(P.mix.w[2]), 0.1)]          # phone eye blend: in use, value in glances, the three weights
 		if rig != null and is_instance_valid(rig):
 			r["ex"] = [float(rig.get("_ex_sign")), snappedf(float(rig.get("_ex_full")), 0.0001), snappedf(float(rig.get("_ex_ref")), 0.0001), snappedf(float(rig.get("_off_now")), 0.01)]          # steering: direction, glance size, centre, the look as the game reads it
@@ -288,6 +289,14 @@ static func barrier(d: Dictionary) -> void:
 		inst._hits += 1
 	d["kind"] = "gate"
 	d["flags"] = inst.flags.keys()
+	inst._post(d)
+
+
+## A one-off record (the result of the follow-the-dot fit, ...).
+static func event(kind: String, d: Dictionary) -> void:
+	if inst == null:
+		return
+	d["kind"] = kind
 	inst._post(d)
 
 

@@ -11,7 +11,7 @@ const ZONE_LABELS := {"rush": "STEEP RUSH", "flat": "MEADOW", "tunnel": "TUNNEL"
 var cfg: Dictionary = {
 	"theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
 	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
-	"faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.8,
+	"faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.8, "mode": "score",
 }
 
 var _bg: ThemeBackdrop
@@ -46,6 +46,7 @@ var _int_row: Control
 var _status: Label
 var _reports_l: Label
 var _cam_btn: Button
+var _mode_btns: Dictionary = {}
 var _u: float = 1.0
 var _cols: int = -1
 var _last_vs: Vector2 = Vector2.ZERO
@@ -237,7 +238,10 @@ func _build_theme_card() -> void:
 	var c := _card("LOOK")
 	var f := _flow(c)
 	var grp := ButtonGroup.new()
+	var all_looks := OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('looks')"))          # one look at a time: Alpine is the demo, ?looks brings the others back
 	for id in Themes.ORDER:
+		if id != "alpine" and not all_looks:
+			continue
 		var d := Themes.theme_data(id)
 		var b := _button(String(d["name"]), 22, f, true)
 		b.button_group = grp
@@ -394,6 +398,19 @@ func _build_footer() -> void:
 	_footer = BoxContainer.new()
 	_footer.vertical = true
 	_root.add_child(_footer)
+	# the two ways to ride the same trail: one choice, remembered
+	var mrow := HBoxContainer.new()
+	mrow.add_theme_constant_override("separation", 12)
+	_footer.add_child(mrow)
+	var mgrp := ButtonGroup.new()
+	for md in [["score", "FREESTYLE  ·  biggest score"], ["race", "RACE  ·  fastest line"]]:
+		var mb := _button(String(md[1]), 20, mrow, true)
+		mb.button_group = mgrp
+		mb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		mb.pressed.connect(func() -> void:
+			cfg["mode"] = String(md[0])
+			_save())
+		_mode_btns[md[0]] = mb
 	_cam_btn = Button.new()
 	_cam_btn.text = "START"
 	_cam_btn.focus_mode = Control.FOCUS_NONE
@@ -443,6 +460,8 @@ func _pick_preset(id: String) -> void:
 
 func _custom() -> void:
 	cfg["preset"] = ""
+	for id in _mode_btns:
+		(_mode_btns[id] as Button).set_pressed_no_signal(id == String(cfg["mode"]))
 	for id in _preset_btns:
 		(_preset_btns[id] as Button).set_pressed_no_signal(false)
 
@@ -555,6 +574,9 @@ func _url_overrides() -> void:
 			cfg["diff"] = d["diff"]
 		if d.has("zones"):
 			cfg["zones"] = (d["zones"] as Dictionary).duplicate()
+	var mo: String = q.call("mode")
+	if mo == "race" or mo == "score":
+		cfg["mode"] = mo
 	var sd: String = q.call("seed")
 	if sd.is_valid_int():
 		cfg["seed"] = int(sd)

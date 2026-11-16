@@ -293,7 +293,7 @@ class EyeFuse {
     const L = r.faceLandmarks[0];
     // Iris position inside each eye (relative to the eye corners / lids), so
     // head movement (used for walking) does not leak into the aim.
-    let gx = 0.5, gy = 0.5;
+    let gx = 0.5, gy = 0.5, khx = null, kf = null;
     if (L.length > 473) {
       // across each eye measured along the line between its corners (pixel space), so head roll does not leak vertical iris movement into it
       const along = (c, o, i) => {
@@ -305,6 +305,10 @@ class EyeFuse {
       const ry = (L[468].y - L[159].y) / (L[145].y - L[159].y || 1);
       const ly = (L[473].y - L[386].y) / (L[374].y - L[386].y || 1);
       gx = 0.5 + (0.5 - (rx + lx) * 0.5) * IRIS_GAIN_X;
+      const keye = (c1, c2, ir, up) => { const ax = (L[c2].x - L[c1].x) * W, ay = (L[c2].y - L[c1].y) * H, w = Math.hypot(ax, ay) || 1, ux = ax / w, uy = ay / w, mx = (L[c1].x + L[c2].x) * W / 2, my = (L[c1].y + L[c2].y) * H / 2; const ix = L[ir].x * W - mx, iy = L[ir].y * H - my, px = L[up].x * W - mx, py = L[up].y * H - my; return [(-ix * uy + iy * ux) / w, (-px * uy + py * ux) / w]; };
+      const kA = keye(33, 133, 468, 159), kB = keye(362, 263, 473, 386);
+      kf = [(kA[0] + kB[0]) / 2, (kA[1] + kB[1]) / 2, L[168].x - 0.5, L[168].y - 0.5];   // iris height in the eye, upper lid, where the face is in the picture: the rest of what the follow-the-dot fit uses
+      khx = (rx + lx) * 0.5 - 0.5;   // the iris along the eye, from the middle of the opening, in eye widths: the reading KitEye uses, untouched
       gy = 0.5 + (((ry + ly) * 0.5) - 0.5) * IRIS_GAIN_Y;
     }
     const bh = ((g('eyeLookInLeft') + g('eyeLookOutRight')) - (g('eyeLookOutLeft') + g('eyeLookInRight'))) * 0.5;
@@ -359,7 +363,7 @@ class EyeFuse {
 
             pkt = {
       n: ++frameN, ew: fuse.ready ? [fuse.w.u[0], fuse.w.u[1]] : null, pp: (PROF && PROF.pose && isFinite(PROF.pose.pit)) ? [PROF.pose.pit, PROF.pose.yaw, PROF.pose.rol] : null, lx: lx, ly: ly, lrad: lrad, glimb: glimb,
-      x: gx, y: gy, bx: bx, by: by, f: feats, gu: gg.ok ? gg.u : undefined, gv: gg.ok ? gg.v : undefined, hyaw: yaw, hpitch: pitch, hroll: roll, gyaw: gg.ok ? gg.gyaw : undefined, gpitch: gg.ok ? gg.gpitch : undefined, conf: 1.0,
+      x: gx, y: gy, hx: khx, kf: kf, bx: bx, by: by, f: feats, gu: gg.ok ? gg.u : undefined, gv: gg.ok ? gg.v : undefined, hyaw: yaw, hpitch: pitch, hroll: roll, gyaw: gg.ok ? gg.gyaw : undefined, gpitch: gg.ok ? gg.gpitch : undefined, conf: 1.0,
       blink_l: g('eyeBlinkLeft'), blink_r: g('eyeBlinkRight'),
       mouth: g('jawOpen'), brows: g('browInnerUp'),
       smile: (g('mouthSmileLeft') + g('mouthSmileRight')) * 0.5, tongue: (bs.tongueOut !== undefined ? bs.tongueOut : -1), puff: g('cheekPuff'),
@@ -481,6 +485,10 @@ const MAIN := """
   const envNow = () => ({ search: location.search, PROF: PROFnow, coarse: coarseNow, sw: screen.width || 0, sh: screen.height || 0, iw: window.innerWidth, ih: window.innerHeight,
     wx: window.screenX || 0, wy: window.screenY || 0, oh: window.outerHeight, orient: (screen.orientation && screen.orientation.type) || 'portrait-primary' });
   applyEnv(envNow());
+  // the phone is turned: the camera sits at another edge of the screen and the screen is another shape, so the placing of the gaze is redone
+  const refreshEnv = () => { try { applyEnv(envNow()); } catch (e) {} };
+  window.addEventListener('resize', refreshEnv);
+  try { screen.orientation.addEventListener('change', refreshEnv); } catch (e) {}
   window.__eyeFit = { limbusFit: limbusFit, toGray: toGray, geo: geo };
 
 

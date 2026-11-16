@@ -138,6 +138,10 @@ func _process(delta: float) -> void:
 		_applied = true
 		_apply_tier()                                   # a phone starts at its floor tier: apply it, do not wait for the first change
 	_governor(delta)
+	if rig.trail and theme_id == "alpine":
+		var fe: Environment = level.world_env.environment
+		fe.fog_enabled = true
+		fe.fog_density = 0.0028                              # the forest trail: a soft haze that hides how far the world is drawn
 	_apply_cave_exposure()
 	var lit := theme_id == "alpine"                 # the other looks are unshaded: lights would cost frame rate and change nothing
 	_rider.visible = lit and tier < 3
@@ -212,7 +216,7 @@ func _apply_tier() -> void:
 		var cap := clampf(sqrt((0.95e6 if Game.touch_mode else 2.1e6) / px), 0.5, 1.0) if OS.has_feature("web") else 1.0          # a phone: about a million pixels; a laptop: up to full HD
 		RScale.set_scale(vp, minf([1.0, 1.0, 0.8, 0.65][tier], cap))
 	# draw distance for trees and rocks: the cheapest big saving there is
-	rig.veg_range = [0.0, 280.0, 190.0, 130.0][tier]
+	rig.veg_range = [0.0, 340.0, 280.0, 230.0][tier]          # (the fog hides the far end, so things fade into the haze instead of popping up)
 	for n in rig.get_children():
 		if n is MultiMeshInstance3D:
 			(n as MultiMeshInstance3D).visibility_range_end = rig.veg_range

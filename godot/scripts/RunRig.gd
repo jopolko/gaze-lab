@@ -107,14 +107,1198 @@ func _gen_trail(row: Dictionary, z0: float, cones: Array[Transform3D], cone_cols
 	for n in range(n0, n0 + 12):
 		var sp := (PI * 0.5 + float(n) * PI - _tr_p1) * TRAIL_TURN_LEN
 		var pz := -sp
-		if pz > z0 or pz <= z0 - ROW_GAP or sp < 150.0 or pz < finish_z + 30.0:
+		if not winding or pz > z0 or pz <= z0 - ROW_GAP or sp < 150.0 or pz < finish_z + 30.0:
 			continue
 		var e := signf(sin(sp / TRAIL_TURN_LEN + _tr_p1))                               # +1: the trail is at its right-most here, so the turn is to the left and the pole stands on the left
-		var px := trail_x(pz) - e * 5.0
+		var px := trail_x(pz) - e * 6.5
 		var pole := {"x": px, "z": pz, "e": e, "done": false, "n": _make_pole(row, px, pz, e, poles_total % 2 == 0)}
 		poles_total += 1
 		poles.append(pole)
 	row["poles"] = poles
+	_gen_feats(row, z0)
+	# rails, poles, rocks, swirls: a few hundred separate things, each its own draw call on a phone. Nothing further than 300 m ahead needs drawing (the fog has hidden it by then) (a choice is only offered from 130 m)
+	for nd in (row["nodes"] as Array):
+		if is_instance_valid(nd) and nd is GeometryInstance3D:
+			(nd as GeometryInstance3D).visibility_range_end = 300.0
+
+
+# --------------------------------------------------------------------------
+# FOLLOW THE DOT: on a phone the run starts with a dot that sweeps left and right for about seven seconds. Following it with your eyes is what teaches the game how YOUR
+# look reads on THIS phone, held the way you are holding it now (see KitEye). Without it the sideways reading on the phone that was tested barely moved.
+# Once per page load; ?nocal skips it, ?calib asks for it on a laptop too.
+# --------------------------------------------------------------------------
+const CAL_XS := [0.0, -0.75, 0.75, 0.0, 0.75, -0.75, 0.0]          # learning: the dot JUMPS between the middle, the left and the right (it does not glide)
+const CAL_STEP := 1.1
+const CAL_LEAD := 1.3
+var cal_res: Dictionary = {}
+# The dots are off by default now (the three places are learned while playing); ?calib or ?eyecheck brings them back.
+var _dot_off: bool = not (OS.has_feature("web") and (str(JavaScriptBridge.eval("window.location.search")).contains("calib") or str(JavaScriptBridge.eval("window.location.search")).contains("eyecheck")))
+var _dot_force: bool = OS.has_feature("web") and (str(JavaScriptBridge.eval("window.location.search")).contains("calib") or str(JavaScriptBridge.eval("window.location.search")).contains("eyecheck"))
+var _dot_t: float = -1.0
+var _dot_done: bool = false
+var _dot_tries: int = 0
+var _dot_targets: Array = []
+
+
+# --------------------------------------------------------------------------
+# EYE CHECK: is the camera reading your eyes? It runs straight after the dot sweep (and again from Pause > EYE CHECK, or with ?eyecheck on a laptop):
+#   1  the sweep: the fit itself says how well the readings followed the dot, and whether it was your eyes or your head that followed it
+#   2  the look test: the dot JUMPS left, right and to the middle six times; each time the game checks that it read the side you were asked to look at
+#   3  the result, in plain words, on screen until you tap, and written to the log (kind "eyecheck")
+# ?eyecheck=sim runs it with made-up eyes that follow the dot, to check the check itself.
+# --------------------------------------------------------------------------
+const CHK_XS := [-0.75, 0.75, 0.0, 0.75, 0.0, -0.75, 0.75, -0.75]
+const CHK_STEP := 1.2
+var chk_res: Dictionary = {}
+var dot_sim: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("eyecheck=sim")
+var _dot_phase: int = 0              # 0 the sweep, 1 the look test, 2 the result
+var _chk_sum: Array = []            # per prompt: readings that showed the place asked for
+var _chk_n: Array = []
+var _chk_rt: Array = []             # per prompt: seconds until the game first read that place (-1 = never)
+var _chk_tr: Array = []             # the look test as it was read, 20 a second: [t, asked, iris, how far to the side, place read]
+var _chk_acc: float = 0.0
+var _dot_marks: Array = []          # [time, x] each time the dot jumped
+var _chk_lines: Array = []           # [text, 0 good / 1 so-so / 2 bad]
+var _chk_head: String = ""
+var _chk_grade: int = 0
+var _sim_hist: Array = []
+var _sim_rng := RandomNumberGenerator.new()
+var _sim_dead: bool = false          # tests: the made-up eyes do not move at all
+
+
+func _dot_x() -> float:
+	if _dot_phase == 1:
+		return float(CHK_XS[clampi(int(_dot_t / CHK_STEP), 0, CHK_XS.size() - 1)])
+	if _dot_phase == 2:
+		return 0.0
+	var tt := _dot_t - CAL_LEAD
+	if tt <= 0.0:
+		return 0.0
+	return float(CAL_XS[clampi(int(tt / CAL_STEP), 0, CAL_XS.size() - 1)])
+
+
+## Run the whole check again (from the pause menu).
+func eye_check_start() -> void:
+	_dot_done = false
+	_dot_t = -1.0
+	_dot_tries = 0
+	_dot_phase = 0
+	_dot_force = true
+	_dot_off = false
+	chk_res = {}
+	if not _dot_ready():
+		_dot_done = true
+		_toast("The eye check needs the camera", Color(1.0, 0.7, 0.3))
+
+
+func _dot_ready() -> bool:
+	if dot_sim:
+		return true
+	return GazeProvider.backend == GazeProvider.Backend.CAMERA and GazeProvider._camera_fresh() and GazeProvider.kit.has_feat
+
+
+## Made-up eyes for ?eyecheck=sim and the tests: they follow the dot 0.15 s late, mostly with the head, a little with the iris, with some noise.
+func _dot_sim_feed() -> void:
+	var now := GazeProvider._now()
+	_sim_hist.append(Vector2(now, _dot_x() if _dot_t >= 0.0 else 0.0))
+	while _sim_hist.size() > 2 and (_sim_hist[1] as Vector2).x < now - 0.15:
+		_sim_hist.pop_front()
+	var xl := 0.0 if _sim_dead else (_sim_hist[0] as Vector2).y
+	var kit := GazeProvider.kit
+	kit.set_feat(-0.03 * xl + _sim_rng.randfn(0.0, 0.004), 0.0, 0.1, 0.04 * xl + _sim_rng.randfn(0.0, 0.008), -0.5, 0.01 * xl, 0.1)
+	kit.add(kit.feat[0], 0.3, 0.3, now)
+
+
+## True while the dot or the result is on screen: the board waits where it is.
+func _calib_tick(delta: float) -> bool:
+	GazeProvider.kit.auto_zones = _dot_off and GazeProvider.backend == GazeProvider.Backend.CAMERA          # no dots: learn the three places while playing
+	if _dot_done or _dot_off or not (Game.touch_mode or _dot_force or dot_sim or GazeProvider.backend == GazeProvider.Backend.CAMERA) or _finished:
+		return false
+	if dot_sim:
+		_dot_sim_feed()
+	var kit := GazeProvider.kit
+	if _dot_phase == 2:
+		_dot_t += delta
+		return true                                           # the result stays until a tap
+	if not _dot_ready():
+		if _dot_t >= 0.0:
+			_dot_t = -1.0                                     # the face went away half way through: start again when it is back
+			_dot_phase = 0
+			kit.recording = false
+		return false
+	if _dot_t < 0.0:
+		_dot_t = 0.0
+		_dot_phase = 0
+		_dot_marks.clear()
+	_dot_t += delta
+	var now := GazeProvider._now()
+	if _dot_phase == 0:
+		var tt := _dot_t - CAL_LEAD
+		if tt > -0.4 and not kit.recording:
+			kit.begin_zones()
+		if tt >= 0.0 and (_dot_marks.is_empty() or float(_dot_marks[_dot_marks.size() - 1][1]) != _dot_x()):
+			_dot_marks.append([now, _dot_x()])
+		if tt >= float(CAL_XS.size()) * CAL_STEP:
+			var stops: Array = []
+			for i in _dot_marks.size():
+				stops.append([_dot_marks[i][0], _dot_marks[i + 1][0] if i + 1 < _dot_marks.size() else now, _dot_marks[i][1]])
+			cal_res = kit.finish_zones(stops)
+			_dot_tries += 1
+			var rec := cal_res.duplicate()
+			rec["try"] = _dot_tries
+			Telemetry.event("calib", rec)
+			if not dot_sim:
+				Telemetry.event("calib_raw", {"try": _dot_tries, "s": kit.fit_raw.get("s", []), "d": kit.fit_raw.get("d", [])})
+			if bool(cal_res.get("ok", false)) or _dot_tries >= 2:
+				_dot_phase = 1
+				_dot_t = 0.0
+				_chk_sum.clear()
+				_chk_n.clear()
+				_chk_rt.clear()
+				_chk_tr.clear()
+				_chk_acc = 0.0
+				for i in CHK_XS.size():
+					_chk_sum.append(0)
+					_chk_n.append(0)
+					_chk_rt.append(-1.0)
+			else:
+				_dot_t = 0.0                                  # one more go
+				_dot_marks.clear()
+	else:
+		var ci := int(_dot_t / CHK_STEP)
+		if ci >= CHK_XS.size():
+			_check_finish()
+		else:
+			var want := int(signf(float(CHK_XS[ci])))
+			var in_step := fmod(_dot_t, CHK_STEP)
+			var z := kit.zone if not kit.zones.is_empty() else 0
+			if z == want and float(_chk_rt[ci]) < 0.0 and in_step > 0.08 and not kit.zones.is_empty():
+				_chk_rt[ci] = in_step
+			if in_step > 0.55:
+				_chk_n[ci] = int(_chk_n[ci]) + 1
+				if z == want and not kit.zones.is_empty():
+					_chk_sum[ci] = int(_chk_sum[ci]) + 1
+			_chk_acc += delta
+			if _chk_acc >= 0.05:
+				_chk_acc = 0.0
+				_chk_tr.append([snappedf(_dot_t, 0.01), want, snappedf(kit.feat[0], 0.0001), snappedf(kit.zn, 0.01), z])
+	return true
+
+
+func _check_finish() -> void:
+	var kit := GazeProvider.kit
+	var hits := 0
+	var per: Array = []
+	var rts: Array = []
+	for i in CHK_XS.size():
+		var share := float(_chk_sum[i]) / maxf(float(_chk_n[i]), 1.0)
+		var hit := share >= 0.6
+		per.append([int(signf(float(CHK_XS[i]))), snappedf(share, 0.01), snappedf(float(_chk_rt[i]), 0.01)])
+		if hit:
+			hits += 1
+			if i > 0 and float(_chk_rt[i]) >= 0.0:
+				rts.append(float(_chk_rt[i]))
+	var react := KitEye._median(rts)
+	var fitted := not kit.zones.is_empty()
+	var fps := 60.0 if dot_sim else float(GazeProvider._pkt_times.size()) / 2.0
+	var lat := 0 if dot_sim else int(GazeProvider.trk_lat_ms)
+	var st := _guide_status()
+	var sep := float(cal_res.get("sep", 0.0))
+	var nq := CHK_XS.size()
+	_chk_grade = 0 if (hits >= nq - 1 and fitted) else (1 if (hits >= nq - 2 and fitted) else 2)
+	_chk_head = ["LEFT, MIDDLE AND RIGHT ARE BEING READ", "ROUGH: SOME LOOKS ARE MISREAD", "NOT READING YOUR EYES"][_chk_grade]
+	_chk_lines.clear()
+	_chk_lines.append(["Camera: %d readings a second, %d ms behind" % [int(fps), lat], 0 if fps >= 15.0 else (1 if fps >= 9.0 else 2)])
+	var face_bad: Array = []
+	if float(st["face"]) > 0.0:
+		face_bad.append("your face keeps dropping out of the picture")
+	if float(st["light"]) > 0.0:
+		face_bad.append("poor light on your face: turn toward a window or a lamp")
+	if float(st["dist"]) > 0.0:
+		face_bad.append("too close or too far")
+	if face_bad.is_empty():
+		_chk_lines.append(["Face: in view, well placed and lit", 0])
+	else:
+		for fb in face_bad:
+			_chk_lines.append(["Face: " + String(fb), 1])
+	if fitted:
+		_chk_lines.append(["Learning: a look to a side moves your iris %.1f times the noise" % sep, 0 if sep >= 4.0 else 1])
+	else:
+		_chk_lines.append(["Learning: left, middle and right could not be told apart (%.1f times the noise)" % sep, 2])
+	_chk_lines.append(["Look test: %d of %d read right" % [hits, nq], 0 if hits >= nq - 1 else (1 if hits >= nq - 2 else 2)])
+	if not rts.is_empty():
+		_chk_lines.append(["Speed: %d ms from the dot jumping to the game reading it" % int(1000.0 * react), 0 if react <= 0.45 else 1])
+	chk_res = {"grade": ["good", "rough", "none"][_chk_grade], "hits": hits, "of": nq, "per": per, "react": snappedf(react, 0.01), "fitted": fitted,
+		"sep": sep, "noise": cal_res.get("noise", 0.0), "dl": cal_res.get("dl", 0.0), "dr": cal_res.get("dr", 0.0), "agree": cal_res.get("agree", 0), "cal_react": cal_res.get("react", 0.0),
+		"fps": snappedf(fps, 0.1), "lat": lat, "face": face_bad, "tries": _dot_tries, "sim": dot_sim}
+	Telemetry.event("eyecheck", chk_res.duplicate())
+	if not dot_sim:
+		Telemetry.event("lmr_trace", {"tr": _chk_tr.duplicate()})
+	_dot_phase = 2
+	_dot_t = 0.0
+	Game.sfx(&"coin" if _chk_grade == 0 else &"hurt")
+
+
+func _check_dismiss() -> void:
+	_dot_done = true
+	_dot_phase = 0
+	_dot_t = -1.0
+	_toast(["EYES LOCKED", "ROUGH LOCK", "NO LOCK: the board will not follow your eyes"][_chk_grade], [Color(0.5, 1.0, 0.6), Color(1.0, 0.85, 0.4), Color(1.0, 0.5, 0.4)][_chk_grade])
+
+
+func _draw_calib(font: Font, s: Vector2, k: float) -> void:
+	_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0.03, 0.07, 0.15, 0.5 if _dot_phase < 2 else 0.86))
+	if _dot_phase == 2:
+		var hc: Color = [Color(0.5, 1.0, 0.6), Color(1.0, 0.85, 0.4), Color(1.0, 0.5, 0.4)][_chk_grade]
+		_ctext(font, s.y * 0.14, "EYE CHECK", 20, Color(1, 1, 1, 0.7))
+		_ctext(font, s.y * 0.14 + 40.0 * k, _chk_head, 32, hc)
+		var y := s.y * 0.14 + 84.0 * k
+		var x0 := s.x * 0.5 - minf(s.x * 0.42, 400.0 * k)
+		for ln in _chk_lines:
+			var lc: Color = [Color(0.5, 1.0, 0.6), Color(1.0, 0.85, 0.4), Color(1.0, 0.5, 0.4)][int(ln[1])]
+			_hud.draw_rect(Rect2(x0, y - 13.0 * k, 12.0 * k, 12.0 * k), lc)
+			_text(font, Vector2(x0 + 22.0 * k, y), String(ln[0]), 18, Color(1, 1, 1, 0.92))
+			y += 30.0 * k
+		if _dot_t > 1.0:
+			_ctext(font, y + 26.0 * k, "tap to ride", 24, Color(1, 1, 1, 0.6 + 0.3 * sin(_dot_t * 4.0)))
+		_ctext(font, y + 54.0 * k, "Pause > EYE CHECK runs this again", 14, Color(1, 1, 1, 0.5))
+		return
+	if _dot_phase == 0:
+		_ctext(font, s.y * 0.2, "LOOK AT THE DOT EACH TIME IT JUMPS", 30, Color(1, 1, 1, 0.95))
+		_ctext(font, s.y * 0.2 + 34.0 * k, "eyes only, keep your head and the phone still" if _dot_tries == 0 else "once more: eyes only, a little closer to the light", 16, Color(1, 1, 1, 0.7))
+	else:
+		_ctext(font, s.y * 0.2, "AGAIN: THE BAR SHOWS WHAT THE GAME READS", 30, Color(1, 1, 1, 0.95))
+		_ctext(font, s.y * 0.2 + 34.0 * k, "it should jump to the dot as fast as your eyes do", 16, Color(1, 1, 1, 0.7))
+		var zk := GazeProvider.kit
+		var zz := zk.zone if not zk.zones.is_empty() else 0
+		_hud.draw_rect(Rect2(s.x * (0.02 + 0.32 * float(zz + 1)), s.y * 0.62, s.x * 0.32, 14.0 * k), Color(0.4, 1.0, 0.55, 0.9))
+	var c := Vector2((0.5 + 0.5 * _dot_x()) * s.x, s.y * 0.5)
+	Draw2D.circle(_hud, c, 26.0 * k, Color(1.0, 0.85, 0.3, 0.25))
+	Draw2D.circle(_hud, c, 13.0 * k, Color(1.0, 0.9, 0.4, 1.0))
+	Draw2D.circle(_hud, c, 4.0 * k, Color(1, 1, 1, 1))
+	var total := (CAL_LEAD + float(CAL_XS.size()) * CAL_STEP) if _dot_phase == 0 else float(CHK_XS.size()) * CHK_STEP
+	var bw := minf(s.x * 0.4, 460.0 * k)
+	_hud.draw_rect(Rect2(s.x * 0.5 - bw * 0.5, s.y * 0.78, bw, 8.0 * k), Color(0.05, 0.12, 0.25, 0.6))
+	_hud.draw_rect(Rect2(s.x * 0.5 - bw * 0.5, s.y * 0.78, bw * clampf(_dot_t / total, 0.0, 1.0), 8.0 * k), Color(1.0, 0.85, 0.35, 0.95))
+
+
+# --------------------------------------------------------------------------
+# EYES vs GAME: the four links between your eyes and what the board does, compared at every choice and drawn live.
+#   EYES   what the tracker reads (the fitted look on a phone)                     -1 left .. +1 right
+#   READ   what the game makes of it after its own smoothing: left, ahead or right
+#   PICK   the target the game chose from that
+#   GOT    what the board actually took
+# At each left/right choice the four are compared and the first link that broke is named:
+#   match     eyes, read, pick and board all agree
+#   misread   the game read a different side than your eyes showed (tracker -> game)
+#   mispick   the game read your side but chose something else, or nothing (game -> pick)
+#   missed    the game chose your side but the board did not get there (pick -> board)
+#   stray     you were not looking to a side and the game picked one anyway
+#   no look   no look to either side, nothing picked
+# Each one is a small line on screen, a record in the log (kind "choice"), and a count on the finish screen. The live chart (Pause > EYE CHART, ?nodiag hides it)
+# scrolls the last 8 seconds: yellow = eyes, white = the game's reading, blue = the steering the board was given, green bar = the side picked.
+# --------------------------------------------------------------------------
+var diag_on: bool = not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nodiag"))
+var choice_log: Array = []
+var choice_n: Dictionary = {}
+var _cho: Dictionary = {}
+var _dg_hist: Array = []             # Vector4(eyes, read, steer, pick side), 30 a second
+var _dg_acc: float = 0.0
+const SIDE_NAME := {-1: "LEFT", 0: "AHEAD", 1: "RIGHT"}
+
+
+## What the tracker says right now, before the game does anything with it.
+func eye_now() -> float:
+	if pick_override != 0.0:
+		return pick_override
+	if zone_test != 99 or zn_test != 99.0:
+		return float(_eye_zone())
+	var kit := GazeProvider.kit
+	if GazeProvider.backend == GazeProvider.Backend.CAMERA and kit.ready and GazeProvider.kit_used():
+		if kit.lost:
+			return 0.0
+		if not kit.zones.is_empty():
+			return float(kit.zone)                       # left, middle or right: nothing in between
+		return clampf(kit.gaze_x if not kit.model.is_empty() else kit.x, -1.0, 1.0)
+	return clampf(_steer_gaze, -1.0, 1.0)
+
+
+var _dec_key: String = ""
+
+
+## The decision trace: every step between the eye reading and the board, as short records per choice: [time, what, ...]. what = tgt (what the reading points at and why),
+## refused (a look that was long enough to count but the lock rules said no), LOCK (the board is now going for it), drop (it can no longer be reached).
+func _dec(g: int, ev: Array) -> void:
+	if g < 0:
+		return
+	var c := _cho_get(g)
+	if not c.has("ev"):
+		c["ev"] = []
+	if (c["ev"] as Array).size() < 40:
+		(c["ev"] as Array).append(ev)
+
+
+func _cho_get(g: int) -> Dictionary:
+	if not _cho.has(g):
+		_cho[g] = {"t": 0.0, "eL": 0.0, "eR": 0.0, "rL": 0.0, "rR": 0.0, "es": 0.0, "pick": 0, "got": 0, "closed": 0, "kinds": {}, "z": 0.0, "tr": [], "ta": 0.0}
+	return _cho[g]
+
+
+## One thing of a choice is behind the board (or was ridden). When both are, the choice is judged.
+func _choice_feat_done(f: Dictionary, got: bool) -> void:
+	if f.get("cd", false) or not f.has("g"):
+		return
+	f["cd"] = true
+	var g := int(f["g"])
+	var c := _cho_get(g)
+	(c["kinds"] as Dictionary)[int(float(f["sd"]))] = String(f["kind"])
+	if got:
+		c["got"] = int(float(f["sd"]))
+	elif int(c.get("pick", 0)) == int(float(f["sd"])):
+		# the thing the eyes chose was not taken: where the board was when it went by, for the log
+		c["md"] = [String(f["kind"]), snappedf(spos.x - _feat_x(f, spos.z), 0.1), grounded, snappedf(hurt_t, 0.1), int(-vel.y), snappedf(_lock_age, 0.1), _rail.is_empty(), snappedf(spos.y - terrain_h(spos.x, spos.z), 0.1)]
+	c["closed"] = int(c["closed"]) + 1
+	if int(c["closed"]) < 2:
+		return
+	_cho.erase(g)
+	var tt := maxf(float(c["t"]), 0.01)
+	var eyes := 0
+	if float(c["eL"]) >= 0.3 and float(c["eL"]) > float(c["eR"]) * 1.3:
+		eyes = -1
+	elif float(c["eR"]) >= 0.3 and float(c["eR"]) > float(c["eL"]) * 1.3:
+		eyes = 1
+	var read := 0
+	if float(c["rL"]) >= 0.2 and float(c["rL"]) > float(c["rR"]) * 1.3:
+		read = -1
+	elif float(c["rR"]) >= 0.2 and float(c["rR"]) > float(c["rL"]) * 1.3:
+		read = 1
+	var pick := int(c["pick"])
+	var gotv := int(c["got"])
+	var v := "match"
+	if eyes == 0:
+		v = "no look" if pick == 0 else "stray"
+	elif read != eyes:
+		v = "misread"
+	elif pick != eyes:
+		v = "mispick"
+	elif gotv != pick:
+		v = "missed"
+	choice_n[v] = int(choice_n.get(v, 0)) + 1
+	var kinds: Dictionary = c["kinds"]
+	var got_txt := String(kinds.get(gotv, "nothing")).to_upper() if gotv != 0 else "NOTHING"
+	var rec := {"z": int(-spos.z), "v": v, "eyes": eyes, "read": read, "pick": pick, "got": gotv, "got_kind": got_txt.to_lower(), "left": kinds.get(-1, ""), "right": kinds.get(1, ""),
+		"eye_mean": snappedf(float(c["es"]) / tt, 0.01), "eye_left_s": snappedf(float(c["eL"]), 0.01), "eye_right_s": snappedf(float(c["eR"]), 0.01), "secs": snappedf(tt, 0.01), "tr": c["tr"], "pz": c.get("pz", 0), "pzn": c.get("pzn", 0.0), "zm": c.get("zm", []), "pnx": c.get("pnx", 0.0), "md": c.get("md", []), "sw": c.get("sw", 0), "dec": c.get("ev", [])}
+	choice_log.append(rec)
+	if choice_log.size() > 200:
+		choice_log.pop_front()
+	Telemetry.event("choice", rec.duplicate())
+	if diag_on and v != "no look":
+		var ok := v == "match"
+		_toast("eyes %s > read %s > picked %s > got %s   %s" % [SIDE_NAME[eyes], SIDE_NAME[read], SIDE_NAME[pick] if pick != 0 else "NONE", got_txt, "OK" if ok else v.to_upper()], Color(0.5, 1.0, 0.6) if ok else Color(1.0, 0.6, 0.35), "ach")
+
+
+func _feat_got(f: Dictionary) -> bool:
+	match String(f["kind"]):
+		"jump":
+			return absf(spos.x - _feat_x(f, float(f["zb"]))) < JUMP_W * 0.5 - 1.5
+		"loot":
+			return f.has("b") and bool((f["b"] as Dictionary)["taken"])
+	return false
+
+
+func _diag_tick(delta: float) -> void:
+	_dg_acc += delta
+	if _dg_acc < 1.0 / 30.0:
+		return
+	_dg_acc = 0.0
+	_dg_hist.append(Quaternion(eye_now(), clampf(_s_in_now, -1.0, 1.0), steer, 0.0 if _line_pick.is_empty() else float(_line_pick["sd"])))
+	if _dg_hist.size() > 240:
+		_dg_hist.pop_front()
+
+
+func choice_summary() -> String:
+	var n := 0
+	for kk in choice_n:
+		n += int(choice_n[kk])
+	if n == 0:
+		return ""
+	var looked := n - int(choice_n.get("no look", 0))
+	return "eyes vs board: %d of %d looks taken   misread %d   mispick %d   missed %d   stray %d" % [int(choice_n.get("match", 0)), looked - int(choice_n.get("stray", 0)), int(choice_n.get("misread", 0)), int(choice_n.get("mispick", 0)), int(choice_n.get("missed", 0)), int(choice_n.get("stray", 0))]
+
+
+## LOOK TARGETS. The things on the trail sit close to the middle of the screen until the last moment, so looking at them barely moves the eyes sideways: on a phone that
+## is too small for the camera to tell apart. So each choice also shows as a big round target out at the side of the screen, where the follow-the-dot check proved the
+## eyes can be read. Look at one: its ring fills, it turns green, and the board goes for that side.
+var _show_cards: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("cards")
+
+
+func _draw_cards(font: Font, s: Vector2, k: float) -> void:
+	if not _show_cards:
+		return          # the things carry their own rings now; ?cards brings the round look targets at the sides of the screen back
+	for cd in [_card_l, _card_r, _card_m]:
+		var fd: Dictionary = cd
+		if fd.is_empty() or bool(fd["done"]) or spos.z < float(fd["zb"]) + 6.0:
+			continue
+		var sd := float(fd.get("cs", fd["sd"]))
+		var c := Vector2((0.5 + 0.5 * sd * 0.72) * s.x, s.y * (0.30 if sd == 0.0 else 0.42))
+		var on := is_same(_line_pick, fd)
+		var fill := 1.0 if on else clampf(float(fd["want"]) / 0.18, 0.0, 1.0)
+		var r := (38.0 if on else 32.0) * k
+		var col := Color(0.5, 1.0, 0.6) if on else Color(1.0, 0.9, 0.45)
+		Draw2D.circle(_hud, c, r, Color(0.03, 0.07, 0.15, 0.55))
+		Draw2D.arc(_hud, c, r, 0.0, TAU, 32, Color(1, 1, 1, 0.3), 2.0 * k)
+		if fill > 0.0:
+			Draw2D.arc(_hud, c, r, -PI * 0.5, -PI * 0.5 + TAU * fill, 32, col, 6.0 * k)
+		Draw2D.circle(_hud, c, 5.0 * k, Color(col.r, col.g, col.b, 0.95))
+		var nm := String(fd["kind"]).to_upper()
+		var fs := int(18.0 * k)
+		_text(font, c + Vector2(-_tw(font, nm, fs) * 0.5, r + 22.0 * k), nm, 18, Color(col.r, col.g, col.b, 0.95))
+
+
+func _draw_diag(font: Font, s: Vector2, k: float) -> void:
+	if GazeProvider.backend == GazeProvider.Backend.CAMERA and GazeProvider.kit_used() and GazeProvider.kit.lost_s > 1.0:
+		_ctext(font, s.y * 0.2, "CAN'T SEE YOUR FACE", 26, Color(1.0, 0.55, 0.4, 0.75 + 0.2 * sin(GazeProvider.kit.lost_s * 6.0)))
+	var w := minf(s.x * 0.36, 400.0 * k)
+	var h := 64.0 * k
+	var o := Vector2(s.x * 0.5 - w * 0.5, s.y * 0.72)
+	_hud.draw_rect(Rect2(o, Vector2(w, h)), Color(0.03, 0.07, 0.15, 0.5))
+	_hud.draw_line(o + Vector2(0.0, h * 0.5), o + Vector2(w, h * 0.5), Color(1, 1, 1, 0.25), 1.0)
+	var thr := LOOK_PICK / 0.6 * h * 0.5                              # the reading has to pass these lines to count as a look to that side
+	_hud.draw_line(o + Vector2(0.0, h * 0.5 - thr), o + Vector2(w, h * 0.5 - thr), Color(0.5, 1.0, 0.7, 0.22), 1.0)
+	_hud.draw_line(o + Vector2(0.0, h * 0.5 + thr), o + Vector2(w, h * 0.5 + thr), Color(0.5, 1.0, 0.7, 0.22), 1.0)
+	var n := _dg_hist.size()
+	if n >= 2:
+		var pe := PackedVector2Array()
+		var pr := PackedVector2Array()
+		var ps := PackedVector2Array()
+		for i in n:
+			var q: Quaternion = _dg_hist[i]
+			var x := o.x + w * (1.0 - float(n - 1 - i) / 239.0)
+			pe.append(Vector2(x, o.y + h * 0.5 + clampf(q.x, -1.0, 1.0) * h * 0.5))            # down the chart = RIGHT, up = LEFT
+			pr.append(Vector2(x, o.y + h * 0.5 + clampf(q.y / 0.6, -1.0, 1.0) * h * 0.5))
+			ps.append(Vector2(x, o.y + h * 0.5 + clampf(q.z, -1.0, 1.0) * h * 0.5))
+			if q.w != 0.0 and i > 0:
+				var xp := o.x + w * (1.0 - float(n - i) / 239.0)
+				_hud.draw_rect(Rect2(xp, o.y + (h - 5.0 * k if q.w > 0.0 else 0.0), x - xp + 1.0, 5.0 * k), Color(0.4, 1.0, 0.6, 0.85))
+		_hud.draw_polyline(ps, Color(0.4, 0.75, 1.0, 0.9), 2.0 * k)
+		_hud.draw_polyline(pr, Color(1, 1, 1, 0.9), 2.0 * k)
+		_hud.draw_polyline(pe, Color(1.0, 0.85, 0.3, 1.0), 2.5 * k)
+	_text(font, o + Vector2(-16.0 * k, 12.0 * k), "L", 13, Color(1, 1, 1, 0.9 if look_side < 0.0 else 0.45))
+	_text(font, o + Vector2(-16.0 * k, h), "R", 13, Color(1, 1, 1, 0.9 if look_side > 0.0 else 0.45))
+	var ly := o.y + h + 15.0 * k
+	_text(font, Vector2(o.x, ly), "eyes", 12, Color(1.0, 0.85, 0.3, 0.95))
+	_text(font, Vector2(o.x + 44.0 * k, ly), "game's reading", 12, Color(1, 1, 1, 0.9))
+	_text(font, Vector2(o.x + 150.0 * k, ly), "steering", 12, Color(0.4, 0.75, 1.0, 0.95))
+	_text(font, Vector2(o.x + 214.0 * k, ly), "picked", 12, Color(0.4, 1.0, 0.6, 0.95))
+	var cs := choice_summary()
+	if cs != "":
+		_text(font, Vector2(o.x + w - font.get_string_size(cs.substr(0, 33), HORIZONTAL_ALIGNMENT_LEFT, -1, int(12.0 * k)).x, o.y - 6.0 * k), cs.substr(0, 33), 12, Color(1, 1, 1, 0.75))
+
+
+# --------------------------------------------------------------------------
+# GOALS: three things to do this run, picked at the start and shown on screen. Nothing on the trail is collected by riding down the middle any more: every pole, ramp,
+# rail and treat is a little to one side, and it is a look to that side that takes it. The goals say what to go for; each one pays, and all three pay a lot.
+# --------------------------------------------------------------------------
+const GOAL_POOL := [["shave", "Shave %d poles", 5], ["rail", "Grind %d rails", 3], ["jump", "Hit %d jumps", 4], ["treat", "Eat %d treats", 6], ["orb", "Collect %d orbs", 24], ["flow", "Reach FLOW x%.1f", 6]]
+var goals: Array = []
+var goals_done: int = 0
+var flow_peak: int = 0
+
+
+func _goals_new() -> void:
+	goals.clear()
+	goals_done = 0
+	flow_peak = 0
+	var grng := RandomNumberGenerator.new()
+	grng.randomize()
+	var pool: Array = GOAL_POOL.duplicate()
+	if not winding:
+		pool.pop_front()                                    # no poles on the open slope
+	var sc := clampf(absf(finish_z) / 4200.0, 0.35, 1.6)
+	for i in 3:
+		var g: Array = pool.pop_at(grng.randi() % pool.size())
+		var need := int(g[2]) if g[0] == "flow" else maxi(int(round(float(g[2]) * sc)), 1)
+		var txt := String(g[1]) % (1.0 + 0.25 * float(need)) if g[0] == "flow" else String(g[1]) % need
+		goals.append({"id": g[0], "text": txt, "need": need, "done": false})
+
+
+func _goal_have(id: String) -> int:
+	match id:
+		"shave":
+			return poles_shaved
+		"rail":
+			return rails_done
+		"jump":
+			return jumps_done
+		"treat":
+			return buffs_got
+		"orb":
+			return orbs_got
+		"flow":
+			return flow_peak
+	return 0
+
+
+func _goals_tick() -> void:
+	flow_peak = maxi(flow_peak, mini(chain, FLOW_MAX))
+	if _finished:
+		return
+	for g in goals:
+		if g["done"] or _goal_have(String(g["id"])) < int(g["need"]):
+			continue
+		g["done"] = true
+		goals_done += 1
+		var all := goals_done >= goals.size()
+		if mode == "race":
+			time_pen -= 5.0 if all else 2.0
+		else:
+			_gain(1500 if all else 500)
+		_toast(("ALL GOALS!  %s" if all else "GOAL: " + String(g["text"]) + "  %s") % (("-5 s" if all else "-2 s") if mode == "race" else ("+1500" if all else "+500")), Color(0.5, 1.0, 0.6))
+		_flash = maxf(_flash, 0.3)
+		Game.sfx(&"loot")
+
+
+func _draw_goals(font: Font, s: Vector2, k: float, m: float) -> void:
+	if goals.is_empty():
+		return
+	var intro := clampf(4.5 - _run_t, 0.0, 1.0)                       # big in the middle for the first seconds, then small in the corner
+	var y := lerpf(m + 128.0 * k, s.y * 0.2, intro)
+	var x := lerpf(m, s.x * 0.5 - 150.0 * k, intro)
+	var sz := int(lerpf(14.0, 24.0, intro))
+	if intro > 0.0:
+		_text(font, Vector2(x, y - 12.0 * k), "GOALS", int(lerpf(12.0, 18.0, intro)), Color(1.0, 0.85, 0.3, 0.9))
+		y += 16.0 * k * intro + 4.0 * k
+	for g in goals:
+		var done: bool = g["done"]
+		var col := Color(0.5, 1.0, 0.6, 0.9) if done else Color(1, 1, 1, 0.85)
+		var bs := float(sz) * 0.7 * k
+		if done:
+			_hud.draw_rect(Rect2(x, y - bs, bs, bs), col)
+		else:
+			_hud.draw_rect(Rect2(x, y - bs, bs, bs), col, false, 2.0 * k)
+		var have := mini(_goal_have(String(g["id"])), int(g["need"]))
+		var txt := String(g["text"]) if (done or g["id"] == "flow") else "%s   %d/%d" % [g["text"], have, int(g["need"])]
+		_text(font, Vector2(x + bs + 8.0 * k, y), txt, sz, col)
+		y += float(sz) * 1.35 * k
+
+
+# --------------------------------------------------------------------------
+# WHAT IS ON THE TRAIL. Between every two poles the trail runs nearly straight for a moment, and that is where things stand:
+#   a JUMP   across the middle: ride on and you fly (eyebrows up on the ramp for a bigger launch), with something to grab in the air
+#   a RAIL   down one side: look that way and the board lines itself up, hops on and grinds it. Pop off early for style, or ride it to the end.
+#   a LOOT LINE  a string of orbs curving out to one side with a treat at the end
+# The side things are a CHOICE: you make it with a look to that side, and the board carves over by itself (the same rule as everywhere: eyes pick, the board steers).
+#
+# TWO MODES, same trail:
+#   "score"  FREESTYLE: the biggest score wins. Flow multiplies everything; rails, tricks and treats are where the points are.
+#   "race"   RACE: the fastest time wins. Flow is SPEED: every clean pole, rail and jump raises your pace, a pole on the wrong side costs two seconds, treats are boosts.
+# --------------------------------------------------------------------------
+## THE OPEN SLOPE (the default; ?winding brings the forest trail back). The trail used to wind, and the board followed its bends by itself: hands off, it turned 10 to 15
+## degrees with the first bend, so nobody could tell their eyes from the game. Now the slope runs straight and wide, nothing turns the board but your look, the board sits
+## where your eyes are across the slope, and the two things at each choice stand far apart (15 m either side) so going to one is plainly your doing.
+static func _winding() -> bool:
+	return OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("winding")
+var winding: bool = _winding()
+var FEAT_OFF: float = 6.5 if _winding() else 15.0                # metres from the middle of the trail to a rail or a loot line
+const RAIL_H := 0.9
+const BEST_FILE := "user://downhill_best.cfg"
+var mode: String = "race" if (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("mode=race")) else "score"
+var time_pen: float = 0.0
+var feats_total: int = 0
+var jumps_built: int = 0
+var jumps_done: int = 0
+var rails_built: int = 0
+var rails_done: int = 0
+var rail_m: float = 0.0
+var loot_built: int = 0
+var picks: int = 0
+var picks_side: Dictionary = {}
+var choices_built: int = 0
+var look_side: float = 0.0           # what the game reads your look as right now: -1 left, 0 ahead, +1 right
+const LOOK_PICK := 0.14
+var pick_override: float = 0.0       # tests: a look held to one side (-1 / +1)
+var best_val: float = 0.0            # the record for this mode and length before this run
+var new_best: bool = false
+var _rail: Dictionary = {}           # the rail being ridden
+var _rail_z0: float = 0.0
+var _rail_pops0: int = 0
+var _rail_spark: float = 0.0
+var _rail_py: float = 0.0
+var _rail_py_ok: bool = false
+var _rail_out_t: float = 0.0
+var _card_l: Dictionary = {}              # the two things coming up, for the look targets at the sides of the screen
+var _card_r: Dictionary = {}
+var _card_m: Dictionary = {}              # the thing in the middle of the screen, when there is one
+var _line_pick: Dictionary = {}           # the side line your eyes chose
+var _s_in_now: float = 0.0
+var _rail_meshes: Dictionary = {}
+var _rail_post: CylinderMesh
+
+
+func _feat_x(f: Dictionary, z: float) -> float:
+	if f.has("kx"):
+		return float(f["kx"])          # a ramp stands where it was built; it does not follow the weave of the trail
+	return trail_x(z) + float(f["sd"]) * FEAT_OFF
+
+
+func _rail_y(f: Dictionary, z: float) -> float:
+	return terrain_h(_feat_x(f, z), z) + lerpf(0.15, RAIL_H, smoothstep(0.0, 4.0, float(f["za"]) - z))          # it rises out of the snow over its first metres, so you slide up onto it
+
+
+## A box laid from a to b (strip points).
+func _seg_box(row: Dictionary, a: Vector3, b: Vector3, thick: Vector2, mat: Material) -> void:
+	var ln := snappedf(a.distance_to(b) + 0.06, 0.1)
+	var key := "%.2f_%.2f_%.1f" % [thick.x, thick.y, ln]
+	if not _rail_meshes.has(key):
+		var bm := BoxMesh.new()
+		bm.size = Vector3(thick.x, thick.y, ln)
+		_rail_meshes[key] = bm
+	var n := MeshInstance3D.new()
+	n.mesh = _rail_meshes[key]
+	n.material_override = mat
+	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(n)
+	n.global_transform = Transform3D(Basis.looking_at((b - a).normalized(), Vector3.UP), Vector3.ZERO)
+	_place(n, (a + b) * 0.5)
+	(row["nodes"] as Array).append(n)
+
+
+func _build_rail(row: Dictionary, f: Dictionary) -> void:
+	var col := Color(0.35, 0.95, 1.0)
+	var mat := _fx_mat("solid", col, 1.8)
+	var pmat := _fx_mat("solid", Color(0.3, 0.36, 0.5), 0.5)
+	if _rail_post == null:
+		_rail_post = CylinderMesh.new()
+		_rail_post.top_radius = 0.09
+		_rail_post.bottom_radius = 0.12
+		_rail_post.height = RAIL_H
+		_rail_post.radial_segments = 5
+	var za: float = f["za"]
+	var zb: float = f["zb"]
+	var n := int(ceil((za - zb) / 8.0))
+	var prev := Vector3.ZERO
+	for i in n + 1:
+		var z := lerpf(za, zb, float(i) / float(n))
+		var pt := Vector3(_feat_x(f, z), _rail_y(f, z), z)
+		if i > 0:
+			_seg_box(row, prev, pt, Vector2(0.36, 0.2), mat)
+			if i % 2 == 0 or i == n:
+				(row["nodes"] as Array).append(_mi(self, _rail_post, pmat, Vector3(pt.x, pt.y - RAIL_H * 0.5, z)))
+		prev = pt
+	# a tall thin light at the way on, so it can be picked out from a long way up the trail
+	_buff_assets("orb")
+	var ex := _feat_x(f, za)
+	(row["nodes"] as Array).append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(col.r, col.g, col.b, 0.3)), Vector3(ex, terrain_h(ex, za) + 4.6, za + 0.5)))
+
+
+func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: float, grp: int) -> void:
+	feats_total += 1
+	if kind == "jump":
+		var klen := JUMP_LEN
+		var kz := zi + klen - 3.0
+		var lipz := kz - klen
+		var kx := trail_x(kz - klen * 0.5) + sd * FEAT_OFF
+		_kickers.append({"x": kx, "z": kz, "len": klen, "w": JUMP_W, "rise": JUMP_RISE, "epic": false, "trail": true})
+		var lc := Color(1.0, 0.6, 0.15)
+		var lipm := BoxMesh.new()
+		lipm.size = Vector3(JUMP_W - 3.0, 0.12, 0.5)
+		(row["nodes"] as Array).append(_mi(self, lipm, _fx_mat("solid", lc, 1.6), Vector3(kx, terrain_h(kx, lipz + 0.8) + 0.12, lipz + 0.8)))
+		for sx in [-1.0, 1.0]:
+			var pole := CylinderMesh.new()
+			pole.top_radius = 0.07
+			pole.bottom_radius = 0.09
+			pole.height = 3.4
+			pole.radial_segments = 5
+			var px: float = kx + float(sx) * (JUMP_W * 0.5 - 0.8)
+			var pn := _mi(self, pole, _fx_mat("solid", lc, 1.4), Vector3(px, terrain_h(px, lipz + 1.0) + 1.7, lipz + 1.0))
+			(row["nodes"] as Array).append(pn)
+			_mi(pn, _quad(1.5), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, 1.5, 0.0))
+		var lead: Array = [Vector2(trail_x(kz + 12.0) + sd * FEAT_OFF * 0.8, kz + 12.0), Vector2(kx, kz - 2.0)]
+		_spawn_buff(row, "boost" if mode == "race" else _pick_buff(true), trail_x(lipz - 11.0) + sd * FEAT_OFF, lipz - 11.0, lead, "air", 2.2)
+		jumps_built += 1
+		_make_vortex(row, _kickers[_kickers.size() - 1], kx, kz, false, true)          # the same swirl the free-ride ramps have, big, so a jump can be seen from far up the slope
+		_buff_assets("orb")
+		(row["nodes"] as Array).append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(1.0, 0.35, 1.0, 0.3)), Vector3(kx, terrain_h(kx, kz + 8.0) + 4.6, kz + 8.5)))
+		# the two edges of the ramp, lit, so its length and where it ends can be seen
+		for ex in [-1.0, 1.0]:
+			var ex_x: float = kx + float(ex) * (JUMP_W * 0.5 - 0.4)
+			var ep := Vector3(ex_x, terrain_h(ex_x, kz) + 0.18, kz)
+			var en_ := 2
+			for ei in range(1, en_ + 1):
+				var ez := kz - klen * float(ei) / float(en_)
+				var epn := Vector3(ex_x, terrain_h(ex_x, ez) + 0.18, ez)
+				_seg_box(row, ep, epn, Vector2(0.3, 0.14), _fx_mat("solid", lc, 1.6))
+				ep = epn
+		feats.append({"kind": "jump", "za": kz + 44.0, "zl": kz, "zb": lipz, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp, "kx": kx})
+	elif kind == "rail":
+		var rl := _rng.randf_range(26.0, 36.0)
+		var f := {"kind": "rail", "za": zi + rl * 0.5, "zb": zi - rl * 0.5, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp}
+		_build_rail(row, f)
+		rails_built += 1
+		feats.append(f)
+	else:
+		var bz := zi - 8.0
+		var lead2: Array = []
+		for i in 3:
+			var u := float(i + 2) / 5.0
+			var oz := bz + 30.0 * (1.0 - u)
+			lead2.append(Vector2(trail_x(oz) + sd * FEAT_OFF * u * u * (3.0 - 2.0 * u), oz))          # the orbs curve out toward the treat (they start clear of the middle: riding straight on collects nothing)
+		var t := ("boost" if _rng.randf() < 0.7 else "shield") if mode == "race" else ("mult" if loot_built == 0 else _pick_buff(false))
+		_spawn_buff(row, t, trail_x(bz) + sd * FEAT_OFF, bz, lead2, "path")
+		loot_built += 1
+		feats.append({"kind": "loot", "za": bz + 30.0, "zl": bz, "zb": bz - 2.0, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp, "b": (row["buffs"] as Array).back()})
+
+
+## The things that stand between the poles of this stretch of trail. Every one is a CHOICE of two: something on the left and something different on the right, side by
+## side, with nothing in the middle. You cannot have both, the board takes neither by itself, and the one you get is the one you looked at: that is how you can tell the
+## game is reading your eyes and not steering for you.
+func _gen_feats(row: Dictionary, z0: float) -> void:
+	var feats: Array = []
+	row["feats"] = feats
+	var rz0: float = row["z"]
+	var n0 := int(floor((-z0 / TRAIL_TURN_LEN + _tr_p1) / PI))
+	for n in range(n0, n0 + 12):
+		var si := (float(n) * PI - _tr_p1) * TRAIL_TURN_LEN          # where the trail swings from one turn into the next: its straightest stretch
+		var zi := -si
+		if zi > z0 or zi <= z0 - ROW_GAP or si < 230.0 or zi < finish_z + 110.0:
+			continue
+		var opts: Array = ["rail"]                                    # a rail does not mind where it stands
+		if zi < z0 - 31.0 and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0:
+			opts.append("jump")                                       # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
+		if absf(zi + 22.0 - rz0) < 140.0 and absf(zi - 10.0 - rz0) < 140.0:
+			opts.append("loot")
+		for i in range(opts.size() - 1, 0, -1):
+			var jx := _rng.randi() % (i + 1)
+			var tmp: String = opts[i]
+			opts[i] = opts[jx]
+			opts[jx] = tmp
+		if opts.size() == 1:
+			opts.append("rail")
+		var sd := 1.0 if _rng.randf() < 0.5 else -1.0
+		choices_built += 1
+		_make_feat(row, feats, String(opts[0]), zi, sd, choices_built)
+		_make_feat(row, feats, String(opts[1]), zi, -sd, choices_built)
+		# the way straight on is not always clear: ahead of the choice there can be something nasty in the board's own lane. It is not a choice (nothing chooses it, and it
+		# is hit by simply staying where you are): the choice is to stay and take it, or swing out to one of the good things at the side.
+		if _rng.randf() < HAZARD_SHARE and absf(zi + 36.0 - rz0) < 140.0:
+			_make_hazard(row, feats, "rock" if _rng.randf() < 0.5 else "slush", zi)
+
+
+const HAZARD_SHARE := 0.6
+
+## A hazard in the middle lane. "rock": a patch of rocks, a crash (the shield takes it if you have one). "slush": wet heavy snow that drags the board's speed down while in it.
+func _make_hazard(row: Dictionary, feats: Array, kind: String, zi: float) -> void:
+	var za := zi + (30.0 if kind == "rock" else 36.0)
+	var zb := zi + (22.0 if kind == "rock" else 14.0)
+	var zm := (za + zb) * 0.5
+	var nodes := row["nodes"] as Array
+	if kind == "rock":
+		var rm := _fx_mat("solid", Color(0.5, 0.52, 0.6), 0.5)
+		var sm := SphereMesh.new()                                   # one mesh for every rock of the patch, each its own size
+		sm.radius = 1.0
+		sm.height = 1.5
+		sm.radial_segments = 8
+		sm.rings = 4
+		for i in 5:
+			var rx := trail_x(zm) + _rng.randf_range(-3.0, 3.0)
+			var rz := zm + _rng.randf_range(-3.5, 3.5)
+			var r := _rng.randf_range(1.0, 1.7)
+			var rn := _mi(self, sm, rm, Vector3(rx, terrain_h(rx, rz) + r * 0.45, rz))
+			rn.scale = Vector3(r, r, r)
+			nodes.append(rn)
+	else:
+		var bm := BoxMesh.new()
+		bm.size = Vector3(9.0, 0.12, za - zb)
+		var cx := trail_x(zm)
+		nodes.append(_mi(self, bm, _fx_mat("solid", Color(0.5, 0.42, 0.34), 0.3), Vector3(cx, terrain_h(cx, zm) + 0.14, zm)))
+	_buff_assets("orb")
+	var bx := trail_x(za)
+	nodes.append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(1.0, 0.3, 0.2, 0.3)), Vector3(bx, terrain_h(bx, za) + 4.6, za + 0.5)))
+	hazards_built += 1
+	feats.append({"kind": kind, "hz": true, "za": za, "zl": zb, "zb": zb, "sd": 0.0, "done": false, "want": 0.0, "away": 0.0})
+
+
+## Which side thing the eyes have chosen, or {}. At a choice there is one on the left and one on the right: a look held to a side for a moment chooses that one, and a
+## look to the other side changes your mind. With no look to either side nothing is chosen and the board rides between them.
+var _slide_v: float = 0.0
+var hazards_hit: int = 0
+var _lock_age: float = 0.0          # seconds since the current lock
+var _switch_slow: float = 0.0       # after changing a lock the board turns slowly for a moment: changing your mind costs distance
+const COMMIT_S := 0.5
+var hazards_built: int = 0
+var zone_test: int = 99            # tests: 99 = off, otherwise the place the eyes are read at (-1, 0, +1)
+
+
+var zn_test: float = 99.0          # tests: 99 = off, otherwise the unrounded reading (-1 = on the left look target, +1 = on the right one)
+var fine_test: float = 0.15
+
+
+func _eye_zone() -> int:
+	if zn_test != 99.0:
+		return 1 if zn_test > 0.5 else (-1 if zn_test < -0.5 else 0)
+	return zone_test if zone_test != 99 else GazeProvider.kit.zone
+
+
+## The same reading unrounded: 0 = the middle of the screen, -1 / +1 = the look targets at the sides (0.75 of the way to the edge).
+func _eye_zn() -> float:
+	if zn_test != 99.0:
+		return zn_test
+	return float(zone_test) if zone_test != 99 else GazeProvider.kit.zn
+
+
+## The smallest look to a side the reading can be trusted for, in the same units. A steady reading (a laptop) can tell a small look from none, so a look at the thing
+## itself counts; a noisy one (a phone) only tells the three places apart, so there this is 0.5 and only the look targets at the sides count.
+func _eye_fine() -> float:
+	if zn_test != 99.0 or zone_test != 99:
+		return fine_test
+	var z: Dictionary = GazeProvider.kit.zones
+	if z.is_empty():
+		return 0.5
+	var sep := minf(absf(float(z["dl"])), absf(float(z["dr"]))) / maxf(float(z["noise"]), 1.0e-5)
+	return clampf(3.0 / sep, 0.15, 0.5)
+
+
+## Where a rail, a jump or a loot line is across the screen right now: -1 = the left edge, +1 = the right edge, 99 = not in view. Taken a little ahead of the board.
+func _feat_nx(f: Dictionary) -> float:
+	var z := clampf(spos.z - 12.0, float(f["zb"]), float(f["za"]))
+	var x := _feat_x(f, z)
+	var w := Vector3(x, terrain_h(x, z) + 1.0, z)
+	if cam == null or _behind(w):
+		return 99.0
+	var sx := get_viewport().get_visible_rect().size.x
+	return clampf(_unp(w).x / maxf(sx, 1.0) * 2.0 - 1.0, -1.5, 1.5)
+
+
+## Which third of the screen a rail, a jump or a loot line is in, seen from the board: -1 left, 0 straight ahead, +1 right. It is judged where the thing begins, so
+## once the board has carved over to it, it is "straight ahead" and the other one is the one to the side.
+const SECTOR_M := 2.0
+func _sector(f: Dictionary) -> int:
+	var dx := _feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x
+	return 0 if absf(dx) < SECTOR_M else int(signf(dx))
+
+
+## True when the eyes are being read as left / middle / right (the learning step passed and the face is in view).
+func _zoned() -> bool:
+	if zone_test != 99 or zn_test != 99.0:
+		return true
+	var kit := GazeProvider.kit
+	return GazeProvider.backend == GazeProvider.Backend.CAMERA and not kit.zones.is_empty() and kit.ready and not kit.lost
+
+
+func _trail_pick(delta: float, s_in: float) -> Dictionary:
+	var v := pick_override if pick_override != 0.0 else s_in
+	_lock_age += delta
+	_switch_slow = maxf(_switch_slow - delta, 0.0)
+	if not _line_pick.is_empty() and (spos.z < float(_line_pick["zb"]) + 4.0 or bool(_line_pick["done"])):
+		_line_pick = {}
+	var fl: Dictionary = {}
+	var fr: Dictionary = {}
+	var fm: Dictionary = {}
+	var cands: Array = []
+	for kk in _rows:
+		for f in (_rows[kk] as Dictionary).get("feats", []):
+			var ez0 := float(f["zl"]) if f.has("zl") else float(f["za"])          # where the thing is taken: the ramp's foot, the treat, the top of a rail
+			if f.has("hz") or f["done"] or spos.z - ez0 > 130.0 or spos.z < float(f["zb"]) + 6.0:
+				continue
+			# only what the board can still reach is offered: crossing over takes time, and a thing that will be gone by then is not a choice
+			if not is_same(f, _line_pick) and not is_same(f, _rail):
+				var reach_t := absf(_feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x) / 34.0 + 0.3 + (0.25 if not _line_pick.is_empty() else 0.0)
+				var end_z := float(f["zl"]) if f.has("zl") else float(f["zb"]) + 8.0          # a jump or a treat is taken at one spot; a rail anywhere along it
+				if (spos.z - end_z) / maxf(-vel.y, MIN_SPEED) < reach_t:
+					if not f.has("dr"):
+						f["dr"] = true
+						_dec(int(f.get("g", -1)), [snappedf(_age, 0.01), "drop", String(f["kind"]), int(float(f["sd"])), "time left %.2f s, needs %.2f s (dx %.1f m)" % [(spos.z - end_z) / maxf(-vel.y, MIN_SPEED), reach_t, _feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x]])
+					continue
+			cands.append(f)
+			if float(f["sd"]) < 0.0:
+				if fl.is_empty() or float(f["za"]) > float(fl["za"]):
+					fl = f
+			elif fr.is_empty() or float(f["za"]) > float(fr["za"]):
+				fr = f
+	look_side = 0.0 if absf(v) < LOOK_PICK else signf(v)
+	var en := eye_now()
+	var zoned := pick_override == 0.0 and _zoned()
+	var tgt: Dictionary = {}
+	if zoned:
+		# CHOOSING WITH THE EYES. Everything coming up that can still be reached is a choice, wherever it is and whatever it is. Each is placed where it shows on the
+		# screen right now. The nearest ones (one choice) also get a look target out at the side of the screen: the leftmost of them the left target, the rightmost the right.
+		#   a look at a side target        chooses the thing it stands for (this is all a noisy reading can tell, and it always works)
+		#   a look at the thing itself     chooses it too, when the reading is steady enough to tell that small a look from none: the eyes have to go most of the way to
+		#                                  where it is on the screen. Of several that way, the one nearest to where the eyes are.
+		#   a look at the middle           chooses nothing and changes nothing: what was chosen stays chosen, and nothing is taken just for being in the way
+		var near_g := -1
+		var near_za := -1.0e9
+		for f in cands:
+			f["nx"] = _feat_nx(f)
+			if float(f["za"]) > near_za:
+				near_za = float(f["za"])
+				near_g = int(f.get("g", -1))
+		var grp: Array = []
+		for f in cands:
+			if int(f.get("g", -2)) == near_g and float(f["nx"]) != 99.0:
+				grp.append(f)
+		grp.sort_custom(func(a, b): return float(a["nx"]) < float(b["nx"]))
+		fl = {}
+		fr = {}
+		fm = {}
+		# the thing nearest the middle of the screen, if it is really in the middle, is the MIDDLE choice: looking at the middle of the screen takes it
+		var mi := -1
+		for gi in grp.size():
+			if absf(float((grp[gi] as Dictionary)["nx"])) / 0.75 < 0.22 and (mi < 0 or absf(float((grp[gi] as Dictionary)["nx"])) < absf(float((grp[mi] as Dictionary)["nx"]))):
+				mi = gi
+		if mi >= 0:
+			fm = grp[mi]
+			fm["cs"] = 0
+			grp.remove_at(mi)
+		if grp.size() >= 2:
+			fl = grp[0]
+			fr = grp[grp.size() - 1]
+		elif grp.size() == 1:
+			var one: Dictionary = grp[0]
+			var cs0 := int(one.get("cs", 0))
+			if cs0 == 0:
+				cs0 = int(signf(float(one["nx"]))) if absf(float(one["nx"])) > 0.05 else int(float(one["sd"]))
+			if cs0 < 0:
+				fl = one
+			else:
+				fr = one
+		if not fl.is_empty():
+			fl["cs"] = -1
+		if not fr.is_empty():
+			fr["cs"] = 1
+		var zone := _eye_zone()
+		var g := _eye_zn()
+		var fine := _eye_fine()
+		look_side = float(zone)
+		var why := "none"
+		if zone < 0 and not fl.is_empty():
+			tgt = fl
+			why = "side-L"
+		elif zone > 0 and not fr.is_empty():
+			tgt = fr
+			why = "side-R"
+		elif zone == 0 and not fm.is_empty() and absf(g) < 0.3:
+			tgt = fm
+			why = "middle"
+		elif zone != 0 and (fl if zone < 0 else fr).is_empty():
+			why = "side-empty"
+		elif fine < 0.5:
+			var best := 9.0
+			for f in cands:
+				var cn := float(f["nx"]) / 0.75
+				# only a thing well out from the middle of the screen can be chosen by looking at it (a look near the middle is a look at nothing in particular), and the
+				# eyes have to be close to where it is
+				if absf(cn) < 0.22 or cn > 2.0 or cn * g <= 0.0 or absf(g) < maxf(maxf(0.22, 0.6 * absf(cn)), fine) or absf(cn - g) > 0.4:
+					continue
+				if absf(cn - g) < best:
+					best = absf(cn - g)
+					tgt = f
+			if not tgt.is_empty():
+				look_side = signf(g)
+				why = "fine"
+		var dkey := "%s|%s|%d" % [why, String(tgt.get("kind", "")), int(float(tgt.get("za", 0.0)))]
+		if dkey != _dec_key:
+			_dec_key = dkey
+			_dec(near_g, [snappedf(_age, 0.01), "tgt", why, String(tgt.get("kind", "-")), int(float(tgt.get("sd", 0.0))), snappedf(g, 0.01), zone, snappedf(fine, 0.01)])
+	_card_l = fl
+	_card_r = fr
+	_card_m = fm
+	var seen_g := -1
+	for f0 in [fl, fr, fm]:
+		var fd0: Dictionary = f0
+		if fd0.is_empty() or int(fd0["g"]) == seen_g:
+			continue
+		seen_g = int(fd0["g"])
+		var cc := _cho_get(seen_g)
+		cc["t"] = float(cc["t"]) + delta
+		cc["es"] = float(cc["es"]) + en * delta
+		cc["ta"] = float(cc["ta"]) + delta
+		if float(cc["ta"]) >= 0.1 and (cc["tr"] as Array).size() < 100:
+			cc["ta"] = 0.0
+			(cc["tr"] as Array).append(snappedf(en, 0.01))          # the eye reading ten times a second through the approach, for the log
+		if en < -0.2:
+			cc["eL"] = float(cc["eL"]) + delta
+		elif en > 0.2:
+			cc["eR"] = float(cc["eR"]) + delta
+		if look_side < 0.0:
+			cc["rL"] = float(cc["rL"]) + delta
+		elif look_side > 0.0:
+			cc["rR"] = float(cc["rR"]) + delta
+	for f in (cands if zoned else [fl, fr]):
+		var fd: Dictionary = f
+		if fd.is_empty():
+			continue
+		if is_same(fd, tgt) if zoned else (look_side == float(fd["sd"])):
+			# a look at the side is a decision; a look at the middle is also where resting eyes go, so taking the middle thing needs a longer, steadier look
+			fd["want"] = minf(float(fd["want"]) + delta * (0.35 if (zoned and is_same(fd, fm)) else 1.0), 0.5)
+		else:
+			fd["want"] = maxf(float(fd["want"]) - delta * (3.0 if look_side != 0.0 else 0.6), 0.0)
+		# LOCK ON. The first look settles on a thing after a fifth of a second. Once something is locked it holds, however the eyes wander: another thing takes the lock only
+		# after a steady look at it (0.35 s), and not in the last half second before the board reaches the one it is going for.
+		var need_w := 0.18
+		if not _line_pick.is_empty() and zoned:
+			need_w = 0.2 if _lock_age >= COMMIT_S else 0.45          # just locked: committed for half a second, a change of mind in that window needs a longer, steadier look
+			var lez := float(_line_pick["zl"]) if _line_pick.has("zl") else float(_line_pick["za"])
+			if (spos.z - lez) / maxf(-vel.y, MIN_SPEED) < 0.25 and spos.z > float(_line_pick["zb"]):
+				need_w = 9.0
+		if float(fd["want"]) > 0.18 and float(fd["want"]) <= need_w and not is_same(_line_pick, fd) and not fd.has("rf"):
+			fd["rf"] = true
+			_dec(int(fd.get("g", -1)), [snappedf(_age, 0.01), "refused", String(fd["kind"]), int(float(fd["sd"])), snappedf(float(fd["want"]), 0.01), need_w, snappedf(_lock_age, 0.1), "blocked: too close to the locked thing" if need_w >= 9.0 else "holding the lock"])
+		elif float(fd["want"]) < 0.05:
+			fd.erase("rf")
+		if float(fd["want"]) > need_w and not is_same(_line_pick, fd):
+			_dec(int(fd.get("g", -1)), [snappedf(_age, 0.01), "LOCK", String(fd["kind"]), int(float(fd["sd"])), snappedf(float(fd["want"]), 0.01), need_w, "switch" if not _line_pick.is_empty() else "first", snappedf(_eye_zn(), 0.01)])
+			if not _line_pick.is_empty():
+				_switch_slow = 0.8                                  # a change of mind: the turn to the new one is slow at first
+			_lock_age = 0.0
+			_line_pick = fd
+			var pc := _cho_get(int(fd["g"]))
+			pc["pick"] = int(float(fd["sd"]))
+			pc["sw"] = int(pc.get("sw", 0)) + 1
+			pc["pz"] = _eye_zone()
+			pc["pzn"] = snappedf(_eye_zn(), 0.01)
+			pc["zm"] = [snappedf(float(GazeProvider.kit.zones.get("m", 0.0)), 0.0001), snappedf(float(GazeProvider.kit.zones.get("dl", 0.0)), 0.0001), snappedf(float(GazeProvider.kit.zones.get("dr", 0.0)), 0.0001)]
+			pc["pnx"] = snappedf(float(fd.get("nx", 0.0)), 0.01)
+			picks += 1
+			picks_side[int(float(fd["sd"]))] = int(picks_side.get(int(float(fd["sd"])), 0)) + 1
+	return _line_pick
+
+
+func _rail_off(how: String) -> void:
+	var f := _rail
+	_rail = {}
+	f["done"] = true
+	var m := _rail_z0 - spos.z
+	_choice_feat_done(f, m >= 6.0)
+	rail_m += m
+	if how != "drop":
+		grounded = false
+		air_t = 0.0
+		if how == "end":
+			vy += 3.2                                             # it throws you off the end: a small hop on top of the way the hill is already carrying you down
+	if m < 6.0:
+		return
+	rails_done += 1
+	var pts := int(m * 7.0 * groove) + (80 if how == "pop" else 0)
+	_gain(pts)
+	_flow_up(2 if m > 18.0 else 1)
+	if mode == "race":
+		_boost_t = maxf(_boost_t, 1.0 + m / 22.0)                 # in a race a rail is a slingshot
+	_toast(("POPPED OFF  %d m" if how == "pop" else "RAIL  %d m") % int(m), Color(0.5, 0.95, 1.0))
+	_burst(spos + Vector3(0, 0.3, 0), Color(0.6, 0.95, 1.0), 26, 9.0, 0.6, 0.8, Vector3(0, 1, 0.4), 60.0, -5.0)
+	_fov_punch = maxf(_fov_punch, 3.0)
+	Game.sfx(&"coin")
+
+
+## Per physics frame, after the board has moved: getting on a rail, riding it, coming off it.
+func _feat_tick(delta: float) -> void:
+	if not trail or _finished:
+		return
+	if not _rail.is_empty():
+		var f := _rail
+		if hurt_t > 0.0:
+			_rail = {}
+			f["done"] = true
+			_choice_feat_done(f, true)
+			return
+		if pops_flat != _rail_pops0:
+			_rail_off("pop")                                       # eyebrows up: off the rail and into the air, early
+			return
+		if spos.z <= float(f["zb"]):
+			_rail_off("end")
+			return
+		_rail_out_t = _rail_out_t + delta if (_s_in_now * float(f["sd"]) < -0.8 or (not _zoned() and absf(_s_in_now) > 0.8)) else 0.0          # read as left / middle / right, only a look to the OTHER side lets go
+		if _zoned() and not _line_pick.is_empty() and not is_same(_line_pick, f):
+			_rail_off("drop")                                      # the eyes chose something else: off this rail and over to it
+			return
+		if _rail_out_t > 0.3:
+			_rail_off("drop")                                      # a hard look away lets go of it
+			return
+		# held on the rail: the board follows it, whatever the snow underneath is doing
+		var slope := (_feat_x(f, spos.z - 1.0) - _feat_x(f, spos.z + 1.0)) * 0.5
+		spos.x = _feat_x(f, spos.z)
+		var ry := _rail_y(f, spos.z)
+		vy = clampf((ry - _rail_py) / maxf(delta, 0.0001), -40.0, 10.0) if _rail_py_ok else vy          # falling with the hill, like the snow under it (a pop or the hop off the end is added to this)
+		_rail_py = ry
+		_rail_py_ok = true
+		spos.y = ry
+		vel.x = slope * -vel.y
+		heading = atan(slope)
+		_steer_s = clampf(heading / THETA_MAX, -1.0, 1.0)
+		_steer_vel = 0.0
+		grounded = true
+		_flow_touch()
+		_rail_spark -= delta
+		if _rail_spark <= 0.0:
+			_rail_spark = 0.14
+			_burst(spos + Vector3(0, 0.05, 0.6), Color(1.0, 0.9, 0.5), 5, 6.0, 0.3, 0.45, Vector3(0, 1, 1), 50.0, -9.0)
+		return
+	for kk in _rows:
+		var r: Dictionary = _rows[kk]
+		for f in r.get("feats", []):
+			if f["done"]:
+				continue
+			if spos.z < float(f["zb"]) + (5.0 if f["kind"] == "rail" else 0.0):
+				f["done"] = true
+				_choice_feat_done(f, _feat_got(f))
+				continue
+			if f.has("hz"):
+				if spos.z <= float(f["za"]) and spos.y - terrain_h(spos.x, spos.z) < 2.0 and absf(spos.x - trail_x(spos.z)) < (3.6 if f["kind"] == "rock" else 4.3):
+					if f["kind"] == "rock":
+						if not f.has("hit"):
+							f["hit"] = true
+							hazards_hit += 1
+							_crash("rock patch")
+					else:
+						if not f.has("hit"):
+							f["hit"] = true
+							hazards_hit += 1
+							_toast("SLUSH", Color(0.75, 0.62, 0.45))
+						vel *= exp(-0.9 * delta)
+				continue
+			if f["kind"] != "rail" or hurt_t > 0.0 or spos.z > float(f["za"]) + 0.5:
+				continue
+			var near_top := spos.z > float(f["za"]) - 10.0
+			if absf(spos.x - _feat_x(f, spos.z)) < (2.6 if near_top else 1.3) and spos.y - _rail_y(f, spos.z) < 2.0:
+				_rail = f
+				_rail_z0 = spos.z
+				_rail_pops0 = pops_flat
+				_rail_py_ok = false
+				_rail_out_t = 0.0
+				_rail_spark = 0.0
+				_shake = maxf(_shake, 0.15)
+				Game.sfx(&"coin")
+				return
+
+
+func _best_key() -> String:
+	return "%s_%d" % [mode, int(absf(finish_z) / 100.0)]
+
+
+func _best_load() -> void:
+	best_val = 0.0
+	new_best = false
+	if not Prog.save_enabled:
+		return
+	var cf := ConfigFile.new()
+	if cf.load(BEST_FILE) == OK:
+		best_val = float(cf.get_value("best", _best_key(), 0.0))
+
+
+## The run is over: is it the record for this mode on a course of this length? (A race is judged on time with penalties, a freestyle run on score.)
+func _best_store() -> void:
+	var val := (_run_t + time_pen) if mode == "race" else float(score)
+	new_best = best_val <= 0.0 or (val < best_val if mode == "race" else val > best_val)
+	if not new_best or not Prog.save_enabled:
+		return
+	var cf := ConfigFile.new()
+	cf.load(BEST_FILE)
+	cf.set_value("best", _best_key(), val)
+	cf.save(BEST_FILE)
+
+
+static func clock_text(t: float) -> String:
+	return "%d:%04.1f" % [int(t / 60.0), fmod(t, 60.0)]
 
 
 func _make_pole(row: Dictionary, x: float, z: float, e: float, red: bool) -> Node3D:
@@ -157,8 +1341,10 @@ func _slalom_tick() -> void:
 				poles_wrong += 1
 				chain = maxi(chain - 2, 0)
 				groove = 1.0 + 0.25 * minf(float(chain), float(FLOW_MAX))
-				_toast("WRONG SIDE", Color(1.0, 0.6, 0.3))
-			elif d < 2.4:
+				if mode == "race":
+					time_pen += 2.0
+				_toast("WRONG SIDE  +2 s" if mode == "race" else "WRONG SIDE", Color(1.0, 0.6, 0.3))
+			elif d < 2.8:
 				poles_shaved += 1
 				poles_clean += 1
 				_gain(int(60.0 * groove))
@@ -166,14 +1352,12 @@ func _slalom_tick() -> void:
 				_toast("SHAVED IT", Color(0.4, 1.0, 0.7))
 				_burst(Vector3(float(pl["x"]), spos.y + 1.0, float(pl["z"])), Color(1, 1, 1), 16, 7.0, 0.5, 0.7)
 				Game.sfx(&"coin")
-			elif d < 8.0:
+			elif d < 4.2:
 				poles_clean += 1
 				_gain(int(30.0 * groove))
 				_flow_up()
+				_toast("CLOSE", Color(0.8, 0.95, 1.0))
 				Game.sfx(&"coin")
-			else:
-				_gain(10)
-				_flow_touch()
 
 
 ## The next pole ahead, or {}.
@@ -196,11 +1380,11 @@ func _next_pole() -> Dictionary:
 # --------------------------------------------------------------------------
 var trail: bool = OS.has_feature("web") and not str(JavaScriptBridge.eval("window.location.search")).contains("gates")
 const TRAIL_TURN_LEN := 30.0         # metres: the trail swings one way and back every 2 * PI * this (a turn about every 95 m)
-const TRAIL_TURN_AMP := 13.0         # metres either side of its slow line
+var TRAIL_TURN_AMP: float = 13.0 if _winding() else 4.0         # metres either side of its slow line
 const TRAIL_DRIFT_LEN := 170.0
-const TRAIL_DRIFT_AMP := 9.0
+var TRAIL_DRIFT_AMP: float = 9.0 if _winding() else 8.0
 const TRAIL_SPEED := 23.5           # m/s
-const TRAIL_HALF := 13.0             # half the width of the open snow between the tree lines
+var TRAIL_HALF: float = 13.0 if _winding() else 25.0             # half the width of the open snow between the tree lines
 var _tr_p1: float = 0.0
 var _tr_p2: float = 0.0
 var _tr_p3: float = 0.0
@@ -223,6 +1407,8 @@ func trail_x(z: float) -> float:
 
 ## How hard the trail is turning there, -1 .. +1 (+ = curving toward +x).
 func _trail_turn(z: float) -> float:
+	if not winding:
+		return 0.0
 	var s := maxf(-z, 0.0)
 	return -_trail_k(s) * sin(s / TRAIL_TURN_LEN + _tr_p1)
 
@@ -232,7 +1418,7 @@ func _trail_h(x: float, z: float) -> float:
 	var s := maxf(-z, 0.0)
 	var k := _trail_k(s)
 	var off := x - trail_x(z)
-	var h := k * (2.6 * sin(s / 23.0 + _tr_p3) + 1.15 * sin(s / 9.5 + _tr_p4))          # long rollers and short whoops: the crests lift you when you are fast
+	var h := k * 1.7 * sin(s / 26.0 + _tr_p3)                                         # long gentle rollers only: the short bumps threw the board into the air every few seconds, and that read as constant bouncing
 	h -= 0.11 * _trail_turn(z) * clampf(off, -22.0, 22.0)                             # banked turns: the outside of the bend is higher
 	var side := absf(off) - (TRAIL_HALF - 3.0)
 	if side > 0.0:
@@ -261,7 +1447,7 @@ func terrain_h(x: float, z: float) -> float:
 		if uu < 0.0 or uu >= 1.0:
 			continue
 		var half: float = float(k["w"]) * 0.5
-		var lat := 1.0 - smoothstep(half - 2.0, half, absf(x - float(k["x"])))
+		var lat := 1.0 - smoothstep(half - (3.5 if k.get("trail", false) else 2.0), half, absf(x - float(k["x"])))
 		h += float(k["rise"]) * uu * lat
 	return h
 
@@ -1568,6 +2754,7 @@ func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz
 # --------------------------------------------------------------------------
 const BOOST_S := 3.0
 const MULT_S := 10.0
+const TRAIL_VMAX := 30.0                 # m/s on the forest trail (108 km/h) before boosts
 const SPEED_CAP := 57.0              # a boost never pushes you past this (the hill alone reaches about 51 m/s)
 const BUFF_COL := {"boost": Color(1.0, 0.55, 0.1), "shield": Color(0.3, 0.85, 1.0), "mult": Color(0.95, 0.4, 1.0), "donut": Color(1.0, 0.45, 0.7), "orb": Color(1.0, 0.9, 0.45)}
 
@@ -2122,7 +3309,7 @@ func _flow_tick(delta: float) -> void:
 # POP: raise your eyebrows to hop off the snow (W or the up arrow without a camera). On a ramp, holding them up charges the launch instead, and the
 # pop happens at the lip. A pop is small, but it refills the flow clock: it is the thing you do between the big things.
 # --------------------------------------------------------------------------
-const POP_RISE := 0.2                # how far above your own resting level the eyebrows must go
+const POP_RISE := 0.3                # how far above your own resting level the eyebrows must go
 const POP_VY := 6.2                  # m/s off the snow: about 1.2 s in the air and 1.9 m up
 const POP_COOLDOWN := 1.0
 var brow_override: bool = false      # tests
@@ -2130,6 +3317,7 @@ var pops_flat: int = 0
 var _brow_base: float = 0.0
 var _brow_ready: bool = false
 var _brow_was: bool = false
+var _brow_hold: float = 0.0
 var _pop_cd: float = 0.0
 var _brow_hint_t: float = 0.0
 var _brow_hinted: bool = false
@@ -2145,8 +3333,10 @@ func _brows_up(delta: float) -> bool:
 	if not _brow_ready:
 		_brow_base = b
 		_brow_ready = true
-	var up := b - _brow_base > POP_RISE
-	if not up:
+	var raised := b - _brow_base > POP_RISE
+	_brow_hold = _brow_hold + delta if raised else 0.0
+	var up := _brow_hold > 0.12                                        # held for a moment: one noisy frame from the camera is not a pop
+	if not raised:
 		_brow_base += (b - _brow_base) * minf(delta / 4.0, 1.0)          # the resting level follows slowly, and only while they are down
 	return up
 
@@ -2896,9 +4086,42 @@ func _guard_path(delta: float, s_in: float) -> float:
 		var ff := atan((trail_x(zf - 2.0) - trail_x(zf + 2.0)) / 4.0) / THETA_MAX
 		var tx := trail_x(spos.z - spd_t * 0.5)
 		var np := _next_pole()
-		if not np.is_empty() and spos.z - float(np["z"]) < 40.0:
-			tx = lerpf(tx, float(np["x"]) + float(np["e"]) * 4.0, 0.5)          # set up for the pole: about 4 m to its passing side
+		if not np.is_empty() and spos.z - float(np["z"]) < 55.0:
+			# the pole stands 5 m to the inside of the turn. Left alone the board passes it wide, which earns nothing; a look toward the pole cuts in to shave it.
+			var pv := pick_override if pick_override != 0.0 else s_in
+			if absf(pv) > 0.14 and signf(pv) == -float(np["e"]):
+				np["want"] = float(np.get("want", 0.0)) + delta
+			if float(np.get("want", 0.0)) > 0.15:
+				tx = float(np["x"]) + float(np["e"]) * 1.5
+		var pkf := _trail_pick(delta, s_in)
+		if not winding:
+			tx += (0.0 if _zoned() else clampf(eye_now(), -1.0, 1.0) * FEAT_OFF * 1.15)          # the board sits where you look across the slope: far left of the screen is the far left line
+		if not pkf.is_empty():
+			tx = _feat_x(pkf, clampf(spos.z - spd_t * 0.5, float(pkf["zb"]), float(pkf["za"]) + 40.0))          # the rail or loot line you looked at: the board carves over to it
+			# a look that picked it always gets there: whatever the carve cannot cover in the time left, the board slides across
+			if _rail.is_empty():
+				var gx := _feat_x(pkf, clampf(spos.z, float(pkf["zb"]), float(pkf["za"])))
+				var t_left := maxf((spos.z - float(pkf["za"])) / spd_t - 0.25, 0.04)
+				var need := gx - spos.x
+				var rate := clampf(absf(need) / t_left, 0.0, 40.0)
+				# eased in and out: the sideways speed builds up and dies away over a fraction of a second instead of starting and stopping at once
+				var v_want := signf(need) * rate if (rate > 3.0 or spos.z <= float(pkf["za"])) else 0.0
+				_slide_v += (v_want * (0.55 if _switch_slow > 0.0 else 1.0) - _slide_v) * (1.0 - exp(-delta / ((0.4 if _switch_slow > 0.0 else 0.22) if t_left > 0.5 else 0.08)))
+				if _slide_v * need > 0.0:
+					_slide_v = signf(_slide_v) * minf(absf(_slide_v), absf(need) / 0.12)          # and settles onto the line instead of stopping dead on it
+					spos.x += signf(need) * minf(absf(need), absf(_slide_v) * delta)
+		if pkf.is_empty() or not _rail.is_empty():
+			_slide_v = 0.0
+		if not np.is_empty() and spos.z - float(np["z"]) < 32.0 and absf(s_in) < 0.6:
+			var pe := float(np["e"])                                   # close to a pole the line never drifts to its wrong side by itself: only a hard look takes you there
+			if (tx - float(np["x"])) * pe < 1.4:
+				tx = float(np["x"]) + pe * 1.4
 		var t_want := clampf(ff + (tx - (spos.x + vel.x * 0.5)) / 11.0, -1.0, 1.0)
+		# the edge of the trail: the nearer the trees, the harder the board leans back in. Only a look held hard at the forest gets past it.
+		var e_off := (spos.x + vel.x * 0.45) - trail_x(spos.z - spd_t * 0.45)
+		var e_over := absf(e_off) - maxf(8.0, FEAT_OFF + 4.0)
+		if e_over > 0.0 and absf(s_in) < 0.8:
+			t_want = clampf(t_want - signf(e_off) * clampf(e_over / 3.0, 0.0, 1.0) * 1.3, -1.0, 1.0)
 		add += t_want * lerpf(0.75, 1.0, _a()) * (1.0 - 0.4 * absf(s_in))
 	# 1) the barrier ahead: commit to a gate
 	var row: Dictionary = {}
@@ -3005,7 +4228,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 		gate_done = true
 	if not gate_done:
 		add += carve_assist * _assist_conf() * _aim_w * _aim_want * (1.0 - 0.6 * absf(s_in))
-	if _buff_w > 0.0 and not _buff_tgt.is_empty():
+	if _buff_w > 0.0 and not _buff_tgt.is_empty() and not trail:          # on a winding trail a straight line to a treat cuts through the forest: there the side-line pick does this job
 		add += _buff_w * _buff_want * (1.0 - 0.6 * absf(s_in))
 	# 2) a lone tree or rock on the way: swerve by just what is needed
 	var av := 0.0
@@ -3094,6 +4317,8 @@ func _physics_process(delta: float) -> void:
 		_warm_shaders()
 	if _paused or _warming:
 		return
+	if _calib_tick(delta):
+		return
 	var pf0 := Time.get_ticks_usec()
 	_render_governor(delta)
 	_age += delta
@@ -3126,8 +4351,10 @@ func _physics_process(delta: float) -> void:
 	# A webcam gaze is a slow, noisy signal (a few percent of the screen of jitter), so the eyes CHOOSE the opening and the board carves to it; free steering from the
 	# raw look only trims (0.6 with nothing chosen, 0.15 once an opening is locked).
 	var eye_gain := lerpf(0.7, 0.35, _aim_w) * lerpf(1.0, 0.6, _a() * _aim_w)
-	var s_in := key + (eye_s * eye_gain if _eye_on else clampf(pk.x / 1.8, -1.0, 1.0))
-	if _eye_on:
+	# Read as left / middle / right, the eyes CHOOSE and do not steer: the board holds its line down the trail however the eyes move, and turns only for what was chosen.
+	var eyes_pick_only := trail and pick_override == 0.0 and _zoned()
+	var s_in := key + (0.0 if eyes_pick_only else (eye_s * eye_gain if _eye_on else clampf(pk.x / 1.8, -1.0, 1.0)))
+	if _eye_on and not eyes_pick_only:
 		s_in += _intent_dir * _intent_amt * 0.38                     # the board starts toward a look at once; the settled gaze and the chosen gate take over
 	if false:
 		# the moment a real look to one side is recognised the board starts turning that way, then the settled gaze takes over: response without waiting for the smoothed signal
@@ -3135,6 +4362,7 @@ func _physics_process(delta: float) -> void:
 	if autopilot:
 		s_in = _auto_steer()
 	s_in = clampf(s_in, -1.0, 1.0)
+	_s_in_now = s_in
 	steer = clampf(s_in + _guard_path(delta, s_in), -1.0, 1.0)
 	if grounded and absf(s_in) < 0.3 and _aim.is_empty():
 		steer = clampf(steer - 0.12 * clampf(vel.x / 12.0, -1.0, 1.0), -1.0, 1.0)          # coming back to the middle: damp the sideways speed so it does not ring
@@ -3179,6 +4407,10 @@ func _physics_process(delta: float) -> void:
 		if sp > 0.01:
 			var dec := minf((fr + drag * sp * sp) * delta, sp)
 			vel -= vel / sp * dec
+		if trail and not _finished:
+			var vcap := TRAIL_VMAX + (8.0 if (_boost_t > 0.0 or _vx_active_t > 0.0) else 0.0)          # a relaxing speed: the hill alone does not run away with it, a boost or a swirl adds a bit
+			if sp > vcap:
+				vel -= vel / sp * (sp - vcap) * 1.5 * delta
 		var old_sp := vel.length()
 		var along := vel.dot(fwd)
 		var lat := vel.dot(right)
@@ -3192,13 +4424,21 @@ func _physics_process(delta: float) -> void:
 		if sp2 > 0.01:
 			vel -= vel / sp2 * minf(DRAG * 0.4 * sp2 * sp2 * delta, sp2)
 		vel += right * steer * 3.0 * delta
+		if trail and not _finished:
+			var a_high := spos.y - terrain_h(spos.x, spos.z) - 5.0
+			if a_high > 0.0 and vy > -12.0:
+				vy -= minf(a_high * 6.0, 30.0) * delta                    # a trail ramp is a hop of a few metres: anything that starts to go higher is pulled back down
+			var a_tz := spos.z + vel.y * 0.7                                 # a jump lands you on the trail: in the air the board drifts toward where the trail will be
+			vel.x += clampf((trail_x(a_tz) - (spos.x + vel.x * 0.7)) * 2.2, -16.0, 16.0) * delta
 		air_t += delta
 	if trail and not _finished:
 		# slalom pace: the forest trail turns every 95 m, so the hill is held to about 85-105 km/h (it climbs a little as the run goes on)
-		var cap := TRAIL_SPEED + 6.0 * prog + (8.0 if _boost_t > 0.0 else 0.0)
+		var cap := TRAIL_SPEED + 6.0 * prog + (4.0 if _boost_t > 0.0 else 0.0)
+		if mode == "race":
+			cap += 0.5 * minf(float(chain), float(FLOW_MAX))          # in a race, flow IS pace: every clean pole lets the hill run a little faster
 		var spn := vel.length()
 		if spn > cap:
-			vel *= 1.0 - minf(1.4 * delta * (spn - cap) / cap, 0.5)
+			vel *= 1.0 - minf(1.4 * delta * (spn - cap) / cap * 3.0, 0.5)
 	if not _finished:
 		vel.y = minf(vel.y, -3.0)          # the hill always carries you down it: a slide off a tree can never turn into a run uphill
 	spos.x += vel.x * delta
@@ -3224,6 +4464,7 @@ func _physics_process(delta: float) -> void:
 		if spos.y <= gh:
 			_land(maxf(gvy - vy, 0.0), gh, gvy)
 	_gh_prev = gh
+	_feat_tick(delta)
 	_realm_tick(delta)
 	_collide()
 	_collect_buffs()
@@ -3237,6 +4478,8 @@ func _physics_process(delta: float) -> void:
 	_animate_buffs()
 	_update_rows()
 	_slalom_tick()
+	_goals_tick()
+	_diag_tick(delta)
 	_called_tick(delta)
 	if not _finished and spos.z <= finish_z:
 		_finish()
@@ -3370,6 +4613,10 @@ func _crash(msg: String, ctx: String = "") -> void:
 	if trail:
 		# back onto the trail: a tree at the edge must not leave the board pinned among the trees, hitting the next one and the next
 		spos.x = lerpf(spos.x, trail_x(spos.z), 0.85)
+		spos.y = terrain_h(spos.x, spos.z)                  # the snow is at another height there: without this the next frame reads the difference as a launch
+		_gh_prev = spos.y
+		vy = 0.0
+		grounded = true
 		vel.x = 0.0
 		heading = 0.0
 		_steer_s = 0.0
@@ -3587,6 +4834,7 @@ func _update_rows() -> void:
 
 func _finish() -> void:
 	_finished = true
+	_best_store()
 	_call_flush()
 	_runlog.end_run(self, "finish")
 	_end_t = 0.0
@@ -3714,6 +4962,12 @@ func _warm_one(holder: Node3D, mesh: Mesh, m: Material, i: int, near: bool) -> v
 
 
 func _restart() -> void:
+	if GazeProvider.kit.refit_due and not _dot_off:
+		GazeProvider.kit.refit_due = false            # the face was gone for a while: this may be someone else, so the dot runs again
+		_dot_done = false
+		_dot_t = -1.0
+		_dot_tries = 0
+		_dot_phase = 0
 	var trng := RandomNumberGenerator.new()
 	trng.randomize()
 	_tr_p1 = trng.randf_range(0.0, TAU)
@@ -3724,6 +4978,24 @@ func _restart() -> void:
 	poles_shaved = 0
 	poles_wrong = 0
 	poles_total = 0
+	time_pen = 0.0
+	_goals_new()
+	feats_total = 0
+	jumps_built = 0
+	jumps_done = 0
+	rails_built = 0
+	rails_done = 0
+	rail_m = 0.0
+	loot_built = 0
+	picks = 0
+	picks_side = {}
+	choices_built = 0
+	choice_log.clear()
+	choice_n = {}
+	_cho.clear()
+	_dg_hist.clear()
+	_rail = {}
+	_line_pick = {}
 	TrailCurve.on = bend
 	_cam_strip_ok = false
 	if bend:
@@ -3899,7 +5171,7 @@ func _squint_now() -> bool:
 
 
 func _can_eat() -> bool:
-	return (not eat_enabled) or wide_override or _age - _wide_last < 0.5
+	return trail or (not eat_enabled) or wide_override or _age - _wide_last < 0.5
 
 
 ## Snowballs are things to get away from, not things to look at. Two things do that for you: the board slips out of the way of a ball that is about to hit (a smooth sideways push, stronger the
@@ -4176,16 +5448,19 @@ var _vx_spin: float = 0.0
 var _vx_active_t: float = 0.0
 
 
-func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bool) -> void:
+func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bool, big: bool = false) -> void:
 	var col := Color(0.95, 0.35, 1.0) if not epic else Color(0.3, 0.9, 1.0)
 	var rings: Array = []
 	for ri in 4:
 		var tm := TorusMesh.new()
 		tm.inner_radius = 2.2 - 0.45 * float(ri)
 		tm.outer_radius = 2.7 - 0.45 * float(ri)
-		var node := _mi(self, tm, _fx_mat("add", Color(col.r, col.g, col.b, 0.8 - 0.12 * float(ri))), Vector3(kx, terrain_h(kx, kz + 8.0) + 5.0, kz + 8.0))
+		if big and ri % 2 == 1:
+			continue                                                     # two rings are enough on the trail
+		var node := _mi(self, tm, _fx_mat("add", Color(col.r, col.g, col.b, 0.8 - 0.12 * float(ri))), Vector3(kx, terrain_h(kx, kz + 8.0) + (6.5 if big else 5.0), kz + 8.0))
 		node.rotation.x = PI * 0.5
-		node.scale = Vector3(1.0 + 0.55 * float(ri), 1.0 + 0.55 * float(ri), 1.0)
+		var bs := 1.5 if big else 1.0
+		node.scale = Vector3((1.0 + 0.55 * float(ri)) * bs, (1.0 + 0.55 * float(ri)) * bs, bs)
 		(row["nodes"] as Array).append(node)
 		rings.append(node)
 	k["vx"] = rings
@@ -4210,6 +5485,14 @@ func _vortex_drive(delta: float) -> void:
 				if is_instance_valid(rn):
 					(rn as Node3D).rotation.y = _vx_spin * (2.2 + 0.7 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)
 				gi += 1
+		if k.get("trail", false):
+			# on the trail the swirl does not pull you sideways (the eyes choose the jump and the board is taken there), but riding up the ramp inside it is the boost
+			if grounded and spos.z < kz + 34.0 and spos.z > lipz and absf(spos.x - kx) < float(k["w"]) * 0.5:
+				active = true
+				var fsp := -vel.y
+				if fsp < TRAIL_VMAX + 8.0:
+					vel.y -= minf(VX_ACCEL * delta, TRAIL_VMAX + 8.0 - fsp)
+			continue
 		if dz > 70.0 or spos.z < lipz or not grounded:
 			continue
 		# reach: a little way either side of the ramp, much more when you are looking at the swirl
@@ -4235,6 +5518,7 @@ func _vortex_drive(delta: float) -> void:
 func _update_ramps(delta: float) -> void:
 	var on_ramp := false
 	var crossed := false
+	var crossed_mid := false
 	for k in _kickers:
 		var kz: float = k["z"]
 		var lipz: float = kz - float(k["len"])
@@ -4243,6 +5527,7 @@ func _update_ramps(delta: float) -> void:
 				on_ramp = true
 			if _ramp_prev_z > lipz and spos.z <= lipz:
 				crossed = true
+				crossed_mid = absf(spos.x - float(k["x"])) < float(k["w"]) * 0.5 - 1.5
 	_ramp_prev_z = spos.z
 	var tucking_in := nod_p < -0.10 or trick_charge_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or _brow_held          # chin down or eyebrows up: either one winds the launch up
 	_on_ramp_now = on_ramp
@@ -4250,6 +5535,9 @@ func _update_ramps(delta: float) -> void:
 		_ramp_charge = minf(_ramp_charge + delta / 0.9, 1.0)
 	elif not crossed:
 		_ramp_charge = move_toward(_ramp_charge, 0.0, delta * (0.6 if on_ramp else 2.5))
+	if crossed and trail and crossed_mid:
+		jumps_done += 1
+		_flow_up()
 	if crossed:
 		vy += 1.5 * float(chain_lvl)                      # a longer chain launches harder
 		_chain_hit("ramp")
@@ -4364,13 +5652,19 @@ func _fit_fov() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	if vs.y > vs.x * 1.05:
 		cam.keep_aspect = Camera3D.KEEP_WIDTH
-		cam.fov = clampf(78.0 + (vel.length() - 18.0) * 0.5, 76.0, 96.0) + _fov_punch
+		cam.fov = clampf(62.0 + (vel.length() - 18.0) * 0.3, 60.0, 74.0) + _fov_punch * 0.6          # held upright the picture is tall: a wide sideways view makes it far taller still (122 deg from top to bottom at 78) and the phone draws all of it
+	elif Game.touch_mode and vs.x > vs.y * 1.9:
+		cam.keep_aspect = Camera3D.KEEP_WIDTH                    # a long thin phone screen: a 100 deg view from top to bottom is 140 deg across. Fix the width instead and the sky and snow nobody looks at are not drawn
+		cam.fov = clampf(98.0 + (vel.length() - 18.0) * 0.4, 96.0, 110.0) + _fov_punch * 0.6
 	else:
 		cam.keep_aspect = Camera3D.KEEP_HEIGHT
 
 
 func _place_camera(delta: float, snap: bool = false) -> void:
 	if not view_fp:
+		cam_back = 9.5 if trail else 8.0                          # on the trail the camera sits higher and looks further down the slope: the next two things are in view sooner
+		cam_h = 6.2 if trail else 4.6
+		cam_ahead = 30.0 if trail else 16.0
 		super._place_camera(delta, snap)
 		_fit_fov()
 		_cine_apply(delta)
@@ -4452,6 +5746,9 @@ var sky_rise: float = 2.2
 var sky_drag: float = 0.28                                   # how much steeper than a plain kicker the air-stretch ramps are
 const KICK_LEN := 26.0
 const KICK_W := 18.0
+const JUMP_LEN := 28.0              # the ramps on the forest trail: shorter and lower than a sky ramp, and you ride onto them, nothing pulls you in
+const JUMP_W := 14.0
+const JUMP_RISE := 4.0
 var kickers_built: int = 0
 var kick_log: Array = []
 var epics_built: int = 0
@@ -4618,6 +5915,7 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	params["seed"] = int(c.get("seed", 424242))
 	apply_params({"length": 0.0 if bool(c.get("endless", false)) else km * 1000.0, "diff": float(c.get("diff", 1.0)), "zones": zones})
 	face_enabled = bool(c.get("faces", true))
+	mode = String(c.get("mode", mode))
 	cine_enabled = bool(c.get("cine", true))
 	GazeProvider.pm_on = bool(c.get("phone", true))
 	GazeProvider.pm.haptics_on = bool(c.get("haptics", true))
@@ -5495,6 +6793,11 @@ func _update_aim(delta: float) -> void:
 # Input, pause, report
 # --------------------------------------------------------------------------
 func _input(event: InputEvent) -> void:
+	if _dot_phase == 2 and not _dot_done and _dot_t > 1.0:
+		if (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed) or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) or (event is InputEventKey and (event as InputEventKey).pressed):
+			_check_dismiss()
+			get_viewport().set_input_as_handled()
+			return
 	if _pause_input(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -5573,6 +6876,14 @@ func _pause_action(id: String) -> void:
 	if id == "trace":
 		_paused = false
 		_trace_start()
+		return
+	if id == "diag":
+		diag_on = not diag_on
+		return
+	if id == "eyecheck":
+		_paused = false
+		_pause_adv = false
+		eye_check_start()
 		return
 	if id == "trace_off":
 		_trace_end()
@@ -5817,6 +7128,9 @@ func _draw_hud_inner() -> void:
 		_hud.draw_rect(Rect2(bp, Vector2(bw0, 12.0 * k)), Color(0.05, 0.12, 0.25, 0.6))
 		_hud.draw_rect(Rect2(bp, Vector2(bw0 * _warm_k, 12.0 * k)), Color(1.0, 0.85, 0.35, 0.95))
 		return
+	if _dot_t >= 0.0 and not _dot_done:
+		_draw_calib(font, s, k)
+		return
 	var m := 24.0 * k
 	if hurt_t > 0.0:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(1.0, 0.1, 0.1, 0.22 * clampf(hurt_t, 0.0, 1.0)))
@@ -5847,6 +7161,57 @@ func _draw_hud_inner() -> void:
 				var bob := sin(_age * 8.0) * 4.0 * k
 				var a0 := pc + Vector2(pe * (14.0 * k + bob), 0.0)
 				Draw2D.poly(_hud, PackedVector2Array([a0 + Vector2(0.0, -12.0 * k), a0 + Vector2(0.0, 12.0 * k), a0 + Vector2(pe * 20.0 * k, 0.0)]), Color(1.0, 0.9, 0.2, 0.95))          # pass on this side
+		# what is coming up on the trail: both things at a choice are named. The one your look has chosen gets a ring and an arrow, the other fades.
+		for fk in _rows:
+			for ff in (_rows[fk] as Dictionary).get("feats", []):
+				var fzl := float(ff.get("zl", ff["za"]))
+				var fdz := spos.z - fzl
+				if ff["done"] or fdz > 130.0 or fdz < 4.0:
+					continue
+				var fx0 := _feat_x(ff, fzl)
+				var fw := Vector3(fx0, terrain_h(fx0, fzl) + 6.0, fzl)
+				if _behind(fw):
+					continue
+				var fs := _unp(fw)
+				var chosen := is_same(ff, _line_pick)
+				var other := not _line_pick.is_empty() and not chosen and int(ff.get("g", -1)) == int(_line_pick.get("g", -2))
+				var fa := clampf((130.0 - fdz) / 30.0, 0.0, 1.0) * (0.3 if other else 0.95)
+				var fcl := Color(0.5, 0.95, 1.0, fa) if ff["kind"] == "rail" else (Color(1.0, 0.7, 0.25, fa) if ff["kind"] == "jump" else (Color(1.0, 0.35, 0.3, fa) if ff.has("hz") else Color(1.0, 0.55, 0.9, fa)))
+				var ft := "RAIL" if ff["kind"] == "rail" else ("JUMP" if ff["kind"] == "jump" else ("ROCKS" if ff["kind"] == "rock" else ("SLUSH" if ff["kind"] == "slush" else "TREAT")))
+				var fsz := 24 if chosen else 17
+				_text(font, Vector2(fs.x - font.get_string_size(ft, HORIZONTAL_ALIGNMENT_LEFT, -1, int(float(fsz) * k)).x * 0.5, fs.y), ft, fsz, fcl)
+				if not ff.has("hz"):
+					# the ring sits on the thing itself: it grows as the board closes in, fills while a look is settling on it, and turns green when it is locked
+					var rr := clampf(2300.0 / maxf(fdz, 28.0), 16.0, 80.0) * k
+					var rc := fs + Vector2(0.0, rr * 0.9)
+					var rfill := 1.0 if chosen else clampf(float(ff["want"]) / 0.18, 0.0, 1.0)
+					var rcol := Color(0.5, 1.0, 0.65, 0.95) if chosen else Color(fcl.r, fcl.g, fcl.b, fa * 0.75)
+					Draw2D.arc(_hud, rc, rr, 0.0, TAU, 32, Color(1, 1, 1, 0.22 * fa), 2.0 * k)
+					if rfill > 0.0:
+						Draw2D.arc(_hud, rc, rr, -PI * 0.5, -PI * 0.5 + TAU * rfill, 32, rcol, (6.0 if chosen else 4.0) * k)
+				if chosen:
+					var bob2 := sin(_age * 8.0) * 3.0 * k
+					Draw2D.poly(_hud, PackedVector2Array([fs + Vector2(-11.0 * k, 10.0 * k + bob2), fs + Vector2(11.0 * k, 10.0 * k + bob2), fs + Vector2(0.0, 26.0 * k + bob2)]), Color(0.5, 1.0, 0.7, 0.95))
+					pass
+				else:
+					pass
+		# HOW THE GAME READS YOUR LOOK, live: a dot on a short bar. When it is far enough to a side to choose something, that half lights up. If the dot does not follow
+		# your eyes, the tracking is not working; if it does and the board goes to what you chose, it is.
+		if not _finished:
+			_draw_cards(font, s, k)
+		if diag_on and not _finished:
+			_draw_diag(font, s, k)
+		elif not _finished:
+			var lv := pick_override if pick_override != 0.0 else _s_in_now
+			var lw := 170.0 * k
+			var lc0 := Vector2(s.x * 0.5, s.y * 0.8)
+			_hud.draw_rect(Rect2(lc0.x - lw, lc0.y - 3.0 * k, lw * 2.0, 6.0 * k), Color(0.05, 0.1, 0.2, 0.45))
+			if look_side != 0.0:
+				_hud.draw_rect(Rect2(lc0.x if look_side > 0.0 else lc0.x - lw, lc0.y - 3.0 * k, lw, 6.0 * k), Color(0.5, 1.0, 0.7, 0.75))
+			_hud.draw_rect(Rect2(lc0.x - 1.5 * k, lc0.y - 9.0 * k, 3.0 * k, 18.0 * k), Color(1, 1, 1, 0.6))
+			Draw2D.circle(_hud, lc0 + Vector2(clampf(lv / 0.5, -1.0, 1.0) * lw, 0.0), 9.0 * k, Color(1.0, 0.9, 0.4, 0.95) if _eye_on or pick_override != 0.0 else Color(1, 1, 1, 0.5))
+			_text(font, Vector2(lc0.x - lw - 20.0 * k, lc0.y + 6.0 * k), "L", 15, Color(1, 1, 1, 0.9 if look_side < 0.0 else 0.4))
+			_text(font, Vector2(lc0.x + lw + 10.0 * k, lc0.y + 6.0 * k), "R", 15, Color(1, 1, 1, 0.9 if look_side > 0.0 else 0.4))
 	_draw_beacons(s, k)
 	_draw_called(k)
 	# the opening you have latched: two soft posts at its edges
@@ -5898,8 +7263,15 @@ func _draw_hud_inner() -> void:
 	_hud.draw_rect(Rect2(bx, m, bw, 10.0 * k), Color(0.05, 0.12, 0.25, 0.5))
 	_hud.draw_rect(Rect2(bx, m, bw * progress(), 10.0 * k), Color(1.0, 0.85, 0.35, 0.95))
 	_hud.draw_rect(Rect2(bx + bw - 3.0 * k, m - 4.0 * k, 3.0 * k, 18.0 * k), Color(1, 1, 1, 0.9))
-	_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 26, Color(1, 1, 1, 0.95))
+	if trail and mode == "race":
+		_text(font, Vector2(m, m + 22.0 * k), clock_text(_run_t), 26, Color(1, 1, 1, 0.95))
+		if time_pen != 0.0:
+			_text(font, Vector2(m + 96.0 * k, m + 22.0 * k), "%+d s" % int(time_pen), 18, Color(1.0, 0.5, 0.4, 0.95) if time_pen > 0.0 else Color(0.5, 1.0, 0.6, 0.95))
+	else:
+		_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 26, Color(1, 1, 1, 0.95))
 	_draw_chain(s, k, m)
+	if trail and not _finished:
+		_draw_goals(font, s, k, m)
 	_draw_setup_guide(s, k, get_process_delta_time())
 	var by := m + 52.0 * k
 	if _boost_t > 0.0:
@@ -5930,7 +7302,7 @@ func _draw_hud_inner() -> void:
 		pt += "   Q%d" % qt
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
-		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 40.0 * k), pt, 18, pcol)
+		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 66.0 * k), pt, 18, pcol)
 	if chain > 0:
 		# FLOW: the multiplier, big, with its clock underneath. The bar is what you watch: it empties in a few seconds and anything you do refills it.
 		var fsz := 26 + int(8.0 * _flow_bump)
@@ -5975,11 +7347,30 @@ func _draw_hud_inner() -> void:
 	if _finished:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0.03, 0.07, 0.15, 0.55))
 		_ctext(font, s.y * 0.34, "FINISH", 64, Color(1.0, 0.9, 0.4))
-		_ctext(font, s.y * 0.34 + 56.0 * k, "time %.1f s   crashes %d   score %d" % [_run_t, crashes, score], 30, Color(1, 1, 1))
-		if crashes == 0:
-			_ctext(font, s.y * 0.34 + 98.0 * k, "CLEAN RUN +1000", 28, Color(0.5, 1.0, 0.6))
+		if trail:
+			var race := mode == "race"
+			var mine := clock_text(_run_t + time_pen) if race else "%d" % score
+			_ctext(font, s.y * 0.34 + 56.0 * k, ("RACE   %s" if race else "FREESTYLE   %s points") % mine, 34, Color(1, 1, 1))
+			var sub := ""
+			if new_best:
+				sub = "NEW BEST!"
+			elif best_val > 0.0:
+				sub = "best %s" % (clock_text(best_val) if race else "%d" % int(best_val))
+			if race and time_pen != 0.0:
+				sub += "   (%+d s from poles and goals)" % int(time_pen)
+			if sub != "":
+				_ctext(font, s.y * 0.34 + 96.0 * k, sub, 24, Color(0.5, 1.0, 0.6) if new_best else Color(1, 1, 1, 0.8))
+			_ctext(font, s.y * 0.34 + 126.0 * k, "goals %d/%d   poles %d (shaved %d)   rails %d   jumps %d   best flow x%.1f   crashes %d" % [goals_done, goals.size(), poles_clean, poles_shaved, rails_done, jumps_done, best_flow, crashes], 18, Color(1, 1, 1, 0.75))
+			if not race:
+				_ctext(font, s.y * 0.34 + 150.0 * k, "time %s" % clock_text(_run_t), 16, Color(1, 1, 1, 0.55))
+			if choice_summary() != "":
+				_ctext(font, s.y * 0.34 + 214.0 * k, choice_summary(), 16, Color(0.6, 0.95, 1.0, 0.9))
+		else:
+			_ctext(font, s.y * 0.34 + 56.0 * k, "time %.1f s   crashes %d   score %d" % [_run_t, crashes, score], 30, Color(1, 1, 1))
+			if crashes == 0:
+				_ctext(font, s.y * 0.34 + 98.0 * k, "CLEAN RUN +1000", 28, Color(0.5, 1.0, 0.6))
 		if _end_t > 1.2:
-			_ctext(font, s.y * 0.34 + 148.0 * k, "press R, SPACE or tap to ride again", 22, Color(1, 1, 1, 0.85))
+			_ctext(font, s.y * 0.34 + 184.0 * k, "press R, SPACE or tap to ride again", 22, Color(1, 1, 1, 0.85))
 	if not _paused:
 		var pr := _pause_rect()
 		_hud.draw_rect(pr, Color(0.05, 0.12, 0.25, 0.5))

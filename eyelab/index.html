@@ -181,6 +181,7 @@
       <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px">
         <button id="rcGuide" disabled class="primary" style="font-size:16px;padding:10px 18px" title="Goes full screen and shows a dot. Look at the dot each time it moves. About 20 seconds.">Guide me: look here (20 s)</button>
         <button id="rcFull" title="Make the map fill your whole screen: the dot is then exactly where you are looking, in real time. Esc exits.">Full screen map</button>
+        <button id="btnLmr" class="primary" title="Three places only: left, middle, right. Look at the dot each time it jumps (8 s), then the same again scored (10 s), then it runs live so you can see how fast and how surely it snaps.">Left / middle / right (full screen)</button>
         <button id="rcBall" class="primary" title="A tennis-ball sized circle that follows your gaze across the whole screen, full screen, real time.">Ball demo (full screen)</button>
         <span class="note" style="margin:0">Press Start camera, then this. A dot appears full screen: just look at it each time it moves, eyes only.</span>
       </div>
@@ -427,6 +428,17 @@ async function startCamNow(my) {
     setTimeout(() => { if (running && fpsEma > 0 && fpsEma < 18 && $('res').value === '1920x1080') { $('res').value = '1280x720'; $('status').textContent = '1080p was too slow here (' + fpsEma.toFixed(0) + ' frames/s): switching to 720p'; startCam().catch(() => {}); } }, 5000);
   }
 }
+// A phone turned on its side hands over a picture of a different shape (720x1280 becomes 1280x720). Everything measured in picture pixels has to
+// follow, or the face is squashed into the old shape and every reading is wrong.
+function syncVideoSize() {
+  W = vid.videoWidth; H = vid.videoHeight;
+  grab.width = W; grab.height = H; ov.width = W; ov.height = H;
+  if (results.camera) results.camera.actual = [W, H];
+  for (const k in cropMemo) delete cropMemo[k];
+  ring.length = 0;
+  try { rcForget(); } catch (e) {}
+  $('status').textContent = 'camera ' + W + 'x' + H + ' running';
+}
 let autoDowngraded = false;
 let running = false;
 // Optional short fixed exposure (see the checkbox tooltip). Falls back to the camera's auto exposure when unchecked.
@@ -483,6 +495,7 @@ const EYES = {
 };
 
 function process(now) {
+  if (vid.videoWidth && (vid.videoWidth !== W || vid.videoHeight !== H)) syncVideoSize();
   const t0 = performance.now();
   { const ea = $('eyeAxis'); eyeAxisOn = ea ? ea.checked : true; }
   calls++;
@@ -572,7 +585,7 @@ function process(now) {
   }
   const ms = performance.now() - t0; infEma = infEma ? infEma * 0.9 + ms * 0.1 : ms;
   drawOverlay(f); drawVideoTrails(); drawEye('eyeR', 'eyeRinfo', R, 'right eye (left in the picture)', 'R'); drawEye('eyeL', 'eyeLinfo', Lf, 'left eye (right in the picture)', 'L');
-  drawChart(); drawMonitor(f); drawMap(); updMapStatus(); updateStats(); reachFrame(f);
+  drawChart(); drawMonitor(f); drawMap(); updMapStatus(); updateStats(); reachFrame(f); try { lmrFrame(f); } catch (e) {}
 }
 // Calibration-free gaze from 3D geometry.
 //  1. Depth from the iris: a human iris is ~11.7 mm wide, so depth = focal_px * 11.7 mm / iris_px.
@@ -598,7 +611,7 @@ function pxStep(f, mm) {
 function geoGaze(f, mm, useLimb) {
   const hfov = (parseFloat($('hfov').value) || 66) * Math.PI / 180;
   const Wv = W || 1280, Hv = H || 720;
-  const fpx = (Wv / 2) / Math.tan(hfov / 2), cx = Wv / 2, cy = Hv / 2;
+  const fpx = (Math.max(Wv, Hv) / 2) / Math.tan(hfov / 2), cx = Wv / 2, cy = Hv / 2;
   const diam = f.eyes.R.rad + f.eyes.L.rad;              // = 2 x average iris radius, px
   if (!(diam > 4)) return { ok: false };
   const Zi = fpx * 1.17 / diam;                          // cm
@@ -1605,6 +1618,7 @@ class EyeFuse {
 const DUAL0 = () => ({ on: false, c: { R: { u: 0, v: 0 }, L: { u: 0, v: 0 } }, g: { R: { gl: 1, gr: 1, gt: 1, gb: 1 }, L: { gl: 1, gr: 1, gt: 1, gb: 1 } }, w: { u: [0.5, 0.5], v: [0.5, 0.5] }, info: '' });
 const RC = { fuse: new EyeFuse(), fuseOn: true, dual: DUAL0(), fu: new OneEuroJS(), fv: new OneEuroJS(), curve: 1, guide: [], buf: [], heat: new Float32Array(48 * 27), trail: [], kyaw: 0, kpitch: 0, gx: 1, gy: 1, gl: 1, gr: 1, gt: 1, gb: 1, sx: 0, sy: 0, center: true,
   med: { u: 0.5, v: 0.5 }, yawRef: 0, pitchRef: 0, fix: null, leakBuf: [], lastTable: 0, lastMed: 0, cur: null };
+function rcForget() { RC.buf.length = 0; RC.trail.length = 0; RC.leakBuf.length = 0; RC.heat.fill(0); RC.fu.x = null; RC.fv.x = null; RC.lastMed = 0; RC.cur = null; RC.fuse = new EyeFuse(); }
 const reachCv = $('reach');
 const rcx = reachCv.getContext('2d');
 const scrCm = () => {
@@ -1762,7 +1776,7 @@ function drawReach() {
   rcx.strokeStyle = '#4a5b7a'; rcx.lineWidth = 3; rcx.strokeRect(1.5, 1.5, W - 3, H - 3);
 }
 
-const camDist = (diamPx) => ((vid.videoWidth || 1280) / 2) / Math.tan(((parseFloat($('hfov').value) || 66) * Math.PI / 180) / 2) * 1.17 / Math.max(diamPx, 1);
+const camDist = (diamPx) => ((Math.max(vid.videoWidth, vid.videoHeight) || 1280) / 2) / Math.tan(((parseFloat($('hfov').value) || 66) * Math.PI / 180) / 2) * 1.17 / Math.max(diamPx, 1);
 function updReachTable() {
   const c = scrCm(), sw = c[0], sh = c[1];
   const tb = document.querySelector('#rcTable tbody');
@@ -2068,7 +2082,7 @@ $('btnFov').onclick = () => {
   const diam = pct(B.map((b) => b.rad * 2), 0.5), d = parseFloat($('dist').value);
   if (!(diam > 4) || !(d > 15)) { $('profNote').textContent = 'No iris reading or a bad distance.'; return; }
   const fpx = diam * d / 1.17;                                  // iris diameter 11.7 mm
-  const fov = Math.max(45, Math.min(110, 2 * Math.atan(vid.videoWidth / 2 / fpx) * 180 / Math.PI));
+  const fov = Math.max(45, Math.min(110, 2 * Math.atan(Math.max(vid.videoWidth, vid.videoHeight) / 2 / fpx) * 180 / Math.PI));
   $('hfov').value = fov.toFixed(0);
   $('profNote').textContent = 'field of view fitted to ' + fov.toFixed(0) + ' degrees (iris ' + diam.toFixed(1) + ' px at ' + d + ' cm). Only valid if you really sat ' + d + ' cm from the screen.';
 };
@@ -2449,6 +2463,21 @@ if (matchMedia('(pointer: coarse)').matches) {
   $('scrW').value = (screen.width / 63).toFixed(1);   // ~63 CSS px per cm on phones, current orientation
   $('dist').value = 30;
   $('res').value = '1280x720';
+  // Turning the phone: the screen is now wider or narrower in cm, and the camera has moved from the top edge to a side edge.
+  let oW = screen.width, oCam = '';
+  const camSide = () => { const o = screen.orientation; if (o && typeof o.angle === 'number') return ({ 0: 'top', 90: 'left', 180: 'bottom', 270: 'right' })[o.angle] || 'top'; return screen.width > screen.height ? 'left' : 'top'; };
+  const turned = () => {
+    const cs = camSide(), sw = screen.width > 0 ? screen.width : oW;
+    if (sw === oW && cs === oCam) return;
+    if (sw > 0 && oW > 0 && sw !== oW) { const cur = parseFloat($('scrW').value); if (cur > 0) $('scrW').value = (cur * sw / oW).toFixed(1); }
+    if (!oCam || $('campos').value === oCam) $('campos').value = cs;
+    oW = sw; oCam = cs;
+    rcForget(); sizeReach(); drawReach();
+  };
+  turned();
+  if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', () => setTimeout(turned, 60));
+  window.addEventListener('orientationchange', () => setTimeout(turned, 60));
+  window.addEventListener('resize', () => setTimeout(turned, 60));
 }
 async function loadModelRetry() {
   for (let i = 0; i < 4; i++) {
@@ -2458,6 +2487,246 @@ async function loadModelRetry() {
   throw new Error('could not load the tracker from the internet: check your connection and reload');
 }
 modelPromise = loadModelRetry().catch((e) => { $('status').style.color = 'var(--red)'; $('status').textContent = e.message || String(e); });
+// ---------------------------------------------------------------- LMR BEGIN: left / middle / right, the control the game uses
+// Same method as the game (godot/scripts/KitEye.gd): only the iris along the eye. A dot jumps between the middle, the left and the right; the resting reading at each
+// stop is the median of what came in once the eyes had landed. Live, the median of the last three readings is measured from the middle as a fraction of the way to the
+// side target: past half way = that side, back inside 0.3 = the middle. Nothing is smoothed over time. The middle follows slow drift (3 s) while the look is in the middle.
+const LMR = { on: false, phase: 'off', t0: 0, z: null, zone: 0, zn: 0, zoneT: 0, zh: [], drift: 0, sideS: 0, lastT: 0, rec: [], marks: [], cal: null, chk: null, tr: [], trT: 0, tries: 0, flips: 0, liveT0: 0, seen: 0 };
+const LMR_CAL = [0, -0.75, 0.75, 0, 0.75, -0.75, 0], LMR_CHK = [-0.75, 0.75, 0, 0.75, 0, -0.75, 0.75, -0.75];
+const LMR_STEP = 1100, LMR_LEAD = 1500, LMR_CSTEP = 1200, LMR_IN = 0.5, LMR_OUT = 0.3;
+const lmrMed = (a) => { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y), h = b.length >> 1; return b.length & 1 ? b[h] : (b[h - 1] + b[h]) / 2; };
+const lmrZn = (z, d) => Math.max(-1.6, Math.min(1.6, d * z.dl > 0 ? -d / z.dl : d / z.dr));
+// stops: [[t in, t out, x]], rec: [[t, reading]]. Returns the three resting places and how well they stand apart.
+function lmrFit(stops, rec, col) {
+  const grp = { '-1': [], '0': [], '1': [] }, meds = [], spreads = [];
+  for (const st of stops) {
+    const v = rec.filter((r) => r[0] >= st[0] + 450 && r[0] <= st[1]).map((r) => r[col]);
+    if (v.length < 4) continue;
+    const md = lmrMed(v), sp = lmrMed(v.map((q) => Math.abs(q - md))) * 1.48, side = Math.sign(st[2]);
+    meds.push([side, md]); grp[side].push(md); spreads.push(sp);
+  }
+  const out = { ok: false, n: rec.length, stops: meds.length, sep: 0, agree: 0 };
+  if (!grp['-1'].length || !grp['0'].length || !grp['1'].length) { out.why = 'few readings'; return out; }
+  const m = lmrMed(grp['0']), dl = lmrMed(grp['-1']) - m, dr = lmrMed(grp['1']) - m, noise = Math.max(lmrMed(spreads), 1e-5);
+  Object.assign(out, { m, dl, dr, noise, sep: Math.min(Math.abs(dl), Math.abs(dr)) / noise });
+  if (dl * dr >= 0) { out.why = 'left and right read the same way'; return out; }
+  const z = { m, dl, dr };
+  for (const md of meds) { const n = lmrZn(z, md[1] - m), got = n > LMR_IN ? 1 : (n < -LMR_IN ? -1 : 0); if (got === md[0]) out.agree++; }
+  const reacts = [];
+  for (const st of stops) { const side = Math.sign(st[2]); if (!side) continue; const hit = rec.find((r) => r[0] > st[0] && r[0] <= st[1] && lmrZn(z, r[col] - m) * side > LMR_IN); if (hit) reacts.push(hit[0] - st[0]); }
+  out.react = lmrMed(reacts);
+  out.ok = out.sep >= 2 && out.agree >= meds.length - 1;
+  if (!out.ok) out.why = out.sep < 2 ? 'too close to the noise' : 'stops disagree';
+  return out;
+}
+function lmrStep(hx, t) {
+  const z = LMR.z, dt = Math.max(0.001, Math.min(1, (t - LMR.lastT) / 1000)); LMR.lastT = t;
+  LMR.zh.push(hx); if (LMR.zh.length > 3) LMR.zh.shift();
+  const d = lmrMed(LMR.zh) - z.m - LMR.drift;
+  LMR.zn = lmrZn(z, d);
+  let q = LMR.zone;
+  if (LMR.zn > LMR_IN) q = 1; else if (LMR.zn < -LMR_IN) q = -1; else if (Math.abs(LMR.zn) < LMR_OUT) q = 0;
+  if (q !== LMR.zone) { LMR.zone = q; LMR.zoneT = t; LMR.sideS = 0; if (LMR.phase === 'live') LMR.flips++; }
+  if (LMR.zone === 0) LMR.drift += d * Math.min(1, dt / 3);
+  else { LMR.sideS += dt; if (LMR.sideS > 4) LMR.drift += (d - (LMR.zone < 0 ? z.dl : z.dr)) * Math.min(1, dt / 10); }
+}
+function lmrFrame(f) {
+  if (!LMR.on) return;
+  LMR.seen = f.t;
+  if (!(f.closure < 0.2)) return;                                       // lids moving: a blink drags the iris landmark with it
+  const R = f.eyes.R, L = f.eyes.L, hx = (R.mp[0] + L.mp[0]) / 2, hl = (R.limbN[0] + L.limbN[0]) / 2;
+  if (LMR.phase === 'learn') LMR.rec.push([f.t, hx, hl]);
+  if (LMR.z) lmrStep(hx, f.t);
+  LMR.hx = hx; LMR.hl = hl;
+}
+const lmrR = (v, n) => (typeof v === 'number' && isFinite(v)) ? Math.round(v * n) / n : null;
+function lmrSend(kind, o) {
+  try {
+    if (/[?&]noshare/.test(location.search)) return;
+    let who = 'anon-x'; try { who = localStorage.getItem('gazelab_id') || 'anon-x'; } catch (e) {}
+    o.kind = kind; o.scr = [innerWidth, innerHeight, screen.width || 0, screen.height || 0]; o.video = [W, H]; o.fps = lmrR(fpsEma, 10);
+    fetch('/gaze-lab/log.php', { method: 'POST', keepalive: true, body: JSON.stringify({ kind: 'batch', who: who, sid: (window.__elSid = window.__elSid || Math.random().toString(16).slice(2, 8)), device: (matchMedia('(pointer: coarse)').matches ? 'mobile' : 'desktop'), app: 'eyelab', items: [o] }) }).catch(() => {});
+  } catch (e) {}
+}
+function lmrBuild() {
+  if ($('lmrStage')) return;
+  const d = document.createElement('div'); d.id = 'lmrStage';
+  d.style.cssText = 'position:fixed;inset:0;background:#05070b;z-index:120;display:none;color:#e8eef7;font-family:inherit;user-select:none;-webkit-user-select:none;touch-action:manipulation';
+  d.innerHTML = '<div id="lmrP0" class="lmrP" style="left:1%"></div><div id="lmrP1" class="lmrP" style="left:34%"></div><div id="lmrP2" class="lmrP" style="left:67%"></div>' +
+    '<div id="lmrMsg" style="position:absolute;left:0;right:0;top:5%;text-align:center;font-size:clamp(15px,3.4vw,26px);font-weight:700;padding:0 10px"></div>' +
+    '<div id="lmrSub" style="position:absolute;left:0;right:0;top:calc(5% + 2.2em);text-align:center;font-size:clamp(11px,2vw,15px);color:#9fb0c7;padding:0 10px;margin-top:10px;white-space:pre-line"></div>' +
+    '<div id="lmrDot" style="position:absolute;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;background:#ffe066;box-shadow:0 0 0 8px rgba(255,224,102,.25);display:none"></div>' +
+    '<div id="lmrBar" style="position:absolute;left:20%;right:20%;bottom:20%;height:6px;background:#16233a;border-radius:3px"><div style="height:100%;width:0;background:#ffd257;border-radius:3px"></div></div>' +
+    '<div style="position:absolute;right:10px;bottom:10px;display:flex;gap:8px"><button id="lmrAgain">Learn again</button><button id="lmrExit" class="warn">Exit</button></div>';
+  const st = document.createElement('style');
+  st.textContent = '.lmrP{position:absolute;top:30%;height:40%;width:32%;border-radius:14px;border:2px solid #1d2c47;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-size:clamp(14px,3vw,24px);font-weight:700;color:#3a4c6b}.lmrP.on{background:#1f7a43;border-color:#3ddc84;color:#fff}.lmrP.want{border-color:#ffd257}';
+  document.head.appendChild(st); document.body.appendChild(d);
+  ['LEFT', 'MIDDLE', 'RIGHT'].forEach((n, i) => { $('lmrP' + i).textContent = n; });
+  $('lmrExit').onclick = lmrExit; $('lmrAgain').onclick = () => lmrBegin();
+}
+function lmrBegin() {
+  LMR.phase = 'learn'; LMR.t0 = performance.now(); LMR.rec = []; LMR.marks = []; LMR.z = null; LMR.zone = 0; LMR.zn = 0; LMR.zh = []; LMR.drift = 0; LMR.cal = null; LMR.chk = null; LMR.tr = [];
+}
+async function lmrEnter() {
+  lmrBuild(); LMR.on = true; LMR.tries = 0; $('lmrStage').style.display = 'block';
+  try { if ($('lmrStage').requestFullscreen) await $('lmrStage').requestFullscreen(); } catch (e) {}
+  if (!running) { $('lmrMsg').textContent = 'starting the camera...'; try { await startCam(); } catch (e) { $('lmrMsg').textContent = 'camera error: ' + (e.message || e); return; } }
+  lmrBegin(); requestAnimationFrame(lmrTick);
+}
+async function lmrExit() {
+  LMR.on = false; LMR.phase = 'off'; if ($('lmrStage')) $('lmrStage').style.display = 'none';
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch (e) {}
+}
+function lmrTick() {
+  if (!LMR.on) return;
+  requestAnimationFrame(lmrTick);
+  const now = performance.now(), t = now - LMR.t0, dot = $('lmrDot'), bar = $('lmrBar').firstElementChild;
+  const lost = now - LMR.seen > 700;
+  let x = null, want = null;
+  if (LMR.phase === 'learn') {
+    const tt = t - LMR_LEAD;
+    x = tt <= 0 ? 0 : LMR_CAL[Math.min(LMR_CAL.length - 1, Math.floor(tt / LMR_STEP))];
+    if (lost) { LMR.t0 = now; LMR.rec = []; LMR.marks = []; }                        // no face: wait, then start the stops again
+    else if (tt >= 0 && (!LMR.marks.length || LMR.marks[LMR.marks.length - 1][1] !== x)) LMR.marks.push([now, x]);
+    $('lmrMsg').textContent = lost ? 'I cannot see your face' : 'LOOK AT THE DOT EACH TIME IT JUMPS';
+    $('lmrSub').textContent = LMR.tries ? 'once more: eyes only, keep your head and the phone still' : 'eyes only, keep your head and the phone still';
+    bar.style.width = Math.max(0, Math.min(100, t / (LMR_LEAD + LMR_CAL.length * LMR_STEP) * 100)) + '%';
+    if (!lost && tt >= LMR_CAL.length * LMR_STEP) {
+      const stops = LMR.marks.map((m, i) => [m[0], i + 1 < LMR.marks.length ? LMR.marks[i + 1][0] : now, m[1]]);
+      const cal = lmrFit(stops, LMR.rec, 1), edge = lmrFit(stops, LMR.rec, 2);
+      LMR.cal = cal; LMR.cal.edgeSep = edge.sep; LMR.tries++;
+      const t00 = LMR.rec.length ? LMR.rec[0][0] : now;
+      lmrSend('eyelab_lmr_cal', { try: LMR.tries, ok: cal.ok, why: cal.why || '', sep: lmrR(cal.sep, 10), edgeSep: lmrR(edge.sep, 10), noise: lmrR(cal.noise, 10000), dl: lmrR(cal.dl, 10000), dr: lmrR(cal.dr, 10000), agree: cal.agree, stops: cal.stops, react: lmrR(cal.react, 1),
+        s: LMR.rec.slice(0, 290).map((r) => [Math.round(r[0] - t00), lmrR(r[1], 10000), lmrR(r[2], 10000)]), d: stops.map((q) => [Math.round(q[0] - t00), q[2]]) });
+      if (cal.ok || LMR.tries >= 2) {
+        if (cal.ok) { LMR.z = { m: cal.m, dl: cal.dl, dr: cal.dr }; LMR.zh = []; LMR.drift = 0; LMR.zone = 0; LMR.lastT = now; }
+        LMR.phase = 'test'; LMR.t0 = now; LMR.chk = LMR_CHK.map(() => ({ ok: 0, n: 0, rt: -1 })); LMR.tr = []; LMR.trT = 0;
+      } else { LMR.t0 = now; LMR.rec = []; LMR.marks = []; }
+    }
+  } else if (LMR.phase === 'test') {
+    const ci = Math.floor(t / LMR_CSTEP);
+    if (ci >= LMR_CHK.length) lmrFinish();
+    else {
+      x = LMR_CHK[ci]; want = Math.sign(x);
+      const inStep = t - ci * LMR_CSTEP, c = LMR.chk[ci], z = LMR.z ? LMR.zone : null;
+      if (z === want && c.rt < 0 && inStep > 80) c.rt = inStep;
+      if (inStep > 550 && !c.seenT) c.seenT = 0;
+      if (inStep > 550 && now - (c.last || 0) > 30) { c.last = now; c.n++; if (z === want) c.ok++; }
+      if (now - LMR.trT >= 50) { LMR.trT = now; LMR.tr.push([Math.round(t), want, lmrR(LMR.hx, 10000), lmrR(LMR.hl, 10000), lmrR(LMR.zn, 100), z]); }
+      $('lmrMsg').textContent = 'AGAIN: THE GREEN BOX IS WHAT IS BEING READ';
+      $('lmrSub').textContent = 'it should jump to the dot as fast as your eyes do';
+      bar.style.width = Math.min(100, t / (LMR_CHK.length * LMR_CSTEP) * 100) + '%';
+    }
+  } else if (LMR.phase === 'live') {
+    const c = LMR.cal || {}, k = LMR.res || {};
+    $('lmrMsg').textContent = lost ? 'I cannot see your face' : (LMR.z ? 'LIVE: LOOK LEFT, MIDDLE, RIGHT' : 'LEFT, MIDDLE AND RIGHT COULD NOT BE TOLD APART');
+    $('lmrSub').textContent = 'look test: ' + k.hits + ' of ' + k.of + ' read right' + (k.react > 0 ? ', ' + Math.round(k.react) + ' ms from the dot jumping to the read' : '') +
+      '\na look to a side moves the iris ' + (c.sep || 0).toFixed(1) + ' x the noise (iris edge fit: ' + (c.edgeSep || 0).toFixed(1) + ' x)   ' + fpsEma.toFixed(0) + ' readings/s   ' + W + 'x' + H +
+      (LMR.z ? '\nreading ' + (LMR.zn >= 0 ? '+' : '') + LMR.zn.toFixed(2) + ' (side at 0.50, back to middle at 0.30)   switches ' + LMR.flips : '\n' + (c.why || '') + ': press Learn again, closer to the light, eyes only');
+    if (LMR.z && now - LMR.liveT0 > 30000) { LMR.liveT0 = now; lmrSend('eyelab_lmr_live', { flips: LMR.flips, zn: lmrR(LMR.zn, 100), drift: lmrR(LMR.drift, 10000) }); }
+  }
+  dot.style.display = x === null ? 'none' : 'block';
+  if (x !== null) dot.style.left = (50 + 50 * x * 0.88) + '%';
+  $('lmrBar').style.display = LMR.phase === 'live' ? 'none' : 'block';
+  const zz = (LMR.z && !lost && LMR.phase !== 'learn') ? LMR.zone : null;
+  for (let i = 0; i < 3; i++) { const e = $('lmrP' + i); e.classList.toggle('on', zz === i - 1); e.classList.toggle('want', want === i - 1); e.style.visibility = LMR.phase === 'learn' ? 'hidden' : 'visible'; }
+}
+function lmrFinish() {
+  let hits = 0; const rts = [], per = [];
+  LMR.chk.forEach((c, i) => { const share = c.n ? c.ok / c.n : 0, hit = share >= 0.6; per.push([Math.sign(LMR_CHK[i]), lmrR(share, 100), Math.round(c.rt)]); if (hit) { hits++; if (i > 0 && c.rt >= 0) rts.push(c.rt); } });
+  LMR.res = { hits, of: LMR_CHK.length, react: lmrMed(rts), per };
+  lmrSend('eyelab_lmr', { hits: hits, of: LMR_CHK.length, react: Math.round(LMR.res.react), per: per, fitted: !!LMR.z, sep: lmrR(LMR.cal && LMR.cal.sep, 10), edgeSep: lmrR(LMR.cal && LMR.cal.edgeSep, 10), tries: LMR.tries, tr: LMR.tr.slice(0, 290) });
+  LMR.phase = 'live'; LMR.flips = 0; LMR.liveT0 = performance.now();
+}
+$('btnLmr').onclick = lmrEnter;
+document.addEventListener('fullscreenchange', () => { if (LMR.on && !document.fullscreenElement && !matchMedia('(pointer: coarse)').matches) lmrExit(); });
+window.addEventListener('keydown', (e) => { if (LMR.on && e.key === 'Escape') lmrExit(); });
+window.__eyelabLmr = { LMR, lmrFit, lmrStep, lmrZn, lmrMed, lmrEnter, lmrExit, lmrFrame };
+// ---------------------------------------------------------------- LMR END
+// ---------------------------------------------------------------- ELDIAG: diagnostic log (numbers only, never pictures)
+// Read-only: it only looks at what the tracker already computed and posts it to the lab's own log every 3 s while the camera runs,
+// so a session on a phone can be analysed afterwards. Nothing here changes the tracking, the tests or the page. ?noshare turns it off.
+(function () {
+  if (/[?&]noshare/.test(location.search)) return;
+  const T0 = performance.now(), BUILD = 'eldiag-1';
+  const r4 = (v) => (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10000) / 10000 : null;
+  const r1 = (v) => (typeof v === 'number' && isFinite(v)) ? Math.round(v * 10) / 10 : null;
+  const ms = () => Math.round(performance.now() - T0);
+  let who = 'anon-x';
+  try { who = localStorage.getItem('gazelab_id') || ''; if (!who) { who = 'anon-' + Math.random().toString(16).slice(2, 8); localStorage.setItem('gazelab_id', who); } } catch (e) { who = 'anon-x'; }
+  const sid = (window.__elSid = window.__elSid || Math.random().toString(16).slice(2, 8));
+  const dev = matchMedia('(pointer: coarse)').matches ? 'mobile' : 'desktop';
+  let queue = [], rows = [], ev = [], lastT = -1, polls = 0, lost = 0, blinks = 0, sentStart = '', seq = 0;
+  let mo = { n: 0, rx: 0, ry: 0, rz: 0, gx: 0, gy: 0, gz: 0 };
+  const val = (id) => { const e = $(id); return e ? (e.type === 'checkbox' ? (e.checked ? 1 : 0) : e.value) : null; };
+  const mode = () => { try { return LMR.on ? 'lmr:' + LMR.phase : BALL.on ? 'ball' : (stage.style.display === 'block' ? 'stage' : (rcIsFull() ? 'reachfull' : 'page')); } catch (e) { return '?'; } };
+  const note = (k, v) => { if (ev.length < 60) ev.push([ms(), String(k).slice(0, 24), (typeof v === 'number') ? r4(v) : String(v == null ? '' : v).slice(0, 60)]); };
+  function setup() {
+    return { kind: 'eldiag_start', build: BUILD, ua: (navigator.userAgent || '').slice(0, 160), scr: [innerWidth, innerHeight, window.devicePixelRatio || 1, screen.width || 0, screen.height || 0],
+      orient: (screen.orientation && screen.orientation.type) || '', camera: results.camera, video: [W, H], rvfc: hasRVFC ? 1 : 0,
+      cfg: { scrW: val('scrW'), dist: val('dist'), hfov: val('hfov'), campos: val('campos'), res: val('res'), eyeAxis: val('eyeAxis'), flipx: val('flipx'), flipy: val('flipy'), fastExp: val('fastExp'), trOn: val('trOn') } };
+  }
+  function ctx() {
+    const o = { mode: mode(), full: document.fullscreenElement ? 1 : 0, kyaw: r4(RC.kyaw), kpitch: r4(RC.kpitch), gx: r4(RC.gx), gy: r4(RC.gy), gl: r4(RC.gl), gr: r4(RC.gr), gt: r4(RC.gt), gb: r4(RC.gb), sx: r4(RC.sx), sy: r4(RC.sy),
+      curve: r4(RC.curve), center: RC.center ? 1 : 0, medU: r4(RC.med.u), medV: r4(RC.med.v), yawRef: r4(RC.yawRef), pitchRef: r4(RC.pitchRef), smooth: r4(RC.fu.minC), fuseOn: RC.fuseOn ? 1 : 0, fuseReady: RC.fuse.ready ? 1 : 0,
+      fuseInfo: String(RC.fuse.info || '').slice(0, 200), headComp: calib.ready ? 1 : 0, centred: calib.centred ? 1 : 0, busy: modeCollect ? 1 : 0 };
+    if (stage.style.display === 'block' && sdot.style.display !== 'none') o.dot = [parseFloat(sdot.style.left) || 0, parseFloat(sdot.style.top) || 0];
+    return o;
+  }
+  // 10 samples a second of what the page is showing: [ms, out u, out v, raw 3D gaze u, v, right-eye u, left-eye u, right-eye v, left-eye v, iris-edge x, y (in the eye), landmark iris x, y,
+  //  head yaw, pitch, roll (rad), iris radius px, eye width px, lid closure, distance cm, screen fraction moved per iris px across, 3D gaze yaw deg, pitch deg, nose x, y (0..1 of the picture), face width (0..1)]
+  setInterval(() => {
+    try {
+      if (!running) return;
+      polls++;
+      const f = frame;
+      if (!f) { lost++; return; }
+      if (f.t === lastT) return;
+      lastT = f.t;
+      if (!(f.closure < 0.2)) blinks++;
+      const g = f.geoL || {}, R = f.eyes.R, L = f.eyes.L, c = RC.cur, fresh = c && c.s && c.s.t === f.t;
+      rows.push([ms(), fresh ? r4(c.u) : null, fresh ? r4(c.v) : null, r4(g.u), r4(g.v), g.eu ? r4(g.eu[0]) : null, g.eu ? r4(g.eu[1]) : null, g.ev ? r4(g.ev[0]) : null, g.ev ? r4(g.ev[1]) : null,
+        r4((R.limbN[0] + L.limbN[0]) / 2), r4((R.limbN[1] + L.limbN[1]) / 2), r4((R.mp[0] + L.mp[0]) / 2), r4((R.mp[1] + L.mp[1]) / 2),
+        r4(f.yaw), r4(f.pitch), r4(f.roll), r1((R.rad + L.rad) / 2), r1((R.eyeW + L.eyeW) / 2), r4(f.closure), r1(g.Zi), (g.px && typeof g.px === 'object') ? r4(g.px.du != null ? g.px.du : g.px[0]) : r4(g.px), r1(g.yaw), r1(g.pitch),
+        r4(f.nose[0] / (W || 1)), r4(f.nose[1] / (H || 1)), r4(f.faceW / (W || 1))]);
+    } catch (e) {}
+  }, 100);
+  // phone movement: turn rate (deg/s, root mean square) and the average pull of gravity along each axis (how the phone is held)
+  window.addEventListener('devicemotion', (e) => {
+    const r = e.rotationRate, a = e.accelerationIncludingGravity; if (!r && !a) return;
+    mo.n++; if (r) { mo.rx += (r.alpha || 0) ** 2; mo.ry += (r.beta || 0) ** 2; mo.rz += (r.gamma || 0) ** 2; } if (a) { mo.gx += a.x || 0; mo.gy += a.y || 0; mo.gz += a.z || 0; }
+  }, { passive: true });
+  // what was pressed or changed (ids and values only)
+  document.addEventListener('click', (e) => { const b = e.target && e.target.closest ? e.target.closest('button, input[type=checkbox], select') : null; if (b && b.id) note('click', b.id); }, true);
+  document.addEventListener('change', (e) => { const b = e.target; if (b && b.id && b.type !== 'checkbox') note('set:' + b.id, b.value); }, true);
+  document.addEventListener('pointerdown', (e) => { if (mode() !== 'page') note('tap', r4(e.clientX / innerWidth) + ',' + r4(e.clientY / innerHeight)); }, true);
+  window.addEventListener('keydown', (e) => { if (mode() !== 'page') note('key', e.key); }, true);
+  document.addEventListener('fullscreenchange', () => note('fullscreen', document.fullscreenElement ? 1 : 0));
+  document.addEventListener('visibilitychange', () => note('visible', document.hidden ? 0 : 1));
+  window.addEventListener('resize', () => note('resize', innerWidth + 'x' + innerHeight));
+  window.addEventListener('error', (e) => note('error', (e.message || '') + ' @' + (e.lineno || 0)));
+  window.addEventListener('unhandledrejection', (e) => note('reject', String((e.reason && e.reason.message) || e.reason || '')));
+  function flush() {
+    try {
+      if (running || rows.length || ev.length) {
+        const st = setup(), key = JSON.stringify(st);
+        if (running && key !== sentStart) { sentStart = key; queue.push(st); }
+        if (rows.length || ev.length || (running && polls)) {
+          const it = { kind: 'eldiag', seq: seq++, t: ms(), ctx: ctx(), rate: { cam: r1(rateNews), calls: r1(rateCalls), fps: r1(fpsEma), model: r1(infEma), polls: polls, lost: lost, blink: blinks, n: rows.length }, s: rows, ev: ev };
+          if (mo.n) it.motion = { n: mo.n, turn: [r1(Math.sqrt(mo.rx / mo.n)), r1(Math.sqrt(mo.ry / mo.n)), r1(Math.sqrt(mo.rz / mo.n))], grav: [r4(mo.gx / mo.n), r4(mo.gy / mo.n), r4(mo.gz / mo.n)] };
+          queue.push(it);
+        }
+      }
+      rows = []; ev = []; polls = lost = blinks = 0; mo = { n: 0, rx: 0, ry: 0, rz: 0, gx: 0, gy: 0, gz: 0 };
+      if (!queue.length) return;
+      const body = JSON.stringify({ kind: 'batch', who: who, sid: sid, device: dev, app: 'eyelab', items: queue.splice(0, 4) });
+      if (body.length < 30000) fetch('/gaze-lab/log.php', { method: 'POST', body: body, keepalive: true }).catch(() => {});
+    } catch (e) {}
+  }
+  setInterval(flush, 3000);
+  window.addEventListener('pagehide', flush);
+  window.__eldiag = { flush, peek: () => ({ rows: rows.length, ev: ev.length, queue: queue.length, seq: seq }) };
+})();
 </script>
 </body>
 </html>

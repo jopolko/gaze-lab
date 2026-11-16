@@ -176,6 +176,9 @@ var mix := EyeMix.new()                     # phones: the three sideways eye rea
 var mix_on: bool = true                     # ?nomix turns the blend off to compare, ?mix forces it on a laptop
 var mix_force: bool = false
 var mix_x: float = 0.5
+var kit := KitEye.new()                    # the STARGAZE sideways reading, as that tracker makes it: what a phone steers with (?nokit goes back to the blend, ?kit forces it on a laptop)
+var kit_on: bool = true
+var kit_force: bool = false
 var _mfx := OneEuro.new()
 var _efx := OneEuro.new()
 var _efy := OneEuro.new()
@@ -264,6 +267,10 @@ func _ready() -> void:
 			_head_sign.y = -1.0
 		if q.contains("nopm"):
 			pm_on = false
+		if q.contains("nokit"):
+			kit_on = false
+		elif q.contains("kit"):
+			kit_force = true
 		if q.contains("nomix"):
 			mix_on = false
 		elif q.contains("mix"):
@@ -380,6 +387,11 @@ func ingest(d: Dictionary) -> void:
 					if _full.size() >= 2:
 						_track_conv(float(_full[0]), float(_full[1]))
 		_geo_limb = d.has("glimb") and int(d["glimb"]) == 1
+		if _frame_fresh and d.has("hx") and d["hx"] != null:
+			if d.has("kf") and d["kf"] != null and (d["kf"] as Array).size() >= 4:
+				var kfa: Array = d["kf"]
+				kit.set_feat(float(d["hx"]), float(kfa[0]), float(kfa[1]), float(d.get("hyaw", 0.0)), float(d.get("hpitch", 0.0)), float(kfa[2]), float(kfa[3]))
+			kit.add(float(d["hx"]), float(d.get("blink_l", 0.0)), float(d.get("blink_r", 0.0)), _now())
 		if _frame_fresh and d.has("bx"):
 			var mlx := NAN
 			if d.has("lx") and d["lx"] != null:
@@ -447,6 +459,11 @@ func ingest(d: Dictionary) -> void:
 ## readings (see EyeMix); on a laptop it is the iris-edge fit, unchanged.
 func eye_x() -> float:
 	return mix_x if mix_used() else eih.x
+
+
+## True when the steering should take the STARGAZE reading as it is, with none of the centring, sizing and filtering this game adds to its own readings.
+func kit_used() -> bool:
+	return kit_on and (Game.touch_mode or kit_force or not kit.zones.is_empty()) and kit.ready          # once left, middle and right are learned they are the control on any device
 
 
 func mix_used() -> bool:
@@ -648,6 +665,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	kit.idle(_now(), delta)
 	# the mouse pointer is only ever hidden (captured) while a first-person level is being played; any menu, pause, other level or level exit shows it again
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var fps_level := not (Game.peek_mode or Game.flight_mode or Game.downhill_mode or Game.trance_mode or Game.gaze_test_mode or Game.run_mode)
