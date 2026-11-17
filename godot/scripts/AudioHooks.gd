@@ -77,6 +77,8 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 	if world_pos.is_finite():
 		var p3 := AudioStreamPlayer3D.new()
 		p3.stream = stream
+		if _low_latency:
+			p3.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE
 		p3.unit_size = 12.0
 		p3.max_distance = 90.0
 		p3.pitch_scale = randf_range(0.9, 1.15)
@@ -89,6 +91,8 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 	else:
 		var p := AudioStreamPlayer.new()
 		p.stream = stream
+		if _low_latency:
+			p.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE
 		p.pitch_scale = randf_range(0.95, 1.05)
 		p.bus = &"Master"
 		p.volume_db = DhMusic.vol_db(DhMusic.vol_sfx)
@@ -99,6 +103,8 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 
 var _voices: int = 0
 static var played: int = 0
+## ?samples: the browser plays the effects itself (its own low-latency sample playback) instead of the game mixing them: less delay, and less work for the game. Off unless asked for, to be tried on a phone.
+var _low_latency: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("samples")
 
 
 ## A voice is freed by a timer of its own length, not by its "finished" signal, and counted by hand: if a signal ever fails to come, the sounds do not run out.
@@ -165,6 +171,21 @@ func _build_new_voices() -> void:
 	await get_tree().process_frame
 	_streams[&"blip"] = _wav(_voice(0.11, 880.0, 1500.0, 0.6, Vector3(0.8, 0.0, 0.2), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.4, 0.4))
 	await get_tree().process_frame
+	# a speed pad: a rising whoosh with a bright tone riding up under it, loud enough to be felt as the push
+	_streams[&"pad_boost"] = _wav(_mixp([
+		_voice(0.75, 150.0, 1500.0, 2.0, Vector3(0.4, 0.6, 0), 0.0, 0.0, 0.0, 9.0, 1.5, 1.6, 0.9, 0.7),
+		_voice(0.75, 300.0, 300.0, 1.0, Vector3(0, 0, 0), 1.0, 0.15, 0.95, 0.0, 0.0, 1.4, 0.8, 0.6),
+		_voice(0.4, 90.0, 40.0, 0.6, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.8, 1.5, 0.7)]))
+	await get_tree().process_frame
+	# a chime for each of the six molecules, on a pentatonic scale rising from the first to the last: you hear which one you took
+	var notes := [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5]
+	for i in 6:
+		var f: float = notes[i]
+		_streams[StringName("mol%d" % i)] = _wav(_mixp([
+			_voice(0.6, f, f, 1.0, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 5.0, 0.3, 1.1, 1.6, 0.7),
+			_voice(0.5, f * 2.0, f * 2.0, 1.0, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.2, 0.35),
+			_voice(0.08, 3000.0, 1500.0, 1.0, Vector3(0, 0, 0), 1.0, 0.9, 0.5, 0.0, 0.0, 1.0, 4.0, 0.3)]))
+		await get_tree().process_frame
 
 
 ## A general voice: the pitch glides f0 to f1 along a curve, sine/saw/square mixed (`wave`), noise with a low-pass that sweeps lp0 to lp1 (0..1 coefficients), an FM wobble

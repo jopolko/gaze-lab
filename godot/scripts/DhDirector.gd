@@ -82,7 +82,14 @@ var _still: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.l
 var _noplay: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("noplay")          # ?noplay: fetch but never play (to measure)
 
 
+var _stem_after: float = 12.0
+
+
 func start() -> void:
+	if OS.has_feature("web"):
+		# the stems are about 3.6 MB: on a slow or metered connection they wait longer (the tracks play meanwhile)
+		var slow := bool(JavaScriptBridge.eval("(navigator.connection && (navigator.connection.saveData || /(^|-)(2g|3g)/.test(navigator.connection.effectiveType || ''))) ? true : false"))
+		_stem_after = 60.0 if slow else 20.0
 	_base = str(JavaScriptBridge.eval("new URL('music/', document.baseURI).href")) if OS.has_feature("web") else ""
 	_age = 0.0
 	dbg = "music: starting"
@@ -220,7 +227,7 @@ func update(delta: float, st: Dictionary) -> void:
 		_down = false
 	elif _peak > 0.2 and avg < _peak * 0.4:
 		_down = true
-	if _age > 12.0:
+	if _age > _stem_after:
 		for n in STEMS:
 			_fetch("stem_" + n, "stem_" + n + ".ogg", true)          # the stems come down in the background once the run is going
 	# ------------------------------------------------ what should be playing

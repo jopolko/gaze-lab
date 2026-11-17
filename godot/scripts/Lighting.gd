@@ -29,7 +29,7 @@ var _applied: bool = false
 var _bad: float = 0.0
 var _good: float = 0.0
 var _cool: float = 0.0
-const GAME_FPS_MIN := 40.0
+const GAME_FPS_MIN := 50.0          # below this for a few seconds and the picture steps down a level
 const TRACKER_FPS_MIN := 10.5
 var _hurt_prev: float = 0.0
 var _grounded_prev: bool = true
@@ -162,7 +162,7 @@ func step_governor(dt: float, game_fps: float, trk_fps: float, cam_on: bool) -> 
 	if pressure:
 		_good = 0.0
 		_bad += dt
-		var need := 2.0 if (cam_on and trk_fps < TRACKER_FPS_MIN) else 4.0          # a starving tracker is answered twice as fast
+		var need := 2.0 if (cam_on and trk_fps < TRACKER_FPS_MIN) else 3.0          # a starving tracker is answered twice as fast
 		if _bad >= need and tier < 3 and _cool <= 0.0:
 			tier += 1
 			tier_changes += 1

@@ -6706,6 +6706,7 @@ func _update_pads() -> void:
 				if p.has("gem") and is_instance_valid(p["gem"]):
 					(p["gem"] as Node3D).visible = false
 				pads_hit += 1
+				Game.sfx(&"pad_boost")          # the push of a speed pad is heard
 				_boost_t = maxf(_boost_t, 1.8)
 				var fwd := Vector2(sin(heading), -cos(heading))
 				var sp0 := vel.length()
@@ -7203,7 +7204,7 @@ func _pill_eat(t: Dictionary) -> void:
 	_flow_up(1)
 	_mix_add("pill")
 	_shake = maxf(_shake, 0.12)
-	Game.sfx(&"blip")
+	Game.sfx(StringName("mol%d" % mi))          # each molecule has its own note
 	_toast("%s  %d/6" % [String(t["name"]), int(_mdose[mi])], t["col"])          # what it was
 	if _pill_n == 3:
 		_cheer("TRIPPING", Color(1.0, 0.3, 0.9), 1.2)
@@ -8212,7 +8213,11 @@ func _psy_tick(delta: float) -> void:
 
 
 func _pause_rect() -> Rect2:
-	return Rect2(-9000.0, -9000.0, 1.0, 1.0)          # no on-screen buttons in the game: the screen is the game (Esc or P pauses)
+	if not Game.touch_mode:
+		return Rect2(-9000.0, -9000.0, 1.0, 1.0)          # on a computer there is no button: the screen is the game (Esc or P pauses)
+	var vs := get_viewport().get_visible_rect().size
+	var k := _hud_scale()
+	return Rect2(vs.x - 66.0 * k, 10.0 * k, 54.0 * k, 44.0 * k)          # on a phone a small pause button sits in the top corner (touch only)
 
 
 ## The sandbox looks: a hat, and a tricycle under the rider.
