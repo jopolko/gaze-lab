@@ -11,7 +11,7 @@ const ZONE_LABELS := {"rush": "RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "ben
 var cfg: Dictionary = {
 	"v": 4, "theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
 	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
-	"psy": false, "journey": true, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
+	"psy": false, "journey": true, "trip": 1, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
 }
 
 var _defaults: Dictionary = cfg.duplicate(true)
@@ -70,6 +70,7 @@ var _mh_s: Dictionary = {}
 var _hat_b: Button
 var _lvl_l: Label
 var _mus_btns: Dictionary = {}
+var _trip_btns: Dictionary = {}
 var _mvol_s: HSlider
 var _svol_s: HSlider
 var _mvol_l: Label
@@ -377,9 +378,22 @@ func _build_theme_card() -> void:
 		if _building:
 			return
 		cfg["journey"] = on
-		_sync_labels())
+		if on and String(cfg["theme"]) != "alpine":
+			cfg["theme"] = "alpine"          # All dressed starts from alpine: switching it on takes you back there
+			_bg.choose_theme("alpine")
+		_sync_widgets())
 	_toggles["journey"] = jb
-	_label("It plays like the plain run, then a different world washes over it, stronger each time: new speeds, new music, new ways things bounce. Off: one world, your pick below.", 15, Color(1, 1, 1, 0.55), c)
+	_label("A run shaped like a night out: it plays like the plain run, then worlds wash over it one after another (a first taste, warmth, the rush, the peak, then the comedown), with their own speeds, music and bounce. Pills bring it on early. Off: one world, your pick below. Picking a world yourself always gives that world in full.", 15, Color(1, 1, 1, 0.55), c)
+	var tf := _flow(c)
+	var tg := ButtonGroup.new()
+	for tv in [[0, "GENTLE"], [1, "NORMAL"], [2, "WILD"]]:
+		var tb := _button(String(tv[1]), 17, tf, true)
+		tb.button_group = tg
+		tb.pressed.connect(func() -> void:
+			cfg["trip"] = int(tv[0])
+			_save())
+		_trip_btns[tv[0]] = tb
+		_boxes.append([tb, 120.0, 44.0])
 	var f := _flow(c)
 	var grp := ButtonGroup.new()
 	var all_looks := OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('looks')"))          # one look at a time: Alpine is the demo, ?looks brings the others back
@@ -715,8 +729,10 @@ func _custom() -> void:
 
 func _pick_theme(id: String) -> void:
 	cfg["theme"] = id
+	if id != "alpine":
+		cfg["journey"] = false          # a world picked by hand is that world, all of it: All dressed switches itself off
 	_bg.choose_theme(id)
-	_sync_labels()
+	_sync_widgets()
 
 
 func _sync_widgets() -> void:
@@ -738,6 +754,8 @@ func _sync_widgets() -> void:
 		(_mh_s[k] as HSlider).value = float(cfg[k])
 	for id in _mus_btns:
 		(_mus_btns[id] as Button).set_pressed_no_signal(id == String(cfg["mus"]))
+	for tid in _trip_btns:
+		(_trip_btns[tid] as Button).set_pressed_no_signal(int(tid) == int(cfg["trip"]))
 	_mvol_s.value = float(cfg["mvol"])
 	_svol_s.value = float(cfg["svol"])
 	for id in _mode_btns:

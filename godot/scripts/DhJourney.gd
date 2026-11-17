@@ -8,10 +8,27 @@ extends RefCounted
 
 const ORDER := ["psychedelic", "tunnel", "desert", "candy", "egypt", "matrix", "synthwave"]
 
+## THE ARC: the run is a script, not a dice roll, shaped like a night out: a first taste, warmth, the rush, euphoria, the sharp peak, the deepest wave, then the afterglow and the
+## comedown, and round again a little stronger. w world, s strength (0..1.2), calm the rest before it, on / peak / off the seconds of coming on, holding, going out.
+const ARC := [
+	{"w": "psychedelic", "s": 0.30, "calm": 40.0, "on": 16.0, "peak": 10.0, "off": 10.0},
+	{"w": "candy", "s": 0.45, "calm": 30.0, "on": 18.0, "peak": 22.0, "off": 10.0},
+	{"w": "tunnel", "s": 0.70, "calm": 26.0, "on": 20.0, "peak": 30.0, "off": 10.0},
+	{"w": "synthwave", "s": 0.85, "calm": 22.0, "on": 18.0, "peak": 38.0, "off": 10.0},
+	{"w": "matrix", "s": 1.00, "calm": 18.0, "on": 20.0, "peak": 34.0, "off": 12.0},
+	{"w": "psychedelic", "s": 1.20, "calm": 16.0, "on": 22.0, "peak": 55.0, "off": 16.0},
+	{"w": "desert", "s": 0.60, "calm": 22.0, "on": 18.0, "peak": 30.0, "off": 14.0},
+	{"w": "egypt", "s": 0.40, "calm": 45.0, "on": 24.0, "peak": 40.0, "off": 20.0},
+]
+## The trip level (menu): how strong, how long, and how soon. Gentle never goes past a wash of colour; Wild goes all the way, sooner.
+const LV_STR := [0.5, 1.0, 1.3]
+const LV_LEN := [0.7, 1.0, 1.3]
+const LV_CALM := [1.3, 1.0, 0.75]
+
 ## How each world changes the ride. spd top speed, haz rocks, pads boost pads, jumps ramps, glint glint rain, bump how hard the cupcakes bounce you, spring how high a spring
 ## throws you, padk how big a boost pad's kick is, grip how slowly the board swings across (above 1 is heavy, below 1 is sharp), mus the music.
 const BIOME := {
-	"alpine": {"spd": 1.0, "haz": 1.0, "pads": 1.0, "jumps": 1.0, "glint": 1.0, "bump": 1.0, "spring": 1.0, "padk": 1.0, "grip": 1.0, "mus": "ambient"},
+	"alpine": {"spd": 1.0, "haz": 1.0, "pads": 1.0, "jumps": 1.0, "glint": 1.0, "bump": 1.0, "spring": 1.0, "padk": 1.0, "grip": 1.0, "mus": "techno"},
 	"psychedelic": {"spd": 1.0, "haz": 0.9, "pads": 1.0, "jumps": 1.2, "glint": 1.7, "bump": 1.2, "spring": 1.1, "padk": 1.0, "grip": 0.9, "mus": "trance"},
 	"tunnel": {"spd": 1.28, "haz": 0.8, "pads": 1.6, "jumps": 0.9, "glint": 1.0, "bump": 1.0, "spring": 0.9, "padk": 1.5, "grip": 0.8, "mus": "techno"},
 	"desert": {"spd": 1.0, "haz": 1.5, "pads": 0.8, "jumps": 1.5, "glint": 0.8, "bump": 0.9, "spring": 1.4, "padk": 1.0, "grip": 1.15, "mus": "jungle"},
@@ -62,10 +79,8 @@ func start(r: RunRig, seed_v: int) -> void:
 	_sky_k = -1.0
 	for s in STAGES:
 		_shown[s] = false
-	_order = ORDER.duplicate()
-	_shuffle()
-	world = String(_order[0])
-	_calm_len = 75.0          # the first minute and a quarter is the plain run: nothing is shown before the player has found their feet
+	world = String(ARC[0]["w"])
+	_calm_len = _calm(0)          # the plain run first: nothing is shown before the player has found their feet
 	_prewarm_t = 5.0
 	_plan_wave()
 	rig.biome_apply(BIOME["alpine"], 1.0, 1.0)
@@ -76,7 +91,7 @@ func start(r: RunRig, seed_v: int) -> void:
 		var wq := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('jw') || ''"))
 		if wq.is_valid_int():
 			wave = int(wq)          # ?jw=6: begin at the sixth wave
-			world = String(_order[wave % ORDER.size()])
+			world = String(ARC[wave % ARC.size()]["w"])
 			_plan_wave()
 
 
@@ -90,22 +105,24 @@ func _shuffle() -> void:
 
 ## How long each part of the coming wave lasts, from how many have gone before.
 func _plan_wave() -> void:
-	strength = clampf(0.30 + 0.10 * float(wave), 0.30, 1.2)
-	_onset_len = clampf(14.0 + 3.0 * float(wave), 14.0, 45.0)
-	_peak_len = clampf(4.0 + 4.0 * float(wave), 4.0, 60.0)
-	_off_len = clampf(8.0 + 0.6 * float(wave), 8.0, 16.0)
+	var a: Dictionary = ARC[wave % ARC.size()]
+	var lv := clampi(rig._cfg_trip, 0, 2)
+	var round_k := 1.0 + 0.08 * float(wave / ARC.size())          # each time round is a little stronger
+	strength = clampf(float(a["s"]) * LV_STR[lv] * round_k, 0.15, LV_STR[lv] * 1.0 if lv < 2 else 1.3)
+	_onset_len = float(a["on"])
+	_peak_len = float(a["peak"]) * LV_LEN[lv]
+	_off_len = float(a["off"])
 
 
-func _calm_after(w: int) -> float:
-	var base := _rng.randf_range(32.0, 60.0) * clampf(1.0 - 0.015 * float(w), 0.6, 1.0)
-	if w % 4 == 3:
-		base *= 1.6          # a long rest every fourth wave
-	return maxf(base, 24.0)
+## The rest before wave `w`, from the script.
+func _calm(w: int) -> float:
+	var a: Dictionary = ARC[w % ARC.size()]
+	return float(a["calm"]) * LV_CALM[clampi(rig._cfg_trip, 0, 2)] * _rng.randf_range(0.9, 1.15)
 
 
 ## The world `k` waves ahead of the one coming now (the first one or two are built while the run loads).
 func peek_world(k: int) -> String:
-	return String(_order[(wave + k) % ORDER.size()])
+	return String(ARC[(wave + k) % ARC.size()]["w"])
 
 
 ## 1.0 at the start, a little more each wave, and it never stops growing slowly: faster, more rocks, more going on.
@@ -118,6 +135,12 @@ func hint() -> float:
 	if phase != Phase.CALM:
 		return 0.0
 	return clampf((t - (_calm_len - 10.0)) / 10.0, 0.0, 1.0) * 0.15
+
+
+## A long run of pills: the calm is over, the next wave starts (it still waits out the first fifteen seconds of a run).
+func nudge() -> void:
+	if phase == Phase.CALM and t > 15.0:
+		t = maxf(t, _calm_len + 15.0)
 
 
 ## How far the world has come on: a hint in the calm, rising through the onset, 1 at the peak, falling away through the offset.
@@ -175,7 +198,7 @@ func tick(delta: float) -> void:
 	match phase:
 		Phase.CALM:
 			# the wave comes in when the run is building (fast, a flow going, boosts): or, if it never does, after a while anyway
-			if t >= _calm_len and (rig.excitement() > 0.55 or t >= _calm_len + 25.0):
+			if t >= _calm_len and (rig.excitement() > 0.45 or t >= _calm_len + 15.0):
 				_set_phase(Phase.ONSET)
 		Phase.ONSET:
 			if t >= _onset_len:
@@ -206,10 +229,8 @@ func _set_phase(p: int) -> void:
 			rig.music_morph(String(BIOME["alpine"]["mus"]), wave * 3 + 2)
 		Phase.CALM:
 			wave += 1
-			if wave % ORDER.size() == 0:
-				_shuffle()
-			world = String(_order[wave % ORDER.size()])
-			_calm_len = _calm_after(wave - 1)
+			world = String(ARC[wave % ARC.size()]["w"])
+			_calm_len = _calm(wave)
 			_prewarm_t = 6.0
 			_plan_wave()
 			rig.journey_reset()

@@ -30,8 +30,6 @@ func _ready() -> void:
 	var last := ""
 	var dt := 1.0 / 60.0
 	var vmax_by := {}
-	var sky_seen := 0
-	var last_sky: SkyRun = null
 	var sling_t := -1.0
 	for i in 60 * secs:
 		GazeProvider.set_scripted(Vector2(0.5, 0.45))
@@ -50,38 +48,6 @@ func _ready() -> void:
 						print("SLING test: placed 24 m before the orb, 4 m to the side")
 		if sling_t > 0.0 and float(i) - sling_t < 240.0 and (i - int(sling_t)) % 20 == 0:
 			print("SLING t+%.2f dz-to-orb: speed %.1f m/s  vx %.1f  boost %.1f" % [(float(i) - sling_t) * dt, -rig.vel.y, rig.vel.x, rig._boost_t])
-		if OS.get_environment("SKY") != "" and i == 60 * 10:
-			rig.sky_start()
-			print("SKY started at z=", rig.spos.z)
-		if rig._sky != null and is_instance_valid(rig._sky):
-			var sk: SkyRun = rig._sky
-			last_sky = sk
-			rig.zone_test = [0, -1, 1, 0, 1, -1][int(sk._age / 2.5) % 6]          # the eyes look left, middle and right in turn
-			rig.zn_test = 99.0
-			GazeProvider.nod_debug = Vector2(0.0, 0.0)
-			if sk.energy > 40.0 and int(sk._age * 10.0) % 40 == 0:
-				sk._tap = true
-			for it2 in sk.items:
-				if String(it2["type"]) == "pinata" and sk.global_position.distance_to(it2["pos"]) < 140.0 and sk.energy >= 25.0 and sk.blast_cd <= 0.0:
-					sk._tap = true
-			if OS.get_environment("PINTEST") != "":
-				for it4 in sk.items:
-					if String(it4["type"]) == "pinata" and int(it4["hp"]) > 0 and float(it4["cool"]) <= 0.0:
-						sk.global_position = (it4["pos"] as Vector3) + Vector3(0, 0, 6)
-						sk.alt = (it4["pos"] as Vector3).y - SkyRun.DECK_Y
-						sk.speed = 60.0
-						sk.blast_t = 1.0
-			if int(sk._age * 60.0) % 60 == 0 and sk.timer > 17.0:
-				for it3 in sk.items:
-					if String(it3["type"]) == "pinata":
-						print("PIN dist %.0f z-rel %.0f lock %s energy %.0f speed %.0f blast %.1f hp %d" % [sk.global_position.distance_to(it3["pos"]), sk.global_position.z - it3["pos"].z, str(sk.lock.get("type", "-")), sk.energy, sk.speed, sk.blast_t, it3["hp"]])
-			sk._physics_process(dt)
-			sk._process(dt)
-			if i % 120 == 0:
-				print("SKY steer %.2f head %.2f eye %.2f x %.0f  phase %d alt %.0f timer %.1f/%.0f speed %.0f items %d score %d goals %s" % [sk.steer, sk.heading, rig.eye_now(), sk.global_position.x - sk._start_x, sk.phase, sk.alt, sk.timer, sk.duration, sk.speed, sk.items.size(), sk.score, str(sk.goals.map(func(g): return "%s %d/%d" % [g["k"], g["have"], g["need"]]))])
-		elif sky_seen == 0 and rig.sky_visits > 0:
-			sky_seen = 1
-			print("SKY ended: back on the slope at z=%.0f y=%.0f grounded=%s hold=%s score=%d" % [rig.spos.z, rig.spos.y, str(rig.grounded), str(rig.sky_hold), rig.score])
 		var key := "%s w%d %s" % [j.world, j.wave, ["calm", "onset", "PEAK", "offset"][j.phase]]
 		if key != last:
 			last = key
@@ -109,6 +75,36 @@ func _ready() -> void:
 					var k2 := "  mesh %s" % (m.get_class() if m != null else "none")
 					cnt[k2] = int(cnt.get(k2, 0)) + 1
 		print("NODES ", cnt)
+		var shown := 0
+		for nd in rig.find_children("*", "MeshInstance3D", true, false):
+			var mi := nd as MeshInstance3D
+			if mi.mesh == rig._pad_mesh and shown < 3:
+				shown += 1
+				print("PAD mesh at ", mi.global_position, " aabb ", mi.mesh.get_aabb(), " vis ", mi.is_visible_in_tree(), " range_end ", mi.visibility_range_end, " tris ", (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size(), " mat ", mi.material_override)
+		var nb := 0
+		for rk in rig._rows:
+			for bf in (rig._rows[rk] as Dictionary).get("buffs", []):
+				if nb < 4 and is_instance_valid(bf["n"]):
+					nb += 1
+					var bnode: Node3D = bf["n"]
+					var kids := bnode.find_children("*", "MeshInstance3D", true, false)
+					var info := ""
+					for kd in kids:
+						var km := kd as MeshInstance3D
+						info += "[%s vis %s scale %s y %.1f]" % [km.mesh.get_class() if km.mesh != null else "none", str(km.is_visible_in_tree()), str(km.global_transform.basis.get_scale()), km.global_position.y]
+					var jj := int(-bnode.global_position.z / 180.0)
+					if rig._chunks.has(jj):
+						var cmi := rig._chunks[jj] as MeshInstance3D
+						var vv: PackedVector3Array = cmi.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+						var best := 1.0e9
+						var by := 0.0
+						for v in vv:
+							var dd := absf(v.x - bnode.global_position.x) + absf(v.z - bnode.global_position.z)
+							if dd < best:
+								best = dd
+								by = v.y
+						print("  GROUND MESH vs terrain at buff: mesh y ", snappedf(by, 0.1), " analytic ", snappedf(rig.terrain_h(bnode.global_position.x, bnode.global_position.z), 0.1), " nearest vertex off by ", snappedf(best, 0.1), " m, chunk pos ", cmi.global_position)
+					print("BUFF ", bf["t"], " at y ", snappedf(bnode.global_position.y, 0.1), " ground ", snappedf(rig.terrain_h(bnode.global_position.x, bnode.global_position.z), 0.1), " base_y ", snappedf(float(bf["y"]), 0.1), " kids ", kids.size(), " ", info.substr(0, 400))
 		print("ROWS ", rig._rows.size(), " chunks ", rig._chunks.size())
 	var lane_c := {}
 	for rk in rig._rows:
@@ -118,8 +114,6 @@ func _ready() -> void:
 			var kk := "%s sd%+d" % [String(ff["kind"]), int(float(ff["sd"]))]
 			lane_c[kk] = int(lane_c.get(kk, 0)) + 1
 	print("LANES ", lane_c)
-	if last_sky != null:
-		print("SKYSTATS ", last_sky.stats, " best combo ", last_sky.best_combo, " score ", last_sky.score, " trip ", snappedf(last_sky.trip_lvl, 0.01), " goals ", last_sky.goals.map(func(g): return "%s %d/%d" % [g["k"], g["have"], g["need"]]))
 	print("JOURNEY top speed by world (km/h): ", vmax_by)
 	print("JOURNEY waves done: ", j.wave, "  score ", rig.score, "  crashes ", rig.crashes if "crashes" in rig else -1)
 	get_tree().quit()

@@ -10,8 +10,8 @@ var BARS: int = 2 if OS.has_feature("web") else 4          # a phone renders hal
 const LAYERS := ["kick", "bass", "pad", "hat", "perc", "arp"]
 # at what intensity (0..1) each layer starts to come in and is fully in, and its level in dB
 const FADE := {
-	"kick": [0.0, 0.05, -2.0], "bass": [0.10, 0.30, -5.0], "pad": [0.0, 0.25, -11.0],
-	"hat": [0.28, 0.45, -13.0], "perc": [0.42, 0.60, -9.0], "arp": [0.55, 0.78, -10.0],
+	"kick": [0.0, 0.05, -1.0], "bass": [0.02, 0.18, -4.0], "pad": [0.0, 0.25, -12.0],
+	"hat": [0.08, 0.25, -11.0], "perc": [0.15, 0.35, -8.0], "arp": [0.30, 0.55, -9.0],
 }
 const FADE_JUNGLE := {
 	"kick": [0.0, 0.05, -3.0], "bass": [0.05, 0.2, -3.0], "pad": [0.2, 0.5, -13.0],
@@ -75,7 +75,7 @@ func compose(style_id: String, seed_v: int) -> void:
 	ensure_buses()
 	style = style_id if STYLES.has(style_id) else "techno"
 	_rng.seed = seed_v * 7919 + 13
-	_bpm = {"techno": 128.0, "trance": 138.0, "industrial": 112.0, "ambient": 84.0, "jungle": 168.0}[style]
+	_bpm = {"techno": 150.0, "trance": 144.0, "industrial": 124.0, "ambient": 84.0, "jungle": 168.0}[style]
 	dbg = "rendering"
 	_spb = int(round(60.0 / _bpm * float(RATE)))
 	_n = _spb * 4 * BARS
@@ -151,13 +151,13 @@ func _plan() -> void:
 		for st in 16:
 			if st % 4 == 2:
 				_jobs.append(["hat", b0 + st * _spb / 4, 1])
-			elif st % 2 == 1 and (style != "techno" or st % 4 == 3):
+			elif st % 2 == 1:
 				_jobs.append(["hat", b0 + st * _spb / 4, 0])
 		# bass
 		var steps: Array = []
 		match style:
 			"techno":
-				steps = [2, 6, 10, 14] if swing == 0 else [2, 6, 7, 10, 14]
+				steps = [2, 3, 6, 7, 10, 11, 14, 15] if swing == 0 else [0, 2, 3, 6, 7, 10, 11, 14]          # a rolling bass on the off-beats, pumping against the kick
 			"trance":
 				steps = [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]
 			_:
@@ -174,7 +174,7 @@ func _plan() -> void:
 			"trance":
 				arp_steps = range(16)
 			"techno":
-				arp_steps = [0, 3, 6, 9, 12]
+				arp_steps = [0, 2, 3, 5, 6, 8, 10, 11, 13, 15]
 			_:
 				arp_steps = [0, 2, 4, 6, 8, 10, 12, 14]
 		var k := 0
@@ -439,7 +439,7 @@ func _arp(start: int, midi: int) -> void:
 
 ## All the events are drawn: duck the sustained layers under the kick, soft-limit, and turn each layer into a looping stream.
 func _finish() -> void:
-	var duck := {"bass": 0.85, "pad": 0.6, "arp": 0.45}
+	var duck := {"bass": 0.92, "pad": 0.7, "arp": 0.55}          # the strong pump: everything ducks hard under every kick
 	var curve := PackedFloat32Array()
 	curve.resize(_spb)
 	for i in _spb:

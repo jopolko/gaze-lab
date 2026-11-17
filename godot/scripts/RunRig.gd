@@ -873,6 +873,45 @@ func _clear_for_kickers(z0: float, cones: Array[Transform3D], cone_cols: PackedC
 	_sh_col = sc2
 
 
+## How much a ramp raises the ground at a point (the ground with it, minus the ground without it).
+func _kick_dh(kk: Dictionary, x: float, z: float) -> float:
+	if z > float(kk["z"]) + 1.0 or z < float(kk["z"]) - float(kk["len"]) - 1.0 or absf(x - float(kk["x"])) > float(kk["w"]) * 0.5 + 8.0:
+		return 0.0
+	var last: Dictionary = _kickers.pop_back()
+	var h0 := terrain_h(x, z)
+	_kickers.append(last)
+	return terrain_h(x, z) - h0
+
+
+## A new ramp raises the ground under things that were put down before it existed (a buff, a pad, a pill, a cupcake in its path): they were set on the old ground and would sit
+## buried. Everything built so far in reach of the ramp is lifted by exactly how much the ground came up under it.
+func _kick_lift(kk: Dictionary, cur: Dictionary) -> void:
+	var rws: Array = _rows.values()
+	if not _rows.has(cur["j"]):
+		rws.append(cur)
+	for r: Dictionary in rws:
+		for n in r["nodes"]:
+			if not (n is Node3D) or not is_instance_valid(n):
+				continue
+			var nd := n as Node3D
+			if nd.position.length() < 0.05:
+				for c in nd.get_children():
+					if c is Node3D:
+						var cd := c as Node3D
+						cd.position.y += _kick_dh(kk, cd.position.x, cd.position.z)
+			else:
+				nd.position.y += _kick_dh(kk, nd.position.x, nd.position.z)
+		for b in r["buffs"]:
+			b["y"] = float(b["y"]) + _kick_dh(kk, float(b["x"]), float(b["z"]))
+		for pp in r["pads"]:
+			if pp.has("gy"):
+				pp["gy"] = float(pp["gy"]) + _kick_dh(kk, float(pp["x"]), float(pp["z"]))
+		if r.has("toys"):
+			for t in r["toys"]:
+				if t.has("y") and t.has("x"):
+					t["y"] = float(t["y"]) + _kick_dh(kk, float(t["x"]), float(t["z"]))
+
+
 func _in_rects(x: float, z: float, rects: Array[Rect2], grow: float) -> bool:
 	for r in rects:
 		if r.grow(grow).has_point(Vector2(x, z)):
@@ -887,13 +926,12 @@ func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: floa
 		var kz := zi + klen - 3.0
 		var lipz := kz - klen
 		var jw := JUMP_W if not _winding() else 10.0          # on the winding trail the lanes are close: a narrower ramp, set out far enough that its inner edge is clear of the middle
-		var is_sky := _journey != null and -zi > 600.0 and _rng.randf() < 0.18          # a ramp that blasts you up above the clouds
-		var is_super := is_sky or (sd == 0.0 and _rng.randf() < 0.6)
+		var is_super := sd == 0.0 and _rng.randf() < 0.6
 		var kx := trail_x(kz - klen * 0.5) + sd * (jw * 0.5 + 13.0)          # well clear of the trail wherever it weaves along the ramp, so nothing is ever crossed by accident
-		_kickers.append({"x": kx, "z": kz, "len": klen, "w": jw, "rise": jump_rise * (1.3 if is_super else 1.0), "epic": false, "trail": true, "pw": jump_pow, "curl": jump_curl, "super": is_super, "sky": is_sky})
+		_jump_gap_z = -kz
+		_kickers.append({"x": kx, "z": kz, "len": klen, "w": jw, "rise": jump_rise * (1.3 if is_super else 1.0), "epic": false, "trail": true, "pw": jump_pow, "curl": jump_curl, "super": is_super})
+		_kick_lift(_kickers.back(), row)          # everything already standing where this ramp now rises goes up with the ground
 		var lc := Color(1.0, 0.6, 0.15) if not is_super else Color(1.0, 0.95, 0.2)
-		if is_sky:
-			lc = Color(0.75, 0.95, 1.0)
 		var lipm := BoxMesh.new()
 		lipm.size = Vector3(jw - 3.0, 0.12, 0.5)
 		(row["nodes"] as Array).append(_mi(self, lipm, _fx_mat("solid", lc, 1.6), Vector3(kx, terrain_h(kx, lipz + 0.8) + 0.12, lipz + 0.8)))
@@ -1007,7 +1045,7 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 		var zi := -si
 		if zi > z0 or zi <= z0 - ROW_GAP or si < 230.0 or zi < finish_z + 110.0:
 			continue
-		var can_jump := _rng.randf() < jump_chance and zi < z0 - (jump_len + 60.0) and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0          # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
+		var can_jump := _rng.randf() < (1.0 if (-zi - _jump_gap_z > 450.0 and jump_chance > 0.05) else jump_chance) and zi < z0 - (jump_len + 72.0) and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0          # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
 		var can_loot := absf(zi + 22.0 - rz0) < 140.0 and absf(zi - 10.0 - rz0) < 140.0
 		var kinds: Array = []
 		if _rng.randf() < 0.28:          # a rail is one choice among several now, not the default
@@ -1073,7 +1111,8 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 
 
 var hazard_share: float = 0.6            # the sandbox: how often something nasty sits in the middle lane
-var jump_chance: float = 0.5            # the sandbox: how often a choice pair has a ramp in it
+var _jump_gap_z: float = 0.0          # how far down the hill (m) the last ramp was built: a long stretch without one makes the next choice point have one
+var jump_chance: float = 0.72            # the sandbox: how often a choice pair has a ramp in it
 var pad_chance: float = 0.12             # the sandbox: boost pads on the slope
 var grip_lag: float = 1.0                # the sandbox: > 1 is ice, the board takes longer to swing across
 var big_head: bool = false
@@ -1107,9 +1146,9 @@ func _audio_setup(c: Dictionary) -> void:
 		ah.toon = bool(c.get("toon", true))
 	var st := String(c.get("mus", "auto"))
 	if bool(c.get("journey", true)) and st == "auto":
-		st = "ambient"          # all dressed starts calm: the music follows the world from there
+		st = "techno"          # all dressed starts fast and pumping: the music follows the world from there
 	if st == "auto":
-		st = String({"alpine": "ambient", "psychedelic": "trance", "tunnel": "techno", "desert": "jungle", "matrix": "industrial", "candy": "jungle", "egypt": "ambient"}.get(String(c.get("theme", "alpine")), "techno"))
+		st = String({"alpine": "techno", "psychedelic": "trance", "tunnel": "techno", "desert": "jungle", "matrix": "industrial", "candy": "jungle", "egypt": "ambient"}.get(String(c.get("theme", "alpine")), "techno"))
 	if _music != null and is_instance_valid(_music):
 		_music.stop()
 	_music = null
@@ -1132,7 +1171,7 @@ func _music_tick() -> void:
 		return
 	var sp := clampf(-vel.y / 45.0, 0.0, 1.0)
 	var grade := clampf((_cur_m - 0.4) / 1.6, 0.0, 1.0)
-	var x := 0.12 + 0.5 * sp + 0.2 * grade + 0.25 * trip + (0.2 if _sb_on else 0.0) + (0.12 if _boost_t > 0.0 else 0.0)
+	var x := 0.3 + 0.42 * sp + 0.2 * grade + 0.25 * trip + 0.2 * _exc + (0.2 if _sb_on else 0.0) + (0.12 if _boost_t > 0.0 else 0.0)
 	if _journey != null:
 		x += 0.15 * _journey.trip_floor()
 	_music.set_intensity(0.0 if _paused else x)
@@ -3890,7 +3929,7 @@ func _spawn_buff(row: Dictionary, t: String, x: float, z: float, trail: Array, k
 	var it := _make_item(t)
 	var bn: Node3D = it["root"]
 	add_child(bn)
-	_place(bn, Vector3(x, terrain_h(x, z) + 1.9 + lift, z))
+	_place(bn, Vector3(x, terrain_h(x, z) + 2.4 + lift, z))
 	(row["nodes"] as Array).append(bn)
 	var bc := MeshInstance3D.new()
 	bc.mesh = _buff_mesh["beacon"]
@@ -4473,8 +4512,6 @@ func _process(delta: float) -> void:
 		JavaScriptBridge.eval("window.__dbg={draws:%d,objs:%d,prims:%d,fps:%d}" % [int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)), int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)), int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)), int(Engine.get_frames_per_second())])          # for looking at what a frame costs (read window.__dbg)
 	if _journey != null and not _finished:
 		_journey.tick(delta)
-	if _sky_dbg and _age > 6.0 and _sky == null and sky_visits == 0 and not _finished:
-		sky_start()          # ?sky: to see the sky without finding a ramp
 	_cue_tint = maxf(_cue_tint - delta / 1.2, 0.0)
 	_music_tick()
 	_sb_tick(delta)
@@ -5144,7 +5181,7 @@ func _portrait_check() -> bool:
 func _physics_process(delta: float) -> void:
 	if not _warmed:
 		_warm_shaders()
-	if _paused or _warming or sky_hold or _portrait_check():
+	if _paused or _warming or _portrait_check():
 		return
 	if _calib_tick(delta):
 		return
@@ -5302,6 +5339,7 @@ func _physics_process(delta: float) -> void:
 	_update_eye_actions(delta)
 	_update_pads()
 	_toys_tick(delta)
+	_pill_tick(delta)
 	_update_ramps(delta)
 	_vortex_drive(delta)
 	_glint_tick(delta)
@@ -5859,6 +5897,7 @@ func _restart() -> void:
 	_goals_new()
 	feats_total = 0
 	jumps_built = 0
+	_jump_gap_z = 0.0
 	jumps_done = 0
 	rails_built = 0
 	rails_done = 0
@@ -5889,13 +5928,6 @@ func _restart() -> void:
 	_sacc_conf_seen = 0
 	_sacc_ret_seen = 0
 	_runlog.end_run(self, "restart")
-	if _sky != null and is_instance_valid(_sky):
-		_sky.queue_free()
-	_sky = null
-	if sky_hold:
-		sky_hold = false
-		_hud.visible = true
-		cam.make_current()
 	if _journey != null:
 		if _jw != "alpine" or _jpost_mode != 0 or _journey.phase != DhJourney.Phase.CALM:
 			journey_reset()
@@ -6340,7 +6372,7 @@ var trick_charge_override: bool = false
 const VX_LAUNCH := 46.0                   # m/s the vortex brings you to by the lip
 const VX_ACCEL := 34.0
 const VX_TRAIL := 37.0                   # m/s the trail swirl builds up to by the lip
-const VX_REACH := 46.0                   # m before the foot of the ramp where the swirl starts to take hold
+const VX_REACH := 62.0                   # m before the foot of the ramp where the swirl starts to take hold
 var _vx_pull: float = 0.0                # 0..1: how far into the swirl you are (the camera widens with it)
 var _vx_blast: float = 0.0               # 1 at the lip, running down to 0
 var _land_off: float = 0.0               # m across the trail the eyes have chosen to land at
@@ -6351,8 +6383,6 @@ var _vx_active_t: float = 0.0
 
 func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bool, big: bool = false) -> void:
 	var col := Color(0.95, 0.35, 1.0) if not epic else Color(0.3, 0.9, 1.0)
-	if k.get("sky", false):
-		col = Color(0.75, 0.95, 1.0)          # the ramp to the sky is pale and bright
 	var rings: Array = []
 	if big:
 		# a funnel: big rings over the foot of the ramp, smaller and brighter toward the lip, so you can see the way in from far up the slope and then ride through the swirl
@@ -6433,14 +6463,14 @@ func _vortex_drive(delta: float) -> void:
 			var half: float = float(k["w"]) * 0.5
 			var dxk := kx - spos.x
 			var picked: bool = not _line_pick.is_empty() and String(_line_pick["kind"]) == "jump" and absf(float(_line_pick.get("kx", 1.0e9)) - kx) < 0.5
-			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 4.0 and (absf(dxk) < half + 15.0 or (picked and absf(dxk) < half + 24.0)):          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
+			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 4.0 and (absf(dxk) < half + 24.0 or (picked and absf(dxk) < half + 36.0)):          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
 				active = true
 				if not _vx_snd:
 					_vx_snd = true
 					Game.sfx(&"stretch")                          # the swirl takes hold: a rubbery stretch, let go at the lip
 				var t := clampf((kz + VX_REACH - spos.z) / (VX_REACH + float(k["len"])), 0.0, 1.0)
 				_vx_pull = maxf(_vx_pull, smoothstep(0.0, 0.8, t))
-				spos.x += clampf(dxk * 5.0, -24.0, 24.0) * delta * smoothstep(0.0, 0.2, t)
+				spos.x += clampf(dxk * 7.0, -34.0, 34.0) * delta * smoothstep(0.0, 0.12, t)
 				var fsp := -vel.y
 				if fsp < VX_TRAIL:
 					vel.y -= minf(VX_ACCEL * (0.9 if spos.z < kz else 0.6) * delta, VX_TRAIL - fsp)
@@ -6533,8 +6563,6 @@ func _update_ramps(delta: float) -> void:
 			_face_next = 0.0
 			_super_face = true
 			_cheer("SUPER AIR!", Color(1.0, 0.9, 0.2), 2.2)
-	if crossed and trail and _sky_wanted(crossed_k):
-		sky_start()
 	if crossed:
 		vy += 1.5 * float(chain_lvl)                      # a longer chain launches harder
 		_chain_hit("ramp")
@@ -6559,12 +6587,45 @@ func _pad_mesh_get() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var bm := BoxMesh.new()
-	bm.size = Vector3(2.4, 0.08, 0.45)
+	bm.size = Vector3(3.4, 0.16, 0.7)
 	for i in 3:
 		for sx in [-1.0, 1.0]:
-			st.append_from(bm, 0, Transform3D(Basis(Vector3.UP, -float(sx) * 0.55), Vector3(float(sx) * 1.0, 0.2, -float(i) * 2.2)))          # the outer ends trail behind and the point leads: a chevron down the slope
+			st.append_from(bm, 0, Transform3D(Basis(Vector3.UP, -float(sx) * 0.55), Vector3(float(sx) * 1.4, 0.22, -float(i) * 2.4)))          # the outer ends trail behind and the point leads: a chevron down the slope
 	_pad_mesh = st.commit()
 	return _pad_mesh
+
+
+var _gem_mesh: ArrayMesh = null
+
+
+## The boost crystal: a faceted diamond (two cones base to base) with a thin ring round its middle, in one mesh, built once and shared.
+func _gem_mesh_get() -> ArrayMesh:
+	if _gem_mesh != null:
+		return _gem_mesh
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var up := CylinderMesh.new()
+	up.top_radius = 0.0
+	up.bottom_radius = 0.7
+	up.height = 1.1
+	up.radial_segments = 6
+	up.rings = 1
+	var dn := CylinderMesh.new()
+	dn.top_radius = 0.7
+	dn.bottom_radius = 0.0
+	dn.height = 1.1
+	dn.radial_segments = 6
+	dn.rings = 1
+	st.append_from(up, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, 0.55, 0.0)))
+	st.append_from(dn, 0, Transform3D(Basis.IDENTITY, Vector3(0.0, -0.55, 0.0)))
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.95
+	tm.outer_radius = 1.05
+	tm.rings = 18
+	tm.ring_segments = 4
+	st.append_from(tm, 0, Transform3D.IDENTITY)
+	_gem_mesh = st.commit()
+	return _gem_mesh
 
 
 func _make_pad(row: Dictionary, x: float, z: float, epic: bool, with_pool: bool = true) -> void:
@@ -6577,8 +6638,12 @@ func _make_pad(row: Dictionary, x: float, z: float, epic: bool, with_pool: bool 
 	if with_pool:
 		var pool := _mi(holder, _quad(8.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.5)), Vector3(x, terrain_h(x, z - 2.2) + 0.15, z - 2.2))
 		pool.rotation.x = -PI * 0.5 - atan(_grad(x, z - 2.2).y)
+	# and a crystal hanging just over it, turning slowly: the flat bars cannot be seen from far off at the height of the board, this can
+	var gy := terrain_h(x, z - 2.2) + 1.35
+	var gem := _mi(holder, _gem_mesh_get(), _fx_mat("solid", Color(1.0, 0.62, 0.15) if not epic else Color(1.0, 0.3, 0.6), 3.0), Vector3(x, gy, z - 2.2))
+	gem.scale = Vector3.ONE * 1.5
 	(row["nodes"] as Array).append(holder)
-	(row["pads"] as Array).append({"x": x, "z": z, "used": false, "epic": epic})
+	(row["pads"] as Array).append({"x": x, "z": z, "used": false, "epic": epic, "gem": gem, "gy": gy, "ph": _rng.randf() * TAU})
 
 
 func _update_pads() -> void:
@@ -6593,6 +6658,8 @@ func _update_pads() -> void:
 				continue
 			if absf(float(p["z"]) - 2.2 - spos.z) < 3.4 and absf(float(p["x"]) - spos.x) < 3.2:
 				p["used"] = true
+				if p.has("gem") and is_instance_valid(p["gem"]):
+					(p["gem"] as Node3D).visible = false
 				pads_hit += 1
 				_boost_t = maxf(_boost_t, 1.8)
 				var fwd := Vector2(sin(heading), -cos(heading))
@@ -6644,7 +6711,11 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 			continue
 		var side: float = [-1.0, 1.0, 0.0, -1.0, 1.0][_rng.randi() % 5]
 		var roll := _rng.randf()
-		if roll < 0.20:
+		var pill_odds := 0.06 if -tz < 500.0 else 0.2
+		if _journey != null and ((not _pill_seen and -tz > 160.0) or _rng.randf() < pill_odds):
+			_pill_seen = true
+			_make_pills(row, toys, tz, side)
+		elif roll < 0.20:
 			_make_bumpers(row, toys, tz, side)
 		elif roll < 0.42:
 			_make_spring(row, toys, tz, side)
@@ -6662,6 +6733,7 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 var _journey: DhJourney = null
 var _exc: float = 0.0
 var _dbg_t: float = 1.0
+var _hi_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("high")          # ?high: the camera up where a big jump would take it, to look at the edges of the world
 
 
 ## How hard the run is going, 0 to 1: speed, a flow going, boosts, a chain of things hit. The trip is made to come on with it.
@@ -6682,11 +6754,12 @@ var _bm_bump: float = 1.0
 var _bm_spring: float = 1.0
 var _bm_pad: float = 1.0
 var _base_haz: float = 0.6
-var _base_jump: float = 0.5
+var _base_jump: float = 0.72
 var _base_pad: float = 0.12
 var _base_glint: float = 1.0
 var _base_grip: float = 1.0
 var _cfg_intensity: float = 0.75
+var _cfg_trip: int = 1          # the trip level for All dressed: 0 gentle, 1 normal, 2 wild
 var _cfg_dyn: bool = true
 var _cfg_snow: bool = true
 var _cfg_fluffy: bool = false
@@ -6780,6 +6853,10 @@ func journey_post(world: String, onset: float, want_trip: bool, strength: float)
 	var fx := _lvl.get_node_or_null("ThemeFX") as ThemeFX if _lvl != null else null
 	if fx == null or fx.post == null:
 		return
+	if _pill_k > 0.001:          # a pill's flash rides on top of whatever the journey is doing
+		onset = maxf(onset, _pill_k)
+		want_trip = true
+		strength = maxf(strength, 0.9)
 	var m := 0
 	if onset > 0.001:
 		if want_trip and (onset < 0.999 or Themes.post_mode(world) < 2):
@@ -6805,70 +6882,22 @@ func journey_reset() -> void:
 	biome_apply(DhJourney.BIOME["alpine"], 1.0, 1.0)
 
 
-# --------------------------------------------------------------------------
-# THE SKY (see SkyRun): a ramp taken hard enough throws the board up through the clouds, and the run goes on as flight until it dives back.
-# --------------------------------------------------------------------------
-var _sky: SkyRun = null
-var sky_hold: bool = false
-var _sky_cd_until: int = 0
-var sky_visits: int = 0
-var _hi_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("high")
-var _sky_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("sky")
-
-
-func _sky_wanted(k: Dictionary) -> bool:
-	if _sky != null or _finished or _age < 20.0 or Time.get_ticks_msec() < _sky_cd_until:
-		return false
-	if bool(k.get("sky", false)):
-		return true
-	return bool(k.get("super", false)) and (-vel.y > 46.0 or _links >= 8)          # a super ramp taken very fast, or at the end of a long chain
-
-
-func sky_start() -> void:
-	_sky = SkyRun.new()
-	(_lvl if _lvl != null else get_parent()).add_child(_sky)
-	_sky.setup(self, _journey.wave if _journey != null else 3)
-	sky_hold = true
-	_hud.visible = false
-	_sky_cd_until = Time.get_ticks_msec() + 45000
-	sky_visits += 1
-	if _music != null:
-		_music.bump(0.6)
-
-
-## Back from the sky: the board comes down onto the slope some way further on, with a boost, and what was done up there is paid.
-func sky_end(res: Dictionary) -> void:
-	sky_hold = false
-	_hud.visible = true
-	cam.make_current()
-	var adv := minf(float(res.get("dist", 0.0)) * 0.25 + 60.0, 340.0)
-	spos.z -= adv
-	spos.x = trail_x(spos.z)
-	spos.y = terrain_h(spos.x, spos.z) + 45.0
-	grounded = false
-	air_t = 0.0
-	vy = -6.0
-	vel = Vector2(0.0, -36.0)
-	heading = 0.0
-	_boost_t = 3.0
-	_air_chain = 0
-	_line_pick = {}
-	_flash = 0.6
-	_gain(int(res.get("score", 0)))
-	var opened := DhProgress.add(float(int(res.get("score", 0))) * 0.05)
-	_cheer("BACK DOWN", Color(0.8, 0.95, 1.0), 1.2)
-	if not opened.is_empty():
-		_toast("Unlocked: " + ", ".join(opened), Color(0.7, 0.9, 1.0))
-	_sky = null
-
-
 var _toy_g: int = 100000
 
 
 ## A row of three boost pads down one lane, one after another: a thing to look at and carve over to, and a chain in itself (every pad is a link).
+func _beacon(row: Dictionary, x: float, z: float, col: Color) -> void:
+	_buff_assets("orb")
+	(row["nodes"] as Array).append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(col.r, col.g, col.b, 0.32)), Vector3(x, terrain_h(x, z) + 4.6, z)))          # a tall thin light, so a thing can be picked out from far up the slope
+
+
 func _boost_row(row: Dictionary, x: float, z: float, sd: float, g: int) -> void:
 	for i in 3:
-		_make_pad(row, x, z - float(i) * 13.0, false, i == 0)          # one pool of light for the row, not one for every pad
+		_make_pad(row, x, z - float(i) * 13.0, false, false)
+	var pool := _mi(self, _quad(22.0), _fx_mat("ground", Color(1.0, 0.55, 0.1, 0.45)), Vector3(x, terrain_h(x, z - 15.0) + 0.15, z - 15.0))          # one wide pool of orange light for the whole row
+	pool.rotation.x = -PI * 0.5 - atan(_grad(x, z - 15.0).y)
+	(row["nodes"] as Array).append(pool)
+	_beacon(row, x, z - 2.0, Color(1.0, 0.6, 0.15))
 	(row["feats"] as Array).append({"kind": "toy", "kx": x, "za": z + 24.0, "zl": z, "zb": z - 30.0, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": g, "cd": true})
 var _toy_meshes: Dictionary = {}
 
@@ -6921,6 +6950,13 @@ func _tm(key: String) -> Mesh:
 			l.height = 0.3
 			l.radial_segments = 16
 			m = l
+		"pill":
+			var pc := CapsuleMesh.new()
+			pc.radius = 0.6
+			pc.height = 2.4
+			pc.radial_segments = 12
+			pc.rings = 3
+			m = pc
 		"lring":
 			var lr := TorusMesh.new()
 			lr.inner_radius = 0.5
@@ -6944,6 +6980,82 @@ func _toy_feat(row: Dictionary, x: float, z: float, sd: float, g: int) -> void:
 	(row["feats"] as Array).append({"kind": "toy", "kx": x, "za": z + 24.0, "zl": z, "zb": z - 6.0, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": g, "cd": true})
 
 
+var _pill_seen: bool = false
+var _pill_k: float = 0.0          # how far the pill flash has come on, 0 to 1
+var _pill_t: float = 0.0          # how long it is still held
+var _pill_n: int = 0          # pills in this chain
+var _pill_gap: float = 0.0
+var _pill_live: bool = false
+
+
+## PILLS: a short row of capsules floating over the snow, turning. Eat one and the world flashes trippy for a few seconds; one after another and it holds and deepens.
+func _make_pills(row: Dictionary, toys: Array, z: float, side: float) -> void:
+	var g := _toy_g
+	_toy_g += 1
+	var first := true
+	var cols := [Color(1.0, 0.2, 0.55), Color(0.2, 0.9, 1.0), Color(1.0, 0.85, 0.2), Color(0.6, 0.35, 1.0)]
+	for r in 3:
+		var pz := z - float(r) * 14.0
+		var px := trail_x(pz) + side * 7.0
+		var ca: Color = cols[_rng.randi() % 4]
+		var hold := Node3D.new()
+		add_child(hold)
+		hold.position = Vector3(px, terrain_h(px, pz) + 2.2, pz)
+		var spin := Node3D.new()
+		hold.add_child(spin)
+		var body := _mi(spin, _tm("pill"), _toy_mat("pillw", Color(0.97, 0.97, 1.0), 1.4), Vector3.ZERO)
+		body.rotation.z = PI * 0.5
+		var cap := _mi(spin, _tm("pill"), _toy_mat("pillc%d" % cols.find(ca), ca, 1.8), Vector3(0.62, 0.0, 0.0))
+		cap.rotation.z = PI * 0.5
+		cap.scale = Vector3(1.0, 0.5, 1.0) * 1.06
+		_mi(hold, _quad(5.0), _fx_mat("halo", Color(ca.r, ca.g, ca.b, 0.6)), Vector3.ZERO)
+		hold.scale = Vector3.ONE * 1.3
+		(row["nodes"] as Array).append(hold)
+		toys.append({"kind": "pill", "x": px, "z": pz, "n": hold, "spin": spin, "t": 0, "col": ca, "y": hold.position.y})
+		if first:
+			_beacon(row, px, pz, ca)
+			_toy_feat(row, px, pz, side, g)
+			first = false
+
+
+func _pill_eat(t: Dictionary) -> void:
+	t["t"] = 1 << 60
+	(t["n"] as Node3D).visible = false
+	_pill_n = _pill_n + 1 if _pill_gap > 0.0 else 1
+	_pill_gap = 6.0
+	_pill_t = minf(2.6 + 1.2 * float(_pill_n - 1), 9.0)
+	_burst(Vector3(float(t["x"]), float(t["y"]), float(t["z"])), t["col"], 22, 8.0, 0.6, 1.0)
+	_gain(int(120.0 * groove * float(_pill_n)))
+	_trip_add(0.25)
+	_flow_up(1)
+	_mix_add("pill")
+	_shake = maxf(_shake, 0.12)
+	Game.sfx(&"blip")
+	if _pill_n == 3:
+		_cheer("TRIPPING", Color(1.0, 0.3, 0.9), 1.2)
+	elif _pill_n >= 4 and _journey != null:
+		_journey.nudge()          # a long run of pills carries the next wave in early
+
+
+func _pill_tick(delta: float) -> void:
+	_pill_gap = maxf(_pill_gap - delta, 0.0)
+	_pill_t = maxf(_pill_t - delta, 0.0)
+	var target := 0.0
+	if _pill_t > 0.0:
+		target = clampf(0.55 + 0.12 * float(_pill_n), 0.55, 0.95)
+	_pill_k = move_toward(_pill_k, target, delta * (3.0 if target > _pill_k else 0.55))
+	if _journey == null:
+		return
+	if _pill_k > 0.001:
+		_pill_live = true
+		if _journey.phase == DhJourney.Phase.CALM and _journey.hint() < 0.001:
+			journey_post("psychedelic", 0.0, false, 0.9)
+	elif _pill_live:
+		_pill_live = false
+		if _journey.phase == DhJourney.Phase.CALM and _journey.hint() < 0.001:
+			journey_post("psychedelic", 0.0, false, 0.3)
+
+
 ## BUMPERS: three cupcakes, pink frosting and a cherry. Ride into one and it bounces you off.
 func _make_bumpers(row: Dictionary, toys: Array, z: float, side: float) -> void:
 	var cx := trail_x(z) + side * 7.0
@@ -6964,6 +7076,7 @@ func _make_bumpers(row: Dictionary, toys: Array, z: float, side: float) -> void:
 		(row["nodes"] as Array).append(hold)
 		toys.append({"kind": "bump", "x": px, "z": pz, "n": hold, "t": 0})
 		if first:
+			_beacon(row, px, pz, Color(1.0, 0.4, 0.8))
 			_toy_feat(row, px, pz, side, g)          # the front cupcake is the one to look at
 			first = false
 
@@ -6996,6 +7109,7 @@ func _make_spring(row: Dictionary, toys: Array, z: float, side: float) -> void:
 	var pool := _mi(holder, _quad(26.0), _fx_mat("ground", Color(0.45, 0.85, 1.0, 0.22)), Vector3(0.0, 0.15, 0.0))
 	pool.rotation.x = -PI * 0.5 - atan(_grad(x, z).y)
 	(row["nodes"] as Array).append(holder)
+	_beacon(row, x, z, Color(0.5, 0.9, 1.0))
 	toys.append({"kind": "sling", "x": x, "z": z, "n": holder, "rings": rings, "in": false, "used": false, "t": 0})
 	_toy_feat(row, x, z, side, _toy_g)
 	_toy_g += 1
@@ -7072,6 +7186,8 @@ func _make_gates(row: Dictionary, toys: Array, z: float) -> void:
 			lanes.append({"x": gx, "c": ci, "n": hold, "y0": y0})
 			_toy_feat(row, gx, gz, signf(sgn), g)
 		toys.append({"kind": "gates", "z": gz, "r": r, "lanes": lanes, "done": false})
+		if r == 0:
+			_beacon(row, trail_x(gz), gz, Color(1.0, 0.9, 0.5))
 
 
 var _links: int = 0
@@ -7154,6 +7270,12 @@ func _gate_result(hit: int, first: bool) -> void:
 
 
 func _toys_tick(delta: float) -> void:
+	for kk in _rows:
+		for pp in (_rows[kk] as Dictionary)["pads"]:
+			var pg: Variant = pp.get("gem", null)
+			if pg != null and is_instance_valid(pg) and absf(float(pp["z"]) - spos.z) < 150.0:
+				(pg as Node3D).rotate_y(1.8 * delta)
+				(pg as Node3D).position.y = float(pp["gy"]) + 0.22 * sin(_age * 2.6 + float(pp["ph"]))          # turning and bobbing a little
 	_link_t -= delta
 	if _link_t <= 0.0:
 		_links = 0
@@ -7194,6 +7316,15 @@ func _toys_tick(delta: float) -> void:
 			if absf(tz - spos.z) > 40.0:
 				continue
 			var n := t["n"] as Node3D
+			if kind == "pill":
+				if n.visible:
+					(t["spin"] as Node3D).rotate_y(2.4 * delta)
+					n.position.y = float(t["y"]) + 0.25 * sin(_age * 2.8 + float(t["x"]))
+					var pdx := spos.x - float(t["x"])
+					var pdz := spos.z - tz
+					if pdx * pdx + pdz * pdz < 9.0 and absf(spos.y - n.position.y) < 4.5:
+						_pill_eat(t)
+				continue
 			if kind == "bump":
 				n.scale = n.scale.lerp(Vector3.ONE, 1.0 - exp(-8.0 * delta))
 			if absf(tz - spos.z) > 3.5 or now < int(t["t"]):
@@ -7609,7 +7740,7 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_psy_start(false, 0.0)                                         # the psychedelic overlay is parked until it is better
 	G = 9.8 * clampf(float(c.get("m_grav", 1.0)), 0.2, 3.0)
 	hazard_share = clampf(0.6 * float(c.get("m_rocks", 1.0)), 0.0, 1.0)
-	jump_chance = clampf(0.5 * float(c.get("m_ramps", 1.0)), 0.0, 1.0)
+	jump_chance = clampf(0.72 * float(c.get("m_ramps", 1.0)), 0.0, 1.0)
 	pad_chance = clampf(0.12 * float(c.get("m_pads", 1.0)), 0.0, 1.0)
 	grip_lag = 2.6 if bool(c.get("m_ice", false)) else 1.0
 	big_head = bool(c.get("m_head", false))
@@ -7624,10 +7755,15 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_base_glint = glint_k
 	_base_grip = grip_lag
 	_cfg_intensity = float(c.get("intensity", 0.8))
+	_cfg_trip = int(c.get("trip", 1))
 	_cfg_dyn = bool(c.get("dynlight", true))
 	_cfg_snow = bool(c.get("snow", true))
 	_cfg_fluffy = bool(c.get("fluffy", false))
-	_journey = DhJourney.new() if bool(c.get("journey", true)) else null
+	_journey = DhJourney.new() if bool(c.get("journey", true)) and String(c.get("theme", "alpine")) == "alpine" else null          # a world picked by hand is the world, all of it: the journey starts from alpine
+	_pill_seen = false
+	_pill_k = 0.0
+	_pill_t = 0.0
+	_pill_n = 0
 	_dress_rider()
 	if _rider != null:
 		for hi in [1, 2]:

@@ -204,7 +204,11 @@ func _apply_tier() -> void:
 	var fx: ThemeFX = level.get_node_or_null("ThemeFX") as ThemeFX
 	if fx != null and fx.post != null:
 		fx.post.trails_ok = tier < 1 or (tier == 1 and not Game.touch_mode)
-		fx.post.set_look(Themes.post_mode(theme_id) if tier < 3 else 0, fx.post.amount)
+		# (the journey decides the full-screen look itself, and what it asks for is what stays: the theme of the last "light" layer must not switch the pass on by the way)
+		var want := rig._jpost_mode if rig._journey != null else Themes.post_mode(theme_id)
+		fx.post.set_look(want if tier < 3 else 0, fx.post.amount)
+		if fx.post.mat != null and rig._journey != null and want == 1:
+			fx.post.mat.set_shader_parameter("onset", maxf(rig._pill_k, 0.0 if rig._journey.phase == DhJourney.Phase.CALM and rig._journey.hint() < 0.001 else rig._journey.onset_k()))
 	var env: Environment = level.world_env.environment
 	if tier >= 2:
 		env.glow_enabled = false
