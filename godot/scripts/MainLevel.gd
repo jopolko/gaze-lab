@@ -83,7 +83,8 @@ func _ready() -> void:
 	gaze = GazeTargeting.new()
 	gaze.name = "GazeTargeting"
 	add_child(gaze)
-	$UI.add_child(TouchControls.new())
+	if not (Game.demo_mode and start_level == 11):
+		$UI.add_child(TouchControls.new())          # Downhill has no on-screen buttons: the eyes do everything
 	if Game.demo_mode:
 		if start_level == 11:
 			$UI.add_child(DownhillMenu.new())

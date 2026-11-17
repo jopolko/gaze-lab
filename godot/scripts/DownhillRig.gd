@@ -13,7 +13,7 @@ extends Node3D
 ##
 ## Input: GazeProvider.peek_offset (lean), nod_state (chin), gaze (screen position). Arrow keys, A / D, W / S stand in.
 
-const G := 9.8
+var G: float = 9.8                         # the sandbox gravity slider changes it
 const SLOPE := 0.34
 const ROW_GAP := 180.0          # metres of hill per barrier on average (was 125): more room to choose, to carve and to meander
 const W_HALF := 58.0
@@ -1360,11 +1360,15 @@ func cleanup() -> void:
 var cam_back: float = 8.0          # how far behind the board, how high, and how far down the slope the camera looks
 var cam_h: float = 4.6
 var cam_ahead: float = 16.0
+var cam_road: float = 0.0          # 0..1: how much the camera looks down the road instead of the way the board is heading (so the weave does not swing the picture)
+var cam_hint: Vector2 = Vector2.ZERO
 
 
 func _place_camera(delta: float, snap: bool = false) -> void:
 	var sp := vel.length()
 	var vdir := vel / sp if sp > 1.0 else Vector2(0.0, -1.0)
+	if cam_road > 0.0 and cam_hint != Vector2.ZERO:
+		vdir = vdir.lerp(cam_hint, cam_road).normalized()
 	_cdir = (_cdir.lerp(vdir, 1.0 - exp(-3.0 * delta))).normalized()
 	var back := Vector3(_cdir.x, 0.0, _cdir.y) * -cam_back
 	var target := spos + back + Vector3(0.0, cam_h + (0.5 if not grounded else 0.0), 0.0)
@@ -1420,7 +1424,7 @@ func _process(delta: float) -> void:
 	if lane_mode:
 		if not _calm_said and _age > 1.5:
 			_calm_said = true
-			_toast("Settle in. Look where you want to go.", Color(0.9, 0.95, 1.0))
+			pass
 		if int(_age / 60.0) > _minutes:
 			_minutes = int(_age / 60.0)
 			_toast("%d min   %d coins   best flow x%.1f" % [_minutes, coins_got, best_flow], Color(1.0, 0.9, 0.5))

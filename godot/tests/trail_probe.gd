@@ -33,8 +33,15 @@ func _ready() -> void:
 		var gl_t := {}
 		var px_prev := 0.0
 		var vx_prev := 0.0
+		var sv_last := 0.0
+		var pk_last := ""
 		var jolt := 0.0
 		var xmin := 0.0
+		var hrev := 0
+		var h_ext := 0.0
+		var h_dir := 0.0
+		var h_prev := 0.0
+		var hrate := 0.0
 		var xmax := 0.0
 		var hmax := 0.0
 		var tg: Array = []
@@ -117,6 +124,8 @@ func _ready() -> void:
 						if dzf > 110.0 or dzf < 0.0:
 							continue
 						var nxv: float = rig._feat_nx(f)
+						if dzf <= 70.0 and not f.has("m70") and nxv != 99.0:
+							f["m70"] = nxv * float(f["sd"])
 						if nxv == 99.0:
 							f["m_off"] = int(f.get("m_off", 0)) + 1
 							continue
@@ -152,10 +161,24 @@ func _ready() -> void:
 			var vx_now: float = (rig.spos.x - px_prev) / dt
 			if i > 120 and rig._rail.is_empty() and rig.hurt_t <= 0.0:
 				jolt = maxf(jolt, absf(vx_now - vx_prev))
+			if OS.get_environment("JOLT") != "" and i > 120 and absf(vx_now - vx_prev) > 12.0:
+				print("JOLT(prev slide_v %.1f, prev pick %s) t%.2f dvx %.1f  vx %.1f->%.1f  rail %s grounded %s hurt %.1f slide_v %.1f steer %.2f heading %.1f pick %s lockage %.1f vel.x %.1f" % [sv_last, pk_last, float(i) * dt, vx_now - vx_prev, vx_prev, vx_now, not rig._rail.is_empty(), rig.grounded, rig.hurt_t, rig._slide_v, rig.steer, rad_to_deg(rig.heading), (rig._line_pick["kind"] + str(int(rig._line_pick["sd"]))) if not rig._line_pick.is_empty() else "-", rig._lock_age, rig.vel.x])
 			vx_prev = vx_now
+			sv_last = rig._slide_v
+			pk_last = (rig._line_pick["kind"] + str(int(rig._line_pick["sd"]))) if not rig._line_pick.is_empty() else "-"
 			xmin = minf(xmin, rig.spos.x)
 			xmax = maxf(xmax, rig.spos.x)
 			hmax = maxf(hmax, absf(rad_to_deg(atan2(rig.vel.x, maxf(-rig.vel.y, 1.0)))))
+			var hd := rad_to_deg(atan2(rig.vel.x, maxf(-rig.vel.y, 1.0)))
+			if i > 120:
+				hrate = maxf(hrate, absf(hd - h_prev) / dt)
+				var sl := signf(hd - h_prev) if absf(hd - h_prev) > 0.02 else h_dir
+				if sl != h_dir and h_dir != 0.0:
+					if absf(h_prev - h_ext) > 8.0:
+						hrev += 1
+					h_ext = h_prev
+				h_dir = sl
+			h_prev = hd
 			px_prev = rig.spos.x
 			if -rig.spos.z > 200.0 and not rig._finished:
 				var off := absf(rig.spos.x - rig.trail_x(rig.spos.z))
@@ -168,23 +191,36 @@ func _ready() -> void:
 				vmax = maxf(vmax, rig.vel.length())
 		print("TRAIL run %d: %d m in 90 s, crashes %d, poles %d (clean %d, shaved %d, wrong side %d), off the middle %.1f m on average and %.1f m at worst, %.1f s in the air (highest %.1f m), top speed %d km/h, best flow x%.1f, score %d" % [run, int(-rig.spos.z), rig.crashes, rig.poles_clean + rig.poles_wrong, rig.poles_clean, rig.poles_shaved, rig.poles_wrong, off_sum / maxf(float(n), 1.0), off_max, air, high, int(vmax * 3.6), rig.best_flow, rig.score])
 		print("TRAIL   %s: jumps %d of %d, rails %d of %d (%d m), treats %d of %d (orbs %d), choices %d, chosen %d (left %d, right %d), time penalty %.0f s, pops %d" % [rig.mode, rig.jumps_done, rig.jumps_built, rig.rails_done, rig.rails_built, int(rig.rail_m), rig.buffs_got, rig.buffs_spawned, rig.orbs_got, rig.choices_built, rig.picks, int(rig.picks_side.get(-1, 0)), int(rig.picks_side.get(1, 0)), rig.time_pen, rig.pops_flat])
+		print("TRAIL   swing: %d turns of the board's heading back the other way by more than 8 deg, fastest heading change %d deg/s" % [hrev, int(hrate)])
 		print("TRAIL   weave: board x from %.1f to %.1f m, steepest heading %.1f deg" % [xmin, xmax, hmax])
 		print("TRAIL   hazards: %d built, %d hit, crashes %d" % [rig.hazards_built, rig.hazards_hit, rig.crashes])
 		print("TRAIL   biggest sideways jolt in one frame: %.1f m/s" % jolt)
 		print("TRAIL   ", rig.choice_summary(), "  ", rig.choice_n)
 		if OS.get_environment("NXMEAS") != "":
 			var rs: Array = []
+			var s70: Array = []
 			var flips := 0
 			var offs := 0
 			var nn := 0
 			for kk in rig._rows:
 				for f in (rig._rows[kk] as Dictionary).get("feats", []):
+					if f.has("m70"):
+						s70.append(float(f["m70"]))
 					if f.has("m_n") and int(f["m_n"]) > 8:
 						rs.append(float(f["m_hi"]) - float(f["m_lo"]))
 						nn += 1
 						flips += 1 if (float(f["m_lo"]) < -0.15 and float(f["m_hi"]) > 0.15) else 0
 						offs += 1 if int(f.get("m_off", 0)) > 0 else 0
 			rs.sort()
+			if s70.size() > 2:
+				var mu := 0.0
+				for v in s70:
+					mu += float(v)
+				mu /= float(s70.size())
+				var sdv := 0.0
+				for v in s70:
+					sdv += (float(v) - mu) * (float(v) - mu)
+				print("TRAIL   NX70: where an object sits across the screen 70 m before it (signed by its lane): mean %.2f, spread (std) %.2f over %d objects" % [mu, sqrt(sdv / float(s70.size())), s70.size()])
 			if nn > 0:
 				print("TRAIL   NX: %d objects watched over their last 110 m: screen position swings %.2f (median) to %.2f (worst) of the half-screen; %d cross from the left of the screen to the right; %d leave the picture at some point" % [nn, rs[nn / 2], rs[nn - 1], flips, offs])
 		if OS.get_environment("DEC") != "":

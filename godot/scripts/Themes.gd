@@ -3,7 +3,7 @@ extends RefCounted
 ## Looks for the Downhill world. A theme is a sky, a ground, a tree finish, the light, and (for the trippy ones) a full-screen pass.
 ## Each shader is written to keep the PLAY readable: the ground stays dark enough that gates, trees and rocks always stand out, and the neon goes on the things you must see.
 
-const ORDER := ["alpine", "candy", "egypt", "psychedelic", "matrix", "synthwave"]
+const ORDER := ["alpine", "psychedelic", "tunnel", "desert", "candy", "egypt", "matrix", "synthwave"]
 
 const DATA := {
 	"alpine": {
@@ -28,6 +28,18 @@ const DATA := {
 		"c1": Color(1.0, 0.25, 0.85), "c2": Color(0.2, 0.9, 1.0),
 		"env": {"sky_top": Color(0.08, 0.0, 0.2), "sky_horizon": Color(0.6, 0.1, 0.7), "sky_ground": Color(0.05, 0.0, 0.12), "ambient": 0.9, "fog_density": 0.0016,
 			"fog": Color(0.35, 0.05, 0.45), "sun_color": Color(1.0, 0.7, 1.0), "sun_energy": 0.7, "sun_rot": Vector3(-35.0, -30.0, 0.0), "fog_sky": 0.0, "glow": 0.35, "glow_on": false, "saturation": 1.15, "contrast": 1.1},
+	},
+	"tunnel": {
+		"name": "TUNNEL ROAD", "blurb": "A neon tunnel of racing chevrons. Everything converges on the vanishing point.",
+		"c1": Color(0.15, 0.85, 1.0), "c2": Color(1.0, 0.25, 0.8),
+		"env": {"sky_top": Color(0.02, 0.0, 0.08), "sky_horizon": Color(0.5, 0.1, 0.5), "sky_ground": Color(0.02, 0.0, 0.05), "ambient": 0.9, "fog_density": 0.0015,
+			"fog": Color(0.25, 0.05, 0.35), "sun_color": Color(0.8, 0.8, 1.0), "sun_energy": 0.5, "sun_rot": Vector3(-35.0, -30.0, 0.0), "fog_sky": 0.0, "glow": 0.35, "glow_on": false, "saturation": 1.2, "contrast": 1.1},
+	},
+	"desert": {
+		"name": "DESERT SUN", "blurb": "A giant red sun, rippling stripes across the sky, rust and cactus.",
+		"c1": Color(1.0, 0.45, 0.3), "c2": Color(0.55, 0.85, 0.65),
+		"env": {"sky_top": Color(0.9, 0.3, 0.35), "sky_horizon": Color(1.0, 0.55, 0.4), "sky_ground": Color(0.8, 0.35, 0.3), "ambient": 1.0, "fog_density": 0.0013,
+			"fog": Color(0.95, 0.5, 0.4), "sun_color": Color(1.0, 0.8, 0.6), "sun_energy": 1.0, "sun_rot": Vector3(-25.0, -10.0, 0.0), "fog_sky": 0.0, "glow": 0.2, "glow_on": false, "saturation": 1.2, "contrast": 1.1},
 	},
 	"matrix": {
 		"name": "DIGITAL", "blurb": "A green grid with falling code. The slope is a program.",
@@ -58,6 +70,7 @@ shader_type spatial;
 render_mode cull_disabled, unshaded;
 //HSV
 varying vec3 wp;
+uniform float speed = 0.0;      // 0..1: the faster you go, the harder the stripes race
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	// liquid marble: a coordinate field folded and warped by itself, so the bands flow, split and rejoin as you ride downhill
@@ -72,6 +85,15 @@ void fragment() {
 	float band = 1.0 - smoothstep(0.0, 0.16, abs(sin(a * 2.2)));           // thin glowing contour lines
 	float soft = 0.5 + 0.5 * sin(a * 1.1 + TIME * 0.4);
 	vec3 col = hsv(hue, 1.0, 0.14 + 0.30 * soft) + hsv(fract(hue + 0.5), 0.9, 0.6) * band;
+	// SPEED STRIPES: thin bands across the slope every 9 m, each its own colour, and a second finer set in between: what passes under you every fraction of a second is
+	// what the eyes read as speed. They sit faintly at a crawl and burn at full speed.
+	float s1 = wp.z * 0.11;
+	float l1 = 1.0 - smoothstep(0.0, 0.07 + 0.05 * speed, abs(fract(s1) - 0.5) * 2.0 - 0.86);
+	float s2 = wp.z * 0.44 + wp.x * 0.02;
+	float l2 = 1.0 - smoothstep(0.0, 0.06, abs(fract(s2) - 0.5) * 2.0 - 0.9);
+	float amt = 0.12 + 0.88 * speed;
+	col += hsv(fract(floor(s1) * 0.13 + TIME * 0.05), 0.85, 1.0) * l1 * amt * 0.9;
+	col += hsv(fract(floor(s2) * 0.07 + 0.5), 0.7, 1.0) * l2 * amt * 0.35 * speed;
 	ALBEDO = col * col;                                          // authored in screen colours: square it into the linear space the renderer wants
 }
 """
@@ -285,6 +307,119 @@ void fragment() {
 }
 """
 
+
+# ---------------------------------------------------------------- tunnel road and desert sun
+const GROUND_TUNNEL := """
+shader_type spatial;
+render_mode cull_disabled, unshaded;
+//HSV
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	// chevrons racing down the slope: a dark floor with thin bright V stripes, each stripe its own neon colour
+	float ch = abs(wp.x) * 0.16 + wp.z * 0.045;
+	float id = floor(ch);
+	float f = fract(ch);
+	float line = smoothstep(0.0, 0.05, f) * (1.0 - smoothstep(0.1, 0.18, f));
+	vec3 neon = hsv(fract(id * 0.17 + 0.55), 0.9, 1.0);
+	vec3 col = vec3(0.03, 0.02, 0.08) + 0.05 * hsv(fract(id * 0.17 + 0.55), 1.0, 1.0) + neon * line * 0.85;
+	ALBEDO = col * col;
+}
+"""
+
+const VEG_TUNNEL := """
+shader_type spatial;
+render_mode cull_disabled;
+//HSV
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	// striped glowing columns: bands of colour up the trunk-like shape, so the walls of the tunnel look painted
+	float lum = dot(COLOR.rgb, vec3(0.34));
+	float b = floor(wp.y * 0.9 + abs(wp.x) * 0.08);
+	vec3 neon = hsv(fract(b * 0.23 + 0.55), 0.9, 1.0);
+	ALBEDO = mix(vec3(0.02, 0.0, 0.05), neon * 0.7, smoothstep(0.1, 0.9, lum));
+	EMISSION = neon * smoothstep(0.35, 1.0, lum) * 0.8;
+	ROUGHNESS = 0.5;
+}
+"""
+
+const SKY_TUNNEL := """
+shader_type sky;
+vec3 pal(float t) { return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67))); }
+void sky() {
+	vec3 d = EYEDIR;
+	// rays and bands converging on the point straight down the slope: sectors of colour round the line of travel, with stripes that stream outward
+	float rad = acos(clamp(-d.z, -1.0, 1.0));
+	float ang = atan(d.y, d.x);
+	float sector = floor((ang + 3.14159) / 6.28318 * 11.0);
+	float st = fract(rad * 7.0 - TIME * 0.35);
+	vec3 col = pal(sector * 0.09 + rad * 0.2 + TIME * 0.02) * (0.15 + 0.85 * smoothstep(0.0, 0.2, st) * (1.0 - smoothstep(0.55, 0.7, st)));
+	col *= 0.35 + 0.65 * smoothstep(2.4, 0.3, rad);
+	float horizon = smoothstep(-0.12, 0.25, d.y);
+	COLOR = mix(vec3(0.06, 0.0, 0.12), col, horizon);
+}
+"""
+
+const GROUND_DESERT := """
+shader_type spatial;
+render_mode cull_disabled, unshaded;
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	// flat poster colours: bands of sand, rust and a little teal, each ringed by a thin dark contour line
+	float n = sin(wp.x * 0.05 + sin(wp.z * 0.02) * 2.0) + sin(wp.z * 0.03 + wp.x * 0.02) + 0.5 * sin(wp.z * 0.11 - wp.x * 0.04);
+	float k = fract(n * 0.35 + 0.5);
+	vec3 sand = vec3(0.92, 0.52, 0.4);
+	vec3 rust = vec3(0.66, 0.22, 0.24);
+	vec3 teal = vec3(0.22, 0.42, 0.42);
+	vec3 col = k < 0.45 ? sand : (k < 0.8 ? rust : teal);
+	float edge = 1.0 - smoothstep(0.0, 0.025, min(abs(k - 0.45), min(abs(k - 0.8), min(k, 1.0 - k))));
+	col = mix(col, vec3(0.15, 0.04, 0.08), edge * 0.8) * 0.62;
+	ALBEDO = col * col;
+}
+"""
+
+const VEG_DESERT := """
+shader_type spatial;
+render_mode cull_disabled;
+varying vec3 wp;
+void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	// cactus green with pale ribs
+	float lum = dot(COLOR.rgb, vec3(0.34));
+	float rib = 0.5 + 0.5 * sin((wp.x + wp.z) * 6.0 + wp.y * 0.5);
+	vec3 g = mix(vec3(0.1, 0.27, 0.17), vec3(0.32, 0.55, 0.3), rib);
+	ALBEDO = mix(vec3(0.05, 0.1, 0.07), g, smoothstep(0.1, 0.9, lum));
+	ROUGHNESS = 0.8;
+}
+"""
+
+const SKY_DESERT := """
+shader_type sky;
+void sky() {
+	vec3 d = EYEDIR;
+	vec3 sd = normalize(vec3(0.12, 0.28, -1.0));
+	float a = acos(clamp(dot(d, sd), -1.0, 1.0));
+	vec3 rx = normalize(cross(sd, vec3(0.0, 1.0, 0.0)));
+	vec3 ry = cross(rx, sd);
+	float th = atan(dot(d, ry), dot(d, rx));
+	// rippling stripes all round a huge red sun, wobbling slowly
+	float warp = 0.08 * sin(th * 4.0 + TIME * 0.25) + 0.05 * sin(th * 9.0 - TIME * 0.4) + 0.04 * sin(a * 6.0 - TIME * 0.2);
+	float rip = sin((a + warp) * 46.0 - TIME * 0.6);
+	vec3 c1 = vec3(0.93, 0.28, 0.32);
+	vec3 c2 = vec3(1.0, 0.72, 0.42);
+	vec3 c3 = vec3(0.55, 0.78, 0.62);
+	float far = smoothstep(0.3, 2.4, a);
+	vec3 col = mix(c1, c2, smoothstep(-0.2, 0.5, rip));
+	col = mix(col, c3, smoothstep(0.55, 0.95, rip) * far * (0.5 + 0.5 * sin(th * 3.0 + TIME * 0.1)));
+	vec3 sun = mix(vec3(0.96, 0.3, 0.2), vec3(1.0, 0.5, 0.3), a / 0.3);
+	col = mix(col, vec3(1.0, 0.85, 0.55), 1.0 - smoothstep(0.29, 0.34, a));
+	col = mix(col, sun, 1.0 - smoothstep(0.27, 0.29, a));
+	COLOR = mix(vec3(0.75, 0.28, 0.28), col, smoothstep(-0.12, 0.05, d.y));
+}
+"""
+
 # ---------------------------------------------------------------- sky
 const SKY_PSY := """
 shader_type sky;
@@ -361,6 +496,7 @@ uniform float mode = 0.0;        // 1 psychedelic, 2 digital, 3 synthwave
 uniform float amount = 1.0;
 uniform float use_trail = 1.0;     // 0 when the tracer pass is switched off to save frame rate
 uniform float breathe = 0.0;     // 0..1 how hard the picture breathes
+uniform float trip = 0.0;        // 0..1 the TRIP: built up by sugar and combos, it swirls the picture, throws the colours apart and fills the air with tracers
 """ + HSV + """
 void fragment() {
 	vec2 uv = SCREEN_UV;
@@ -372,15 +508,20 @@ void fragment() {
 	} else if (mode < 1.5) {
 		// psychedelic: a gentle breathing warp, chromatic split that grows toward the edges, tracers
 		float w = sin(TIME * 0.7 + r * 9.0) * 0.0035 * amount * breathe;
-		vec2 wuv = uv + c * w * 2.0 + vec2(sin(uv.y * 14.0 + TIME) * 0.0008, 0.0) * amount * breathe;
-		float ca = (0.003 + r * 0.012) * amount;
+		float tw = trip * trip;
+		float ang = 0.0;          // no swirl: the heavy swirling was too much
+		vec2 cw = vec2(c.x * cos(ang) - c.y * sin(ang), c.x * sin(ang) + c.y * cos(ang));
+		vec2 wuv = vec2(0.5) + cw + c * w * 2.0 + vec2(sin(uv.y * 14.0 + TIME) * 0.0008, 0.0) * amount * breathe;
+		float ca = (0.003 + r * 0.012) * amount * (1.0 + trip * 3.0);
 		col = vec3(texture(screen_tex, wuv + c * ca).r, texture(screen_tex, wuv).g, texture(screen_tex, wuv - c * ca).b);
 		vec3 old = texture(trail, uv).rgb;
 		vec3 diff = max(old - texture(cur, uv).rgb * 0.92 - 0.02, vec3(0.0));
-		float m = clamp(dot(diff, vec3(0.34)) * 3.2, 0.0, 1.0);
+		float m = clamp(dot(diff, vec3(0.34)) * 3.2 * (1.0 + trip * 3.0) + trip * 0.10 * (0.5 + 0.5 * sin(r * 22.0 - TIME * 2.5)), 0.0, 1.0);
 		vec3 ghost = hsv(fract(TIME * 0.12 + r * 0.9 + m * 0.5), 0.95, 1.0) * m;
 		col += ghost * 1.15 * amount * use_trail;
 		col = mix(col, col * hsv(fract(TIME * 0.05), 0.25, 1.1), 0.12 * amount);
+		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55);
+		col *= 1.0 + trip * 0.25;
 		col *= 1.0 - 0.45 * smoothstep(0.45, 0.95, r);
 	} else if (mode < 2.5) {
 		// digital: green tint, scanlines, a little flicker, vignette
@@ -426,6 +567,10 @@ static func ground_material(id: String) -> ShaderMaterial:
 			return make_shader(GROUND_EGYPT)
 		"psychedelic":
 			return make_shader(GROUND_PSY)
+		"tunnel":
+			return make_shader(GROUND_TUNNEL)
+		"desert":
+			return make_shader(GROUND_DESERT)
 		"matrix":
 			return make_shader(GROUND_MATRIX)
 		"synthwave":
@@ -441,6 +586,10 @@ static func veg_material(id: String) -> ShaderMaterial:
 			return make_shader(VEG_EGYPT)
 		"psychedelic":
 			return make_shader(VEG_PSY)
+		"tunnel":
+			return make_shader(VEG_TUNNEL)
+		"desert":
+			return make_shader(VEG_DESERT)
 		"matrix":
 			return make_shader(VEG_MATRIX)
 		"synthwave":
@@ -456,6 +605,10 @@ static func sky_material(id: String) -> ShaderMaterial:
 			return make_shader(SKY_EGYPT)
 		"psychedelic":
 			return make_shader(SKY_PSY)
+		"tunnel":
+			return make_shader(SKY_TUNNEL)
+		"desert":
+			return make_shader(SKY_DESERT)
 		"matrix":
 			return make_shader(SKY_MATRIX)
 		"synthwave":
@@ -471,6 +624,10 @@ static func mist_color(id: String) -> Color:
 			return Color(0.98, 0.84, 0.58, 0.97)
 		"psychedelic":
 			return Color(0.14, 0.02, 0.24, 0.97)
+		"tunnel":
+			return Color(0.12, 0.02, 0.2, 0.97)
+		"desert":
+			return Color(0.95, 0.55, 0.42, 0.97)
 		"matrix":
 			return Color(0.0, 0.05, 0.015, 0.98)
 		"synthwave":
@@ -599,4 +756,4 @@ static func pyramid_mesh() -> ArrayMesh:
 
 
 static func post_mode(id: String) -> int:
-	return {"psychedelic": 1, "matrix": 2, "synthwave": 3}.get(id, 0)
+	return {"psychedelic": 1, "tunnel": 1, "matrix": 2, "synthwave": 3}.get(id, 0)

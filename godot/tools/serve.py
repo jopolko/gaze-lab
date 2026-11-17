@@ -5,6 +5,7 @@ Never cached, so a fresh export shows up on reload. localhost counts as a secure
 (No special headers needed: the export is built without threads.)"""
 import http.server
 import os
+import re
 import sys
 
 LAN = "--lan" in sys.argv
@@ -61,7 +62,11 @@ class H(http.server.SimpleHTTPRequestHandler):
         super().__init__(*a, directory=ROOT, **k)
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-store")
+        # the engine, the pack and the script carry a fingerprint in their name and never change under it: the phone keeps them. Everything else is always fetched fresh.
+        if re.search(r"\.[0-9a-f]{8}\.(wasm|pck|js)$", self.path.split("?", 1)[0]):
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
     _gz = {}
@@ -78,8 +83,9 @@ class H(http.server.SimpleHTTPRequestHandler):
             if data is None:
                 with open(path, "rb") as f:
                     data = gzip.compress(f.read(), compresslevel=6)
-                self._gz.clear()
-                self._gz[key] = data if os.path.getsize(path) < 80 * 1024 * 1024 else None
+                for old in [k for k in self._gz if k[0] == path]:
+                    del self._gz[old]                      # only this file's older copy goes: the other files keep theirs (clearing all of them made the 40 MB engine compress again on every load)
+                self._gz[key] = data
             self.send_response(200)
             self.send_header("Content-Type", self.guess_type(path))
             self.send_header("Content-Encoding", "gzip")

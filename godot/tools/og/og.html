@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;padding:0;background:#10001f;}
+.c{position:relative;width:1200px;height:630px;overflow:hidden;font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;}
+svg{position:absolute;inset:0}
+.t{position:absolute;left:64px;top:96px;color:#fff;}
+.t h1{margin:0;font-size:132px;line-height:1;letter-spacing:4px;font-weight:900;text-shadow:0 0 30px #ff2fd0,0 6px 0 #3a0a6e,0 0 80px #7a2bff;}
+.t p{margin:16px 0 0;font-size:44px;font-weight:700;color:#ffe9a8;text-shadow:0 3px 0 #3a0a6e,0 0 24px #ff9a2f;}
+.t small{display:block;margin-top:20px;font-size:28px;font-weight:600;color:#bfe9ff;letter-spacing:1px}
+.u{position:absolute;left:64px;bottom:34px;color:#fff;font-size:26px;font-weight:700;opacity:.92;letter-spacing:1px}
+</style></head><body><div class="c">
+<svg viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<radialGradient id="bg" cx="72%" cy="48%" r="85%"><stop offset="0" stop-color="#ff7a2f"/><stop offset=".18" stop-color="#ff2fa8"/><stop offset=".45" stop-color="#6a1bd1"/><stop offset="1" stop-color="#10001f"/></radialGradient>
+<linearGradient id="road" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a0a52"/><stop offset="1" stop-color="#0a0016"/></linearGradient>
+<radialGradient id="eyeg" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#e9e0ff"/></radialGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="1200" height="630" fill="url(#bg)"/>
+<!-- rays out from the vanishing point -->
+<g transform="translate(864 300)" opacity=".55">
+<g id="rays"></g>
+</g>
+<!-- tunnel rings -->
+<g transform="translate(864 300)" fill="none" stroke-linecap="round" id="rings"></g>
+<!-- road -->
+<polygon points="864,300 1200,630 380,630" fill="url(#road)" opacity=".95"/>
+<line x1="864" y1="300" x2="780" y2="630" stroke="#ffe36a" stroke-width="5" stroke-dasharray="26 22" opacity=".9"/>
+<line x1="864" y1="300" x2="950" y2="630" stroke="#6ae8ff" stroke-width="4" opacity=".9" filter="url(#glow)"/>
+<!-- a rail, a glint trail -->
+<g id="glints"></g>
+<!-- the eyes -->
+<g transform="translate(838 372)" filter="url(#glow)">
+<ellipse cx="-92" cy="0" rx="78" ry="92" fill="url(#eyeg)" stroke="#1a0036" stroke-width="8"/>
+<ellipse cx="92" cy="0" rx="78" ry="92" fill="url(#eyeg)" stroke="#1a0036" stroke-width="8"/>
+<circle cx="-70" cy="-14" r="38" fill="#1a0036"/><circle cx="114" cy="-14" r="38" fill="#1a0036"/>
+<circle cx="-82" cy="-28" r="12" fill="#fff"/><circle cx="102" cy="-28" r="12" fill="#fff"/>
+<path d="M-170 -118 Q-92 -170 -14 -112" fill="none" stroke="#1a0036" stroke-width="14" stroke-linecap="round"/>
+<path d="M14 -112 Q92 -170 170 -118" fill="none" stroke="#1a0036" stroke-width="14" stroke-linecap="round"/>
+</g>
+</svg>
+<div class="t"><h1>DOWNHILL</h1><p>Steer with your eyes.</p><small>Rails · ramps · flow · pure speed</small></div>
+<div class="u">joshuaopolko.com/gaze-lab</div>
+</div>
+<script>
+var NS='http://www.w3.org/2000/svg';
+var rays=document.getElementById('rays');
+for(var i=0;i<24;i++){var a=i/24*Math.PI*2,b=(i+0.5)/24*Math.PI*2;var p=document.createElementNS(NS,'polygon');
+ p.setAttribute('points','0,0 '+Math.cos(a)*1400+','+Math.sin(a)*1400+' '+Math.cos(b)*1400+','+Math.sin(b)*1400);
+ p.setAttribute('fill',['#ffd23a','#ff2fa8','#2fe0ff','#9b4bff'][i%4]);p.setAttribute('opacity',i%2?0.0:0.22);rays.appendChild(p);}
+var rings=document.getElementById('rings');
+for(var i=0;i<9;i++){var r=40+i*i*7+i*30;var c=document.createElementNS(NS,'ellipse');
+ c.setAttribute('rx',r);c.setAttribute('ry',r*0.72);c.setAttribute('stroke',['#ffd23a','#ff2fa8','#2fe0ff','#9b4bff'][i%4]);
+ c.setAttribute('stroke-width',4+i*1.6);c.setAttribute('opacity',Math.max(0.25,0.95-i*0.08));rings.appendChild(c);}
+var g=document.getElementById('glints');
+for(var i=0;i<11;i++){var t=i/10;var x=864+(1-t)*0+ (t*160)-10;var y=312+t*300;var s=5+t*13;
+ var d=document.createElementNS(NS,'polygon');d.setAttribute('points',[x,y-s,x+s*.8,y,x,y+s,x-s*.8,y].join(' '));d.setAttribute('fill','#ffd23a');d.setAttribute('opacity',.95);d.setAttribute('filter','url(#glow)');g.appendChild(d);}
+</script></body></html>

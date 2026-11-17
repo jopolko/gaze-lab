@@ -62,7 +62,6 @@ func setup(p_player: PlayerController) -> void:
 		if pv != "":
 			pm_view = clampf(float(pv), -1.0, 1.0)
 	_zone_scale = 1.8                    # the trim from the raw look is looser: full lock at about +-19% of the screen, not +-10%
-	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
 	if OS.has_feature("web"):
 		_tr_auto = bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('trace')"))
 		var rsq := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('rs') || ''"))
@@ -116,6 +115,7 @@ func _gen_trail(row: Dictionary, z0: float, cones: Array[Transform3D], cone_cols
 		poles.append(pole)
 	row["poles"] = poles
 	_gen_feats(row, z0)
+	_gen_guide(row, z0)
 	# rails, poles, rocks, swirls: a few hundred separate things, each its own draw call on a phone. Nothing further than 300 m ahead needs drawing (the fog has hidden it by then) (a choice is only offered from 130 m)
 	for nd in (row["nodes"] as Array):
 		if is_instance_valid(nd) and nd is GeometryInstance3D:
@@ -398,7 +398,7 @@ func _draw_calib(font: Font, s: Vector2, k: float) -> void:
 # Each one is a small line on screen, a record in the log (kind "choice"), and a count on the finish screen. The live chart (Pause > EYE CHART, ?nodiag hides it)
 # scrolls the last 8 seconds: yellow = eyes, white = the game's reading, blue = the steering the board was given, green bar = the side picked.
 # --------------------------------------------------------------------------
-var diag_on: bool = not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nodiag"))
+var diag_on: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("diag")          # the eye graph is off in play: ?diag shows it. The readings are still kept in the background
 var choice_log: Array = []
 var choice_n: Dictionary = {}
 var _cho: Dictionary = {}
@@ -500,7 +500,7 @@ func _choice_feat_done(f: Dictionary, got: bool) -> void:
 func _feat_got(f: Dictionary) -> bool:
 	match String(f["kind"]):
 		"jump":
-			return absf(spos.x - _feat_x(f, float(f["zb"]))) < JUMP_W * 0.5 - 1.5
+			return absf(spos.x - _feat_x(f, float(f["zb"]))) < float(f.get("jw", JUMP_W)) * 0.5 - 1.5
 		"loot":
 			return f.has("b") and bool((f["b"] as Dictionary)["taken"])
 	return false
@@ -721,6 +721,7 @@ var best_val: float = 0.0            # the record for this mode and length befor
 var new_best: bool = false
 var _rail: Dictionary = {}           # the rail being ridden
 var _rail_z0: float = 0.0
+var _rail_dx: float = 0.0
 var _rail_pops0: int = 0
 var _rail_spark: float = 0.0
 var _rail_py: float = 0.0
@@ -785,6 +786,14 @@ func _build_rail(row: Dictionary, f: Dictionary) -> void:
 			if i % 2 == 0 or i == n:
 				(row["nodes"] as Array).append(_mi(self, _rail_post, pmat, Vector3(pt.x, pt.y - RAIL_H * 0.5, z)))
 		prev = pt
+	# a spiral of glints round the rail: ride it and you scoop the lot
+	var gpts: Array = []
+	var gz := za - 3.0
+	while gz > zb + 2.0:
+		var gt := (za - gz) * 0.8
+		gpts.append(Vector3(_feat_x(f, gz) + sin(gt) * 1.1, _rail_y(f, gz) + 1.0 + cos(gt) * 0.7, gz))
+		gz -= 2.2 / glint_k
+	_glint_line(row, gpts, 2.3)
 	# a tall thin light at the way on, so it can be picked out from a long way up the trail
 	_buff_assets("orb")
 	var ex := _feat_x(f, za)
@@ -794,14 +803,16 @@ func _build_rail(row: Dictionary, f: Dictionary) -> void:
 func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: float, grp: int) -> void:
 	feats_total += 1
 	if kind == "jump":
-		var klen := JUMP_LEN
+		var klen := jump_len
 		var kz := zi + klen - 3.0
 		var lipz := kz - klen
-		var kx := trail_x(kz - klen * 0.5) + sd * FEAT_OFF
-		_kickers.append({"x": kx, "z": kz, "len": klen, "w": JUMP_W, "rise": JUMP_RISE, "epic": false, "trail": true})
-		var lc := Color(1.0, 0.6, 0.15)
+		var jw := JUMP_W if not _winding() else 10.0          # on the winding trail the lanes are close: a narrower ramp, set out far enough that its inner edge is clear of the middle
+		var is_super := sd == 0.0 and _rng.randf() < 0.6
+		var kx := trail_x(kz - klen * 0.5) + sd * (jw * 0.5 + 13.0)          # well clear of the trail wherever it weaves along the ramp, so nothing is ever crossed by accident
+		_kickers.append({"x": kx, "z": kz, "len": klen, "w": jw, "rise": jump_rise * (1.3 if is_super else 1.0), "epic": false, "trail": true, "pw": jump_pow, "curl": jump_curl, "super": is_super})
+		var lc := Color(1.0, 0.6, 0.15) if not is_super else Color(1.0, 0.95, 0.2)
 		var lipm := BoxMesh.new()
-		lipm.size = Vector3(JUMP_W - 3.0, 0.12, 0.5)
+		lipm.size = Vector3(jw - 3.0, 0.12, 0.5)
 		(row["nodes"] as Array).append(_mi(self, lipm, _fx_mat("solid", lc, 1.6), Vector3(kx, terrain_h(kx, lipz + 0.8) + 0.12, lipz + 0.8)))
 		for sx in [-1.0, 1.0]:
 			var pole := CylinderMesh.new()
@@ -809,19 +820,27 @@ func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: floa
 			pole.bottom_radius = 0.09
 			pole.height = 3.4
 			pole.radial_segments = 5
-			var px: float = kx + float(sx) * (JUMP_W * 0.5 - 0.8)
+			var px: float = kx + float(sx) * (jw * 0.5 - 0.8)
 			var pn := _mi(self, pole, _fx_mat("solid", lc, 1.4), Vector3(px, terrain_h(px, lipz + 1.0) + 1.7, lipz + 1.0))
 			(row["nodes"] as Array).append(pn)
 			_mi(pn, _quad(1.5), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, 1.5, 0.0))
 		var lead: Array = [Vector2(trail_x(kz + 12.0) + sd * FEAT_OFF * 0.8, kz + 12.0), Vector2(kx, kz - 2.0)]
 		_spawn_buff(row, "boost" if mode == "race" else _pick_buff(true), trail_x(lipz - 11.0) + sd * FEAT_OFF, lipz - 11.0, lead, "air", 2.2)
+		var apts: Array = []
+		var lip_y := terrain_h(kx, lipz)
+		for ai in range(1, int(9.0 * glint_k) + 1):
+			var at := float(ai) * 0.45 / glint_k
+			var az := lipz - 33.0 * at
+			var ay := maxf(lip_y + jump_launch * at - 4.9 * at * at, terrain_h(kx, az) + 1.8)
+			apts.append(Vector3(kx, ay, az))
+		_glint_line(row, apts, 4.0)          # an arc of glints through the air off the lip: the blast carries you through them
 		jumps_built += 1
 		_make_vortex(row, _kickers[_kickers.size() - 1], kx, kz, false, true)          # the same swirl the free-ride ramps have, big, so a jump can be seen from far up the slope
 		_buff_assets("orb")
 		(row["nodes"] as Array).append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(1.0, 0.35, 1.0, 0.3)), Vector3(kx, terrain_h(kx, kz + 8.0) + 4.6, kz + 8.5)))
 		# the two edges of the ramp, lit, so its length and where it ends can be seen
 		for ex in [-1.0, 1.0]:
-			var ex_x: float = kx + float(ex) * (JUMP_W * 0.5 - 0.4)
+			var ex_x: float = kx + float(ex) * (jw * 0.5 - 0.4)
 			var ep := Vector3(ex_x, terrain_h(ex_x, kz) + 0.18, kz)
 			var en_ := 2
 			for ei in range(1, en_ + 1):
@@ -829,7 +848,7 @@ func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: floa
 				var epn := Vector3(ex_x, terrain_h(ex_x, ez) + 0.18, ez)
 				_seg_box(row, ep, epn, Vector2(0.3, 0.14), _fx_mat("solid", lc, 1.6))
 				ep = epn
-		feats.append({"kind": "jump", "za": kz + 44.0, "zl": kz, "zb": lipz, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp, "kx": kx})
+		feats.append({"kind": "jump", "za": kz + 44.0, "zl": kz, "zb": lipz, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp, "kx": kx, "jw": jw})
 	elif kind == "rail":
 		var rl := _rng.randf_range(26.0, 36.0)
 		var f := {"kind": "rail", "za": zi + rl * 0.5, "zb": zi - rl * 0.5, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp}
@@ -849,12 +868,40 @@ func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: floa
 		feats.append({"kind": "loot", "za": bz + 30.0, "zl": bz, "zb": bz - 2.0, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": grp, "b": (row["buffs"] as Array).back()})
 
 
+## A dashed light down the middle of the trail: the way on, easy to find at a glance. One shared draw for the whole stretch.
+var _show_guide: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("guide")          # the dashed centre line is off: it drew the eyes
+
+
+func _gen_guide(row: Dictionary, z0: float) -> void:
+	if not _show_guide:
+		return
+	var xf: Array[Transform3D] = []
+	var cols := PackedColorArray()
+	var z := z0 - 6.0
+	var z_end := maxf(z0 - ROW_GAP, finish_z + 6.0)
+	while z > z_end:
+		if -z > 26.0:
+			var yaw := atan2(trail_x(z - 2.0) - trail_x(z + 2.0), 4.0)
+			xf.append(Transform3D(Basis(Vector3.UP, -yaw), Vector3(trail_x(z), terrain_h(trail_x(z), z) + 0.1, z)))
+			cols.append(Color(1, 1, 1, 1))
+		z -= 11.0
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.7, 0.06, 4.2)
+	_add_mm(row, bm, xf, cols, _fx_mat("add", Color(0.75, 0.95, 1.0, 0.45)))
+
+
 ## The things that stand between the poles of this stretch of trail. Every one is a CHOICE of two: something on the left and something different on the right, side by
 ## side, with nothing in the middle. You cannot have both, the board takes neither by itself, and the one you get is the one you looked at: that is how you can tell the
 ## game is reading your eyes and not steering for you.
 func _gen_feats(row: Dictionary, z0: float) -> void:
 	var feats: Array = []
 	row["feats"] = feats
+	if _cur_m < 0.7:
+		# a mild stretch is where speed is made: boost pads laid along the middle of the trail, a few to a stretch, to be hit on purpose
+		for pdz0: float in [22.0, 78.0, 134.0]:
+			if _rng.randf() < minf(1.0, pad_chance * 6.0):
+				var pdz := z0 - pdz0
+				_make_pad(row, trail_x(pdz) + _rng.randf_range(-2.5, 2.5), pdz, false)
 	var rz0: float = row["z"]
 	var n0 := int(floor((-z0 / TRAIL_TURN_LEN + _tr_p1) / PI))
 	for n in range(n0, n0 + 12):
@@ -862,36 +909,113 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 		var zi := -si
 		if zi > z0 or zi <= z0 - ROW_GAP or si < 230.0 or zi < finish_z + 110.0:
 			continue
-		var opts: Array = ["rail"]                                    # a rail does not mind where it stands
-		if zi < z0 - 31.0 and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0:
-			opts.append("jump")                                       # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
-		if absf(zi + 22.0 - rz0) < 140.0 and absf(zi - 10.0 - rz0) < 140.0:
-			opts.append("loot")
-		for i in range(opts.size() - 1, 0, -1):
+		var can_jump := _rng.randf() < jump_chance and zi < z0 - (jump_len + 3.0) and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0          # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
+		var can_loot := absf(zi + 22.0 - rz0) < 140.0 and absf(zi - 10.0 - rz0) < 140.0
+		var kinds: Array = ["rail"]
+		if can_jump:
+			kinds.append("jump")
+		if can_loot:
+			kinds.append("loot")
+		for i in range(kinds.size() - 1, 0, -1):
 			var jx := _rng.randi() % (i + 1)
-			var tmp: String = opts[i]
-			opts[i] = opts[jx]
-			opts[jx] = tmp
-		if opts.size() == 1:
-			opts.append("rail")
+			var tmp: String = kinds[i]
+			kinds[i] = kinds[jx]
+			kinds[jx] = tmp
 		var sd := 1.0 if _rng.randf() < 0.5 else -1.0
 		choices_built += 1
-		_make_feat(row, feats, String(opts[0]), zi, sd, choices_built)
-		_make_feat(row, feats, String(opts[1]), zi, -sd, choices_built)
-		# the way straight on is not always clear: ahead of the choice there can be something nasty in the board's own lane. It is not a choice (nothing chooses it, and it
-		# is hit by simply staying where you are): the choice is to stay and take it, or swing out to one of the good things at the side.
-		if _rng.randf() < HAZARD_SHARE and absf(zi + 36.0 - rz0) < 140.0:
-			_make_hazard(row, feats, "rock" if _rng.randf() < 0.5 else "slush", zi)
+		# LAYOUTS. Every choice point is dressed differently, so no two feel alike:
+		#   pair    something on each side (the classic), the middle lane open or with a slalom of rocks to thread
+		#   centre  ONE good thing straight ahead in the middle, with rocks on both sides: stay on it, or leave and run the rocks
+		#   triple  three different things across the track, left, middle and right
+		#   flank   a pair with a small rock cluster between the middle and each side: crossing over takes timing
+		var roll := _rng.randf()
+		var layout := "pair"
+		if roll < 0.22:
+			layout = "centre"
+		elif roll < 0.42 and kinds.size() >= 3:
+			layout = "triple"
+		elif roll < 0.62:
+			layout = "flank"
+		var harder := 0.45 if _cur_m < 0.7 else (1.4 if _cur_m > 1.2 else 1.0)
+		var can_rock := absf(zi + 36.0 - rz0) < 140.0
+		match layout:
+			"centre":
+				var ck: String = "jump" if (can_jump and _rng.randf() < 0.65) else ("rail" if _rng.randf() < 0.55 or not can_loot else "loot")
+				_make_feat(row, feats, ck, zi, 0.0, choices_built)
+				if can_rock and ck != "jump":
+					_make_hazard(row, feats, "rock", zi, -9.0, 2, 1.2)
+					_make_hazard(row, feats, "rock", zi, 9.0, 2, 1.2)
+			"triple":
+				_make_feat(row, feats, String(kinds[0]), zi, -1.0, choices_built)
+				_make_feat(row, feats, String(kinds[1]), zi, 0.0, choices_built)
+				_make_feat(row, feats, String(kinds[2]), zi, 1.0, choices_built)
+			_:
+				if kinds.size() == 1:
+					kinds.append("rail")
+				_make_feat(row, feats, String(kinds[0]), zi, sd, choices_built)
+				_make_feat(row, feats, String(kinds[1]), zi, -sd, choices_built)
+				if can_rock and _rng.randf() < hazard_share * harder:
+					if layout == "flank":
+						_make_hazard(row, feats, "rock", zi, -7.5, 2, 1.2)
+						_make_hazard(row, feats, "rock", zi, 7.5, 2, 1.2)
+					else:
+						_make_hazard(row, feats, "rock", zi, 0.0, 4, 3.0)          # a slalom of rocks in the middle lane
 
 
-const HAZARD_SHARE := 0.6
+var hazard_share: float = 0.6            # the sandbox: how often something nasty sits in the middle lane
+var jump_chance: float = 0.4             # the sandbox: how often a choice pair has a ramp in it
+var pad_chance: float = 0.12             # the sandbox: boost pads on the slope
+var grip_lag: float = 1.0                # the sandbox: > 1 is ice, the board takes longer to swing across
+var big_head: bool = false
+var bouncy: bool = false                 # the sandbox: landings spring you back up
+var trike: bool = false                  # the sandbox: a tricycle, which wobbles from side to side by itself
+var glint_k: float = 1.0                 # the sandbox: glint rain
+var face_k: float = 1.0                  # the sandbox: face challenges come more often and pay more
+var hat_id: int = 0
+var _super_face: bool = false
+
+# --------------------------------------------------------------------------
+# THE TRIP: a meter that sugar and combos fill and time drains. In the Psychedelic look it drives how far gone the picture is: a tease at first (a little breathing and
+# tracer fuzz), then swirling and colours thrown apart, then full blown hallucination. Donuts and candy are the big hits.
+# --------------------------------------------------------------------------
+var trip: float = 0.0
+var _gspeed: float = 0.0
+var _lvl: MainLevel = null
+var _trip_on: bool = false
+var _trip_tier: int = 0
+var _trip_force: float = -1.0
+
+
+func _trip_add(a: float) -> void:
+	if not _trip_on:
+		return
+	trip = clampf(trip + a, 0.0, 1.0)
+
+
+func _trip_tick(delta: float) -> void:
+	if not _trip_on:
+		return
+	if _trip_force >= 0.0:
+		trip = _trip_force
+	else:
+		trip = maxf(trip - (0.018 + 0.02 * trip) * delta, 0.0)          # it fades slowly, a little faster the further gone you are
+	var tier := 0 if trip < 0.25 else (1 if trip < 0.55 else (2 if trip < 0.85 else 3))
+	if tier > _trip_tier and _trip_force < 0.0:
+		_cheer(["", "things get colourful...", "WHOA", "FULL TRIP!!"][tier], Color.from_hsv(0.8 - 0.2 * float(tier), 0.8, 1.0), 0.8 + 0.4 * float(tier))
+		_gain(int(100.0 * float(tier) * groove))
+	_trip_tier = tier
+	var fx := _lvl.get_node_or_null("ThemeFX") as ThemeFX if _lvl != null else null
+	if fx != null and fx.post != null and fx.post.mat != null:
+		fx.post.mat.set_shader_parameter("trip", trip)
+		fx.post.mat.set_shader_parameter("breathe", fx.post.amount * (1.0 + trip * 6.0))
 
 ## A hazard in the middle lane. "rock": a patch of rocks, a crash (the shield takes it if you have one). "slush": wet heavy snow that drags the board's speed down while in it.
-func _make_hazard(row: Dictionary, feats: Array, kind: String, zi: float) -> void:
+func _make_hazard(row: Dictionary, feats: Array, kind: String, zi: float, cx_off: float = 0.0, nrock: int = 5, spread: float = 3.0) -> void:
 	var za := zi + (30.0 if kind == "rock" else 36.0)
 	var zb := zi + (22.0 if kind == "rock" else 14.0)
 	var zm := (za + zb) * 0.5
 	var nodes := row["nodes"] as Array
+	var hn: Array = []
 	if kind == "rock":
 		var rm := _fx_mat("solid", Color(0.5, 0.52, 0.6), 0.5)
 		var sm := SphereMesh.new()                                   # one mesh for every rock of the patch, each its own size
@@ -899,23 +1023,27 @@ func _make_hazard(row: Dictionary, feats: Array, kind: String, zi: float) -> voi
 		sm.height = 1.5
 		sm.radial_segments = 8
 		sm.rings = 4
-		for i in 5:
-			var rx := trail_x(zm) + _rng.randf_range(-3.0, 3.0)
+		for i in nrock:
+			var rx := trail_x(zm) + cx_off + _rng.randf_range(-spread, spread)
 			var rz := zm + _rng.randf_range(-3.5, 3.5)
 			var r := _rng.randf_range(1.0, 1.7)
 			var rn := _mi(self, sm, rm, Vector3(rx, terrain_h(rx, rz) + r * 0.45, rz))
 			rn.scale = Vector3(r, r, r)
 			nodes.append(rn)
+			hn.append(rn)
 	else:
 		var bm := BoxMesh.new()
-		bm.size = Vector3(9.0, 0.12, za - zb)
+		bm.size = Vector3(9.0, 0.08, za - zb)
 		var cx := trail_x(zm)
-		nodes.append(_mi(self, bm, _fx_mat("solid", Color(0.5, 0.42, 0.34), 0.3), Vector3(cx, terrain_h(cx, zm) + 0.14, zm)))
+		var sln := _mi(self, bm, _fx_mat("solid", Color(0.5, 0.42, 0.34), 0.3), Vector3(cx, terrain_h(cx, zm) + 0.1, zm))
+		sln.rotation.x = -atan2(terrain_h(cx, za) - terrain_h(cx, zb), za - zb)          # laid along the slope, not flat: a flat slab on a hill stands up out of it like a wall
+		nodes.append(sln)
+		hn.append(sln)
 	_buff_assets("orb")
-	var bx := trail_x(za)
+	var bx := trail_x(za) + cx_off
 	nodes.append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(1.0, 0.3, 0.2, 0.3)), Vector3(bx, terrain_h(bx, za) + 4.6, za + 0.5)))
 	hazards_built += 1
-	feats.append({"kind": kind, "hz": true, "za": za, "zl": zb, "zb": zb, "sd": 0.0, "done": false, "want": 0.0, "away": 0.0})
+	feats.append({"kind": kind, "hz": true, "hn": hn, "za": za, "zl": zb, "zb": zb, "sd": 0.0, "done": false, "want": 0.0, "away": 0.0})
 
 
 ## Which side thing the eyes have chosen, or {}. At a choice there is one on the left and one on the right: a look held to a side for a moment chooses that one, and a
@@ -1002,7 +1130,7 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 				continue
 			# only what the board can still reach is offered: crossing over takes time, and a thing that will be gone by then is not a choice
 			if not is_same(f, _line_pick) and not is_same(f, _rail):
-				var reach_t := absf(_feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x) / 34.0 + 0.3 + (0.25 if not _line_pick.is_empty() else 0.0)
+				var reach_t := absf(_feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x) / (SLIDE_MAX * 0.85) + 0.3 + (0.25 if not _line_pick.is_empty() else 0.0)
 				var end_z := float(f["zl"]) if f.has("zl") else float(f["zb"]) + 8.0          # a jump or a treat is taken at one spot; a rail anywhere along it
 				if (spos.z - end_z) / maxf(-vel.y, MIN_SPEED) < reach_t:
 					if not f.has("dr"):
@@ -1135,9 +1263,9 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 			fd["want"] = maxf(float(fd["want"]) - delta * (3.0 if look_side != 0.0 else 0.6), 0.0)
 		# LOCK ON. The first look settles on a thing after a fifth of a second. Once something is locked it holds, however the eyes wander: another thing takes the lock only
 		# after a steady look at it (0.35 s), and not in the last half second before the board reaches the one it is going for.
-		var need_w := 0.18
+		var need_w := 0.11          # a look settles on a thing after a ninth of a second
 		if not _line_pick.is_empty() and zoned:
-			need_w = 0.2 if _lock_age >= COMMIT_S else 0.45          # just locked: committed for half a second, a change of mind in that window needs a longer, steadier look
+			need_w = 0.14 if _lock_age >= COMMIT_S else 0.35          # just locked: committed for half a second, a change of mind in that window needs a longer, steadier look
 			var lez := float(_line_pick["zl"]) if _line_pick.has("zl") else float(_line_pick["za"])
 			if (spos.z - lez) / maxf(-vel.y, MIN_SPEED) < 0.25 and spos.z > float(_line_pick["zb"]):
 				need_w = 9.0
@@ -1184,6 +1312,19 @@ func _rail_off(how: String) -> void:
 	_flow_up(2 if m > 18.0 else 1)
 	if mode == "race":
 		_boost_t = maxf(_boost_t, 1.0 + m / 22.0)                 # in a race a rail is a slingshot
+	# THE SLINGSHOT: the longer the grind (and the more glints scooped on it), the more the rail has been stretched like a rubber band: at the end it lets go and fires you out
+	var sling := clampf(m / 36.0 + 0.04 * float(_gl_run), 0.0, 1.0)
+	if sling > 0.2 and how != "drop":
+		vel.y -= 3.0 + 13.0 * sling
+		_boost_t = maxf(_boost_t, 0.7 + 1.8 * sling)
+		_vx_active_t = 0.7                                         # lets the speed run past its cap for a moment: it settles back like a stretched band
+		_fov_punch = maxf(_fov_punch, 4.0 + 6.0 * sling)
+		_trip_add(0.05 * sling)
+		if sling > 0.5:
+			_cheer("SLINGSHOT!", Color(0.5, 0.95, 1.0), 0.8 + sling)
+	if _gl_run >= 6:
+		_boost_t = maxf(_boost_t, 1.2 + 0.08 * float(_gl_run))      # a rail full of glints scooped: it fires you off the end
+		_cheer("GLINT RUSH! x%d" % _gl_run, Color(1.0, 0.85, 0.3), 1.4)
 	_toast(("POPPED OFF  %d m" if how == "pop" else "RAIL  %d m") % int(m), Color(0.5, 0.95, 1.0))
 	_burst(spos + Vector3(0, 0.3, 0), Color(0.6, 0.95, 1.0), 26, 9.0, 0.6, 0.8, Vector3(0, 1, 0.4), 60.0, -5.0)
 	_fov_punch = maxf(_fov_punch, 3.0)
@@ -1216,7 +1357,10 @@ func _feat_tick(delta: float) -> void:
 			return
 		# held on the rail: the board follows it, whatever the snow underneath is doing
 		var slope := (_feat_x(f, spos.z - 1.0) - _feat_x(f, spos.z + 1.0)) * 0.5
-		spos.x = _feat_x(f, spos.z)
+		_rail_dx += _slide_v * delta                                    # the sideways speed the board arrived with carries on, then dies away: no stop dead on the rail
+		_slide_v *= exp(-delta / 0.1)
+		_rail_dx *= exp(-delta / 0.15)                                 # the first metre onto the rail is eased, not a jump
+		spos.x = _feat_x(f, spos.z) + _rail_dx
 		var ry := _rail_y(f, spos.z)
 		vy = clampf((ry - _rail_py) / maxf(delta, 0.0001), -40.0, 10.0) if _rail_py_ok else vy          # falling with the hill, like the snow under it (a pop or the hop off the end is added to this)
 		_rail_py = ry
@@ -1242,7 +1386,32 @@ func _feat_tick(delta: float) -> void:
 				f["done"] = true
 				_choice_feat_done(f, _feat_got(f))
 				continue
+			if f["kind"] == "rail" and grounded and spos.z < float(f["za"]) + 6.0 and (_line_pick.is_empty() or is_same(_line_pick, f)):
+				# a rail has a pull round it, like a small gravity well: the nearer, the harder, so a near miss falls onto it
+				var wdx := _feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x
+				if absf(wdx) < 7.0 and absf(wdx) > 0.3:
+					spos.x += signf(wdx) * minf(absf(wdx), (2.5 + 9.0 * (1.0 - absf(wdx) / 7.0)) * delta)
 			if f.has("hz"):
+				if f.has("cleared"):
+					continue
+				var hd: float = spos.z - float(f["za"])
+				if hd > 0.0 and hd < 38.0 and _zoned() and not f.has("rolled") and absf(spos.x - trail_x(spos.z)) < 6.0:
+					# a steady look at it: hold the eyes still on the way in for 0.7 s and there is a chance it breaks. Not a sure thing, a shot worth taking when it cannot be avoided
+					f["dwell"] = float(f.get("dwell", 0.0)) + delta if absf(_eye_zn()) < 0.3 else maxf(float(f.get("dwell", 0.0)) - 2.0 * delta, 0.0)
+					if float(f["dwell"]) >= 0.7:
+						f["rolled"] = true
+						if _rng.randf() < 0.55:
+							f["cleared"] = true
+							for hn in f.get("hn", []):
+								if is_instance_valid(hn):
+									(hn as Node3D).visible = false
+							var hx := trail_x(float(f["za"]))
+							_burst(Vector3(hx, terrain_h(hx, float(f["za"])) + 1.0, float(f["za"]) + 4.0), Color(0.8, 0.82, 0.9), 70, 12.0, 0.8, 1.2, Vector3(0, 1, 0), 80.0, -9.0)
+							Game.sfx(&"boom")
+							_flow_up()
+							_cheer("SMASHED!", Color(1.0, 0.9, 0.5), 1.0)
+							continue
+						_toast("TOUGH ONE", Color(0.8, 0.8, 0.9))
 				if spos.z <= float(f["za"]) and spos.y - terrain_h(spos.x, spos.z) < 2.0 and absf(spos.x - trail_x(spos.z)) < (3.6 if f["kind"] == "rock" else 4.3):
 					if f["kind"] == "rock":
 						if not f.has("hit"):
@@ -1261,8 +1430,10 @@ func _feat_tick(delta: float) -> void:
 			var near_top := spos.z > float(f["za"]) - 10.0
 			if absf(spos.x - _feat_x(f, spos.z)) < (2.6 if near_top else 1.3) and spos.y - _rail_y(f, spos.z) < 2.0:
 				_rail = f
+				_rail_dx = spos.x - _feat_x(f, spos.z)
 				_rail_z0 = spos.z
 				_rail_pops0 = pops_flat
+				_gl_run = 0
 				_rail_py_ok = false
 				_rail_out_t = 0.0
 				_rail_spark = 0.0
@@ -1448,7 +1619,12 @@ func terrain_h(x: float, z: float) -> float:
 			continue
 		var half: float = float(k["w"]) * 0.5
 		var lat := 1.0 - smoothstep(half - (3.5 if k.get("trail", false) else 2.0), half, absf(x - float(k["x"])))
-		h += float(k["rise"]) * uu * lat
+		var kf := uu
+		if k.has("curl"):
+			kf = (1.0 - float(k["curl"])) * uu * uu + float(k["curl"]) * pow(uu, 7.0)          # a swoop that is nearly a wall at the lip
+		elif k.has("pw"):
+			kf = pow(uu, float(k["pw"]))
+		h += float(k["rise"]) * kf * lat
 	return h
 
 
@@ -1482,7 +1658,7 @@ func _gen_segment(j: int) -> void:
 	if j < 3 or not ZONES.has(zone) or (zone == "air" and (_last_air or rz < finish_z + 300.0)):
 		zone = "rush"
 	if trail:
-		zone = ["forest", "rush", "flat", "forest", "rush", "forest"][_rng.randi() % 6] if j >= 2 else "rush"          # plain snow, but the pitch still varies: mellow, steady, steep
+		zone = "flat" if _grade_of(j) < 0.7 else ("rush" if _grade_of(j) > 1.1 else "forest")          # plain snow: the stage of the course sets the pitch (see _grade_of)
 	var zp: Dictionary = ZONES[zone]
 	_cur_zone = zone
 	_zone_by_j[j] = zone
@@ -1490,7 +1666,8 @@ func _gen_segment(j: int) -> void:
 	_gen_lip = not Realms.has_roof(String(_zone_by_j.get(j - 1, "")))          # a cave has a low mouth, unless the stretch before it was one too
 	_rp.clear()
 	_zone_w = float(zp["w"])
-	_push_pitch(z0, float(zp["m"]))
+	_cur_m = _grade_of(j) if trail else float(zp["m"])
+	_push_pitch(z0, _cur_m)
 	zones_seen[zone] = int(zones_seen.get(zone, 0)) + 1
 	var air_seg := zone == "air"
 	_last_air = air_seg
@@ -1579,7 +1756,7 @@ func _gen_segment(j: int) -> void:
 	else:
 		_place_kicker(row, obs, prev_rz, rz, z0, has_row, j, air_seg)
 	# boost pads live out on the slope now, not on ramps (the vortex does the ramps): now and then one lies on the safe line a little after a barrier
-	if has_row and not air_seg and _rng.randf() < 0.12:
+	if has_row and not air_seg and _rng.randf() < pad_chance:
 		var pdz := rz - _rng.randf_range(24.0, 40.0)
 		_make_pad(row, path_x(row, pdz) + _rng.randf_range(-3.0, 3.0), pdz, false)
 	if has_row:
@@ -1730,6 +1907,22 @@ func _base_h(z: float) -> float:
 		i -= 1
 	var e: Dictionary = _pitch[i]
 	return float(e["h"]) + (z - float(e["z"])) * float(e["s"])
+
+
+var _cur_m: float = 1.0                 # the pitch of the stretch being built, as a multiple of the base slope
+
+## THE STAGES. The course builds from slow to as fast as you can handle, in stages that repeat and each time get steeper: long mild slopes where speed has to be made
+## (boost pads, burgers, rail slingshots and ramps matter most), a short build-up, then steep drops where the speed is free and the thing that matters is choosing
+## and hitting the right line. Each steep one is steeper than the last.
+const STAGE_CYCLE := [0.0, 0.0, 0.0, 0.5, 1.0, 1.0]          # in rows (about 180 m each): 0 mild, 0.5 build, 1 steep
+func _grade_of(j: int) -> float:
+	var prog := clampf(float(j) * ROW_GAP / maxf(minf(absf(finish_z), 4200.0), 600.0), 0.0, 1.0)
+	if j < 2:
+		return 0.4                                                            # a slow start: time to settle in
+	var k: float = STAGE_CYCLE[(j - 2) % STAGE_CYCLE.size()]
+	var mild := 0.42 + 0.16 * prog
+	var steep := 1.3 + 0.85 * prog
+	return lerpf(mild, steep, k) + 0.04 * sin(float(j) * 2.7)
 
 
 func _push_pitch(z: float, m: float) -> void:
@@ -2180,6 +2373,18 @@ func _chunk_post(j: int, mi: MeshInstance3D) -> void:
 
 
 func _ground_color(j: int, x: float, z: float, c: Color) -> Color:
+	if trail:
+		for kk in _kickers:
+			var kzz: float = kk["z"]
+			if z > kzz + 3.0 or z < kzz - float(kk["len"]) - 3.0:
+				continue
+			var hw: float = float(kk["w"]) * 0.5
+			var ax := absf(x - float(kk["x"]))
+			if ax > hw + 2.5:
+				continue
+			var ku := clampf((kzz - z) / float(kk["len"]), 0.0, 1.0)
+			var ramp_col := Color(1.0, 0.92, 0.45).lerp(Color(1.0, 0.45, 0.12), ku).lerp(Color(0.95, 0.2, 0.75), smoothstep(hw - 2.0, hw + 1.0, ax) * 0.8)
+			c = c.lerp(ramp_col, 0.9 * (1.0 - smoothstep(hw, hw + 2.5, ax)))
 	var zn := String(_zone_by_j.get(j, ""))
 	if Realms.is_realm(zn):
 		return Realms.ground(zn, x, z, -ROW_GAP * (float(j) + 0.5), c)
@@ -2754,6 +2959,7 @@ func _layout_gaps(row: Dictionary, gaps: Array, d: float, prev_x: float, prev_rz
 # --------------------------------------------------------------------------
 const BOOST_S := 3.0
 const MULT_S := 10.0
+const SLIDE_MAX := 30.0                 # m/s sideways at the most when the board crosses over to what the eyes chose
 const TRAIL_VMAX := 30.0                 # m/s on the forest trail (108 km/h) before boosts
 const SPEED_CAP := 57.0              # a boost never pushes you past this (the hill alone reaches about 51 m/s)
 const BUFF_COL := {"boost": Color(1.0, 0.55, 0.1), "shield": Color(0.3, 0.85, 1.0), "mult": Color(0.95, 0.4, 1.0), "donut": Color(1.0, 0.45, 0.7), "orb": Color(1.0, 0.9, 0.45)}
@@ -3108,6 +3314,141 @@ func _buff_assets(t: String) -> void:
 			_buff_mat["beacon_" + str(key)] = _fx_mat("add", Color(c.r, c.g, c.b, 0.3))
 
 
+# --------------------------------------------------------------------------
+# GLINTS: small gold sparks. A rail carries a spiral of them (ride it and you scoop the lot), a ramp leaves an arc of them in the air, and a crash spills some of yours
+# onto the snow ahead, where they can be caught again. Rushing along a rail with a good handful gives a boost off the end.
+# --------------------------------------------------------------------------
+var glints: int = 0
+var _gl_run: int = 0                     # glints scooped since the board got onto the current rail
+var _gl_mesh: SphereMesh = null
+var _gl_mat: Material = null
+var _gl_spill: Array = []
+
+
+func _gl_assets() -> void:
+	if _gl_mesh == null:
+		_gl_mesh = SphereMesh.new()
+		_gl_mesh.radius = 0.3
+		_gl_mesh.height = 0.6
+		_gl_mesh.radial_segments = 6
+		_gl_mesh.rings = 3
+		_gl_mat = _fx_mat("add", Color(1.0, 0.82, 0.25, 0.95))
+
+
+func _glint_line(row: Dictionary, pts: Array, rad: float) -> void:
+	if pts.is_empty():
+		return
+	_gl_assets()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _gl_mesh
+	mm.instance_count = pts.size()
+	for i in pts.size():
+		mm.set_instance_transform(i, TrailCurve.xf(Transform3D(Basis(), pts[i])))
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = mm
+	inst.material_override = _gl_mat
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	inst.extra_cull_margin = 30.0
+	add_child(inst)
+	(row["nodes"] as Array).append(inst)
+	var got := PackedByteArray()
+	got.resize(pts.size())
+	if not row.has("gl"):
+		row["gl"] = []
+	(row["gl"] as Array).append({"mm": mm, "pts": pts, "got": got, "rad": rad})
+
+
+## A big moment: words, a colour flash, confetti and a ring, so it is felt and not read.
+func _cheer(text: String, col: Color, size: float = 1.0) -> void:
+	_toast(text, col)
+	_flash = maxf(_flash, 0.25 * size)
+	_fov_punch = maxf(_fov_punch, 6.0 * size)
+	_psy_pulse(2 if size >= 1.5 else 5, col)
+	_trip_add(0.04 * size)
+	var cp := spos + Vector3(0.0, 2.0, -4.0)
+	Fx.confetti(self, cp, int(50.0 * size), 1.0 + 0.4 * size)
+	_ring(spos + Vector3(0.0, 0.8, 0.0), col, 7.0 + 5.0 * size, 0.5, true)
+	_burst(cp, col, int(30.0 * size), 10.0, 0.8, 1.0, Vector3(0, 1, 0), 120.0, -6.0)
+	Game.sfx(&"coin")
+
+
+func _glint_got(p: Vector3) -> void:
+	glints += 1
+	_trip_add(0.012)
+	_psy_pulse(1, Color(1.0, 0.85, 0.3))
+	_gl_run += 1
+	_flow_touch()
+	_gain(int(5.0 * groove))
+	_burst(p, Color(1.0, 0.85, 0.3), 3, 4.0, 0.35, 0.5)
+	if glints % 3 == 0:
+		Game.sfx(&"coin")
+
+
+func _glint_tick(delta: float) -> void:
+	if not trail or _finished:
+		return
+	var bp := spos + Vector3(0.0, 0.9, 0.0)
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if not r.has("gl"):
+			continue
+		for e in r["gl"]:
+			var pts: Array = e["pts"]
+			var got: PackedByteArray = e["got"]
+			for i in pts.size():
+				if got[i] == 1:
+					continue
+				var pv: Vector3 = pts[i]
+				if absf(pv.z - spos.z) > 4.0:
+					continue
+				if pv.distance_to(bp) < float(e["rad"]):
+					got[i] = 1
+					(e["mm"] as MultiMesh).set_instance_transform(i, TrailCurve.xf(Transform3D(Basis().scaled(Vector3.ZERO), pv)))
+					_glint_got(pv)
+	# the ones a crash spilled: they tumble down the slope and can be caught again after a moment
+	var i2 := _gl_spill.size() - 1
+	while i2 >= 0:
+		var g: Dictionary = _gl_spill[i2]
+		g["t"] = float(g["t"]) + delta
+		var gp: Vector3 = g["p"]
+		var gv: Vector3 = g["v"]
+		gv.y -= 18.0 * delta
+		gp += gv * delta
+		var gh := terrain_h(gp.x, gp.z) + 0.4
+		if gp.y < gh:
+			gp.y = gh
+			gv.y = absf(gv.y) * 0.5
+			gv.x *= 0.7
+			gv.z *= 0.8
+		g["p"] = gp
+		g["v"] = gv
+		var gn: Node3D = g["n"]
+		if is_instance_valid(gn):
+			_place(gn, gp)
+		var take: bool = float(g["t"]) > 0.6 and gp.distance_to(bp) < 2.8
+		if take or float(g["t"]) > 5.0:
+			if is_instance_valid(gn):
+				gn.queue_free()
+			_gl_spill.remove_at(i2)
+			if take:
+				_glint_got(gp)
+		i2 -= 1
+
+
+## A crash knocks some glints out of the board's pocket: they scatter forward and down the slope, a handful to chase.
+func _glint_spill() -> void:
+	var n := mini(glints, 20)
+	if n < 3:
+		return
+	glints -= n
+	_gl_assets()
+	for i in n:
+		var node := _mi(self, _gl_mesh, _gl_mat, spos)
+		_gl_spill.append({"n": node, "p": spos + Vector3(0.0, 1.0, 0.0), "v": Vector3(_rng.randf_range(-7.0, 7.0), _rng.randf_range(7.0, 14.0), -_rng.randf_range(5.0, 16.0)), "t": 0.0})
+	_toast("-%d glints!" % n, Color(1.0, 0.8, 0.3))
+
+
 func _spawn_orb(row: Dictionary, x: float, z: float, t: String) -> Node3D:
 	_buff_assets("orb")
 	var n := MeshInstance3D.new()
@@ -3285,7 +3626,10 @@ func _flow_touch() -> void:
 
 ## Something worth a level happened.
 func _flow_up(levels: int = 1) -> void:
+	var chain_was := chain
 	chain = mini(chain + levels, 24)
+	if chain / 3 > chain_was / 3 and chain >= 3:
+		_cheer("COMBO x%d!" % chain, Color(1.0, 0.8, 0.3), 1.0 + 0.1 * float(mini(chain / 3, 5)))
 	groove = 1.0 + 0.25 * minf(float(chain), float(FLOW_MAX))
 	best_flow = maxf(best_flow, groove)
 	_flow_bump = 1.0
@@ -3683,6 +4027,11 @@ func _process(delta: float) -> void:
 		cam.global_transform = _cam_strip
 	super._process(delta)
 	_juice(delta)
+	_psy_tick(delta)
+	_trip_tick(delta)
+	_gspeed = lerpf(_gspeed, clampf(-vel.y / 45.0, 0.0, 1.0), clampf(delta * 2.0, 0.0, 1.0))
+	if _m_ground is ShaderMaterial:
+		(_m_ground as ShaderMaterial).set_shader_parameter("speed", _gspeed)
 	if TrailCurve.on:
 		_cam_strip = cam.global_transform
 		_cam_strip_ok = true
@@ -3704,6 +4053,7 @@ func _take_buff(b: Dictionary) -> void:
 	var shown := "+%d" % (60 * (2 if _mult_t > 0.0 else 1))
 	_gain(60)
 	_flash = 0.25
+	_trip_add({"donut": 0.30, "mult": 0.22, "boost": 0.08, "shield": 0.08}.get(t, 0.05))
 	match t:
 		"boost":
 			_boost_t = BOOST_S + 0.8 * float(chain_lvl)
@@ -4075,6 +4425,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 	_swerve_s = 0.0
 	_wall_w = 0.0
 	if _finished or hurt_t > 0.0:
+		_slide_v = 0.0                                              # a crash stops the sideways slide for good: it must not carry on at full speed when the board gets up
 		return 0.0
 	var add := 0.0
 	if trail:
@@ -4094,6 +4445,8 @@ func _guard_path(delta: float, s_in: float) -> float:
 			if float(np.get("want", 0.0)) > 0.15:
 				tx = float(np["x"]) + float(np["e"]) * 1.5
 		var pkf := _trail_pick(delta, s_in)
+		var slide_steer := 0.0
+		var sliding := false
 		if not winding:
 			tx += (0.0 if _zoned() else clampf(eye_now(), -1.0, 1.0) * FEAT_OFF * 1.15)          # the board sits where you look across the slope: far left of the screen is the far left line
 		if not pkf.is_empty():
@@ -4103,20 +4456,29 @@ func _guard_path(delta: float, s_in: float) -> float:
 				var gx := _feat_x(pkf, clampf(spos.z, float(pkf["zb"]), float(pkf["za"])))
 				var t_left := maxf((spos.z - float(pkf["za"])) / spd_t - 0.25, 0.04)
 				var need := gx - spos.x
-				var rate := clampf(absf(need) / t_left, 0.0, 40.0)
+				var rate := clampf(absf(need) / t_left, 0.0, SLIDE_MAX)
 				# eased in and out: the sideways speed builds up and dies away over a fraction of a second instead of starting and stopping at once
 				var v_want := signf(need) * rate if (rate > 3.0 or spos.z <= float(pkf["za"])) else 0.0
-				_slide_v += (v_want * (0.55 if _switch_slow > 0.0 else 1.0) - _slide_v) * (1.0 - exp(-delta / ((0.4 if _switch_slow > 0.0 else 0.22) if t_left > 0.5 else 0.08)))
+				_slide_v += (v_want * (0.55 if _switch_slow > 0.0 else 1.0) - _slide_v) * (1.0 - exp(-delta / (((0.35 if _switch_slow > 0.0 else 0.2) if t_left > 0.5 else 0.12) * grip_lag)))
 				if _slide_v * need > 0.0:
-					_slide_v = signf(_slide_v) * minf(absf(_slide_v), absf(need) / 0.12)          # and settles onto the line instead of stopping dead on it
+					_slide_v = signf(_slide_v) * minf(absf(_slide_v), absf(need) / 0.14)          # and settles onto the line instead of stopping dead on it
 					spos.x += signf(need) * minf(absf(need), absf(_slide_v) * delta)
-		if pkf.is_empty() or not _rail.is_empty():
+				else:
+					spos.x += _slide_v * delta                         # the choice changed: the old sideways speed dies away over a few frames, it does not stop dead
+				if absf(_slide_v) > 0.5:
+					sliding = true
+					slide_steer = clampf(atan2(_slide_v, spd_t) / THETA_MAX, -0.5, 0.5)          # the board points the way it is actually going: no second controller pulling against the slide
+		if pkf.is_empty():
 			_slide_v = 0.0
 		if not np.is_empty() and spos.z - float(np["z"]) < 32.0 and absf(s_in) < 0.6:
 			var pe := float(np["e"])                                   # close to a pole the line never drifts to its wrong side by itself: only a hard look takes you there
 			if (tx - float(np["x"])) * pe < 1.4:
 				tx = float(np["x"]) + pe * 1.4
 		var t_want := clampf(ff + (tx - (spos.x + vel.x * 0.5)) / 11.0, -1.0, 1.0)
+		if trike:
+			t_want = clampf(t_want + 0.3 * sin(_age * 2.7) * (0.5 + 0.5 * sin(_age * 0.9 + 1.0)), -1.0, 1.0)          # a trike weaves: the eyes have to keep correcting it
+		if sliding:
+			t_want = clampf(ff + slide_steer, -0.6, 0.6)
 		# the edge of the trail: the nearer the trees, the harder the board leans back in. Only a look held hard at the forest gets past it.
 		var e_off := (spos.x + vel.x * 0.45) - trail_x(spos.z - spd_t * 0.45)
 		var e_over := absf(e_off) - maxf(8.0, FEAT_OFF + 4.0)
@@ -4408,7 +4770,7 @@ func _physics_process(delta: float) -> void:
 			var dec := minf((fr + drag * sp * sp) * delta, sp)
 			vel -= vel / sp * dec
 		if trail and not _finished:
-			var vcap := TRAIL_VMAX + (8.0 if (_boost_t > 0.0 or _vx_active_t > 0.0) else 0.0)          # a relaxing speed: the hill alone does not run away with it, a boost or a swirl adds a bit
+			var vcap := TRAIL_VMAX + (8.0 if _boost_t > 0.0 else 0.0) + (9.0 if _vx_active_t > 0.0 else 0.0)          # a relaxing speed: the hill alone does not run away with it, a boost or a swirl adds a bit
 			if sp > vcap:
 				vel -= vel / sp * (sp - vcap) * 1.5 * delta
 		var old_sp := vel.length()
@@ -4425,15 +4787,17 @@ func _physics_process(delta: float) -> void:
 			vel -= vel / sp2 * minf(DRAG * 0.4 * sp2 * sp2 * delta, sp2)
 		vel += right * steer * 3.0 * delta
 		if trail and not _finished:
-			var a_high := spos.y - terrain_h(spos.x, spos.z) - 5.0
+			var a_high := spos.y - terrain_h(spos.x, spos.z) - 34.0
 			if a_high > 0.0 and vy > -12.0:
 				vy -= minf(a_high * 6.0, 30.0) * delta                    # a trail ramp is a hop of a few metres: anything that starts to go higher is pulled back down
 			var a_tz := spos.z + vel.y * 0.7                                 # a jump lands you on the trail: in the air the board drifts toward where the trail will be
-			vel.x += clampf((trail_x(a_tz) - (spos.x + vel.x * 0.7)) * 2.2, -16.0, 16.0) * delta
+			var lo_t := (eye_now() * FEAT_OFF * 0.8) if (_zoned() and air_t > 0.2) else 0.0          # in the air the eyes choose where you come down: left lane, the middle or the right lane
+			_land_off += (lo_t - _land_off) * (1.0 - exp(-6.0 * delta))
+			vel.x += clampf((trail_x(a_tz) + _land_off - (spos.x + vel.x * 0.7)) * 2.2, -16.0, 16.0) * delta
 		air_t += delta
 	if trail and not _finished:
 		# slalom pace: the forest trail turns every 95 m, so the hill is held to about 85-105 km/h (it climbs a little as the run goes on)
-		var cap := TRAIL_SPEED + 6.0 * prog + (4.0 if _boost_t > 0.0 else 0.0)
+		var cap := TRAIL_SPEED + 6.0 * prog + (4.0 if _boost_t > 0.0 else 0.0) + (9.0 if _vx_active_t > 0.0 else 0.0)
 		if mode == "race":
 			cap += 0.5 * minf(float(chain), float(FLOW_MAX))          # in a race, flow IS pace: every clean pole lets the hill run a little faster
 		var spn := vel.length()
@@ -4457,7 +4821,7 @@ func _physics_process(delta: float) -> void:
 			spos.y = prev.y + vy * delta
 		else:
 			spos.y = gh
-			vy = vg
+			vy = minf(vg, jump_launch) if trail else vg
 	else:
 		vy -= G * delta
 		spos.y += vy * delta
@@ -4472,6 +4836,7 @@ func _physics_process(delta: float) -> void:
 	_update_pads()
 	_update_ramps(delta)
 	_vortex_drive(delta)
+	_glint_tick(delta)
 	_chain_tick(delta)
 	_update_balls(delta)
 	_update_tricks(delta, key, pk)
@@ -4606,6 +4971,8 @@ func _crash(msg: String, ctx: String = "") -> void:
 		Game.sfx(&"hurt")
 		return
 	crashes += 1
+	_psy_pulse(4, Color(1.0, 0.2, 0.2))
+	_glint_spill()
 	_clean = false
 	crash_log.append("%s at z=%.0f x=%.1f v=%.1f %s" % [msg, spos.z, spos.x, vel.length(), ctx])
 	hurt_t = 1.1
@@ -4881,6 +5248,10 @@ func _warm_shaders() -> void:
 	for zn in Realms.KITS:
 		mats.append(Realms.material(String(zn)))
 		break
+	mats.append(_food_mat(Color.WHITE))                     # the pickups are lit and glow: a different program from the plain lit one, and the first one in view used to stall the frame before it was eaten
+	mats.append(_food_mat(Color(1.0, 0.5, 0.2), 1.2))
+	if _veg_theme != null:
+		mats.append(_veg_theme)                           # the theme's trees and rocks: built here, not the first time one comes into a lamp's reach
 	var box := BoxMesh.new()
 	var col_box := ArrayMesh.new()                    # a box with vertex colours, which the batches use
 	var arr := box.get_mesh_arrays()
@@ -5062,6 +5433,12 @@ func _restart() -> void:
 	spawned_kind = {}
 	got_kind = {}
 	orbs_got = 0
+	glints = 0
+	_gl_run = 0
+	for gsp in _gl_spill:
+		if is_instance_valid(gsp["n"]):
+			(gsp["n"] as Node).queue_free()
+	_gl_spill.clear()
 	_buff_tgt = {}
 	_buff_cand = {}
 	_buff_cand_t = 0.0
@@ -5138,7 +5515,6 @@ func _restart() -> void:
 		_gen_segment(_next_j)
 		_next_j += 1
 	_place_camera(1.0, true)
-	_toast("Look where you want to go", Color(0.9, 0.95, 1.0))
 
 
 # --------------------------------------------------------------------------
@@ -5444,6 +5820,12 @@ var trick_charge_override: bool = false
 # --------------------------------------------------------------------------
 const VX_LAUNCH := 46.0                   # m/s the vortex brings you to by the lip
 const VX_ACCEL := 34.0
+const VX_TRAIL := 37.0                   # m/s the trail swirl builds up to by the lip
+const VX_REACH := 46.0                   # m before the foot of the ramp where the swirl starts to take hold
+var _vx_pull: float = 0.0                # 0..1: how far into the swirl you are (the camera widens with it)
+var _vx_blast: float = 0.0               # 1 at the lip, running down to 0
+var _land_off: float = 0.0               # m across the trail the eyes have chosen to land at
+var _land_ring: MeshInstance3D = null
 var _vx_spin: float = 0.0
 var _vx_active_t: float = 0.0
 
@@ -5451,6 +5833,27 @@ var _vx_active_t: float = 0.0
 func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bool, big: bool = false) -> void:
 	var col := Color(0.95, 0.35, 1.0) if not epic else Color(0.3, 0.9, 1.0)
 	var rings: Array = []
+	if big:
+		# a funnel: big rings over the foot of the ramp, smaller and brighter toward the lip, so you can see the way in from far up the slope and then ride through the swirl
+		var nr := 5
+		for ri in nr:
+			var f := float(ri) / float(nr - 1)
+			var rz: float = kz - float(k["len"]) * lerpf(-0.22, 0.86, f)
+			var rr := lerpf(5.2, 2.5, f)
+			var tm := TorusMesh.new()
+			tm.inner_radius = 0.88
+			tm.outer_radius = 1.12
+			tm.rings = 28
+			tm.ring_segments = 8
+			var cc := col.lerp(Color(1.0, 0.95, 0.6), f * 0.7)
+			var node := _mi(self, tm, _fx_mat("solid", Color(cc.r, cc.g, cc.b), 2.6), Vector3(kx, terrain_h(kx, rz) + 1.2 + 0.3 * rr, rz))
+			node.set_meta("R", rr)
+			node.basis = Basis.from_scale(Vector3(rr, rr, rr * 0.7))
+			(row["nodes"] as Array).append(node)
+			rings.append(node)
+		k["vx"] = rings
+		k["vx_col"] = col
+		return
 	for ri in 4:
 		var tm := TorusMesh.new()
 		tm.inner_radius = 2.2 - 0.45 * float(ri)
@@ -5468,7 +5871,19 @@ func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bo
 
 
 ## Per physics frame: spin the swirls and, when you are in reach of one, pull you onto the ramp and up to launch speed.
+var _jumpdemo: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("jumpdemo")          # test: starts the board 75 m before the first ramp
+var _jd_done: bool = false
+
+
 func _vortex_drive(delta: float) -> void:
+	if _jumpdemo and not _jd_done and trail:
+		for kk0 in _kickers:
+			if kk0.get("trail", false):
+				_jd_done = true
+				spos = Vector3(float(kk0["x"]), terrain_h(float(kk0["x"]), float(kk0["z"]) + 75.0), float(kk0["z"]) + 75.0)
+				_gh_prev = spos.y
+				vel = Vector2(0.0, -24.0)
+				break
 	_vx_spin += delta
 	var vs := get_viewport().get_visible_rect().size
 	var cx := _aim_cx if _aim_cx >= 0.0 else _cursor_px.x
@@ -5481,17 +5896,29 @@ func _vortex_drive(delta: float) -> void:
 		var dz := spos.z - kz
 		if rings != null and dz < 260.0 and dz > -40.0:
 			var gi := 0
+			var near_k := 1.0 + 2.5 * smoothstep(90.0, 10.0, dz)
 			for rn in (rings as Array):
 				if is_instance_valid(rn):
-					(rn as Node3D).rotation.y = _vx_spin * (2.2 + 0.7 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)
+					if (rn as Node3D).has_meta("R"):
+						var rr: float = (rn as Node3D).get_meta("R")
+						(rn as Node3D).basis = Basis(Vector3(0, 0, 1), _vx_spin * near_k * (1.2 + 0.5 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)) * Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale(Vector3(rr, rr, rr * 0.7))
+					else:
+						(rn as Node3D).rotation.y = _vx_spin * (2.2 + 0.7 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)
 				gi += 1
 		if k.get("trail", false):
-			# on the trail the swirl does not pull you sideways (the eyes choose the jump and the board is taken there), but riding up the ramp inside it is the boost
-			if grounded and spos.z < kz + 34.0 and spos.z > lipz and absf(spos.x - kx) < float(k["w"]) * 0.5:
+			# on the trail: the swirl catches you when you are lined up with the ramp (or the eyes picked it): it eases you onto the middle of the ramp and the speed builds
+			# from the first rings to the lip, where the BLAST in _update_ramps throws you off it
+			var half: float = float(k["w"]) * 0.5
+			var dxk := kx - spos.x
+			var picked: bool = not _line_pick.is_empty() and String(_line_pick["kind"]) == "jump" and absf(float(_line_pick.get("kx", 1.0e9)) - kx) < 0.5
+			if grounded and spos.z < kz + VX_REACH and spos.z > lipz and (absf(dxk) < half - 1.0 or (picked and absf(dxk) < half + 6.0)):
 				active = true
+				var t := clampf((kz + VX_REACH - spos.z) / (VX_REACH + float(k["len"])), 0.0, 1.0)
+				_vx_pull = maxf(_vx_pull, smoothstep(0.0, 0.8, t))
+				spos.x += clampf(dxk * 2.0, -6.0, 6.0) * delta * smoothstep(0.0, 0.45, t)
 				var fsp := -vel.y
-				if fsp < TRAIL_VMAX + 8.0:
-					vel.y -= minf(VX_ACCEL * delta, TRAIL_VMAX + 8.0 - fsp)
+				if fsp < VX_TRAIL:
+					vel.y -= minf(VX_ACCEL * (0.9 if spos.z < kz else 0.6) * delta, VX_TRAIL - fsp)
 			continue
 		if dz > 70.0 or spos.z < lipz or not grounded:
 			continue
@@ -5509,16 +5936,35 @@ func _vortex_drive(delta: float) -> void:
 		var fwd_sp := -vel.y
 		if fwd_sp < VX_LAUNCH:
 			vel.y -= minf(VX_ACCEL * delta, VX_LAUNCH - fwd_sp)
+	if trail and not grounded and air_t > 0.25 and absf(_land_off) > 1.5:
+		if _land_ring == null or not is_instance_valid(_land_ring):
+			var rm := TorusMesh.new()
+			rm.inner_radius = 2.0
+			rm.outer_radius = 2.5
+			rm.rings = 24
+			rm.ring_segments = 6
+			_land_ring = _mi(self, rm, _fx_mat("add", Color(0.5, 1.0, 0.8, 0.9)), Vector3.ZERO)
+		var hh := maxf(spos.y - terrain_h(spos.x, spos.z), 0.0)
+		var tl := (vy + sqrt(maxf(vy * vy + 2.0 * G * hh, 0.0))) / G
+		var lz := spos.z + vel.y * tl
+		var lx := trail_x(lz) + _land_off
+		_land_ring.position = Vector3(lx, terrain_h(lx, lz) + 0.25, lz)
+		_land_ring.visible = true
+	elif _land_ring != null and is_instance_valid(_land_ring):
+		_land_ring.visible = false
 	if active:
-		_vx_active_t = 0.25
+		_vx_active_t = 0.45
 	else:
 		_vx_active_t = maxf(_vx_active_t - delta, 0.0)
+		_vx_pull = maxf(_vx_pull - 2.0 * delta, 0.0)
+	_vx_blast = maxf(_vx_blast - 2.2 * delta, 0.0)
 
 
 func _update_ramps(delta: float) -> void:
 	var on_ramp := false
 	var crossed := false
 	var crossed_mid := false
+	var crossed_k: Dictionary = {}
 	for k in _kickers:
 		var kz: float = k["z"]
 		var lipz: float = kz - float(k["len"])
@@ -5527,6 +5973,7 @@ func _update_ramps(delta: float) -> void:
 				on_ramp = true
 			if _ramp_prev_z > lipz and spos.z <= lipz:
 				crossed = true
+				crossed_k = k
 				crossed_mid = absf(spos.x - float(k["x"])) < float(k["w"]) * 0.5 - 1.5
 	_ramp_prev_z = spos.z
 	var tucking_in := nod_p < -0.10 or trick_charge_override or Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN) or _brow_held          # chin down or eyebrows up: either one winds the launch up
@@ -5538,6 +5985,24 @@ func _update_ramps(delta: float) -> void:
 	if crossed and trail and crossed_mid:
 		jumps_done += 1
 		_flow_up()
+	if crossed and trail:
+		vy += jump_blast                                  # the swirl lets go: a hard blast off the lip
+		_vx_blast = 1.0
+		_boost_t = maxf(_boost_t, 1.2)
+		_fov_punch = 12.0
+		_shake = 1.4
+		_flash = maxf(_flash, 0.35)
+		_burst(spos + Vector3(0, 0.6, 0), Color(1.0, 0.55, 1.0), 90, 16.0, 0.9, 1.1, Vector3(0, 1, 0.5), 70.0, -5.0)
+		_burst(spos + Vector3(0, 0.6, 0), Color(1.0, 0.95, 0.6), 50, 24.0, 0.6, 0.8, Vector3(0, 0.6, 1), 35.0, -3.0)
+		Game.sfx(&"boom")
+		GazeProvider.pm.buzz([60, 40])
+		_cheer("BLAST!", Color(1.0, 0.6, 1.0), 1.6)
+		if crossed_k.get("super", false):
+			vy += 9.0                                            # the super ramp: a lot more height, and a face to pull straight away, worth double
+			_boost_t = maxf(_boost_t, 2.4)
+			_face_next = 0.0
+			_super_face = true
+			_cheer("SUPER AIR!", Color(1.0, 0.9, 0.2), 2.2)
 	if crossed:
 		vy += 1.5 * float(chain_lvl)                      # a longer chain launches harder
 		_chain_hit("ramp")
@@ -5637,11 +6102,13 @@ var _menu_arm_t: float = 0.0
 
 ## A MENU button under the view toggle. Two taps (the first says SURE?), so a stray touch cannot throw a run away.
 func _menu_rect() -> Rect2:
+	return Rect2(-9000.0, -9000.0, 1.0, 1.0)          # no on-screen buttons in the game: the screen is the game (Esc or P pauses)
 	var r := _view_rect()
 	return Rect2(r.position.x - 14.0 * _hud_scale(), r.position.y + r.size.y + 10.0 * _hud_scale(), r.size.x + 14.0 * _hud_scale(), r.size.y)
 
 
 func _view_rect() -> Rect2:
+	return Rect2(-9000.0, -9000.0, 1.0, 1.0)          # no on-screen buttons in the game: the screen is the game (Esc or P pauses)
 	var s := get_viewport().get_visible_rect().size
 	var k := _hud_scale()
 	return Rect2(s.x - 24.0 * k - 56.0 * k, 24.0 * k + 30.0 * k + 46.0 * k, 56.0 * k, 30.0 * k)
@@ -5660,13 +6127,33 @@ func _fit_fov() -> void:
 		cam.keep_aspect = Camera3D.KEEP_HEIGHT
 
 
+## The tip of the board sits low in the picture, at a fixed angle below the middle. On a long thin phone screen the view is fixed across the width, so the picture is much
+## shorter than it is wide and that angle fell off the bottom of the screen: the board is raised to stay inside whatever the picture shows.
+func _fit_tip() -> void:
+	if _tip_pivot == null or cam == null:
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var half_v := deg_to_rad(cam.fov) * 0.5
+	if cam.keep_aspect == Camera3D.KEEP_WIDTH:
+		half_v = atan(tan(half_v) * vs.y / maxf(vs.x, 1.0))
+	_tip_pivot.position.y = clampf(-tan(half_v * 0.82), -1.15, -0.3)
+
+
 func _place_camera(delta: float, snap: bool = false) -> void:
 	if not view_fp:
 		cam_back = 9.5 if trail else 8.0                          # on the trail the camera sits higher and looks further down the slope: the next two things are in view sooner
 		cam_h = 6.2 if trail else 4.6
 		cam_ahead = 30.0 if trail else 16.0
+		cam_road = 0.8 if trail else 0.0
+		if trail:
+			cam_hint = Vector2(trail_x(spos.z - 50.0) - spos.x, -50.0).normalized()
+		if trail:
+			var vxk := maxf(_vx_pull * 0.6, _vx_blast)
+			_fov_punch = minf(_fov_punch, 3.0 + 9.0 * vxk)       # calmer: no big zoom flashes, except the swirl pulling you in and the blast off the lip
+			_shake = minf(_shake, 0.5 + 1.0 * _vx_blast)
 		super._place_camera(delta, snap)
 		_fit_fov()
+		_fit_tip()
 		_cine_apply(delta)
 		return
 	var sp := vel.length()
@@ -5692,6 +6179,7 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	_fov_punch = maxf(_fov_punch - 24.0 * delta, 0.0)
 	cam.fov = clampf(80.0 + (sp - 18.0) * 0.6, 78.0, 108.0) + _fov_punch
 	_fit_fov()
+	_fit_tip()
 	_cine_apply(delta)
 
 
@@ -5736,7 +6224,9 @@ func _build_tip() -> void:
 # You always land: the landing straightens the board to the nearest half turn, so a trick never costs you a crash. Doing more than one at once multiplies the points.
 # --------------------------------------------------------------------------
 var perf_pin: int = -1                 # -1 automatic; 0..3 pins the quality tier (the menu's SPEED FIRST pins 2)
-var show_perf: bool = true               # F3 hides the frame-rate line
+var _nohud: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nohud")
+const HUD_MIN := true                    # on screen in play: points, speed, frame rates. Nothing else standing on the picture.
+var show_perf: bool = true  # was: OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("perf")               # ?perf (or F3) shows the frame-rate line
 var _runlog := RunLog.new()
 var hazard_skin: String = "snow"                          # what rolls at you: a snowball, or (desert) a mummy
 var mist_color: Color = Color(0.93, 0.96, 1.0, 0.97)       # what hides the stretch that is not built yet: the theme sets it
@@ -5746,9 +6236,13 @@ var sky_rise: float = 2.2
 var sky_drag: float = 0.28                                   # how much steeper than a plain kicker the air-stretch ramps are
 const KICK_LEN := 26.0
 const KICK_W := 18.0
-const JUMP_LEN := 28.0              # the ramps on the forest trail: shorter and lower than a sky ramp, and you ride onto them, nothing pulls you in
+var jump_len: float = 42.0              # the ramps on the forest trail: a curved kicker, flat at its foot and steepest at the lip, with a swirl that pulls you in and blasts you off
 const JUMP_W := 14.0
-const JUMP_RISE := 4.0
+var jump_rise: float = 24.0
+var jump_curl: float = 0.45             # how much of the ramp is the steep curl at the end
+var jump_launch: float = 21.0           # m/s straight up at the lip, however steep the wall: the flight is long and roomy, never a rocket
+var jump_pow: float = 2.0               # the profile: height = rise * (distance up the ramp)^pow
+var jump_blast: float = 2.0             # m/s of extra lift the swirl gives at the lip
 var kickers_built: int = 0
 var kick_log: Array = []
 var epics_built: int = 0
@@ -5782,8 +6276,24 @@ var _air_peak: float = 0.0
 
 ## A hard landing costs speed but never wipes you out: the hill is steep and a landing is rarely your fault (a bump, a ramp you chose).
 func _land(impact: float, gh: float, gvy: float) -> void:
+	var t_air := air_t
+	var lo := _land_off
+	_psy_pulse(3, Color(0.5, 1.0, 0.9))
+	var on_spot: bool = trail and t_air > 0.8 and absf(lo) > 1.5 and absf(spos.x - (trail_x(spos.z) + lo)) < 3.5 and impact < 7.0
+	_land_off = 0.0
+	if on_spot:
+		_boost_t = maxf(_boost_t, 1.6)
+		_flow_up()
+		score += int(150.0 * groove)
+		_cheer("LANDED WHERE YOU LOOKED!", Color(0.5, 1.0, 0.8), 1.2)
+		_burst(Vector3(spos.x, gh + 0.3, spos.z), Color(0.5, 1.0, 0.8), 40, 9.0, 0.6, 0.9, Vector3(0, 1, 0), 60.0, -6.0)
 	GazeProvider.pm.buzz([clampi(int(impact * 4.0), 15, 70)])
 	super._land(minf(impact, 15.0), gh, gvy)
+	if bouncy and impact > 2.0 and not _finished:
+		vy = clampf(impact * 0.75, 6.0, 15.0)          # boing
+		grounded = false
+		spos.y = gh + 0.15
+		_burst(Vector3(spos.x, gh + 0.3, spos.z), Color(1.0, 0.9, 0.4), 16, 6.0, 0.5, 0.7, Vector3(0, 1, 0), 80.0, -4.0)
 
 
 func _place_kicker(row: Dictionary, obs: PackedFloat32Array, prev_rz: float, rz: float, z0: float, has_row: bool, j: int, air: bool = false) -> void:
@@ -5910,6 +6420,7 @@ var cines: int = 0
 
 ## The menu's choices, applied just before the run starts (and the course rebuilt from them).
 func apply_menu(c: Dictionary, level: MainLevel) -> void:
+	_lvl = level
 	var zones: Dictionary = (c.get("zones", {}) as Dictionary).duplicate()
 	var km := float(c.get("length_km", 4.2))
 	params["seed"] = int(c.get("seed", 424242))
@@ -5926,9 +6437,223 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	assist_level = clampf(float(c.get("assist", 0.7)), 0.0, 1.0)
 	if bool(c.get("gps", false)):
 		RunLog.start_gps()
+	_trip_on = Themes.post_mode(String(c.get("theme", "alpine"))) == 1
+	trip = 0.0
+	_trip_tier = 0
+	if OS.has_feature("web"):
+		var tq := str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('trip') || ''"))
+		_trip_force = float(tq) if tq.is_valid_float() else -1.0
+	_psy_start(false, 0.0)                                         # the psychedelic overlay is parked until it is better
+	G = 9.8 * clampf(float(c.get("m_grav", 1.0)), 0.2, 3.0)
+	hazard_share = clampf(0.6 * float(c.get("m_rocks", 1.0)), 0.0, 1.0)
+	jump_chance = clampf(0.4 * float(c.get("m_ramps", 1.0)), 0.0, 1.0)
+	pad_chance = clampf(0.12 * float(c.get("m_pads", 1.0)), 0.0, 1.0)
+	grip_lag = 2.6 if bool(c.get("m_ice", false)) else 1.0
+	big_head = bool(c.get("m_head", false))
+	bouncy = bool(c.get("m_bounce", false))
+	trike = bool(c.get("m_trike", false))
+	glint_k = clampf(float(c.get("m_glints", 1.0)), 0.5, 4.0)
+	face_k = clampf(float(c.get("m_faces", 1.0)), 0.5, 3.0)
+	hat_id = int(c.get("m_hat", 0))
+	_dress_rider()
+	if _rider != null:
+		for hi in [1, 2]:
+			var hn := _rider.get_child(hi) as Node3D
+			if hn != null:
+				hn.scale = Vector3.ONE * (3.0 if big_head else 1.0)
+				hn.position.y = (1.5 if hi == 1 else 1.62) + (0.6 if big_head else 0.0)
 	ThemeFX.apply_to_level(level, self, String(c.get("theme", "alpine")), float(c.get("intensity", 0.8)), bool(c.get("dynlight", true)), bool(c.get("snow", true)), bool(c.get("fluffy", false)))
 	_run_no = 0
 	_restart()
+
+
+# --------------------------------------------------------------------------
+# PSYCHEDELIC MODE: one full-screen shader over the world, nothing else. Rings and spokes fall away from where you are looking, in colours that cycle;
+# the faster you go (and the harder a boost or a flash hits) the harder it throbs. A clear patch is kept round the board and the trail so play stays readable.
+# It samples no screen texture and does a handful of sines per pixel, so it costs a phone almost nothing.
+# --------------------------------------------------------------------------
+const PSY_SHADER := """
+shader_type canvas_item;
+uniform float t = 0.0;
+uniform float rush = 0.0;
+uniform float amount = 0.4;
+uniform float grind = 0.0;     // on a rail: the rings tighten into fine fast lines
+uniform float air = 0.0;       // in the air: slow, huge, floaty waves and a drifting colour
+uniform float speed = 0.0;     // how fast the ground streams
+uniform vec2 gaze = vec2(0.0, 0.0);
+uniform vec2 aspect = vec2(1.0, 1.0);
+uniform vec4 pa = vec4(9.0);   // age of the four latest events, in seconds (9 = none)
+uniform vec4 pk = vec4(0.0);   // their kind: 1 glint, 2 blast, 3 landing, 4 crash, 5 cheer
+uniform vec3 c0 = vec3(1.0);
+uniform vec3 c1 = vec3(1.0);
+
+vec3 pal(float x) {
+	return 0.5 + 0.5 * cos(6.2831 * (vec3(x) + vec3(0.0, 0.33, 0.67)));
+}
+
+// a ripple that leaves the board: its width, speed and look depend on what happened
+vec4 ev(float age, float kind, vec2 uv, vec3 col) {
+	if (age > 1.6 || kind < 0.5) { return vec4(0.0); }
+	float sp = kind > 1.5 ? 1.1 : 0.7;               // a blast or a landing spreads wide and fast
+	float w = kind > 3.5 ? 0.09 : (kind > 1.5 ? 0.06 : 0.025);
+	float rad = age * sp;
+	float d = length((uv - vec2(0.5, 0.68)) * aspect);
+	float band = exp(-pow((d - rad) / w, 2.0));
+	float fade = 1.0 - age / 1.6;
+	float tex = 1.0;
+	if (kind > 3.5) { tex = 0.55 + 0.45 * sin(d * 90.0); }                       // a crash: a coarse, buzzing band
+	else if (kind > 2.5) { tex = 0.7 + 0.3 * sin(d * 40.0 - age * 30.0); }       // a landing: a thump with ridges
+	else if (kind > 1.5) { tex = 0.6 + 0.4 * sin(atan(uv.y - 0.68, uv.x - 0.5) * 12.0); }   // a blast: a starburst
+	return vec4(col, band * fade * tex);
+}
+
+void fragment() {
+	vec2 uv = (UV - 0.5 - gaze * 0.2) * aspect;
+	float r = length(uv) + 1.0e-4;
+	float a = atan(uv.y, uv.x);
+	float depth = 1.0 / (r + 0.15);
+	float tt = t * (1.0 + 0.6 * rush);
+	float wob = mix(0.6 * sin(a * 3.0 + t * 0.4), 1.6 * sin(a * 2.0 + t * 0.7), air);
+	float rings = sin(depth * mix(5.0, 14.0, grind) - tt * mix(1.5, 4.5, grind) * (1.0 + 2.0 * rush) + wob);
+	float spokes = sin(a * mix(6.0, 26.0, grind) + depth * 1.5 - t * 0.7);
+	float f = rings * mix(0.65, 0.5, grind) + spokes * mix(0.35, 0.5, grind);
+	f = mix(f, sin(depth * 2.0 + t * 0.8 + 2.0 * sin(a * 2.0 - t * 0.3)), air * 0.6);
+	vec3 col = pal(f * 0.25 + depth * 0.08 + t * (0.05 + 0.1 * air));
+	col = mix(col, vec3(1.0), smoothstep(0.85, 1.0, f) * 0.5);
+	// the pattern lives at the edges and in the sky and fades out over the lower middle, so the board and the trail stay readable
+	vec2 d = (UV - vec2(0.5, 0.66)) * vec2(1.0, 1.35);
+	float keep = smoothstep(0.28, 0.7, length(d));
+	float al = amount * (0.12 + 0.88 * keep) * (0.7 + 0.3 * rush);
+
+	// THE GROUND: a grid laid on the snow in perspective that streams at you, with a second one running the other way, so the eyes cannot settle:
+	// stripes across the slope, lines along it that bend with the colour, and a checker flicker that quickens with speed
+	float hz = 0.40;
+	float gy = UV.y - hz;
+	vec4 ground = vec4(0.0);
+	if (gy > 0.01) {
+		float gd = 1.0 / gy;                                       // distance along the ground
+		float gx = (UV.x - 0.5) * gd;                              // across it
+		float flow = t * (4.0 + 22.0 * speed);
+		float s1 = sin((gd - flow) * 1.6);
+		float s2 = sin((gd + flow * 0.5) * 3.1 + gx * 1.2);
+		float l1 = sin(gx * 2.2);
+		float chk = sign(s1) * sign(l1);
+		float lines = smoothstep(0.55, 1.0, abs(s1)) * 0.6 + smoothstep(0.8, 1.0, abs(l1)) * 0.6;
+		vec3 gc = pal(gd * 0.05 - flow * 0.02 + 0.3 * s2 + float(chk > 0.0) * 0.2);
+		float fade_far = smoothstep(0.0, 0.18, gy);                // melts into the horizon
+		float gal = (0.12 + 0.3 * lines + 0.12 * abs(chk)) * fade_far * (0.4 + 0.6 * speed) * amount * 2.0;
+		// the board's own patch stays calm
+		gal *= 0.35 + 0.65 * smoothstep(0.1, 0.4, length((UV - vec2(0.5, 0.78)) * vec2(1.4, 1.0)));
+		ground = vec4(gc, clamp(gal, 0.0, 0.6));
+	}
+
+	vec3 outc = mix(col, ground.rgb, ground.a / max(al + ground.a, 0.001));
+	float outa = clamp(al + ground.a * (1.0 - al), 0.0, 0.85);
+	vec4 e0 = ev(pa.x, pk.x, UV, c0);
+	vec4 e1 = ev(pa.y, pk.y, UV, c1);
+	float ea = clamp(e0.a + e1.a, 0.0, 1.0);
+	vec3 ec = (e0.rgb * e0.a + e1.rgb * e1.a) / max(e0.a + e1.a, 0.001);
+	COLOR = vec4(mix(outc, ec, ea * 0.9), clamp(outa + ea * 0.75, 0.0, 0.92));
+}
+"""
+var psy_on: bool = false
+var _psy_rect: ColorRect = null
+var _psy_mat: ShaderMaterial = null
+var _psy_rush: float = 0.0
+var _psy_grind: float = 0.0
+var _psy_air: float = 0.0
+var _psy_speed: float = 0.0
+var _psy_ev: Array = [[9.0, 0.0, Color(1, 1, 1)], [9.0, 0.0, Color(1, 1, 1)]]          # the two latest events: [age, kind, colour]
+
+
+## Something happened: send a ripple out from the board. kind: 1 glint, 2 blast, 3 landing, 4 crash, 5 cheer.
+func _psy_pulse(kind: int, col: Color) -> void:
+	if not psy_on:
+		return
+	_psy_ev[1] = _psy_ev[0]
+	_psy_ev[0] = [0.0, float(kind), col]
+
+
+func _psy_start(on: bool, amount: float) -> void:
+	psy_on = on
+	if _psy_rect != null:
+		_psy_rect.visible = on
+	if not on:
+		return
+	if _psy_rect == null:
+		var layer := CanvasLayer.new()
+		layer.layer = -1                                                 # over the 3D world, under everything drawn on screen
+		add_child(layer)
+		_psy_rect = ColorRect.new()
+		_psy_rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		_psy_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sh := Shader.new()
+		sh.code = PSY_SHADER
+		_psy_mat = ShaderMaterial.new()
+		_psy_mat.shader = sh
+		_psy_rect.material = _psy_mat
+		layer.add_child(_psy_rect)
+	_psy_mat.set_shader_parameter("amount", clampf(0.12 + 0.3 * amount, 0.12, 0.5))
+
+
+func _psy_tick(delta: float) -> void:
+	if not psy_on or _psy_mat == null:
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var sp := clampf(-vel.y / 45.0, 0.0, 1.5)
+	var target := sp * 0.6 + (0.6 if _boost_t > 0.0 else 0.0) + clampf(_flash * 2.0, 0.0, 0.5)
+	_psy_rush = lerpf(_psy_rush, clampf(target, 0.0, 1.0), clampf(delta * 3.0, 0.0, 1.0))
+	_psy_grind = lerpf(_psy_grind, 1.0 if not _rail.is_empty() else 0.0, clampf(delta * 5.0, 0.0, 1.0))
+	_psy_air = lerpf(_psy_air, 1.0 if (not grounded and _rail.is_empty()) else 0.0, clampf(delta * 3.0, 0.0, 1.0))
+	_psy_speed = lerpf(_psy_speed, clampf(-vel.y / 45.0, 0.0, 1.0), clampf(delta * 2.0, 0.0, 1.0))
+	for e in _psy_ev:
+		(e as Array)[0] = float((e as Array)[0]) + delta
+	var e0: Array = _psy_ev[0]
+	var e1: Array = _psy_ev[1]
+	_psy_mat.set_shader_parameter("pa", Vector4(float(e0[0]), float(e1[0]), 9.0, 9.0))
+	_psy_mat.set_shader_parameter("pk", Vector4(float(e0[1]), float(e1[1]), 0.0, 0.0))
+	var ca: Color = e0[2]
+	var cb: Color = e1[2]
+	_psy_mat.set_shader_parameter("c0", Vector3(ca.r, ca.g, ca.b))
+	_psy_mat.set_shader_parameter("c1", Vector3(cb.r, cb.g, cb.b))
+	_psy_mat.set_shader_parameter("grind", _psy_grind)
+	_psy_mat.set_shader_parameter("air", _psy_air)
+	_psy_mat.set_shader_parameter("speed", _psy_speed)
+	_psy_mat.set_shader_parameter("t", float(Time.get_ticks_msec()) * 0.001)
+	_psy_mat.set_shader_parameter("rush", _psy_rush)
+	_psy_mat.set_shader_parameter("gaze", Vector2(clampf(_eye_zn(), -1.0, 1.0), 0.0))
+	_psy_mat.set_shader_parameter("aspect", Vector2(vs.x / maxf(vs.y, 1.0), 1.0))
+
+
+func _pause_rect() -> Rect2:
+	return Rect2(-9000.0, -9000.0, 1.0, 1.0)          # no on-screen buttons in the game: the screen is the game (Esc or P pauses)
+
+
+## The sandbox looks: a hat, and a tricycle under the rider.
+func _dress_rider() -> void:
+	if _rider == null:
+		return
+	var old := _rider.get_node_or_null("Dress")
+	if old != null:
+		old.queue_free()
+	var dr := Node3D.new()
+	dr.name = "Dress"
+	_rider.add_child(dr)
+	var top := 1.62 + (0.6 if big_head else 0.0)
+	var hs := 3.0 if big_head else 1.0
+	match hat_id:
+		1:          # a top hat
+			Roster.mi(dr, Roster.cyl(0.26 * hs, 0.26 * hs, 0.5 * hs), Vector3(0, top + 0.45 * hs, 0), Color(0.1, 0.1, 0.12))
+			Roster.mi(dr, Roster.cyl(0.46 * hs, 0.46 * hs, 0.06), Vector3(0, top + 0.2 * hs, 0), Color(0.1, 0.1, 0.12))
+		2:          # a party cone
+			Roster.mi(dr, Roster.cyl(0.02, 0.3 * hs, 0.7 * hs), Vector3(0, top + 0.4 * hs, 0), Color(1.0, 0.35, 0.8))
+		3:          # a propeller beanie
+			Roster.mi(dr, Roster.sphere(0.3 * hs, 0.5), Vector3(0, top + 0.1 * hs, 0), Color(0.3, 0.6, 1.0))
+			Roster.mi(dr, Roster.box(Vector3(0.9 * hs, 0.04, 0.12)), Vector3(0, top + 0.42 * hs, 0), Color(1.0, 0.85, 0.2))
+	if trike:
+		for wx in [-0.45, 0.45]:
+			Roster.mi(dr, Roster.cyl(0.32, 0.32, 0.12), Vector3(wx, -0.05, 0.7), Color(0.08, 0.08, 0.1)).rotation.z = PI * 0.5
+		Roster.mi(dr, Roster.cyl(0.24, 0.24, 0.1), Vector3(0, -0.1, -0.8), Color(0.08, 0.08, 0.1)).rotation.z = PI * 0.5
 
 
 func _fp_now() -> bool:
@@ -5976,11 +6701,18 @@ func _face_tick(delta: float, alt: float) -> void:
 		face_seen[face_kind] = int(face_seen.get(face_kind, 0)) + 1
 		_add_move(id)
 		face_kind = ""
-		_face_next = _air_time + 1.6
+		_face_next = _air_time + 1.6 / face_k
+		if _super_face:
+			_super_face = false
+			_gain(int(600.0 * groove))
+			_cheer("SUPER FACE!", Color(1.0, 0.9, 0.2), 1.8)
+		_trip_add(0.08)
+		if face_k > 1.2:
+			_gain(int(250.0 * groove * face_k))
 		_burst(Vector3(spos.x, spos.y + 1.6, spos.z), Color(1.0, 0.85, 0.3), 50, 9.0, 1.0, 1.0)
 	elif face_t <= 0.0:
 		face_kind = ""
-		_face_next = _air_time + 1.8
+		_face_next = _air_time + 1.8 / face_k
 		_trk_text = "...nothing?"
 		_trk_text_t = 0.8
 
@@ -6447,6 +7179,121 @@ func _draw_eyes_hud(font: Font, s: Vector2, k: float) -> void:
 
 
 ## A simple picture of each face the game asks for, so the prompt can be read at a glance: a round face with the one feature that matters drawn big.
+## The big cartoon version of a face challenge: fat white eyes with glints, thick brows, a clear mouth. It is meant to be copied at a glance, with no reading.
+func _eye_big(c: Vector2, R: float, pup: Vector2, pr: float, ink: Color) -> void:
+	Draw2D.circle(_hud, c, R + R * 0.1, ink)
+	Draw2D.circle(_hud, c, R, Color(1, 1, 1))
+	Draw2D.circle(_hud, c + pup * R, pr, ink)
+	Draw2D.circle(_hud, c + pup * R + Vector2(-pr * 0.32, -pr * 0.34), pr * 0.3, Color(1, 1, 1))
+
+
+func _brow_big(a: Vector2, b: Vector2, w: float, ink: Color) -> void:
+	_hud.draw_line(a, b, ink, w, true)
+	Draw2D.circle(_hud, a, w * 0.5, ink)
+	Draw2D.circle(_hud, b, w * 0.5, ink)
+
+
+func _face_big(c: Vector2, r: float, kind: String) -> void:
+	var ink := Color(0.1, 0.07, 0.06)
+	var skin := Color(1.0, 0.86, 0.3)
+	var red := Color(1.0, 0.3, 0.4)
+	var pink := Color(1.0, 0.45, 0.6)
+	var white := Color(1, 1, 1)
+	var bw := r * 0.11
+	Draw2D.circle(_hud, c, r + r * 0.06, Color(0, 0, 0, 0.8))
+	Draw2D.circle(_hud, c, r, skin)
+	var ex := r * 0.42
+	var ey := -r * 0.18
+	var R := r * 0.3
+	var L := c + Vector2(-ex, ey)
+	var Rr := c + Vector2(ex, ey)
+	match kind:
+		"crazy":
+			_eye_big(L, R * 1.1, Vector2(0.35, 0.4), R * 0.45, ink)
+			_eye_big(Rr, R * 1.1, Vector2(-0.3, -0.38), R * 0.45, ink)
+			_brow_big(L + Vector2(-R * 1.1, -R * 1.5), L + Vector2(R * 0.9, -R * 1.2), bw, ink)
+			_brow_big(Rr + Vector2(-R * 0.9, -R * 1.75), Rr + Vector2(R * 1.2, -R * 1.45), bw, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.28), r * 0.38, 0.12 * PI, 0.88 * PI, 18, ink, bw * 0.9, true)
+		"tongue":
+			_eye_big(L, R, Vector2(0.0, -0.25), R * 0.42, ink)
+			_eye_big(Rr, R, Vector2(0.0, -0.25), R * 0.42, ink)
+			_brow_big(L + Vector2(-R, -R * 1.4), L + Vector2(R, -R * 1.55), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 1.55), Rr + Vector2(R, -R * 1.4), bw, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.12), r * 0.46, 0.1 * PI, 0.9 * PI, 18, ink, bw, true)
+			Draw2D.poly(_hud, PackedVector2Array([c + Vector2(-r * 0.2, r * 0.52), c + Vector2(r * 0.2, r * 0.52), c + Vector2(r * 0.2, r * 0.8), c + Vector2(0, r * 0.95), c + Vector2(-r * 0.2, r * 0.8)]), pink)
+			_hud.draw_line(c + Vector2(0, r * 0.56), c + Vector2(0, r * 0.76), Color(0.8, 0.2, 0.4), bw * 0.5, true)
+		"smile":
+			for ec in [L, Rr]:
+				Draw2D.arc(_hud, ec + Vector2(0, R * 0.3), R * 0.9, PI * 1.08, PI * 1.92, 14, ink, bw, true)
+			Draw2D.poly(_hud, PackedVector2Array([c + Vector2(-r * 0.62, r * 0.12), c + Vector2(r * 0.62, r * 0.12), c + Vector2(r * 0.42, r * 0.62), c + Vector2(0, r * 0.78), c + Vector2(-r * 0.42, r * 0.62)]), ink)
+			Draw2D.poly(_hud, PackedVector2Array([c + Vector2(-r * 0.5, r * 0.14), c + Vector2(r * 0.5, r * 0.14), c + Vector2(r * 0.42, r * 0.3), c + Vector2(-r * 0.42, r * 0.3)]), white)
+		"shock":
+			_eye_big(L, R * 1.2, Vector2(0, 0), R * 0.22, ink)
+			_eye_big(Rr, R * 1.2, Vector2(0, 0), R * 0.22, ink)
+			_brow_big(L + Vector2(-R, -R * 1.9), L + Vector2(R, -R * 2.1), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 2.1), Rr + Vector2(R, -R * 1.9), bw, ink)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.5), r * 0.2, ink)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.52), r * 0.12, Color(0.8, 0.2, 0.3))
+		"pain":
+			for ec in [L, Rr]:
+				_hud.draw_line(ec + Vector2(-R * 0.8, -R * 0.8), ec + Vector2(R * 0.8, R * 0.8), ink, bw * 1.1, true)
+				_hud.draw_line(ec + Vector2(-R * 0.8, R * 0.8), ec + Vector2(R * 0.8, -R * 0.8), ink, bw * 1.1, true)
+			_brow_big(L + Vector2(-R, -R * 1.2), L + Vector2(R, -R * 1.9), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 1.9), Rr + Vector2(R, -R * 1.2), bw, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.8), r * 0.4, 1.15 * PI, 1.85 * PI, 16, ink, bw, true)
+			Draw2D.circle(_hud, c + Vector2(r * 0.8, -r * 0.1), r * 0.07, Color(0.4, 0.7, 1.0))
+		"wide":
+			_eye_big(L, R * 1.3, Vector2(0, 0), R * 0.3, ink)
+			_eye_big(Rr, R * 1.3, Vector2(0, 0), R * 0.3, ink)
+			_brow_big(L + Vector2(-R, -R * 2.1), L + Vector2(R, -R * 2.2), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 2.2), Rr + Vector2(R, -R * 2.1), bw, ink)
+			_hud.draw_line(c + Vector2(-r * 0.22, r * 0.55), c + Vector2(r * 0.22, r * 0.55), ink, bw, true)
+		"cross":
+			_eye_big(L, R * 1.1, Vector2(0.45, 0.05), R * 0.45, ink)
+			_eye_big(Rr, R * 1.1, Vector2(-0.45, 0.05), R * 0.45, ink)
+			_brow_big(L + Vector2(-R, -R * 1.5), L + Vector2(R, -R * 1.3), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 1.3), Rr + Vector2(R, -R * 1.5), bw, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.35), r * 0.3, 0.15 * PI, 0.85 * PI, 14, ink, bw, true)
+		"squint":
+			_hud.draw_line(L + Vector2(-R, 0), L + Vector2(R, 0), ink, bw * 1.2, true)
+			_eye_big(Rr, R * 0.7, Vector2(0, 0.1), R * 0.3, ink)
+			_brow_big(L + Vector2(-R, -R * 1.0), L + Vector2(R, -R * 0.5), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 0.5), Rr + Vector2(R, -R * 1.0), bw, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.42), r * 0.3, 0.1 * PI, 0.9 * PI, 14, ink, bw, true)
+		"puff":
+			_eye_big(L, R * 0.8, Vector2(0, 0), R * 0.35, ink)
+			_eye_big(Rr, R * 0.8, Vector2(0, 0), R * 0.35, ink)
+			for sx in [-1.0, 1.0]:
+				Draw2D.circle(_hud, c + Vector2(float(sx) * r * 0.62, r * 0.32), r * 0.34, skin.lightened(0.2))
+				Draw2D.arc(_hud, c + Vector2(float(sx) * r * 0.62, r * 0.32), r * 0.34, 0.0, TAU, 20, ink, bw * 0.6, true)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.42), r * 0.1, ink)
+		"kiss":
+			for ec in [L, Rr]:
+				Draw2D.arc(_hud, ec + Vector2(0, R * 0.2), R * 0.9, PI * 1.08, PI * 1.92, 14, ink, bw, true)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.45), r * 0.2, red)
+			Draw2D.circle(_hud, c + Vector2(0, r * 0.45), r * 0.07, Color(0.5, 0.05, 0.15))
+			for hp in [Vector2(0.75, -0.55), Vector2(1.0, -0.8)]:
+				Draw2D.circle(_hud, c + hp * r, r * 0.12, red)
+		"sneer":
+			_eye_big(L, R * 0.85, Vector2(0.25, 0.1), R * 0.35, ink)
+			_eye_big(Rr, R * 0.85, Vector2(0.25, 0.1), R * 0.35, ink)
+			_brow_big(L + Vector2(-R, -R * 1.9), L + Vector2(R, -R * 1.0), bw, ink)
+			_brow_big(Rr + Vector2(-R, -R * 1.0), Rr + Vector2(R, -R * 1.9), bw, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.5), r * 0.34, 1.12 * PI, 1.88 * PI, 14, ink, bw, true)
+			Draw2D.poly(_hud, PackedVector2Array([c + Vector2(r * 0.18, r * 0.4), c + Vector2(r * 0.34, r * 0.4), c + Vector2(r * 0.26, r * 0.58)]), white)
+		"shake":
+			for off in [-0.28, 0.28]:
+				var oc := c + Vector2(off * r, 0)
+				Draw2D.circle(_hud, oc, r * 0.7, Color(1.0, 0.86, 0.3, 0.45))
+			_eye_big(L, R * 0.8, Vector2(0, 0), R * 0.35, ink)
+			_eye_big(Rr, R * 0.8, Vector2(0, 0), R * 0.35, ink)
+			Draw2D.arc(_hud, c + Vector2(0, r * 0.35), r * 0.3, 0.15 * PI, 0.85 * PI, 14, ink, bw, true)
+			for sx in [-1.0, 1.0]:
+				var ax := c + Vector2(float(sx) * r * 1.25, 0)
+				_hud.draw_line(ax - Vector2(float(sx) * r * 0.25, 0), ax + Vector2(float(sx) * r * 0.25, 0), Color(1, 1, 1), bw, true)
+				Draw2D.poly(_hud, PackedVector2Array([ax + Vector2(float(sx) * r * 0.4, 0), ax + Vector2(float(sx) * r * 0.15, -r * 0.18), ax + Vector2(float(sx) * r * 0.15, r * 0.18)]), Color(1, 1, 1))
+
+
 func _face_icon(c: Vector2, r: float, kind: String) -> void:
 	var skin := Color(1.0, 0.88, 0.3)
 	var ink := Color(0.12, 0.08, 0.05)
@@ -6554,7 +7401,7 @@ func _draw_tricks(font: Font, s: Vector2, k: float) -> void:
 		var say := String(FACES[face_kind]["say"])
 		var sw := font.get_string_size(say, HORIZONTAL_ALIGNMENT_LEFT, -1, int(58.0 * pulse * fk2)).x
 		_ctext(font, py + 58.0 * fk2, say, int(58.0 * pulse), Color(1.0, 0.92, 0.3, 1.0))
-		_face_icon(Vector2(s.x * 0.5 - sw * 0.5 - 64.0 * fk2, py + 38.0 * fk2), 40.0 * fk2, face_kind)
+		_face_big(Vector2(s.x * 0.5, py + 100.0 * fk2 + minf(s.y * 0.17, 120.0 * fk2)), minf(s.y * 0.17, 120.0 * fk2), face_kind)          # the face to copy: big, so it reads at a glance
 		var fw := 260.0 * fk2
 		var fx := s.x * 0.5 - fw * 0.5
 		_hud.draw_rect(Rect2(fx, py + 66.0 * fk2, fw, 10.0 * fk2), Color(0.05, 0.05, 0.1, 0.6))
@@ -7121,6 +7968,7 @@ func _draw_hud_inner() -> void:
 	var s := _hud.size
 	var k := _hud_scale()
 	if _warming:
+		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(0.06, 0.09, 0.2, 1.0))          # a solid screen: the shader warm-up draws test boxes in front of the camera, nobody should see them
 		# the short wait at the very start of the first run: a bar, so it reads as getting ready and not as a hang
 		var bw0 := minf(s.x * 0.4, 460.0 * k)
 		var bp := Vector2(s.x * 0.5 - bw0 * 0.5, s.y * 0.62)
@@ -7131,6 +7979,8 @@ func _draw_hud_inner() -> void:
 	if _dot_t >= 0.0 and not _dot_done:
 		_draw_calib(font, s, k)
 		return
+	if _nohud:
+		return          # ?nohud: nothing on the picture (for screenshots)
 	var m := 24.0 * k
 	if hurt_t > 0.0:
 		_hud.draw_rect(Rect2(Vector2.ZERO, s), Color(1.0, 0.1, 0.1, 0.22 * clampf(hurt_t, 0.0, 1.0)))
@@ -7201,7 +8051,7 @@ func _draw_hud_inner() -> void:
 			_draw_cards(font, s, k)
 		if diag_on and not _finished:
 			_draw_diag(font, s, k)
-		elif not _finished:
+		elif not _finished and false:
 			var lv := pick_override if pick_override != 0.0 else _s_in_now
 			var lw := 170.0 * k
 			var lc0 := Vector2(s.x * 0.5, s.y * 0.8)
@@ -7260,24 +8110,28 @@ func _draw_hud_inner() -> void:
 	# progress bar (top centre), score (top left), eyes status (top right)
 	var bw := minf(s.x * 0.34, 420.0 * k)
 	var bx := s.x * 0.5 - bw * 0.5
-	_hud.draw_rect(Rect2(bx, m, bw, 10.0 * k), Color(0.05, 0.12, 0.25, 0.5))
-	_hud.draw_rect(Rect2(bx, m, bw * progress(), 10.0 * k), Color(1.0, 0.85, 0.35, 0.95))
-	_hud.draw_rect(Rect2(bx + bw - 3.0 * k, m - 4.0 * k, 3.0 * k, 18.0 * k), Color(1, 1, 1, 0.9))
+	_hud.draw_rect(Rect2(bx, 6.0 * k, bw, 4.0 * k), Color(0.05, 0.12, 0.25, 0.35))
+	_hud.draw_rect(Rect2(bx, 6.0 * k, bw * progress(), 4.0 * k), Color(1.0, 0.85, 0.3, 0.8))
 	if trail and mode == "race":
 		_text(font, Vector2(m, m + 22.0 * k), clock_text(_run_t), 26, Color(1, 1, 1, 0.95))
 		if time_pen != 0.0:
 			_text(font, Vector2(m + 96.0 * k, m + 22.0 * k), "%+d s" % int(time_pen), 18, Color(1.0, 0.5, 0.4, 0.95) if time_pen > 0.0 else Color(0.5, 1.0, 0.6, 0.95))
 	else:
 		_text(font, Vector2(m, m + 22.0 * k), "%d" % score, 26, Color(1, 1, 1, 0.95))
-	_draw_chain(s, k, m)
+	if not HUD_MIN:
+		_draw_chain(s, k, m)
+	if glints > 0 and not HUD_MIN:
+		var gdc := Vector2(m + 9.0 * k, m + 47.0 * k)
+		Draw2D.poly(_hud, PackedVector2Array([gdc + Vector2(0, -9.0 * k), gdc + Vector2(8.0 * k, 0), gdc + Vector2(0, 9.0 * k), gdc + Vector2(-8.0 * k, 0)]), Color(1.0, 0.82, 0.25, 0.95))
+		_text(font, Vector2(m + 24.0 * k, m + 54.0 * k), "%d" % glints, 22, Color(1.0, 0.9, 0.5, 0.95))
 	if trail and not _finished:
-		_draw_goals(font, s, k, m)
+		pass          # the goals list is off the screen (they are still counted)
 	_draw_setup_guide(s, k, get_process_delta_time())
-	var by := m + 52.0 * k
-	if _boost_t > 0.0:
+	var by := m + 84.0 * k
+	if _boost_t > 0.0 and not HUD_MIN:
 		_text(font, Vector2(m, by), "BOOST %.1f" % _boost_t, 15, BUFF_COL["boost"])
 		by += 20.0 * k
-	if _mult_t > 0.0:
+	if _mult_t > 0.0 and not HUD_MIN:
 		_text(font, Vector2(m, by), "x2 POINTS %.1f" % _mult_t, 15, BUFF_COL["mult"])
 		by += 20.0 * k
 	if shield > 0:
@@ -7289,21 +8143,19 @@ func _draw_hud_inner() -> void:
 		eye_txt = "MOUSE EYES"
 	var ecol := Color(0.5, 1.0, 0.6) if _eye_on else Color(1, 1, 1, 0.55)
 	var ew := font.get_string_size(eye_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(14.0 * k)).x
-	_text(font, Vector2(s.x - m - ew, m + 16.0 * k), eye_txt, 14, Color(ecol.r, ecol.g, ecol.b, ecol.a * 0.8))
-	_text(font, Vector2(m, s.y - m - 30.0 * k), "%d km/h" % int(vel.length() * 3.6), 20, Color(1, 1, 1, 0.8))
 	if show_perf:
 		var lt: Node = get_parent().get_node_or_null("Lighting") if get_parent() != null else null
 		var qt := (lt as DhLighting).tier if lt != null else 0
 		var gf := int(Engine.get_frames_per_second())
 		var tf := float(GazeProvider._pkt_times.size()) / 2.0
-		var pt := "GAME %d fps" % gf
+		var pt := "%d km/h     GAME %d fps" % [int(-vel.y * 3.6), gf]
 		if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 			pt += "   CAM %.0f fps  %d ms" % [tf, int(GazeProvider.trk_lat_ms)]
 		pt += "   Q%d" % qt
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
 		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 66.0 * k), pt, 18, pcol)
-	if chain > 0:
+	if chain > 0 and not HUD_MIN:
 		# FLOW: the multiplier, big, with its clock underneath. The bar is what you watch: it empties in a few seconds and anything you do refills it.
 		var fsz := 26 + int(8.0 * _flow_bump)
 		var fcol := Color(1.0, 0.85, 0.3, 0.95).lerp(Color(1, 1, 1, 1), _flow_bump)
@@ -7328,7 +8180,6 @@ func _draw_hud_inner() -> void:
 		_text(font, Vector2(hc.x - font.get_string_size("POP", HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x * 0.5, hc.y + 44.0 * k), "POP", 18, hcol)
 	var dtxt := "%d m" % int(maxf(-spos.z, 0.0))
 	var dw := font.get_string_size(dtxt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
-	_text(font, Vector2(s.x - m - dw, s.y - m), dtxt, 18, Color(1, 1, 1, 0.7))
 	var ty := s.y * 0.40
 	var ay := s.y - m - 54.0 * k
 	for t in _toasts:

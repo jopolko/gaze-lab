@@ -5,7 +5,8 @@ extends Control
 
 signal done
 
-const ICONS := ["STEER", "LOCK", "JUMP", "SPIN", "EAT", "SHIELD", "BRACE", "FACE"]
+const ICONS := ["LOOK TO STEER", "RAMP = BLAST!", "STARE AT ROCKS", "MAKE FACES"]
+const BADGE := [Color(0.20, 0.45, 0.95), Color(0.62, 0.22, 0.85), Color(0.90, 0.38, 0.18), Color(0.12, 0.65, 0.55)]
 
 var _t: float = 0.0
 var _go: bool = false
@@ -51,7 +52,10 @@ func _draw() -> void:
 	var s := (minf(w, h) / 720.0) * (0.62 if portrait else 1.0)
 	var fade := clampf(_t / 0.6, 0.0, 1.0)
 	# a soft wash so everything reads over any backdrop
-	draw_rect(Rect2(0, 0, w, h), Color(0.02, 0.03, 0.10, 0.45 * fade))
+	# a colour wash instead of a dark one: violet at the top to peach at the bottom, so the backdrop reads bright and the badges sit in it
+	var sky := PackedVector2Array([Vector2(0, 0), Vector2(w, 0), Vector2(w, h), Vector2(0, h)])
+	var skc := PackedColorArray([Color(0.35, 0.30, 0.85, 0.55 * fade), Color(0.35, 0.30, 0.85, 0.55 * fade), Color(1.0, 0.60, 0.45, 0.45 * fade), Color(1.0, 0.60, 0.45, 0.45 * fade)])
+	draw_polygon(sky, skc)
 	var font := ThemeDB.fallback_font
 	var white := Color(1, 1, 1, fade)
 	# emblem
@@ -74,27 +78,29 @@ func _draw() -> void:
 	var sw := font.get_string_size(sub, HORIZONTAL_ALIGNMENT_LEFT, -1, ssz).x
 	draw_string(font, Vector2(w * 0.5 - sw * 0.5, ty + 42.0 * s), sub, HORIZONTAL_ALIGNMENT_LEFT, -1, ssz, Color(1, 1, 1, 0.9 * fade))
 	# the pictograms
-	var per_row := 8 if not portrait else 4
+	var per_row := 4 if not portrait else 2
 	var rows := ICONS.size() / per_row
-	var cell := minf(w * 0.92 / float(per_row), 150.0 * s * 1.3)
-	var rr := cell * 0.34
-	var y0 := h * (0.72 if not portrait else 0.52)
+	var cell := minf(w * 0.92 / float(per_row), 230.0 * s * 1.3)
+	var rr := cell * 0.30
+	var y0 := h * (0.74 if not portrait else 0.54)
 	for i in ICONS.size():
 		var col := i % per_row
 		var row := i / per_row
 		var cx := w * 0.5 + (float(col) - float(per_row - 1) * 0.5) * cell
-		var cy := y0 + float(row) * cell * 1.12
+		var cy := y0 + float(row) * cell * 1.2
 		var a := clampf((_t - 0.5 - float(i) * 0.08) / 0.35, 0.0, 1.0)
 		if a <= 0.0:
 			continue
 		var cc := Vector2(cx, cy)
-		Draw2D.circle(self, cc, rr, Color(0.04, 0.06, 0.2, 0.40 * a))
-		Draw2D.arc(self, cc, rr, 0.0, TAU, 40, Color(1, 1, 1, 0.8 * a), 2.5 * s, true)
-		_icon(i, cc, rr / 34.0 * 0.78, Color(1, 1, 1, a))
+		cc.y += sin(_t * 2.4 + float(i) * 1.3) * rr * 0.05
+		var bc: Color = BADGE[i]
+		Draw2D.circle(self, cc, rr, Color(bc.r, bc.g, bc.b, a))
+		Draw2D.arc(self, cc, rr, 0.0, TAU, 40, Color(1, 1, 1, a), 5.0 * s, true)
+		_icon(i, cc, rr / 34.0 * 0.9, a)
 		var label: String = ICONS[i]
-		var lsz := int(20.0 * s)
+		var lsz := int(26.0 * s)
 		var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, lsz).x
-		draw_string(font, Vector2(cx - lw * 0.5, cy + rr + 30.0 * s), label, HORIZONTAL_ALIGNMENT_LEFT, -1, lsz, Color(1, 1, 1, a))
+		draw_string(font, Vector2(cx - lw * 0.5, cy + rr + 34.0 * s), label, HORIZONTAL_ALIGNMENT_LEFT, -1, lsz, Color(1, 1, 1, a))
 	# the invitation
 	var hint := "TAP TO BEGIN"
 	var hsz := int(30.0 * s)
@@ -103,46 +109,51 @@ func _draw() -> void:
 	draw_string(font, Vector2(w * 0.5 - hw * 0.5, h * 0.95), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hsz, Color(1, 1, 1, pulse * fade))
 
 
-## One pictogram in a box of about +-34 units, scaled by u.
-func _icon(i: int, c: Vector2, u: float, col: Color) -> void:
-	var lw := 4.5 * u
+## One cartoon badge picture in a box of about +-34 units, scaled by u: fat shapes, bright fills, dark outlines, a face or a burst in each so it reads at a glance.
+func _disc(c: Vector2, r: float, fill: Color, ink: Color, ow: float) -> void:
+	Draw2D.circle(self, c, r, fill)
+	Draw2D.arc(self, c, r, 0.0, TAU, 28, ink, ow, true)
+
+
+func _star(c: Vector2, r1: float, r2: float, n: int, rot: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for k in n * 2:
+		var rr := r1 if k % 2 == 0 else r2
+		var an := rot + PI * float(k) / float(n)
+		pts.append(c + Vector2(cos(an), sin(an)) * rr)
+	Draw2D.poly(self, pts, col)
+
+
+func _icon(i: int, c: Vector2, u: float, a: float) -> void:
+	var ink := Color(0.05, 0.06, 0.18, a)
+	var white := Color(1, 1, 1, a)
+	var ow := 3.2 * u
 	match i:
-		0:   # STEER: two eyes looking aside, an arrow
-			Draw2D.arc(self, c + Vector2(-13, -6) * u, 11.0 * u, 0.0, TAU, 20, col, lw * 0.7, true)
-			Draw2D.arc(self, c + Vector2(13, -6) * u, 11.0 * u, 0.0, TAU, 20, col, lw * 0.7, true)
-			Draw2D.circle(self, c + Vector2(-8, -5) * u, 4.5 * u, col)
-			Draw2D.circle(self, c + Vector2(18, -5) * u, 4.5 * u, col)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(-12, 20) * u, c + Vector2(18, 20) * u]), col, lw, true)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(10, 13) * u, c + Vector2(19, 20) * u, c + Vector2(10, 27) * u]), col, lw, true)
-		1:   # LOCK: an eye on a gate
-			Draw2D.arc(self, c, 18.0 * u, 0.0, TAU, 24, col, lw, true)
-			Draw2D.circle(self, c, 5.0 * u, col)
-			for d in [Vector2(0, -28), Vector2(0, 28), Vector2(-28, 0), Vector2(28, 0)]:
-				draw_line(c + d * u * 0.72, c + d * u, col, lw, true)
-		2:   # JUMP: a ramp and an arrow up
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(-26, 22) * u, c + Vector2(16, 22) * u, c + Vector2(16, -6) * u, c + Vector2(-26, 22) * u]), col, lw, true)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(20, -8) * u, c + Vector2(30, -26) * u]), col, lw, true)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(20, -26) * u, c + Vector2(31, -26) * u, c + Vector2(31, -14) * u]), col, lw, true)
-		3:   # SPIN: a circling arrow around a board
-			Draw2D.arc(self, c, 22.0 * u, deg_to_rad(40.0), deg_to_rad(330.0), 28, col, lw, true)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(-30, -6) * u, c + Vector2(-20, 6) * u, c + Vector2(-10, -4) * u]), col, lw, true)
-			Draw2D.arc(self, c + Vector2(0, 6) * u, 12.0 * u, 0.0, TAU, 16, col, lw * 0.6, true)
-		4:   # EAT: a burger
-			Draw2D.arc(self, c + Vector2(0, -4) * u, 24.0 * u, PI, TAU, 20, col, lw, true)
-			draw_line(c + Vector2(-26, -4) * u, c + Vector2(26, -4) * u, col, lw, true)
-			draw_line(c + Vector2(-24, 6) * u, c + Vector2(24, 6) * u, col, lw, true)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(-24, 14) * u, c + Vector2(24, 14) * u, c + Vector2(20, 24) * u, c + Vector2(-20, 24) * u, c + Vector2(-24, 14) * u]), col, lw, true)
-		5:   # SHIELD
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(0, -26) * u, c + Vector2(22, -17) * u, c + Vector2(22, 3) * u, c + Vector2(0, 28) * u, c + Vector2(-22, 3) * u, c + Vector2(-22, -17) * u, c + Vector2(0, -26) * u]), col, lw, true)
-			Draw2D.circle(self, c + Vector2(0, -2) * u, 6.0 * u, col)
-		6:   # BRACE: a ball hits, speed lines
-			Draw2D.arc(self, c + Vector2(8, 0) * u, 20.0 * u, 0.0, TAU, 24, col, lw, true)
-			Draw2D.pline(self, PackedVector2Array([c + Vector2(-6, -6) * u, c + Vector2(4, 0) * u, c + Vector2(-6, 6) * u]), col, lw, true)
-			for yy in [-14.0, 2.0, 18.0]:
-				draw_line(c + Vector2(-30, yy) * u, c + Vector2(-16, yy) * u, col, lw, true)
-		7:   # FACE: a goofy face, tongue out
-			Draw2D.arc(self, c, 26.0 * u, 0.0, TAU, 28, col, lw, true)
-			draw_line(c + Vector2(-12, -8) * u, c + Vector2(-12, -1) * u, col, lw, true)
-			draw_line(c + Vector2(12, -8) * u, c + Vector2(12, -1) * u, col, lw, true)
-			Draw2D.arc(self, c + Vector2(0, 4) * u, 14.0 * u, deg_to_rad(20.0), deg_to_rad(160.0), 12, col, lw, true)
-			draw_line(c + Vector2(4, 18) * u, c + Vector2(4, 26) * u, col, lw * 1.2, true)
+		0:   # LOOK: two big googly eyes, pupils swung to one side, a little arrow past them
+			for ex in [-15.0, 15.0]:
+				_disc(c + Vector2(ex, -4) * u, 14.0 * u, white, ink, ow)
+				_disc(c + Vector2(ex + 5.0, -2) * u, 6.5 * u, ink, ink, 1.0)
+				Draw2D.circle(self, c + Vector2(ex + 7.0, -5) * u, 2.2 * u, white)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(-20, 22) * u, c + Vector2(20, 22) * u]), Color(1.0, 0.9, 0.3, a), 5.0 * u, true)
+			Draw2D.poly(self, PackedVector2Array([c + Vector2(16, 12) * u, c + Vector2(32, 22) * u, c + Vector2(16, 32) * u]), Color(1.0, 0.9, 0.3, a))
+		1:   # RAMP: an orange kicker, a purple swirl over it, a yellow blast star
+			_star(c + Vector2(14, -16) * u, 20.0 * u, 9.0 * u, 7, 0.3, Color(1.0, 0.9, 0.3, a))
+			Draw2D.arc(self, c + Vector2(14, -16) * u, 11.0 * u, 0.0, TAU, 20, Color(1.0, 0.45, 0.9, a), 4.0 * u, true)
+			var wedge := PackedVector2Array([c + Vector2(-30, 26) * u, c + Vector2(26, 26) * u, c + Vector2(26, 2) * u])
+			Draw2D.poly(self, wedge, Color(1.0, 0.62, 0.15, a))
+			Draw2D.pline(self, PackedVector2Array([wedge[0], wedge[1], wedge[2], wedge[0]]), ink, ow, true)
+		2:   # STARE AT ROCKS: a grumpy rock that is cracking, bits flying
+			var rock := PackedVector2Array([c + Vector2(-24, 20) * u, c + Vector2(-28, 0) * u, c + Vector2(-12, -20) * u, c + Vector2(12, -22) * u, c + Vector2(28, -2) * u, c + Vector2(24, 20) * u])
+			Draw2D.poly(self, rock, Color(0.62, 0.64, 0.72, a))
+			Draw2D.pline(self, PackedVector2Array([rock[0], rock[1], rock[2], rock[3], rock[4], rock[5], rock[0]]), ink, ow, true)
+			Draw2D.pline(self, PackedVector2Array([c + Vector2(0, -22) * u, c + Vector2(-4, -6) * u, c + Vector2(6, 4) * u, c + Vector2(0, 20) * u]), ink, ow, true)
+			Draw2D.circle(self, c + Vector2(-13, -4) * u, 3.4 * u, ink)
+			Draw2D.circle(self, c + Vector2(13, -4) * u, 3.4 * u, ink)
+			_star(c + Vector2(26, -24) * u, 9.0 * u, 4.0 * u, 5, 0.0, Color(1.0, 0.9, 0.3, a))
+			_star(c + Vector2(-28, -22) * u, 7.0 * u, 3.0 * u, 5, 0.5, Color(1.0, 0.9, 0.3, a))
+		3:   # MAKE FACES: a big yellow face with its tongue out
+			_disc(c, 27.0 * u, Color(1.0, 0.85, 0.25, a), ink, ow)
+			Draw2D.circle(self, c + Vector2(-10, -8) * u, 4.6 * u, ink)
+			Draw2D.circle(self, c + Vector2(10, -8) * u, 4.6 * u, ink)
+			Draw2D.poly(self, PackedVector2Array([c + Vector2(-4, 10) * u, c + Vector2(10, 10) * u, c + Vector2(10, 26) * u, c + Vector2(3, 31) * u, c + Vector2(-4, 26) * u]), Color(1.0, 0.45, 0.6, a))
+			Draw2D.arc(self, c + Vector2(0, 2) * u, 16.0 * u, deg_to_rad(25.0), deg_to_rad(155.0), 14, ink, ow, true)

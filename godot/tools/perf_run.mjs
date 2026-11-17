@@ -34,7 +34,7 @@ try {
   await ev("document.querySelector('canvas').focus(); 0");
   await key('Enter', 'Enter', 13); await sleep(1800);   // title: any key
   await shot('menu.jpg');
-  for (let i = 0; i < 4; i++) { const before = await ev('__sp.programs'); await click(vw * 0.5, vh * 0.865); await sleep(5000); if ((await ev('__sp.programs')) > before) break; }   // START (again if the menu was not ready)
+  for (let i = 0; i < 4; i++) { const before = await ev('__sp.programs'); await click(vw * 0.5, vh * 0.905); await sleep(5000); if ((await ev('__sp.programs')) > before) break; }   // START (again if the menu was not ready)
   await ev('__sp.slow.length = 0; __sp.frames = 0; 0');
   if (process.env.SHOTS) { for (let i = 0; i < secs; i++) { await sleep(1000); await shot('t' + i + '.jpg'); } } else await sleep(secs * 1000);
   const out = JSON.parse(await ev('__sp.summary(40)'));
