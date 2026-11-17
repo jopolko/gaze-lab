@@ -269,6 +269,8 @@ class ThemePost extends Node:
 		mat.set_shader_parameter("screen_tex", vp.get_texture())
 		target.material = mat
 
+	var light: bool = false          # a hint or a flicker: the pass without the tracers (they cost a second render of the world), so it comes and goes without a hitch
+
 	func set_look(m: int, intensity: float) -> void:
 		if OS.has_feature("web") and not _own_tex and str(JavaScriptBridge.eval("window.location.search")).contains("nopost"):
 			m = 0                                                  # ?nopost: the world's look without the full-screen pass (to tell the two apart)
@@ -281,14 +283,14 @@ class ThemePost extends Node:
 		mat.set_shader_parameter("breathe", amount)
 		if layer != null:
 			layer.visible = m > 0
-		if m == 1 and trails_ok:
+		if m == 1 and trails_ok and not light:
 			_make_trail()
 		elif trail_vp != null:
 			# kept, not freed: a phone's graphics memory is not asked for again with every wave (that is what loses the context). They just stop drawing.
 			trail_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 			if cur_vp != null:
 				cur_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
-		mat.set_shader_parameter("use_trail", 1.0 if (trail_vp != null and m == 1) else 0.0)
+		mat.set_shader_parameter("use_trail", 1.0 if (trail_vp != null and m == 1 and not light) else 0.0)
 
 	func _make_trail() -> void:
 		if trail_vp != null:

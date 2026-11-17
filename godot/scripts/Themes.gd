@@ -520,11 +520,15 @@ void fragment() {
 		vec3 diff = max(old - texture(cur, uv).rgb * 0.92 - 0.02, vec3(0.0));
 		float m = clamp(dot(diff, vec3(0.34)) * 3.2 * (1.0 + trip * 3.0) + trip * 0.10 * (0.5 + 0.5 * sin(r * 22.0 - TIME * 2.5)), 0.0, 1.0);
 		vec3 ghost = hsv(fract(TIME * 0.12 + r * 0.9 + m * 0.5), 0.95, 1.0) * m;
-		col += ghost * 1.15 * amount * use_trail;
+		col += ghost * 0.7 * amount * use_trail;          // (added light washes a picture out: less of it, and the colour is pushed instead, below)
 		col = mix(col, col * hsv(fract(TIME * 0.05), 0.25, 1.1), 0.12 * amount);
 		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55);
-		col *= 1.0 + trip * 0.25;
+		col *= 1.0 + trip * 0.08;
 		col *= 1.0 - 0.45 * smoothstep(0.45, 0.95, r);
+		// punch: richer colour and deeper darks, so the effect is vivid and not pale
+		float lm = dot(col, vec3(0.299, 0.587, 0.114));
+		col = mix(vec3(lm), col, 1.3 + 0.5 * trip);
+		col = max((col - 0.5) * (1.14 + 0.2 * trip) + 0.5 - 0.05, vec3(0.0));
 		if (onset < 0.999) {
 			vec3 plain = texture(screen_tex, uv).rgb;
 			float dh = abs(uv.y - horizon);

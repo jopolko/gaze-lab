@@ -26,6 +26,8 @@ func _ready() -> void:
 		get_tree().quit()
 		return
 	j.time_scale = float(OS.get_environment("JT")) if OS.get_environment("JT") != "" else 10.0
+	if OS.get_environment("DOSE") != "":
+		rig._dose = float(OS.get_environment("DOSE"))          # pills taken: a dose to start with
 	var secs := int(OS.get_environment("SECS")) if OS.get_environment("SECS") != "" else 150
 	var last := ""
 	var dt := 1.0 / 60.0

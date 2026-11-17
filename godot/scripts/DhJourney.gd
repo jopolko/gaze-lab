@@ -25,6 +25,10 @@ const LV_STR := [0.5, 1.0, 1.3]
 const LV_LEN := [0.7, 1.0, 1.3]
 const LV_CALM := [1.3, 1.0, 0.75]
 
+## How much has to be felt (RunRig._body: pills taken, slowly taking effect, plus a little from the passing of time) for each wave to start, and how it scales with the trip level.
+const THR := [0.9, 1.6, 2.4, 3.2, 4.0, 5.0, 2.5, 1.2]
+const LV_THR := [1.3, 1.0, 0.75]
+
 ## How each world changes the ride. spd top speed, haz rocks, pads boost pads, jumps ramps, glint glint rain, bump how hard the cupcakes bounce you, spring how high a spring
 ## throws you, padk how big a boost pad's kick is, grip how slowly the board swings across (above 1 is heavy, below 1 is sharp), mus the music.
 const BIOME := {
@@ -114,6 +118,10 @@ func _plan_wave() -> void:
 	_off_len = float(a["off"])
 
 
+func _thr(w: int) -> float:
+	return float(THR[w % THR.size()]) * LV_THR[clampi(rig._cfg_trip, 0, 2)] * (1.0 + 0.08 * float(w / THR.size()))
+
+
 ## The rest before wave `w`, from the script.
 func _calm(w: int) -> float:
 	var a: Dictionary = ARC[w % ARC.size()]
@@ -134,8 +142,7 @@ func difficulty() -> float:
 func hint() -> float:
 	if phase != Phase.CALM:
 		return 0.0
-	var hs := 15.0 if wave == 0 else _calm_len - 10.0          # the very first sign comes early (fifteen seconds in): a tease, faint enough to be taken for the light
-	return clampf((t - minf(hs, _calm_len - 10.0)) / 10.0, 0.0, 1.0) * 0.15
+	return clampf(rig._body / maxf(_thr(wave), 0.1), 0.0, 1.0) * 0.15          # the first signs rise with what is felt: faint, round the horizon
 
 
 ## A long run of pills: the calm is over, the next wave starts (it still waits out the first fifteen seconds of a run).
@@ -199,20 +206,20 @@ func tick(delta: float) -> void:
 	match phase:
 		Phase.CALM:
 			# the wave comes in when the run is building (fast, a flow going, boosts): or, if it never does, after a while anyway
-			if t >= _calm_len and (rig.excitement() > 0.45 or t >= _calm_len + 15.0):
+			if t >= _calm_len and rig._body >= _thr(wave):          # a wave comes in when enough has taken effect, not on a timer
 				_set_phase(Phase.ONSET)
 		Phase.ONSET:
 			if t >= _onset_len:
 				_set_phase(Phase.PEAK)
 		Phase.PEAK:
-			if t >= _peak_len:
+			if t >= _peak_len and (rig._body < _thr(wave) * 1.3 or t >= _peak_len * 3.0):          # more taken keeps it up longer
 				_set_phase(Phase.OFFSET)
 		Phase.OFFSET:
 			if t >= _off_len:
 				_set_phase(Phase.CALM)
 	_stages()
 	if phase != Phase.CALM or hint() > 0.001:
-		rig.journey_post(world, onset_k(), wants_trip(), strength)
+		rig.journey_post(world, onset_k(), wants_trip(), strength * 0.85)
 	_mods_t -= d
 	if _mods_t <= 0.0:
 		_mods_t = 0.4

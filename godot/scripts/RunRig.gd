@@ -6792,6 +6792,7 @@ func journey_part(world: String, part: String) -> void:
 
 
 var _jpost_mode: int = 0
+var _jpost_light: bool = false
 var _pw_done: Dictionary = {}
 
 
@@ -6853,7 +6854,8 @@ func journey_post(world: String, onset: float, want_trip: bool, strength: float)
 	var fx := _lvl.get_node_or_null("ThemeFX") as ThemeFX if _lvl != null else null
 	if fx == null or fx.post == null:
 		return
-	if _pill_k > 0.001:          # a pill's flash rides on top of whatever the journey is doing
+	var light := onset < 0.3          # a hint or a flicker needs no tracers: no second render of the world, nothing to build, so it can come and go instantly
+	if _pill_k > 0.001:          # a pill's flicker rides on top of whatever the journey is doing
 		onset = maxf(onset, _pill_k)
 		want_trip = true
 		strength = maxf(strength, 0.9)
@@ -6863,8 +6865,10 @@ func journey_post(world: String, onset: float, want_trip: bool, strength: float)
 			m = 1
 		elif onset >= 0.999:
 			m = Themes.post_mode(world)
-	if m != _jpost_mode:
+	if m != _jpost_mode or (m == 1 and light != _jpost_light):
 		_jpost_mode = m
+		_jpost_light = light
+		fx.post.light = light
 		fx.post.set_look(m, clampf(strength, 0.3, 1.2))
 	_trip_on = _jpost_mode == 1
 	if _jpost_mode == 0:
@@ -7078,7 +7082,8 @@ func _pill_eat(t: Dictionary) -> void:
 	(t["n"] as Node3D).visible = false
 	_pill_n = _pill_n + 1 if _pill_gap > 0.0 else 1
 	_pill_gap = 6.0
-	_pill_t = minf(2.6 + 1.2 * float(_pill_n - 1), 9.0)
+	_dose += 1.0          # it takes a while to come on: the body follows the dose slowly (see _pill_tick)
+	_flick = 1.0          # but there is an instant glimmer
 	_burst(Vector3(float(t["x"]), float(t["y"]), float(t["z"])), t["col"], 22, 8.0, 0.6, 1.0)
 	_gain(int(120.0 * groove * float(_pill_n)))
 	_trip_add(0.25)
@@ -7088,17 +7093,26 @@ func _pill_eat(t: Dictionary) -> void:
 	Game.sfx(&"blip")
 	if _pill_n == 3:
 		_cheer("TRIPPING", Color(1.0, 0.3, 0.9), 1.2)
-	elif _pill_n >= 4 and _journey != null:
-		_journey.nudge()          # a long run of pills carries the next wave in early
+
+
+var _dose: float = 0.0          # what has been taken and not yet worn off
+var _body: float = 0.0          # what is felt: it follows the dose slowly, so the waves come some while after the pills
+var _flick: float = 0.0          # the instant glimmer that goes with each pill
+var _drift_t: float = 110.0          # time itself adds a little, so a run with no pills still comes on, late
 
 
 func _pill_tick(delta: float) -> void:
 	_pill_gap = maxf(_pill_gap - delta, 0.0)
-	_pill_t = maxf(_pill_t - delta, 0.0)
-	var target := 0.0
-	if _pill_t > 0.0:
-		target = clampf(0.55 + 0.12 * float(_pill_n), 0.55, 0.95)
-	_pill_k = move_toward(_pill_k, target, delta * (3.0 if target > _pill_k else 0.55))
+	_flick = maxf(_flick - delta * 2.0, 0.0)          # half a second
+	_dose = maxf(_dose - 0.006 * delta, 0.0)
+	_body += (_dose - _body) * (1.0 - exp(-delta / 25.0))
+	if _journey != null:
+		_drift_t -= delta
+		if _drift_t <= 0.0:
+			_drift_t = 100.0
+			_dose += 0.7
+	# the glimmer: two sharp pulses in half a second. Subtle in size, strong in colour: a hint of what is coming
+	_pill_k = 0.5 * pow(maxf(sin((1.0 - _flick) * TAU * 1.5), 0.0), 1.4) if _flick > 0.0 else 0.0
 	if _journey == null:
 		return
 	if _pill_k > 0.001:
@@ -7819,6 +7833,10 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_pill_k = 0.0
 	_pill_t = 0.0
 	_pill_n = 0
+	_dose = 0.0
+	_body = 0.0
+	_flick = 0.0
+	_drift_t = 110.0
 	_dress_rider()
 	if _rider != null:
 		for hi in [1, 2]:
