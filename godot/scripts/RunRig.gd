@@ -1171,10 +1171,12 @@ func _audio_setup(c: Dictionary) -> void:
 		_dir.stop()
 		_dir.queue_free()
 	_dir = null
-	if String(c.get("mus", "auto")) == "auto" and OS.has_feature("web") and not _dir_failed and not str(JavaScriptBridge.eval("window.location.search")).contains("nomusic"):
-		_dir = DhDirector.new()          # the tracks and stems; the synthesised music below is only the fallback when the files cannot be fetched
-		add_child(_dir)
-		_dir.start()
+	if String(c.get("mus", "auto")) == "auto" and OS.has_feature("web"):
+		# AUTO is the real tracks and stems. If they cannot be fetched (or ?nomusic) there is silence, not the synthesised music: that is only for the styles picked by hand in SOUND.
+		if not _dir_failed and not str(JavaScriptBridge.eval("window.location.search")).contains("nomusic"):
+			_dir = DhDirector.new()
+			add_child(_dir)
+			_dir.start()
 		return
 	if st != "off" and OS.has_feature("web"):
 		_music = DhMusic.new()
