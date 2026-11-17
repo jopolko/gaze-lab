@@ -1269,7 +1269,9 @@ func _sb_tick(delta: float) -> void:
 			sm.rings = 8
 			var body := MeshInstance3D.new()
 			body.mesh = sm
-			body.material_override = _fx_mat("solid", Color(0.92, 0.96, 1.0), 0.7)
+			_sb_mol = _pick_held_molecule()
+			var sbc: Color = MolData.MOLS[MolData.ORDER[_sb_mol]]["c"]
+			body.material_override = _fx_mat("solid", Color(0.92, 0.96, 1.0).lerp(sbc, 0.5), 0.9)
 			body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			_sb_mesh.add_child(body)
 			for bi in 7:
@@ -1300,7 +1302,7 @@ func _sb_tick(delta: float) -> void:
 	_shake = maxf(_shake, 0.35 * _sb_close * _sb_close)
 	if gap < 3.8 and absf(spos.x - _sb_x) < 3.9 and spos.y - terrain_h(spos.x, spos.z) < 3.5 and hurt_t <= 0.0:
 		_sb_end(false)
-		_crash("snowball")
+		_crash("snowball", "", _sb_mol)
 	elif gap > 150.0:
 		_sb_end(true)
 
@@ -1395,6 +1397,7 @@ func _trip_tick(delta: float) -> void:
 		trip = maxf(trip - (0.018 + 0.02 * trip) * delta, 0.0)          # it fades slowly, a little faster the further gone you are
 		if _journey != null:
 			trip = maxf(trip, _journey.trip_floor())          # a wave holds the picture at least this far gone
+		trip = maxf(trip, _mol_avg() * 0.9)          # and so do the molecules
 	var tier := 0 if trip < 0.25 else (1 if trip < 0.55 else (2 if trip < 0.85 else 3))
 	if tier > _trip_tier and _trip_force < 0.0:
 		_cheer(["", "things get colourful...", "WHOA", "FULL TRIP!!"][tier], Color.from_hsv(0.8 - 0.2 * float(tier), 0.8, 1.0), 0.8 + 0.4 * float(tier))
@@ -1412,8 +1415,10 @@ func _make_hazard(row: Dictionary, feats: Array, kind: String, zi: float, cx_off
 	var zm := (za + zb) * 0.5
 	var nodes := row["nodes"] as Array
 	var hn: Array = []
+	var mi := _rng.randi() % 6          # every hazard belongs to one molecule: it takes a level of that one and no other, and it is that molecule's colour
+	var mcol: Color = MolData.MOLS[MolData.ORDER[mi]]["c"]
 	if kind == "rock":
-		var rm := _fx_mat("solid", Color(0.5, 0.52, 0.6), 0.5)
+		var rm := _fx_mat("solid", Color(0.5, 0.52, 0.6).lerp(mcol, 0.65), 0.8)
 		var sm := SphereMesh.new()                                   # one mesh for every rock of the patch, each its own size
 		sm.radius = 1.0
 		sm.height = 1.5
@@ -1431,15 +1436,16 @@ func _make_hazard(row: Dictionary, feats: Array, kind: String, zi: float, cx_off
 		var bm := BoxMesh.new()
 		bm.size = Vector3(9.0, 0.08, za - zb)
 		var cx := trail_x(zm)
-		var sln := _mi(self, bm, _fx_mat("solid", Color(0.5, 0.42, 0.34), 0.3), Vector3(cx, terrain_h(cx, zm) + 0.1, zm))
+		var sln := _mi(self, bm, _fx_mat("solid", Color(0.5, 0.42, 0.34).lerp(mcol, 0.6), 0.6), Vector3(cx, terrain_h(cx, zm) + 0.1, zm))
 		sln.rotation.x = -atan2(terrain_h(cx, za) - terrain_h(cx, zb), za - zb)          # laid along the slope, not flat: a flat slab on a hill stands up out of it like a wall
 		nodes.append(sln)
 		hn.append(sln)
 	_buff_assets("orb")
 	var bx := trail_x(za) + cx_off
-	nodes.append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(1.0, 0.3, 0.2, 0.3)), Vector3(bx, terrain_h(bx, za) + 4.6, za + 0.5)))
+	nodes.append(_mi(self, _buff_mesh["beacon"], _fx_mat("add", Color(mcol.r, mcol.g, mcol.b, 0.35)), Vector3(bx, terrain_h(bx, za) + 4.6, za + 0.5)))
+	nodes.append(_mi(self, _quad(7.0), _fx_mat("halo", Color(mcol.r, mcol.g, mcol.b, 0.45)), Vector3(trail_x(zm) + cx_off, terrain_h(trail_x(zm) + cx_off, zm) + 1.8, zm)))
 	hazards_built += 1
-	feats.append({"kind": kind, "hz": true, "hn": hn, "za": za, "zl": zb, "zb": zb, "sd": 0.0, "done": false, "want": 0.0, "away": 0.0, "cx": cx_off, "hw": spread + 0.8})
+	feats.append({"kind": kind, "hz": true, "mol": mi, "hn": hn, "za": za, "zl": zb, "zb": zb, "sd": 0.0, "done": false, "want": 0.0, "away": 0.0, "cx": cx_off, "hw": spread + 0.8})
 
 
 ## Which side thing the eyes have chosen, or {}. At a choice there is one on the left and one on the right: a look held to a side for a moment chooses that one, and a
@@ -1834,7 +1840,7 @@ func _feat_tick(delta: float) -> void:
 						if not f.has("hit"):
 							f["hit"] = true
 							hazards_hit += 1
-							_crash("rock patch")
+							_crash("rock patch", "", int(f.get("mol", -1)))
 					else:
 						if not f.has("hit"):
 							f["hit"] = true
@@ -4259,7 +4265,7 @@ func _draw_chain(s: Vector2, k: float, m: float) -> void:
 
 
 func _gain(pts: int) -> void:
-	score += int(float(pts) * (2.0 if _mult_t > 0.0 else 1.0) * _chain_k())
+	score += int(float(pts) * (2.0 if _mult_t > 0.0 else 1.0) * _chain_k() * (1.0 + 0.8 * _mbody[1] / 6.0) * (1.0 + 2.0 * _mol_dmt()))          # DOM: more for everything; all six: much more
 
 
 func _tick_buffs(delta: float) -> void:
@@ -5461,7 +5467,7 @@ func _ring_bell(ox: float, oz: float, orad: float) -> void:
 	tw.tween_callback(n.queue_free)
 
 
-func _crash(msg: String, ctx: String = "") -> void:
+func _crash(msg: String, ctx: String = "", mol: int = -1) -> void:
 	if hurt_t > 0.0 or _finished:
 		return
 	GazeProvider.pm.buzz([90, 40, 60])
@@ -5477,6 +5483,7 @@ func _crash(msg: String, ctx: String = "") -> void:
 		Game.sfx(&"hurt")
 		return
 	crashes += 1
+	_mol_hurt(mol)
 	_cue(-1)
 	Game.sfx(&"splat")
 	_psy_pulse(4, Color(1.0, 0.2, 0.2))
@@ -6778,6 +6785,11 @@ func biome_apply(m: Dictionary, k: float, diff: float) -> void:
 	_bm_bump = lerpf(1.0, float(m["bump"]), k)
 	_bm_spring = lerpf(1.0, float(m["spring"]), k)
 	_bm_pad = lerpf(1.0, float(m["padk"]), k)
+	glint_k = clampf(glint_k * (1.0 + 0.6 * _mbody[0] / 6.0), 0.5, 5.0)          # mescaline: more glints
+	_bm_pad *= 1.0 + 0.5 * _mbody[2] / 6.0          # 2C-B: stronger boosts
+	jump_chance = clampf(jump_chance * (1.0 + 0.35 * _mbody[3] / 6.0), 0.0, 1.0)          # 2C-E: more ramps
+	_bm_spring *= 1.0 + 0.6 * _mbody[4] / 6.0          # 2C-T-2: stronger slingshots
+	_spd_k = clampf(_spd_k * (1.0 + 0.12 * _mbody[5] / 6.0), 0.8, 1.9)          # 2C-T-7: faster
 
 
 ## One piece of a world at a time (see ThemeFX.apply_part): the journey lets a world come on layer by layer, flickering, and go the same way.
@@ -6857,6 +6869,11 @@ func journey_post(world: String, onset: float, want_trip: bool, strength: float)
 	var fx := _lvl.get_node_or_null("ThemeFX") as ThemeFX if _lvl != null else null
 	if fx == null or fx.post == null:
 		return
+	var mav := _mol_avg()
+	if mav > 0.01:          # what is felt of the six holds the pass on, deeper the more of them and the higher
+		onset = maxf(onset, clampf(mav * 2.4, 0.0, 1.0))
+		want_trip = true
+		strength = maxf(strength, 0.5 + 0.7 * mav)
 	var light := onset < 0.3          # a hint or a flicker needs no tracers: no second render of the world, nothing to build, so it can come and go instantly
 	if _pill_k > 0.001:          # a pill's flicker rides on top of whatever the journey is doing
 		onset = maxf(onset, _pill_k)
@@ -7000,85 +7017,131 @@ var _pill_live: bool = false
 func _make_pills(row: Dictionary, toys: Array, z: float, side: float) -> void:
 	var g := _toy_g
 	_toy_g += 1
-	var first := true
-	var cols := [Color(1.0, 0.2, 0.55), Color(0.2, 0.9, 1.0), Color(1.0, 0.85, 0.2), Color(0.6, 0.35, 1.0)]
+	var picked: Array = []
 	for r in 3:
-		var pz := z - float(r) * 14.0
-		var px := trail_x(pz) + side * 7.0
-		var ca: Color = cols[_rng.randi() % 4]
+		# three different molecules side by side, one in each lane: which one to look at is the choice
+		var sd: float = [-1.0, 0.0, 1.0][r]
+		var pz := z - 2.0 * absf(sd)
+		var px := trail_x(pz) + sd * 8.0
+		var mid := _pick_molecule(picked)
+		picked.append(mid)
+		var ca: Color = MolData.MOLS[mid]["c"]
 		var hold := Node3D.new()
 		add_child(hold)
 		hold.position = Vector3(px, terrain_h(px, pz) + 2.2, pz)
 		var spin := Node3D.new()
 		hold.add_child(spin)
-		var mk := (_rng.randi() % 3)          # three molecules: a ring, a tetrahedron, a chain
-		var mm := _mol_meshes(mk)
-		_mi(spin, mm[0], _toy_mat("molA%d" % cols.find(ca), ca, 1.9), Vector3.ZERO)
-		_mi(spin, mm[1], _toy_mat("molB", Color(0.96, 0.96, 1.0), 1.3), Vector3.ZERO)
+		_mi(spin, _mol_mesh(mid), _mol_material(), Vector3.ZERO)
 		spin.rotation = Vector3(0.5, 0.0, 0.3)
 		_mi(hold, _quad(5.0), _fx_mat("halo", Color(ca.r, ca.g, ca.b, 0.6)), Vector3.ZERO)
 		hold.scale = Vector3.ONE * 1.3
 		(row["nodes"] as Array).append(hold)
-		toys.append({"kind": "pill", "x": px, "z": pz, "n": hold, "spin": spin, "t": 0, "col": ca, "y": hold.position.y})
-		if first:
-			_beacon(row, px, pz, ca)
-			_toy_feat(row, px, pz, side, g)
-			first = false
+		toys.append({"kind": "pill", "x": px, "z": pz, "n": hold, "spin": spin, "t": 0, "col": ca, "y": hold.position.y, "name": String(MolData.MOLS[mid]["name"]), "id": mid})
+		_beacon(row, px, pz, ca)
+		_toy_feat(row, px, pz, sd, g)
+
+
+## Which molecule the next pickup is: any of the six, the ones not yet near the top more often (a run is built of the climb, so what is missing keeps turning up).
+func _pick_molecule(exclude: Array = []) -> String:
+	var wsum := 0.0
+	var ws: Array = []
+	for i in 6:
+		var w := 0.3 if _mdose[i] >= 5.5 else 1.0 + 0.5 * (6.0 - _mdose[i])
+		if exclude.has(String(MolData.ORDER[i])):
+			w = 0.0
+		ws.append(w)
+		wsum += w
+	var r := _rng.randf() * wsum
+	for i in 6:
+		r -= float(ws[i])
+		if r <= 0.0:
+			return String(MolData.ORDER[i])
+	return String(MolData.ORDER[5])
 
 
 var _mol_cache: Dictionary = {}
+var _mol_mat: StandardMaterial3D = null
+const MOL_EL_COL := {"H": Color(0.95, 0.95, 1.0), "O": Color(1.0, 0.22, 0.2), "N": Color(0.25, 0.42, 1.0), "S": Color(1.0, 0.9, 0.2), "Br": Color(0.70, 0.25, 0.15)}
+const MOL_EL_R := {"H": 0.36, "C": 0.62, "O": 0.60, "N": 0.62, "S": 0.82, "Br": 0.92}
 
 
-## A molecule in balls and sticks, built once per shape: [the atoms, the bonds]. 0 a ring of six, 1 a tetrahedron round a centre, 2 a zig-zag chain.
-func _mol_meshes(kind: int) -> Array:
-	if _mol_cache.has(kind):
-		return _mol_cache[kind]
-	var pts: Array = []
-	var bonds: Array = []
-	if kind == 0:
-		for i in 6:
-			var a := TAU * float(i) / 6.0
-			pts.append(Vector3(cos(a), sin(a), 0.0) * 1.15)
-			bonds.append([i, (i + 1) % 6])
-	elif kind == 1:
-		pts = [Vector3.ZERO, Vector3(1, 1, 1).normalized() * 1.3, Vector3(1, -1, -1).normalized() * 1.3, Vector3(-1, 1, -1).normalized() * 1.3, Vector3(-1, -1, 1).normalized() * 1.3]
-		bonds = [[0, 1], [0, 2], [0, 3], [0, 4]]
-	else:
-		for i in 5:
-			pts.append(Vector3(float(i - 2) * 0.85, 0.45 * (1.0 if i % 2 == 0 else -1.0), 0.0))
-			if i > 0:
-				bonds.append([i - 1, i])
-	var sa := SurfaceTool.new()
-	sa.begin(Mesh.PRIMITIVE_TRIANGLES)
+func _mol_material() -> StandardMaterial3D:
+	if _mol_mat == null:
+		_mol_mat = StandardMaterial3D.new()
+		_mol_mat.vertex_color_use_as_albedo = true
+		_mol_mat.roughness = 0.45
+		_mol_mat.emission_enabled = true
+		_mol_mat.emission = Color(0.22, 0.22, 0.26)
+	return _mol_mat
+
+
+## One real molecule (MolData, from tools/mol_gen.py) as a single ball-and-stick mesh with its colours in the vertices: carbon in the molecule's own colour, hydrogen white, oxygen red,
+## nitrogen blue, sulphur yellow, bromine brown. The ring's double bonds are drawn as two sticks. Built once per molecule.
+func _mol_mesh(id: String) -> ArrayMesh:
+	if _mol_cache.has(id):
+		return _mol_cache[id]
+	var md: Dictionary = MolData.MOLS[id]
+	var sc := 0.3
+	var accent: Color = md["c"]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var ball := SphereMesh.new()
-	ball.radius = 0.38
-	ball.height = 0.76
+	ball.radius = 1.0
+	ball.height = 2.0
 	ball.radial_segments = 8
 	ball.rings = 4
-	for i in pts.size():
-		sa.append_from(ball, 0, Transform3D(Basis.IDENTITY * (1.35 if (kind == 1 and i == 0) else 1.0), pts[i]))
-	var sb := SurfaceTool.new()
-	sb.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ba := ball.get_mesh_arrays()
+	var bv: PackedVector3Array = ba[Mesh.ARRAY_VERTEX]
+	var bn: PackedVector3Array = ba[Mesh.ARRAY_NORMAL]
+	var bi: PackedInt32Array = ba[Mesh.ARRAY_INDEX]
+	var pts: Array = []
+	for a in md["atoms"]:
+		var el := String(a[0])
+		var c := Vector3(float(a[1]), float(a[2]), float(a[3])) * sc
+		pts.append(c)
+		var col: Color = accent if el == "C" else MOL_EL_COL[el]
+		var r: float = float(MOL_EL_R[el]) * sc
+		for k in bi:
+			st.set_color(col)
+			st.set_normal(bn[k])
+			st.add_vertex(c + bv[k] * r)
 	var rod := CylinderMesh.new()
-	rod.top_radius = 0.09
-	rod.bottom_radius = 0.09
+	rod.top_radius = 1.0
+	rod.bottom_radius = 1.0
 	rod.height = 1.0
-	rod.radial_segments = 5
+	rod.radial_segments = 6
 	rod.rings = 1
-	for bd in bonds:
-		var p0: Vector3 = pts[bd[0]]
-		var p1: Vector3 = pts[bd[1]]
+	rod.cap_top = false
+	rod.cap_bottom = false
+	var ra := rod.get_mesh_arrays()
+	var rv: PackedVector3Array = ra[Mesh.ARRAY_VERTEX]
+	var rn: PackedVector3Array = ra[Mesh.ARRAY_NORMAL]
+	var ri: PackedInt32Array = ra[Mesh.ARRAY_INDEX]
+	var bcol := Color(0.86, 0.88, 0.95)
+	for bd in md["bonds"]:
+		var p0: Vector3 = pts[int(bd[0])]
+		var p1: Vector3 = pts[int(bd[1])]
 		var d := p1 - p0
-		var up := d.normalized()
-		var ax := Vector3.UP.cross(up)
-		var bs := Basis.IDENTITY
-		if ax.length() > 0.001:
-			bs = Basis(ax.normalized(), Vector3.UP.angle_to(up))
-		bs = bs * Basis.from_scale(Vector3(1.0, d.length(), 1.0))
-		sb.append_from(rod, 0, Transform3D(bs, (p0 + p1) * 0.5))
-	var out: Array = [sa.commit(), sb.commit()]
-	_mol_cache[kind] = out
-	return out
+		var blen := d.length()
+		var up := d / blen
+		var ref := Vector3.RIGHT if absf(up.x) < 0.9 else Vector3.UP
+		var xa := up.cross(ref).normalized()
+		var bs := Basis(xa, up, xa.cross(up))
+		var offs: Array = [Vector3.ZERO]
+		var br := 0.17 * sc
+		if int(bd[2]) == 2:
+			var off := up.cross(Vector3(0.0, 0.0, 1.0)).normalized() * 0.15 * sc
+			offs = [off, -off]
+			br = 0.10 * sc
+		for off2: Vector3 in offs:
+			for k in ri:
+				st.set_color(bcol)
+				st.set_normal((bs * rn[k]).normalized())
+				var lv := rv[k]
+				st.add_vertex((p0 + p1) * 0.5 + off2 + bs * Vector3(lv.x * br, lv.y * blen, lv.z * br))
+	var mesh := st.commit()
+	_mol_cache[id] = mesh
+	return mesh
 
 
 func _pill_eat(t: Dictionary) -> void:
@@ -7086,7 +7149,10 @@ func _pill_eat(t: Dictionary) -> void:
 	(t["n"] as Node3D).visible = false
 	_pill_n = _pill_n + 1 if _pill_gap > 0.0 else 1
 	_pill_gap = 6.0
-	_dose += 1.0          # it takes a while to come on: the body follows the dose slowly (see _pill_tick)
+	_dose += 0.42          # (all six together open the waves)
+	var mi: int = MolData.ORDER.find(String(t["id"]))
+	_mdose[mi] = minf(_mdose[mi] + 1.0, 6.0)
+	_mol_seen = true
 	_flick = 1.0          # but there is an instant glimmer
 	_burst(Vector3(float(t["x"]), float(t["y"]), float(t["z"])), t["col"], 22, 8.0, 0.6, 1.0)
 	_gain(int(120.0 * groove * float(_pill_n)))
@@ -7095,17 +7161,91 @@ func _pill_eat(t: Dictionary) -> void:
 	_mix_add("pill")
 	_shake = maxf(_shake, 0.12)
 	Game.sfx(&"blip")
+	_toast("%s  %d/6" % [String(t["name"]), int(_mdose[mi])], t["col"])          # what it was
 	if _pill_n == 3:
 		_cheer("TRIPPING", Color(1.0, 0.3, 0.9), 1.2)
 
 
-var _dose: float = 0.0          # what has been taken and not yet worn off
+var _mdose := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # per molecule (MolData.ORDER): what has been taken and not worn off, 0 to 6
+var _mbody := PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # per molecule: what is felt, following the dose slowly
+var _mol_seen: bool = false
+var _mol_hurt_t: float = 0.0
+var _dmt_on: bool = false
+var _dose: float = 0.0          # what has been taken and not yet worn off (all of them together: it opens the waves)
 var _body: float = 0.0          # what is felt: it follows the dose slowly, so the waves come some while after the pills
 var _flick: float = 0.0          # the instant glimmer that goes with each pill
 var _drift_t: float = 110.0          # time itself adds a little, so a run with no pills still comes on, late
 
 
+func _mol_avg() -> float:
+	return (_mbody[0] + _mbody[1] + _mbody[2] + _mbody[3] + _mbody[4] + _mbody[5]) / 36.0
+
+
+## 0 until all six are felt at nearly the top, then 1: the peak.
+func _mol_dmt() -> float:
+	var mn := 6.0
+	for i in 6:
+		mn = minf(mn, _mbody[i])
+	return smoothstep(0.72, 0.98, mn / 6.0)
+
+
+var _sb_mol: int = 0
+var _mol_hurt_i: int = -1
+
+
+## A snowball's molecule: one you are holding, more likely the more of it you hold (it is the one with something to lose).
+func _pick_held_molecule() -> int:
+	var tot := 0.0
+	for i in 6:
+		tot += _mdose[i] + 0.3
+	var r := randf() * tot
+	for i in 6:
+		r -= _mdose[i] + 0.3
+		if r <= 0.0:
+			return i
+	return 5
+
+
+## A hazard costs a level of its own molecule and no other (`mol`, from its colour); one with no molecule of its own (a tree) takes a level from one you hold, any of them. A hazard
+## of a molecule you do not hold costs nothing: the bar shows what is at stake, and which fights are worth having. A shield takes the crash instead (see _crash).
+func _mol_hurt(mol: int) -> void:
+	var i := mol
+	if i < 0:
+		var held: Array = []
+		for k in 6:
+			if _mdose[k] >= 0.5:
+				held.append(k)
+		if held.is_empty():
+			return
+		i = int(held[randi() % held.size()])
+	if _mdose[i] < 0.5 and _mbody[i] < 0.5:
+		return
+	_mdose[i] = maxf(_mdose[i] - 1.0, 0.0)
+	_mbody[i] = maxf(_mbody[i] - 1.0, 0.0)
+	_mol_hurt_t = 1.0
+	_mol_hurt_i = i
+	_dose = maxf(_dose - 0.42, 0.0)
+	_toast("%s  %d/6" % [String(MolData.MOLS[MolData.ORDER[i]]["name"]), int(_mdose[i])], Color(1.0, 0.35, 0.3))
+
+
 func _pill_tick(delta: float) -> void:
+	_mol_hurt_t = maxf(_mol_hurt_t - delta * 1.5, 0.0)
+	for i in 6:
+		_mdose[i] = maxf(_mdose[i] - (0.004 if i == 1 else 0.008) * delta, 0.0)          # each wears off slowly (DOM, the long one, half as fast)
+		var rate := 25.0 if _mdose[i] > _mbody[i] else 8.0
+		_mbody[i] += (_mdose[i] - _mbody[i]) * (1.0 - exp(-delta / rate))
+	var dm := _mol_dmt()
+	if dm > 0.5 and not _dmt_on:
+		_dmt_on = true
+		_cheer("ALL SIX", Color(1.0, 0.85, 0.3), 2.2)
+		Game.sfx(&"kaboom")
+	elif dm < 0.3:
+		_dmt_on = false
+	var fxm := _lvl.get_node_or_null("ThemeFX") as ThemeFX if _lvl != null else null
+	if fxm != null and fxm.post != null and fxm.post.mat != null:
+		fxm.post.mat.set_shader_parameter("mA", Vector3(_mbody[0], _mbody[1], _mbody[2]) / 6.0)
+		fxm.post.mat.set_shader_parameter("mB", Vector3(_mbody[3], _mbody[4], _mbody[5]) / 6.0)
+		fxm.post.mat.set_shader_parameter("dmt", dm)
 	_pill_gap = maxf(_pill_gap - delta, 0.0)
 	_flick = maxf(_flick - delta * 2.0, 0.0)          # half a second
 	_dose = maxf(_dose - 0.006 * delta, 0.0)
@@ -7119,7 +7259,7 @@ func _pill_tick(delta: float) -> void:
 	_pill_k = 0.5 * pow(maxf(sin((1.0 - _flick) * TAU * 1.5), 0.0), 1.4) if _flick > 0.0 else 0.0
 	if _journey == null:
 		return
-	if _pill_k > 0.001:
+	if _pill_k > 0.001 or _mol_avg() > 0.01:
 		_pill_live = true
 		if _journey.phase == DhJourney.Phase.CALM and _journey.hint() < 0.001:
 			journey_post("psychedelic", 0.0, false, 0.9)
@@ -7842,6 +7982,10 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_dose = 0.0
 	_body = 0.0
 	_flick = 0.0
+	_mdose.fill(0.0)
+	_mbody.fill(0.0)
+	_mol_seen = false
+	_dmt_on = false
 	_drift_t = 110.0
 	_dress_rider()
 	if _rider != null:
@@ -9351,6 +9495,36 @@ func _draw_setup_guide(s: Vector2, k: float, delta_hint: float) -> void:
 		_draw_positioner(Vector2(s.x - 56.0 * k, 96.0 * k), 24.0 * k, k * 0.6, 0.9)
 
 
+## The six, along the top: a ring for each in its colour. The dim arc is how much has been taken, the bright arc is how much is felt, the number is the level (out of 6). A crash flashes them red.
+func _draw_mol_bar(font: Font, k: float, s: Vector2, m: float) -> void:
+	if not _mol_seen:
+		return
+	var gap := 56.0 * k
+	var x0 := s.x * 0.5 - gap * 2.5
+	var y := m + 70.0 * k
+	for i in 6:
+		var id: String = MolData.ORDER[i]
+		var col: Color = MolData.MOLS[id]["c"]
+		var c := Vector2(x0 + gap * float(i), y)
+		var lv := _mdose[i] / 6.0
+		var felt := _mbody[i] / 6.0
+		_hud.draw_circle(c, 18.0 * k, Color(0.0, 0.0, 0.0, 0.5))
+		if lv > 0.001:
+			Draw2D.arc(_hud, c, 17.0 * k, -PI * 0.5, -PI * 0.5 + TAU * lv, 32, Color(col.r, col.g, col.b, 0.35), 5.0 * k)
+		if felt > 0.001:
+			Draw2D.arc(_hud, c, 17.0 * k, -PI * 0.5, -PI * 0.5 + TAU * felt, 32, col, 5.0 * k)
+		if _mol_hurt_t > 0.0 and i == _mol_hurt_i:
+			_hud.draw_circle(c, 19.0 * k, Color(1.0, 0.2, 0.2, 0.6 * _mol_hurt_t))
+		var cnt := "%d" % int(floor(_mdose[i] + 0.001))
+		_text(font, c + Vector2(-_tw(font, cnt, int(16.0 * k)) * 0.5, 6.0 * k), cnt, 16, Color(1, 1, 1, 0.95 if lv > 0.001 else 0.35))
+		var nm := String(MolData.MOLS[id]["name"]).to_upper()
+		if nm == "MESCALINE":
+			nm = "MESC"
+		_text(font, c + Vector2(-_tw(font, nm, int(10.0 * k)) * 0.5, 33.0 * k), nm, 10, Color(col.r, col.g, col.b, 0.85))
+	if _dmt_on:
+		_text(font, Vector2(s.x * 0.5 - _tw(font, "ALL SIX", int(14.0 * k)) * 0.5, y + 50.0 * k), "ALL SIX", 14, Color(1.0, 0.85, 0.3, 0.7 + 0.3 * sin(_age * 6.0)))
+
+
 var _diag: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("diag")          # ?diag: the tracking made visible (targets, the gaze point, the readings)
 
 
@@ -9601,6 +9775,7 @@ func _draw_hud_inner() -> void:
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
 		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 66.0 * k), pt, 18, pcol)
+	_draw_mol_bar(font, k, s, m)
 	if _diag:
 		_draw_track_dbg(font, k, s, m)
 	if chain > 0 and not HUD_MIN:

@@ -668,6 +668,7 @@ func _build_reports_card() -> void:
 		RunLog.clear_all()
 		_refresh_reports())
 	_label("VEHICLE: tells the game you are on a bus or train, so it re-centres your look faster. GPS SPEED: lets the browser report only your speed (never your position) so it can notice a moving vehicle by itself.", 16, Color(1, 1, 1, 0.55), c)
+	_label("The molecules you collect are six phenethylamines from Alexander Shulgin's PiHKAL: mescaline, DOM, 2C-B, 2C-E, 2C-T-2 and 2C-T-7. Their shapes are built from their structural formulas. With respect to Sasha Shulgin, whose work on how molecules shape what we perceive made them known.", 14, Color(1, 1, 1, 0.55), c).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_refresh_reports()
 
 

@@ -499,6 +499,9 @@ uniform float breathe = 0.0;     // 0..1 how hard the picture breathes
 uniform float trip = 0.0;        // 0..1 the TRIP: built up by sugar and combos, it swirls the picture, throws the colours apart and fills the air with tracers
 uniform float onset = 1.0;       // 0..1 how far the effect has come on: at first only a band around the horizon (the mountains) shimmers, then it spreads over the whole picture
 uniform float horizon = 0.42;    // where the horizon is on the screen (0 top, 1 bottom)
+uniform vec3 mA = vec3(0.0);     // how far each of six molecules is felt, 0..1: mescaline, DOM, 2C-B
+uniform vec3 mB = vec3(0.0);     // 2C-E, 2C-T-2, 2C-T-7
+uniform float dmt = 0.0;         // all six at the top at once
 """ + HSV + """
 void fragment() {
 	vec2 uv = SCREEN_UV;
@@ -514,7 +517,20 @@ void fragment() {
 		float ang = 0.0;          // no swirl: the heavy swirling was too much
 		vec2 cw = vec2(c.x * cos(ang) - c.y * sin(ang), c.x * sin(ang) + c.y * cos(ang));
 		vec2 wuv = vec2(0.5) + cw + c * w * 2.0 + vec2(sin(uv.y * 14.0 + TIME) * 0.0008, 0.0) * amount * breathe;
-		float ca = (0.003 + r * 0.012) * amount * (1.0 + trip * 3.0);
+		// the six, each in its own way. Everything is eased down in the middle of the picture and round the board, so it stays playable.
+		float keep = mix(0.35, 1.0, smoothstep(0.05, 0.38, length(c * vec2(1.0, 1.25))));
+		float pl = pow(max(sin(TIME * 6.0), 0.0), 3.0);
+		wuv += c * (mA.x * 0.010 * keep * sin(TIME * 0.5 + r * 6.0));          // mescaline: slow warm waves
+		wuv += c * (mB.y * 0.018 * keep * sin(r * 34.0 - TIME * 3.0));          // 2C-T-2: ripples running out from the middle
+		if (mB.x + dmt > 0.01) {          // 2C-E: the picture folds into mirrored segments
+			float kf = clamp(mB.x * 0.6 + dmt * 0.7, 0.0, 0.85) * keep;
+			float seg = 6.2831853 / (6.0 + 2.0 * dmt);
+			float an = atan(c.y, c.x);
+			float af = abs(mod(an, seg) - seg * 0.5);
+			wuv = mix(wuv, vec2(0.5) + vec2(cos(af), sin(af)) * r, kf);
+		}
+		wuv = vec2(0.5) + (wuv - vec2(0.5)) * (1.0 - 0.04 * mB.z * pl * keep + 0.05 * dmt * sin(TIME * 0.8) * keep);          // 2C-T-7: a pulse that pushes in
+		float ca = (0.003 + r * 0.012) * amount * (1.0 + trip * 3.0 + mA.z * 2.0 + dmt * 3.0);          // 2C-B: the colours split apart
 		col = vec3(texture(screen_tex, wuv + c * ca).r, texture(screen_tex, wuv).g, texture(screen_tex, wuv - c * ca).b);
 		vec3 old = texture(trail, uv).rgb;
 		vec3 diff = max(old - texture(cur, uv).rgb * 0.92 - 0.02, vec3(0.0));
@@ -525,10 +541,17 @@ void fragment() {
 		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55);
 		col *= 1.0 + trip * 0.08;
 		col *= 1.0 - 0.45 * smoothstep(0.45, 0.95, r);
+		col = mix(col, col * vec3(1.15, 0.95, 0.78), mA.x * 0.5);          // mescaline: warm
+		col *= 1.0 + mA.y * 0.12 * sin(TIME * 0.35);          // DOM: a slow deep swell of light
+		col *= 1.0 + mB.z * 0.30 * pl * keep;          // 2C-T-7: the pulse is bright too
 		// punch: richer colour and deeper darks, so the effect is vivid and not pale
 		float lm = dot(col, vec3(0.299, 0.587, 0.114));
-		col = mix(vec3(lm), col, 1.3 + 0.5 * trip);
-		col = max((col - 0.5) * (1.14 + 0.2 * trip) + 0.5 - 0.05, vec3(0.0));
+		col = mix(vec3(lm), col, 1.3 + 0.5 * trip + 0.8 * mA.z + 0.4 * dmt);          // 2C-B: vivid
+		col = max((col - 0.5) * (1.14 + 0.2 * trip + 0.2 * mA.y) + 0.5 - 0.05, vec3(0.0));          // DOM: deeper
+		if (dmt > 0.001) {          // all six: the colours cycle through everything and rings run outward
+			col = mix(col, col * hsv(fract(TIME * 0.2 + r * 2.0), 0.8, 1.4), dmt * 0.6 * keep);
+			col += hsv(fract(r * 8.0 - TIME * 0.6), 0.9, 1.0) * 0.18 * dmt * (0.5 + 0.5 * sin(r * 40.0 - TIME * 4.0)) * keep;
+		}
 		if (onset < 0.999) {
 			vec3 plain = texture(screen_tex, uv).rgb;
 			float dh = abs(uv.y - horizon);
