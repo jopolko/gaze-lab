@@ -11,7 +11,7 @@ const ZONE_LABELS := {"rush": "RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "ben
 var cfg: Dictionary = {
 	"v": 4, "theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
 	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
-	"psy": false, "journey": true, "trip": 1, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
+	"psy": false, "journey": true, "trip": 1, "session": 10, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
 }
 
 var _defaults: Dictionary = cfg.duplicate(true)
@@ -73,6 +73,7 @@ var _mus_btns: Dictionary = {}
 var _reset_arm: float = 0.0
 var _reset_b: Button
 var _trip_btns: Dictionary = {}
+var _sess_btns: Dictionary = {}
 var _mvol_s: HSlider
 var _svol_s: HSlider
 var _mvol_l: Label
@@ -423,6 +424,17 @@ func _build_theme_card() -> void:
 			_save())
 		_trip_btns[tv[0]] = tb
 		_boxes.append([tb, 120.0, 44.0])
+	_label("HOW LONG A SESSION: the climb, the peak and the way down are stretched to fit. It goes round again, a little higher, if you play on.", 15, Color(1, 1, 1, 0.55), c)
+	var sf := _flow(c)
+	var sg := ButtonGroup.new()
+	for sv in [[10, "10 MIN"], [60, "1 H"], [120, "2 H"], [240, "4 H"], [480, "8 H"]]:
+		var sb := _button(String(sv[1]), 17, sf, true)
+		sb.button_group = sg
+		sb.pressed.connect(func() -> void:
+			cfg["session"] = int(sv[0])
+			_save())
+		_sess_btns[sv[0]] = sb
+		_boxes.append([sb, 100.0, 44.0])
 	var f := _flow(c)
 	var grp := ButtonGroup.new()
 	var all_looks := OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('looks')"))          # one look at a time: Alpine is the demo, ?looks brings the others back
@@ -790,6 +802,8 @@ func _sync_widgets() -> void:
 		(_mus_btns[id] as Button).set_pressed_no_signal(id == String(cfg["mus"]))
 	for tid in _trip_btns:
 		(_trip_btns[tid] as Button).set_pressed_no_signal(int(tid) == int(cfg["trip"]))
+	for sid in _sess_btns:
+		(_sess_btns[sid] as Button).set_pressed_no_signal(int(sid) == int(cfg["session"]))
 	_mvol_s.value = float(cfg["mvol"])
 	_svol_s.value = float(cfg["svol"])
 	for id in _mode_btns:

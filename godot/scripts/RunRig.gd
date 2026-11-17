@@ -6750,7 +6750,7 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 			continue
 		var side: float = [-1.0, 1.0, 0.0, -1.0, 1.0][_rng.randi() % 5]
 		var roll := _rng.randf()
-		var pill_odds := 0.06 if -tz < 500.0 else 0.2
+		var pill_odds := (0.06 if -tz < 500.0 else 0.2) * (_pacer.spawn_bias(_mol_avg()) if _pacer != null else 1.0)          # the pacer: more when the player is behind the session's curve
 		if _mol_dbg and _journey != null:
 			_make_pills(row, toys, tz, [-1.0, 1.0, 0.0][_rng.randi() % 3])          # ?mol: every slot is a row of molecules
 		elif _journey != null and ((not _pill_seen and -tz > 160.0) or _rng.randf() < pill_odds):
@@ -6822,6 +6822,8 @@ func biome_apply(m: Dictionary, k: float, diff: float) -> void:
 	jump_chance = clampf(jump_chance * (1.0 + 0.35 * _mbody[3] / 6.0), 0.0, 1.0)          # 2C-E: more ramps
 	_bm_spring *= 1.0 + 0.6 * _mbody[4] / 6.0          # 2C-T-2: stronger slingshots
 	_spd_k = clampf(_spd_k * (1.0 + 0.12 * _mbody[5] / 6.0), 0.8, 1.9)          # 2C-T-7: faster
+	if _pacer != null:
+		hazard_share = clampf(hazard_share * _pacer.hazard_k(), 0.0, 1.0)          # what the phase of the session asks for (nothing hostile for the first twenty seconds)
 	if _dir != null and is_instance_valid(_dir):
 		var pace := 0.7 + 0.6 * _dir.wave_at(8.0)          # the course is built about eight seconds ahead of the board: where the wave will be when you get there
 		hazard_share = clampf(hazard_share * pace, 0.0, 1.0)          # more on the crest of a wave, fewer in the lull
@@ -7041,6 +7043,7 @@ func _toy_feat(row: Dictionary, x: float, z: float, sd: float, g: int) -> void:
 	(row["feats"] as Array).append({"kind": "toy", "kx": x, "za": z + 24.0, "zl": z, "zb": z - 6.0, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": g, "cd": true})
 
 
+var _pacer: DhPacer = null
 var _pill_seen: bool = false
 var _mol_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("mol")          # ?mol: a row of molecules right at the start, to look at
 var _pill_k: float = 0.0          # how far the pill flash has come on, 0 to 1
@@ -7266,6 +7269,8 @@ func _mol_hurt(mol: int) -> void:
 
 
 func _pill_tick(delta: float) -> void:
+	if _pacer != null and not _paused:
+		_pacer.tick(delta)
 	_mol_hurt_t = maxf(_mol_hurt_t - delta * 1.5, 0.0)
 	for i in 6:
 		_mdose[i] = maxf(_mdose[i] - (0.004 if i == 1 else 0.008) * delta, 0.0)          # each wears off slowly (DOM, the long one, half as fast)
@@ -8021,6 +8026,10 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_cfg_snow = bool(c.get("snow", true))
 	_cfg_fluffy = bool(c.get("fluffy", false))
 	_journey = DhJourney.new() if bool(c.get("journey", true)) and String(c.get("theme", "alpine")) == "alpine" else null          # a world picked by hand is the world, all of it: the journey starts from alpine
+	_pacer = null
+	if _journey != null:
+		_pacer = DhPacer.new()
+		_pacer.session_s = clampf(float(c.get("session", 10)), 5.0, 600.0) * 60.0
 	_pill_seen = false
 	_pill_k = 0.0
 	_pill_t = 0.0
