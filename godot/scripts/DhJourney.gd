@@ -134,7 +134,8 @@ func difficulty() -> float:
 func hint() -> float:
 	if phase != Phase.CALM:
 		return 0.0
-	return clampf((t - (_calm_len - 10.0)) / 10.0, 0.0, 1.0) * 0.15
+	var hs := 15.0 if wave == 0 else _calm_len - 10.0          # the very first sign comes early (fifteen seconds in): a tease, faint enough to be taken for the light
+	return clampf((t - minf(hs, _calm_len - 10.0)) / 10.0, 0.0, 1.0) * 0.15
 
 
 ## A long run of pills: the calm is over, the next wave starts (it still waits out the first fifteen seconds of a run).

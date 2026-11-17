@@ -64,12 +64,14 @@ var _tab_btns: Array[Button] = []
 var _tabrow: HBoxContainer
 var _rep_card: PanelContainer
 var _rep_on: bool = false
-var _mix_grid: GridContainer
+var _mix_grid: GridContainer = GridContainer.new()          # (the zone mix is set by the course presets now; this stays only so old code has a place to point)
 var _tints: Array = [Color(0.45, 0.8, 1.0), Color(1.0, 0.7, 0.3), Color(0.8, 0.55, 1.0), Color(1.0, 0.45, 0.55), Color(0.6, 0.9, 0.6)]
 var _mh_s: Dictionary = {}
 var _hat_b: Button
 var _lvl_l: Label
 var _mus_btns: Dictionary = {}
+var _reset_arm: float = 0.0
+var _reset_b: Button
 var _trip_btns: Dictionary = {}
 var _mvol_s: HSlider
 var _svol_s: HSlider
@@ -119,7 +121,7 @@ func _ready() -> void:
 	_build_tabs()
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER          # it still scrolls by touch and wheel; no bar is drawn
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED          # no scrolling anywhere: every page is made to fit the screen
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_root.add_child(_scroll)
 	_grid = GridContainer.new()
@@ -127,6 +129,7 @@ func _ready() -> void:
 	_scroll.add_child(_grid)
 	_build_theme_card()
 	_build_course_card()
+	_build_sound_card()
 	_build_experience_card()
 	_build_mayhem_card()
 	_build_reports_card()
@@ -209,7 +212,7 @@ func _switch_tex(on: bool) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-func _switch_row(parent: Node, text: String) -> CheckButton:
+func _switch_row(parent: Node, text: String, hairline: bool = true) -> CheckButton:
 	var b := CheckButton.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
@@ -238,19 +241,30 @@ func _switch_row(parent: Node, text: String) -> CheckButton:
 	parent.add_child(b)
 	_texts.append([b, 18])
 	_boxes.append([b, 0.0, 46.0])
-	var sep := ColorRect.new()
-	sep.color = Color(1, 1, 1, 0.08)
-	sep.custom_minimum_size = Vector2(0, 1)
-	parent.add_child(sep)
+	if hairline:
+		var sep := ColorRect.new()
+		sep.color = Color(1, 1, 1, 0.08)
+		sep.custom_minimum_size = Vector2(0, 1)
+		parent.add_child(sep)
 	return b
+
+
+## Two columns of switches (or dials), so a page of them is half as tall.
+func _pair_grid(parent: Node) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = 2
+	g.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	g.add_theme_constant_override("h_separation", 18)
+	parent.add_child(g)
+	return g
 
 
 func _build_tabs() -> void:
 	_tabrow = HBoxContainer.new()
 	_root.add_child(_tabrow)
 	var grp := ButtonGroup.new()
-	for i in 4:
-		var b := _button(["WORLD", "COURSE", "YOU", "MAYHEM"][i], 22, _tabrow, true)
+	for i in 5:
+		var b := _button(["WORLD", "COURSE", "SOUND", "YOU", "MAYHEM"][i], 22, _tabrow, true)
 		b.button_group = grp
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.add_theme_stylebox_override("normal", _style(Color(1, 1, 1, 0.07), Color(0, 0, 0, 0), 14, 0))
@@ -269,7 +283,7 @@ func _show_cards() -> void:
 	var portrait := _cols == 1
 	for i in _cards.size():
 		var pc := _cards[i]
-		if i == 4:
+		if i == _cards.size() - 1:
 			pc.visible = _rep_on
 		elif _rep_on:
 			pc.visible = false
@@ -329,6 +343,7 @@ func _slider(parent: Node, lo: float, hi: float, step: float, label_text: String
 	s.step = step
 	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	s.focus_mode = Control.FOCUS_NONE
+	s.scrollable = false          # the wheel never moves a slider (it used to change values by accident while scrolling the page)
 	if _grabber == null:
 		_grabber = _grabber_tex(24, Color(1, 1, 1, 1.0))
 	s.add_theme_icon_override("grabber", _grabber)
@@ -363,7 +378,21 @@ func _build_header() -> void:
 	_lvl_bar.add_theme_stylebox_override("background", _style(Color(1, 1, 1, 0.14), Color(0, 0, 0, 0), 4, 0))
 	_lvl_bar.add_theme_stylebox_override("fill", _style(Color(1.0, 0.85, 0.3), Color(0, 0, 0, 0), 4, 0))
 	tb.add_child(_lvl_bar)
-	var rb := _button("REPORTS", 16, h)
+	var xb := _button("RESET", 16, h)
+	xb.pressed.connect(func() -> void:
+		if _reset_arm <= 0.0:
+			_reset_arm = 3.0
+			xb.text = "SURE?"
+			return
+		_reset_arm = 0.0
+		xb.text = "RESET"
+		cfg = _defaults.duplicate(true)
+		_bg.choose_theme(String(cfg["theme"]))
+		_sync_widgets()
+		_save()
+		_status.text = "Everything is back to how it came.")
+	_reset_b = xb
+	var rb := _button("MORE", 16, h)
 	rb.pressed.connect(func() -> void:
 		_rep_on = not _rep_on
 		_show_cards())
@@ -383,7 +412,7 @@ func _build_theme_card() -> void:
 			_bg.choose_theme("alpine")
 		_sync_widgets())
 	_toggles["journey"] = jb
-	_label("A run shaped like a night out: it plays like the plain run, then worlds wash over it one after another (a first taste, warmth, the rush, the peak, then the comedown), with their own speeds, music and bounce. Pills bring it on early. Off: one world, your pick below. Picking a world yourself always gives that world in full.", 15, Color(1, 1, 1, 0.55), c)
+	_label("A night out in waves: a first taste, warmth, the rush, the peak, the comedown. Glowing molecules bring it on early. Picking a world yourself gives that world in full.", 15, Color(1, 1, 1, 0.55), c)
 	var tf := _flow(c)
 	var tg := ButtonGroup.new()
 	for tv in [[0, "GENTLE"], [1, "NORMAL"], [2, "WILD"]]:
@@ -417,21 +446,7 @@ func _build_theme_card() -> void:
 		cfg["intensity"] = v
 		_bg.set_intensity(v)
 		_sync_labels())
-	_label("WHAT THE GATES LEAD TO", 15, Color(1, 1, 1, 0.55), c)
-	_mix_grid = GridContainer.new()
-	_mix_grid.columns = 2
-	_mix_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	c.add_child(_mix_grid)
-	for z in ["rush", "flat", "tunnel", "bend", "air", "forest", "drop"]:
-		var mr := _slider(_mix_grid, 0.0, 3.0, 0.1, "", 15, 30.0)
-		_zone_s[z] = mr[0]
-		_zone_l[z] = mr[1]
-		(mr[0] as HSlider).value_changed.connect(func(v: float) -> void:
-			if _building:
-				return
-			(cfg["zones"] as Dictionary)[z] = v
-			_custom()
-			_sync_labels())
+
 
 
 func _build_course_card() -> void:
@@ -493,17 +508,9 @@ func _build_course_card() -> void:
 	share.pressed.connect(_copy_link)
 
 
-func _build_experience_card() -> void:
-	var c := _card("YOU", "how you play")
-	var ar := _slider(c, 0.0, 1.0, 0.05, "")
-	_assist_s = ar[0]
-	_assist_l = ar[1]
-	_assist_s.value_changed.connect(func(v: float) -> void:
-		if _building:
-			return
-		cfg["assist"] = v
-		_sync_labels())
-	_label("SOUND", 16, Color(1, 1, 1, 0.5), c)
+func _build_sound_card() -> void:
+	var c := _card("SOUND", "music and effects")
+	_label("MUSIC", 16, Color(1, 1, 1, 0.5), c)
 	var mf := _flow(c)
 	var mg := ButtonGroup.new()
 	for md in [["off", "OFF"], ["auto", "AUTO"], ["ambient", "AMBIENT"], ["techno", "TECHNO"], ["trance", "TRANCE"], ["jungle", "JUNGLE"], ["industrial", "INDUSTRIAL"]]:
@@ -514,7 +521,8 @@ func _build_experience_card() -> void:
 			_save())
 		_mus_btns[md[0]] = mb
 		_boxes.append([mb, 120.0, 44.0])
-	var mv := _slider(c, 0.0, 1.0, 0.05, "", 17, 34.0)
+	var g := _pair_grid(c)
+	var mv := _slider(g, 0.0, 1.0, 0.05, "", 17, 34.0)
 	_mvol_s = mv[0]
 	_mvol_l = mv[1]
 	_mvol_s.value_changed.connect(func(v: float) -> void:
@@ -522,7 +530,7 @@ func _build_experience_card() -> void:
 			return
 		cfg["mvol"] = v
 		_sync_labels())
-	var sv := _slider(c, 0.0, 1.0, 0.05, "", 17, 34.0)
+	var sv := _slider(g, 0.0, 1.0, 0.05, "", 17, 34.0)
 	_svol_s = sv[0]
 	_svol_l = sv[1]
 	_svol_s.value_changed.connect(func(v: float) -> void:
@@ -537,18 +545,32 @@ func _build_experience_card() -> void:
 		cfg["toon"] = on
 		_sync_labels())
 	_toggles["toon"] = tb
-	for t in [["faces", "Face challenges"], ["cine", "Cinematic jumps"], ["dynlight", "Dynamic light"], ["snow", "Snowfall"], ["fluffy", "Fluffy shapes"], ["phone", "Phone stabiliser"], ["haptics", "Haptics"], ["speed_first", "Speed first"], ["vehicle", "On a vehicle"], ["gps", "GPS speed"]]:
-		var b := _switch_row(c, String(t[1]))
+
+
+func _build_experience_card() -> void:
+	var c := _card("YOU", "how you play")
+	var ar := _slider(c, 0.0, 1.0, 0.05, "")
+	_assist_s = ar[0]
+	_assist_l = ar[1]
+	_assist_s.value_changed.connect(func(v: float) -> void:
+		if _building:
+			return
+		cfg["assist"] = v
+		_sync_labels())
+	var g := _pair_grid(c)
+	for t in [["faces", "Face challenges"], ["cine", "Cinematic jumps"], ["dynlight", "Dynamic light"], ["snow", "Snowfall"], ["fluffy", "Fluffy shapes"], ["phone", "Phone stabiliser"], ["haptics", "Haptics"], ["speed_first", "Speed first"]]:
+		var b := _switch_row(g, String(t[1]), false)
 		b.toggled.connect(func(on: bool) -> void:
 			if _building:
 				return
 			cfg[t[0]] = on
 			_sync_labels())
 		_toggles[t[0]] = b
-	_label("Faces pop up in the air: pull them for points. The stabiliser steadies tracking with your phone's motion sensors. Vehicle and GPS help on a bus or train.", 14, Color(1, 1, 1, 0.55), c).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_label("Faces pop up in the air: pull them for points. The stabiliser steadies tracking with your phone's motion sensors.", 14, Color(1, 1, 1, 0.55), c).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 
-func _mh_slider(c: Node, key: String, lo: float, hi: float, name: String, words: Array) -> void:
+## One dial can drive more than one setting (`also`: key, scale), so the page has four dials instead of six.
+func _mh_slider(c: Node, key: String, lo: float, hi: float, name: String, words: Array, also: Array = []) -> void:
 	var r := _slider(c, lo, hi, 0.05, "", 17, 34.0)
 	var sl: HSlider = r[0]
 	_mh_s[key] = sl
@@ -557,19 +579,21 @@ func _mh_slider(c: Node, key: String, lo: float, hi: float, name: String, words:
 		if _building:
 			return
 		cfg[key] = v
+		for al in also:
+			cfg[String(al[0])] = v * float(al[1])
 		_sync_labels())
 
 
 func _build_mayhem_card() -> void:
 	var c := _card("MAYHEM", "bend the rules")
-	_mh_slider(c, "m_grav", 0.3, 2.0, "GRAVITY", ["MOON", "FLOATY", "NORMAL", "HEAVY", "ANVIL"])
-	_mh_slider(c, "m_ramps", 0.0, 2.5, "RAMPS", ["NONE", "RARE", "NORMAL", "LOTS", "ALL OVER"])
-	_mh_slider(c, "m_pads", 0.0, 4.0, "BOOST PADS", ["NONE", "FEW", "NORMAL", "LOTS", "FIREHOSE"])
-	_mh_slider(c, "m_rocks", 0.0, 2.5, "ROCKS & SLUSH", ["NONE", "FEW", "NORMAL", "LOTS", "MINEFIELD"])
-	_mh_slider(c, "m_glints", 0.5, 4.0, "GLINT RAIN", ["DRIZZLE", "LIGHT", "NORMAL", "HEAVY", "MONSOON"])
-	_mh_slider(c, "m_faces", 0.5, 3.0, "FACE CHALLENGES", ["RARE", "FEWER", "NORMAL", "MORE", "NONSTOP"])
+	var g := _pair_grid(c)
+	_mh_slider(g, "m_grav", 0.3, 2.0, "GRAVITY", ["MOON", "FLOATY", "NORMAL", "HEAVY", "ANVIL"])
+	_mh_slider(g, "m_ramps", 0.0, 2.5, "RAMPS & BOOSTS", ["NONE", "RARE", "NORMAL", "LOTS", "ALL OVER"], [["m_pads", 1.6]])
+	_mh_slider(g, "m_rocks", 0.0, 2.5, "ROCKS & SLUSH", ["NONE", "FEW", "NORMAL", "LOTS", "MINEFIELD"])
+	_mh_slider(g, "m_glints", 0.5, 4.0, "GLINTS & FACES", ["DRIZZLE", "LIGHT", "NORMAL", "HEAVY", "MONSOON"], [["m_faces", 0.75]])
+	var tg := _pair_grid(c)
 	for t in [["m_ice", "Ice rink"], ["m_head", "Big head"], ["m_bounce", "Bouncy snow"], ["m_trike", "Tricycle"]]:
-		var b := _switch_row(c, String(t[1]))
+		var b := _switch_row(tg, String(t[1]), false)
 		b.toggled.connect(func(on: bool) -> void:
 			if _building:
 				return
@@ -592,12 +616,20 @@ func _build_mayhem_card() -> void:
 		cfg["m_hat"] = 0
 		_sync_widgets())
 	_boxes.append([rs, 118.0, 46.0])
-	_label("Ice rink: slow, wide swings. Bouncy: landings boing. Trike: it weaves by itself. Big head and hats: for style.", 14, Color(1, 1, 1, 0.55), c)
 
 
 func _build_reports_card() -> void:
-	var c := _card("RUN REPORTS", "kept on this device only")
+	var c := _card("MORE", "reports, travel, reset")
 	_rep_card = _cards[_cards.size() - 1]
+	var vg := _pair_grid(c)
+	for t in [["vehicle", "On a vehicle"], ["gps", "GPS speed"]]:
+		var vb := _switch_row(vg, String(t[1]), false)
+		vb.toggled.connect(func(on: bool) -> void:
+			if _building:
+				return
+			cfg[t[0]] = on
+			_sync_labels())
+		_toggles[t[0]] = vb
 	_reports_l = _label("", 17, Color(1, 1, 1, 0.8), c)
 	var f := _flow(c)
 	var cp := _button("COPY ALL", 20, f)
@@ -943,6 +975,10 @@ func _copy_link() -> void:
 
 # ---------------------------------------------------------------- layout
 func _process(_delta: float) -> void:
+	if _reset_arm > 0.0:
+		_reset_arm -= _delta
+		if _reset_arm <= 0.0 and _reset_b != null:
+			_reset_b.text = "RESET"
 	var vs := get_viewport_rect().size
 	if vs != _last_vs:
 		_last_vs = vs
@@ -971,7 +1007,7 @@ func _process(_delta: float) -> void:
 			_fit_h += 1
 			_fit = maxf(0.4, _fit * (vs.y * 0.55 / fixed))
 			_apply_unit(true)
-	if _fit_n < 6 and _root != null and _margin.visible:
+	if _fit_n < 9 and _root != null and _margin.visible:
 		# everything must be on the page without scrolling: if it is taller than the screen, shrink it all a little and look again
 		var need := _grid.get_combined_minimum_size().y
 		for ch in _root.get_children():
@@ -983,6 +1019,10 @@ func _process(_delta: float) -> void:
 				_force_tabs = true                           # side by side does not fit at a readable size: tabs instead
 				_fit = 1.0
 				_fit_n += 1
+				_apply_unit(true)
+			elif _fit > 0.45:
+				_fit_n += 1                                   # no scrolling: the whole page, the footer included, is scaled until it fits the height
+				_fit = maxf(0.45, _fit * vs.y / need * 0.97)
 				_apply_unit(true)
 	if visible and GazeProvider.camera_status != "" and _status != null:
 		_status.text = GazeProvider.camera_status
@@ -1005,7 +1045,7 @@ func _apply_unit(force: bool) -> void:
 	var portrait := size.y > size.x * 1.05
 	# text is sized from how big it really is on this screen (CSS pixels), not from the game's own 1280-unit canvas: the smallest text must be readable and every button a thumb
 	var u_read := clampf(17.0 / (15.0 * _css_per_unit()), 1.0, 3.4)
-	var tabs := portrait or size.x / u_read < 900.0 or _force_tabs
+	var tabs := true          # one page at a time, always: each page is short enough to fit without scrolling
 	var u := u_read * _fit
 	var compact := size.y * _css_per_unit() < 480.0          # a short landscape phone: every pixel of height goes to the panel
 	var hk := 0.58 if compact else 1.0

@@ -7003,11 +7003,11 @@ func _make_pills(row: Dictionary, toys: Array, z: float, side: float) -> void:
 		hold.position = Vector3(px, terrain_h(px, pz) + 2.2, pz)
 		var spin := Node3D.new()
 		hold.add_child(spin)
-		var body := _mi(spin, _tm("pill"), _toy_mat("pillw", Color(0.97, 0.97, 1.0), 1.4), Vector3.ZERO)
-		body.rotation.z = PI * 0.5
-		var cap := _mi(spin, _tm("pill"), _toy_mat("pillc%d" % cols.find(ca), ca, 1.8), Vector3(0.62, 0.0, 0.0))
-		cap.rotation.z = PI * 0.5
-		cap.scale = Vector3(1.0, 0.5, 1.0) * 1.06
+		var mk := (_rng.randi() % 3)          # three molecules: a ring, a tetrahedron, a chain
+		var mm := _mol_meshes(mk)
+		_mi(spin, mm[0], _toy_mat("molA%d" % cols.find(ca), ca, 1.9), Vector3.ZERO)
+		_mi(spin, mm[1], _toy_mat("molB", Color(0.96, 0.96, 1.0), 1.3), Vector3.ZERO)
+		spin.rotation = Vector3(0.5, 0.0, 0.3)
 		_mi(hold, _quad(5.0), _fx_mat("halo", Color(ca.r, ca.g, ca.b, 0.6)), Vector3.ZERO)
 		hold.scale = Vector3.ONE * 1.3
 		(row["nodes"] as Array).append(hold)
@@ -7016,6 +7016,61 @@ func _make_pills(row: Dictionary, toys: Array, z: float, side: float) -> void:
 			_beacon(row, px, pz, ca)
 			_toy_feat(row, px, pz, side, g)
 			first = false
+
+
+var _mol_cache: Dictionary = {}
+
+
+## A molecule in balls and sticks, built once per shape: [the atoms, the bonds]. 0 a ring of six, 1 a tetrahedron round a centre, 2 a zig-zag chain.
+func _mol_meshes(kind: int) -> Array:
+	if _mol_cache.has(kind):
+		return _mol_cache[kind]
+	var pts: Array = []
+	var bonds: Array = []
+	if kind == 0:
+		for i in 6:
+			var a := TAU * float(i) / 6.0
+			pts.append(Vector3(cos(a), sin(a), 0.0) * 1.15)
+			bonds.append([i, (i + 1) % 6])
+	elif kind == 1:
+		pts = [Vector3.ZERO, Vector3(1, 1, 1).normalized() * 1.3, Vector3(1, -1, -1).normalized() * 1.3, Vector3(-1, 1, -1).normalized() * 1.3, Vector3(-1, -1, 1).normalized() * 1.3]
+		bonds = [[0, 1], [0, 2], [0, 3], [0, 4]]
+	else:
+		for i in 5:
+			pts.append(Vector3(float(i - 2) * 0.85, 0.45 * (1.0 if i % 2 == 0 else -1.0), 0.0))
+			if i > 0:
+				bonds.append([i - 1, i])
+	var sa := SurfaceTool.new()
+	sa.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ball := SphereMesh.new()
+	ball.radius = 0.38
+	ball.height = 0.76
+	ball.radial_segments = 8
+	ball.rings = 4
+	for i in pts.size():
+		sa.append_from(ball, 0, Transform3D(Basis.IDENTITY * (1.35 if (kind == 1 and i == 0) else 1.0), pts[i]))
+	var sb := SurfaceTool.new()
+	sb.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var rod := CylinderMesh.new()
+	rod.top_radius = 0.09
+	rod.bottom_radius = 0.09
+	rod.height = 1.0
+	rod.radial_segments = 5
+	rod.rings = 1
+	for bd in bonds:
+		var p0: Vector3 = pts[bd[0]]
+		var p1: Vector3 = pts[bd[1]]
+		var d := p1 - p0
+		var up := d.normalized()
+		var ax := Vector3.UP.cross(up)
+		var bs := Basis.IDENTITY
+		if ax.length() > 0.001:
+			bs = Basis(ax.normalized(), Vector3.UP.angle_to(up))
+		bs = bs * Basis.from_scale(Vector3(1.0, d.length(), 1.0))
+		sb.append_from(rod, 0, Transform3D(bs, (p0 + p1) * 0.5))
+	var out: Array = [sa.commit(), sb.commit()]
+	_mol_cache[kind] = out
+	return out
 
 
 func _pill_eat(t: Dictionary) -> void:
@@ -9272,6 +9327,50 @@ func _draw_setup_guide(s: Vector2, k: float, delta_hint: float) -> void:
 		_draw_positioner(Vector2(s.x - 56.0 * k, 96.0 * k), 24.0 * k, k * 0.6, 0.9)
 
 
+var _diag: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("diag")          # ?diag: the tracking made visible (targets, the gaze point, the readings)
+
+
+## DIAGNOSTICS (?diag): every thing that can be chosen is ringed where it is on the screen (grey; the one the board is committed to is green and thick), the raw gaze point is a
+## cyan cross, and the readings the choice is made from are listed down the left side, so a miss can be told apart: the camera lost you, the gaze was off, or the choice was wrong.
+func _draw_track_dbg(font: Font, k: float, s: Vector2, m: float) -> void:
+	var gp := Vector2(GazeProvider.gaze.x * s.x, GazeProvider.gaze.y * s.y)
+	_hud.draw_line(gp - Vector2(16.0 * k, 0.0), gp + Vector2(16.0 * k, 0.0), Color(0.3, 1.0, 1.0, 0.9), 2.0 * k)
+	_hud.draw_line(gp - Vector2(0.0, 16.0 * k), gp + Vector2(0.0, 16.0 * k), Color(0.3, 1.0, 1.0, 0.9), 2.0 * k)
+	var n := 0
+	var best_d := 1.0e9
+	var best_f := ""
+	for kk in _rows:
+		for f in (_rows[kk] as Dictionary).get("feats", []):
+			if f.has("hz") or f["done"]:
+				continue
+			var fz := float(f["zl"]) if f.has("zl") else float(f["za"])
+			if spos.z - fz > 130.0 or spos.z < fz - 260.0:
+				continue
+			var fx := _feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"])))
+			var wp := Vector3(fx, terrain_h(fx, fz) + 1.5, fz)
+			if cam.is_position_behind(wp):
+				continue
+			var sp := cam.unproject_position(wp)
+			n += 1
+			var locked := is_same(f, _line_pick)
+			var col := Color(0.4, 1.0, 0.5, 1.0) if locked else Color(1, 1, 1, 0.55)
+			_hud.draw_arc(sp, (26.0 if locked else 17.0) * k, 0.0, TAU, 28, col, (4.0 if locked else 2.0) * k)
+			_text(font, sp + Vector2(20.0 * k, -8.0 * k), "%s %dm" % [String(f["kind"]), int(spos.z - fz)], 13, col)
+			var dg := gp.distance_to(sp)
+			if dg < best_d:
+				best_d = dg
+				best_f = "%s %dm" % [String(f["kind"]), int(spos.z - fz)]
+	var lines: Array = [
+		"gaze %.2f %.2f   conf %.2f   face %.2f" % [GazeProvider.gaze.x, GazeProvider.gaze.y, GazeProvider.confidence, GazeProvider.face_size],
+		"look %s   eyes %s   choices ringed %d" % [["LEFT", "AHEAD", "RIGHT"][int(look_side) + 1], "on" if _eye_on else "off", n],
+		"nearest to your gaze: %s (%d px)" % [best_f if best_f != "" else "-", int(best_d) if best_f != "" else 0],
+		"locked: %s" % (String(_line_pick["kind"]) if not _line_pick.is_empty() else "-"),
+		"cam %.0f fps  %d ms   game %d fps" % [float(GazeProvider._pkt_times.size()) / 2.0, int(GazeProvider.trk_lat_ms), int(Engine.get_frames_per_second())],
+	]
+	for i in lines.size():
+		_text(font, Vector2(m, m + (90.0 + 20.0 * float(i)) * k), String(lines[i]), 15, Color(0.75, 1.0, 1.0, 0.95))
+
+
 func _draw_hud_inner() -> void:
 	var font := ThemeDB.fallback_font
 	var s := _hud.size
@@ -9478,6 +9577,8 @@ func _draw_hud_inner() -> void:
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
 		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 66.0 * k), pt, 18, pcol)
+	if _diag:
+		_draw_track_dbg(font, k, s, m)
 	if chain > 0 and not HUD_MIN:
 		# FLOW: the multiplier, big, with its clock underneath. The bar is what you watch: it empties in a few seconds and anything you do refills it.
 		var fsz := 26 + int(8.0 * _flow_bump)
