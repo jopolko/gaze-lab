@@ -93,6 +93,7 @@ func start() -> void:
 	_base = str(JavaScriptBridge.eval("new URL('music/', document.baseURI).href")) if OS.has_feature("web") else ""
 	_age = 0.0
 	dbg = "music: starting"
+	Game.sfx_requested.connect(_on_sfx)
 
 
 func stop() -> void:
@@ -166,8 +167,15 @@ func _mk_player() -> AudioStreamPlayer:
 	return p
 
 
+var _duck: float = 0.0
+
+
+func _on_sfx(_n: StringName, _p: Vector3) -> void:
+	_duck = 1.0          # every effect takes a little of the music's level for a moment, so it sits on top of it without being louder
+
+
 func _db(g: float) -> float:
-	return -80.0 if g < 0.003 else maxf(linear_to_db(g) + DhMusic.vol_db(DhMusic.vol_music), -80.0)
+	return -80.0 if g < 0.003 else maxf(linear_to_db(g * (1.0 - 0.28 * _duck)) + DhMusic.vol_db(DhMusic.vol_music), -80.0)
 
 
 func _play_track(key: String) -> void:
@@ -270,6 +278,7 @@ func update(delta: float, st: Dictionary) -> void:
 	if _mix_t >= 0.1:
 		var d := _mix_t
 		_mix_t = 0.0
+		_duck = maxf(_duck - d * 4.0, 0.0)
 		var step := d / FADE_S
 		if mode == "track" and _cur_p != null:
 			_cur_g = minf(_cur_g + step, 1.0) if want_mode == "track" else maxf(_cur_g - step * 1.4, 0.0)

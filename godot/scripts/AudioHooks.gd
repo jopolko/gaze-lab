@@ -18,33 +18,30 @@ const _TOON_MAP := {&"boom": &"explosion", &"coin": &"blip", &"boing": &"sproing
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	DhMusic.ensure_buses()
-	# wave: 0 sine, 1 square, 2 saw, 3 noise
-	_streams[&"squawk"] = _wav(_synth(700.0, 320.0, 0.28, 2, 0.35, 0.12, 0.05, 1.5))
-	_streams[&"pop"] = _wav(_synth(420.0, 70.0, 0.14, 0, 0.7, 0.0, 0.0, 2.5))
-	_streams[&"squeak"] = _wav(_synth(1300.0, 2400.0, 0.2, 0, 0.35, 0.05, 0.0, 1.2))
-	_streams[&"bonk"] = _wav(_synth(170.0, 55.0, 0.22, 0, 0.8, 0.0, 0.25, 3.0))
-	_streams[&"whoosh"] = _wav(_synth(900.0, 200.0, 0.22, 3, 0.35, 0.0, 1.0, 1.0))
-	_streams[&"yeet"] = _wav(_synth(300.0, 1000.0, 0.4, 1, 0.25, 0.08, 0.0, 1.5))
-	_streams[&"thwup"] = _wav(_synth(260.0, 90.0, 0.12, 0, 0.8, 0.0, 0.2, 2.0))
-	_streams[&"boing"] = _wav(_synth(180.0, 620.0, 0.4, 0, 0.45, 0.15, 0.0, 1.2))
-	_streams[&"honk"] = _wav(_synth(420.0, 360.0, 0.3, 1, 0.22, 0.03, 0.05, 1.2))
-	_streams[&"hurt"] = _wav(_synth(320.0, 70.0, 0.25, 2, 0.4, 0.0, 0.2, 2.0))
-	_streams[&"boom"] = _wav(_synth(130.0, 35.0, 0.55, 0, 0.9, 0.0, 0.55, 2.2))
-	_streams[&"coin"] = _wav(_cat([_synth(1250.0, 1250.0, 0.05, 0, 0.35, 0.0, 0.0, 0.5), _synth(1850.0, 1850.0, 0.12, 0, 0.35, 0.0, 0.0, 1.5)]))
-	_streams[&"gong"] = _wav(_synth(196.0, 188.0, 1.1, 0, 0.55, 0.07, 0.0, 1.6))
-	_streams[&"thwack"] = _wav(_synth(320.0, 90.0, 0.16, 3, 0.5, 0.0, 0.7, 3.0))
-	_streams[&"bell"] = _wav(_cat([_synth(1900.0, 1900.0, 0.12, 0, 0.4, 0.0, 0.0, 1.0), _synth(1500.0, 1500.0, 0.5, 0, 0.35, 0.03, 0.0, 2.2)]))
-	_streams[&"crowd"] = _wav(_synth(400.0, 700.0, 0.9, 3, 0.3, 0.0, 1.0, 0.8))
-	_streams[&"buff_boost"] = _wav(_cat([_synth(300.0, 1500.0, 0.2, 2, 0.22, 0.0, 0.2, 1.0), _synth(1900.0, 2300.0, 0.14, 0, 0.3, 0.0, 0.0, 1.8)]))
-	_streams[&"buff_shield"] = _wav(_cat([_synth(660.0, 660.0, 0.07, 0, 0.3, 0.05, 0.0, 0.6), _synth(990.0, 990.0, 0.07, 0, 0.3, 0.05, 0.0, 0.6), _synth(1320.0, 1320.0, 0.3, 0, 0.3, 0.12, 0.0, 1.8)]))
-	_streams[&"buff_mult"] = _wav(_cat([_synth(523.0, 523.0, 0.07, 1, 0.2, 0.0, 0.0, 0.8), _synth(659.0, 659.0, 0.07, 1, 0.2, 0.0, 0.0, 0.8), _synth(784.0, 784.0, 0.07, 1, 0.2, 0.0, 0.0, 0.8), _synth(1047.0, 1047.0, 0.07, 1, 0.2, 0.0, 0.0, 0.8), _synth(1568.0, 1568.0, 0.3, 1, 0.2, 0.0, 0.0, 1.6)]))
-	_streams[&"powerup"] = _wav(_synth(300.0, 1200.0, 0.3, 1, 0.22, 0.0, 0.0, 1.0))
-	_streams[&"levelup"] = _wav(_cat([
-		_synth(523.0, 523.0, 0.1, 1, 0.22, 0.0, 0.0, 0.8), _synth(659.0, 659.0, 0.1, 1, 0.22, 0.0, 0.0, 0.8),
-		_synth(784.0, 784.0, 0.1, 1, 0.22, 0.0, 0.0, 0.8), _synth(1047.0, 1047.0, 0.3, 1, 0.22, 0.0, 0.0, 1.5)]))
-	_streams[&"loot"] = _wav(_cat([
-		_synth(880.0, 880.0, 0.08, 0, 0.35, 0.0, 0.0, 0.6), _synth(1175.0, 1175.0, 0.08, 0, 0.35, 0.0, 0.0, 0.6),
-		_synth(1568.0, 1568.0, 0.25, 0, 0.35, 0.0, 0.0, 1.5)]))
+	# SOFT SOUNDS. Sine tones with a few gentle harmonics and a slow-ish attack, no square or saw, no hard clicks; every pitch is in A minor pentatonic (A C D E G), the key of
+	# the music, so an effect that lands on a note sounds like part of it. Notes: A3 220, C4 261.6, D4 293.7, E4 329.6, G4 392, A4 440, C5 523.3, D5 587.3, E5 659.3, G5 784, A5 880, C6 1047.
+	_streams[&"squawk"] = _wav(_tone(392.0, 329.6, 0.22, 0.4, 0.015, 2.5, 0.25))
+	_streams[&"pop"] = _wav(_mixp([_tone(329.6, 130.0, 0.12, 0.5, 0.004, 3.0), _tone(659.3, 659.3, 0.07, 0.12, 0.006, 3.0)]))
+	_streams[&"squeak"] = _wav(_tone(659.3, 784.0, 0.16, 0.25, 0.012, 2.0, 0.15))
+	_streams[&"bonk"] = _wav(_mixp([_tone(196.0, 82.0, 0.22, 0.6, 0.004, 3.0), _air(0.12, 0.05, 0.02, 0.25, 0.004, 3.0)]))
+	_streams[&"whoosh"] = _wav(_air(0.4, 0.02, 0.2, 0.55, 0.07, 1.6))
+	_streams[&"yeet"] = _wav(_tone(220.0, 440.0, 0.35, 0.32, 0.03, 1.8, 0.15))
+	_streams[&"thwup"] = _wav(_tone(220.0, 110.0, 0.12, 0.55, 0.005, 3.0))
+	_streams[&"boing"] = _wav(_tone(196.0, 392.0, 0.38, 0.4, 0.015, 1.8, 0.2))
+	_streams[&"honk"] = _wav(_tone(220.0, 220.0, 0.28, 0.32, 0.02, 1.6, 0.3, 0.12))
+	_streams[&"hurt"] = _wav(_mixp([_tone(220.0, 165.0, 0.32, 0.4, 0.01, 2.2, 0.15), _tone(110.0, 82.0, 0.3, 0.4, 0.01, 2.5)]))
+	_streams[&"boom"] = _wav(_mixp([_tone(90.0, 45.0, 0.55, 0.75, 0.006, 2.2), _air(0.5, 0.03, 0.01, 0.4, 0.006, 2.0)]))
+	_streams[&"coin"] = _wav(_cat([_tone(659.3, 659.3, 0.07, 0.34, 0.006, 2.0, 0.3, 0.1), _tone(880.0, 880.0, 0.22, 0.34, 0.006, 3.0, 0.3, 0.1)]))
+	_streams[&"gong"] = _wav(_tone(110.0, 108.0, 1.2, 0.55, 0.02, 1.4, 0.3, 0.0, [Vector2(2.76, 0.3), Vector2(5.4, 0.15)]))
+	_streams[&"thwack"] = _wav(_mixp([_tone(250.0, 100.0, 0.15, 0.5, 0.004, 3.0), _air(0.08, 0.1, 0.03, 0.3, 0.003, 3.0)]))
+	_streams[&"bell"] = _wav(_tone(880.0, 880.0, 0.7, 0.4, 0.008, 2.2, 0.0, 0.0, [Vector2(2.76, 0.25), Vector2(5.4, 0.1)]))
+	_streams[&"crowd"] = _wav(_air(0.9, 0.03, 0.08, 0.35, 0.2, 1.2))
+	_streams[&"buff_boost"] = _wav(_mixp([_air(0.35, 0.02, 0.22, 0.4, 0.05, 1.4), _tone(440.0, 880.0, 0.3, 0.3, 0.03, 1.6, 0.2)]))
+	_streams[&"buff_shield"] = _wav(_cat([_tone(440.0, 440.0, 0.08, 0.32, 0.008, 1.0, 0.25), _tone(523.3, 523.3, 0.08, 0.32, 0.008, 1.0, 0.25), _tone(659.3, 659.3, 0.3, 0.32, 0.008, 2.0, 0.25)]))
+	_streams[&"buff_mult"] = _wav(_cat([_tone(523.3, 523.3, 0.07, 0.3, 0.008, 1.0, 0.2), _tone(587.3, 587.3, 0.07, 0.3, 0.008, 1.0, 0.2), _tone(659.3, 659.3, 0.07, 0.3, 0.008, 1.0, 0.2), _tone(784.0, 784.0, 0.3, 0.3, 0.008, 2.0, 0.2)]))
+	_streams[&"powerup"] = _wav(_mixp([_tone(440.0, 880.0, 0.3, 0.3, 0.03, 1.4, 0.2), _tone(660.0, 1320.0, 0.3, 0.12, 0.05, 1.8)]))
+	_streams[&"levelup"] = _wav(_cat([_tone(440.0, 440.0, 0.1, 0.3, 0.008, 1.0, 0.25), _tone(523.3, 523.3, 0.1, 0.3, 0.008, 1.0, 0.25), _tone(659.3, 659.3, 0.1, 0.3, 0.008, 1.0, 0.25), _tone(880.0, 880.0, 0.4, 0.3, 0.008, 2.0, 0.25)]))
+	_streams[&"loot"] = _wav(_cat([_tone(659.3, 659.3, 0.08, 0.32, 0.006, 1.0, 0.3), _tone(880.0, 880.0, 0.08, 0.32, 0.006, 1.0, 0.3), _tone(1047.0, 1047.0, 0.28, 0.32, 0.006, 2.5, 0.3)]))
 
 	_build_new_voices.call_deferred()          # the big new sounds take a moment to build: one a frame, after the game is up
 
@@ -83,7 +80,7 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 		p3.max_distance = 90.0
 		p3.pitch_scale = randf_range(0.9, 1.15)
 		p3.bus = &"Master"
-		p3.volume_db = DhMusic.vol_db(DhMusic.vol_sfx)
+		p3.volume_db = DhMusic.vol_db(DhMusic.vol_sfx) + SFX_GAIN_DB
 		add_child(p3)
 		p3.global_position = world_pos
 		p3.play()
@@ -95,7 +92,7 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 			p.playback_type = AudioServer.PLAYBACK_TYPE_SAMPLE
 		p.pitch_scale = randf_range(0.95, 1.05)
 		p.bus = &"Master"
-		p.volume_db = DhMusic.vol_db(DhMusic.vol_sfx)
+		p.volume_db = DhMusic.vol_db(DhMusic.vol_sfx) + SFX_GAIN_DB
 		add_child(p)
 		p.play()
 		_free_later(p, stream, p.pitch_scale)
@@ -103,6 +100,7 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 
 var _voices: int = 0
 static var played: int = 0
+const SFX_GAIN_DB := 3.0          # the soft sounds are quieter than the old harsh ones: this brings them back up so they are still heard over the music
 ## ?samples: the browser plays the effects itself (its own low-latency sample playback) instead of the game mixing them: less delay, and less work for the game. Off unless asked for, to be tried on a phone.
 var _low_latency: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("samples")
 
@@ -133,59 +131,88 @@ func _synth(f0: float, f1: float, dur: float, wave: int, vol: float, vibrato: fl
 			2: s = fmod(phase, TAU) / PI - 1.0
 			_: s = 0.0
 		s = lerpf(s, randf() * 2.0 - 1.0, noise_mix)
-		var env := pow(1.0 - u, decay) * minf(1.0, t * 200.0)
+		var env := pow(1.0 - u, decay) * minf(1.0, t * 100.0)
 		data.encode_s16(i * 2, int(clampf(s * env * vol, -1.0, 1.0) * 32767.0))
 	return data
 
 
 func _build_new_voices() -> void:
-	_streams[&"explosion"] = _wav(_mixp([
-		_voice(0.9, 95.0, 26.0, 0.6, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.6, 0.8, 0.9),
-		_voice(0.9, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.55, 0.03, 0.0, 0.0, 2.2, 0.7, 0.7),
-		_voice(0.5, 900.0, 300.0, 1.0, Vector3(0, 0, 0), 1.0, 0.9, 0.2, 0.0, 0.0, 1.5, 3.0, 0.5)]))
+	_streams[&"explosion"] = _wav(_mixp([_tone(100.0, 35.0, 0.9, 0.8, 0.006, 1.8), _air(0.8, 0.04, 0.01, 0.55, 0.006, 1.8), _tone(55.0, 40.0, 0.9, 0.5, 0.01, 1.4)]))
 	await get_tree().process_frame
-	_streams[&"kaboom"] = _wav(_mixp([
-		_voice(1.5, 70.0, 20.0, 0.5, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.6, 1.0),
-		_voice(1.5, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.5, 0.015, 0.0, 0.0, 2.5, 0.55, 0.8),
-		_voice(0.7, 1400.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.95, 0.15, 0.0, 0.0, 2.0, 3.0, 0.5)]))
+	_streams[&"kaboom"] = _wav(_mixp([_tone(70.0, 30.0, 1.5, 0.85, 0.008, 1.5), _air(1.4, 0.03, 0.01, 0.6, 0.008, 1.4), _tone(45.0, 32.0, 1.5, 0.5, 0.01, 1.2)]))
 	await get_tree().process_frame
-	_streams[&"sproing"] = _wav(_voice(0.55, 170.0, 640.0, 0.7, Vector3(0.9, 0.2, 0), 0.0, 0.0, 0.0, 13.0, 5.5, 1.0, 1.3, 0.6))
+	_streams[&"sproing"] = _wav(_tone(196.0, 587.3, 0.5, 0.42, 0.015, 1.6, 0.2))
 	await get_tree().process_frame
-	_streams[&"boing2"] = _wav(_voice(0.6, 700.0, 110.0, 0.8, Vector3(0.9, 0.15, 0), 0.0, 0.0, 0.0, 11.0, 6.0, 1.0, 1.1, 0.6))
+	_streams[&"boing2"] = _wav(_tone(587.3, 165.0, 0.5, 0.42, 0.012, 1.6, 0.2))
 	await get_tree().process_frame
-	_streams[&"stretch"] = _wav(_voice(0.5, 110.0, 1000.0, 2.2, Vector3(0.4, 0.6, 0), 0.04, 0.5, 0.5, 8.0, 2.5, 1.3, 0.5, 0.45))
+	_streams[&"stretch"] = _wav(_mixp([_tone(130.0, 523.3, 0.5, 0.3, 0.05, 1.2, 0.15), _air(0.5, 0.02, 0.12, 0.15, 0.08, 1.2)]))
 	await get_tree().process_frame
-	_streams[&"snap"] = _wav(_mixp([
-		_voice(0.12, 2200.0, 350.0, 0.5, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 3.5, 0.6),
-		_voice(0.07, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.95, 0.9, 0.0, 0.0, 1.5, 4.0, 0.6)]))
+	_streams[&"snap"] = _wav(_mixp([_air(0.06, 0.25, 0.08, 0.4, 0.002, 3.5), _tone(784.0, 587.3, 0.06, 0.25, 0.003, 3.0)]))
 	await get_tree().process_frame
-	_streams[&"splat"] = _wav(_mixp([
-		_voice(0.4, 260.0, 55.0, 0.7, Vector3(0.7, 0.3, 0), 0.2, 0.6, 0.1, 22.0, 4.0, 1.5, 1.4, 0.7),
-		_voice(0.3, 300.0, 300.0, 1.0, Vector3(0, 0, 0), 1.0, 0.7, 0.08, 0.0, 0.0, 1.3, 1.6, 0.5)]))
+	_streams[&"splat"] = _wav(_mixp([_tone(150.0, 60.0, 0.35, 0.55, 0.006, 2.4), _air(0.3, 0.08, 0.02, 0.35, 0.006, 2.4)]))
 	await get_tree().process_frame
-	_streams[&"zap"] = _wav(_voice(0.28, 2400.0, 160.0, 0.5, Vector3(0.0, 1.0, 0.2), 0.0, 0.0, 0.0, 70.0, 3.0, 2.0, 1.6, 0.4))
+	_streams[&"zap"] = _wav(_tone(784.0, 330.0, 0.22, 0.28, 0.01, 2.0, 0.25))
 	await get_tree().process_frame
-	_streams[&"rumble"] = _wav(_mixp([
-		_voice(1.4, 48.0, 36.0, 1.0, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 6.0, 1.2, 1.2, 0.7, 0.8),
-		_voice(1.4, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.7, 0.05, 0.0, 0.0, 1.5, 0.8, 0.5)]))
+	_streams[&"rumble"] = _wav(_mixp([_tone(55.0, 46.0, 1.3, 0.6, 0.06, 1.0), _air(1.3, 0.015, 0.01, 0.4, 0.08, 1.0)]))
 	await get_tree().process_frame
-	_streams[&"blip"] = _wav(_voice(0.11, 880.0, 1500.0, 0.6, Vector3(0.8, 0.0, 0.2), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.4, 0.4))
+	# the target tick: two soft notes, E5 then A5 (a rising fourth), short: heard on every look and every choice
+	_streams[&"blip"] = _wav(_cat([_tone(659.3, 659.3, 0.05, 0.26, 0.008, 1.2, 0.25), _tone(880.0, 880.0, 0.12, 0.26, 0.008, 3.0, 0.25)]))
 	await get_tree().process_frame
-	# a speed pad: a rising whoosh with a bright tone riding up under it, loud enough to be felt as the push
-	_streams[&"pad_boost"] = _wav(_mixp([
-		_voice(0.75, 150.0, 1500.0, 2.0, Vector3(0.4, 0.6, 0), 0.0, 0.0, 0.0, 9.0, 1.5, 1.6, 0.9, 0.7),
-		_voice(0.75, 300.0, 300.0, 1.0, Vector3(0, 0, 0), 1.0, 0.15, 0.95, 0.0, 0.0, 1.4, 0.8, 0.6),
-		_voice(0.4, 90.0, 40.0, 0.6, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.8, 1.5, 0.7)]))
+	# a speed pad: a soft air riser, a tone climbing A3 to A4 under it, and a low push at the start
+	_streams[&"pad_boost"] = _wav(_mixp([_air(0.75, 0.02, 0.3, 0.55, 0.08, 1.3), _tone(220.0, 440.0, 0.75, 0.32, 0.06, 1.2, 0.2), _tone(82.0, 55.0, 0.4, 0.55, 0.01, 2.0)]))
 	await get_tree().process_frame
-	# a chime for each of the six molecules, on a pentatonic scale rising from the first to the last: you hear which one you took
+	# a chime for each molecule, on the pentatonic scale rising from the first to the last: C5 D5 E5 G5 A5 C6
 	var notes := [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5]
 	for i in 6:
 		var f: float = notes[i]
-		_streams[StringName("mol%d" % i)] = _wav(_mixp([
-			_voice(0.6, f, f, 1.0, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 5.0, 0.3, 1.1, 1.6, 0.7),
-			_voice(0.5, f * 2.0, f * 2.0, 1.0, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 2.2, 0.35),
-			_voice(0.08, 3000.0, 1500.0, 1.0, Vector3(0, 0, 0), 1.0, 0.9, 0.5, 0.0, 0.0, 1.0, 4.0, 0.3)]))
+		_streams[StringName("mol%d" % i)] = _wav(_mixp([_tone(f, f, 0.7, 0.4, 0.008, 1.6, 0.3, 0.1), _tone(f * 2.0, f * 2.0, 0.5, 0.12, 0.008, 2.2)]))
 		await get_tree().process_frame
+
+
+## A soft tone: a sine gliding f0 to f1 (exponentially) with a second and third harmonic mixed in (h2, h3) and any extra partials (a list of Vector2(multiple of the pitch, strength)),
+## an attack of `att` seconds (never abrupt: that is what clicks) and an exponential decay. Ends in a short fade so nothing is cut off.
+func _tone(f0: float, f1: float, dur: float, vol: float, att: float = 0.012, dec: float = 2.5, h2: float = 0.0, h3: float = 0.0, extra: Array = []) -> PackedByteArray:
+	var n := int(RATE * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase := 0.0
+	var norm := 1.0 / (1.0 + h2 + h3 + _sum_x(extra))
+	for i in n:
+		var t := float(i) / RATE
+		var u := float(i) / float(n)
+		phase += TAU * f0 * pow(maxf(f1, 1.0) / maxf(f0, 1.0), u) / RATE
+		var sm := sin(phase) + h2 * sin(2.0 * phase) + h3 * sin(3.0 * phase)
+		for e: Vector2 in extra:
+			sm += e.y * sin(phase * e.x)
+		var env := exp(-dec * u * 5.0) * minf(1.0, t / maxf(att, 0.002)) * minf(1.0, (dur - t) / 0.01)
+		data.encode_s16(i * 2, int(clampf(sm * norm * env * vol, -1.0, 1.0) * 32767.0))
+	return data
+
+
+func _sum_x(extra: Array) -> float:
+	var t := 0.0
+	for e: Vector2 in extra:
+		t += e.y
+	return t
+
+
+## Soft air: noise smoothed by two low-pass stages (the coefficient moves lp0 to lp1: small is dark, larger is brighter), a slow attack and a decay. Whooshes, thumps' bodies, rumbles.
+func _air(dur: float, lp0: float, lp1: float, vol: float, att: float = 0.05, dec: float = 1.5) -> PackedByteArray:
+	var n := int(RATE * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var a := 0.0
+	var b := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var u := float(i) / float(n)
+		var c := lerpf(lp0, lp1, u)
+		a += ((randf() * 2.0 - 1.0) - a) * c
+		b += (a - b) * c
+		var gain := 1.0 / maxf(sqrt(c / (2.0 - c)) * 0.58, 0.02)          # brings the smoothed noise back up to about the same loudness at any coefficient
+		var env := exp(-dec * u * 5.0) * minf(1.0, t / maxf(att, 0.002)) * minf(1.0, (dur - t) / 0.01)
+		data.encode_s16(i * 2, int(clampf(b * gain * 0.35 * env * vol, -1.0, 1.0) * 32767.0))
+	return data
 
 
 ## A general voice: the pitch glides f0 to f1 along a curve, sine/saw/square mixed (`wave`), noise with a low-pass that sweeps lp0 to lp1 (0..1 coefficients), an FM wobble
@@ -209,7 +236,7 @@ func _voice(dur: float, f0: float, f1: float, curve: float, wave: Vector3, noise
 			lp += ((randf() * 2.0 - 1.0) - lp) * lerpf(lp0, lp1, u)
 			s += noise * lp * 2.0
 		s = tanh(s * drive) * norm
-		var env := exp(-decay * u * 5.0) * minf(1.0, t * 300.0)
+		var env := exp(-decay * u * 5.0) * minf(1.0, t * 100.0)
 		data.encode_s16(i * 2, int(clampf(s * env * vol, -1.0, 1.0) * 32767.0))
 	return data
 
