@@ -9,10 +9,15 @@ const MAX_VOICES := 28
 
 var _streams: Dictionary = {}
 var _loop_player: AudioStreamPlayer
+var toon: bool = true                          # cartoon sounds: springs, stretches, snaps, rubber and big layered explosions
+## With cartoon sounds off the new names fall back to the plain old ones; with them on, a few old names are swapped for the bigger new ones.
+const _FALLBACK := {&"explosion": &"boom", &"kaboom": &"boom", &"stretch": &"powerup", &"snap": &"pop", &"boing2": &"boing", &"splat": &"bonk", &"zap": &"squeak", &"rumble": &"boom", &"blip": &"coin", &"sproing": &"boing"}
+const _TOON_MAP := {&"boom": &"explosion", &"coin": &"blip", &"boing": &"sproing"}
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	DhMusic.ensure_buses()
 	# wave: 0 sine, 1 square, 2 saw, 3 noise
 	_streams[&"squawk"] = _wav(_synth(700.0, 320.0, 0.28, 2, 0.35, 0.12, 0.05, 1.5))
 	_streams[&"pop"] = _wav(_synth(420.0, 70.0, 0.14, 0, 0.7, 0.0, 0.0, 2.5))
@@ -41,7 +46,10 @@ func _ready() -> void:
 		_synth(880.0, 880.0, 0.08, 0, 0.35, 0.0, 0.0, 0.6), _synth(1175.0, 1175.0, 0.08, 0, 0.35, 0.0, 0.0, 0.6),
 		_synth(1568.0, 1568.0, 0.25, 0, 0.35, 0.0, 0.0, 1.5)]))
 
+	_build_new_voices.call_deferred()          # the big new sounds take a moment to build: one a frame, after the game is up
+
 	_loop_player = AudioStreamPlayer.new()
+	_loop_player.bus = &"Master"
 	_loop_player.stream = _noise_loop()
 	_loop_player.volume_db = -12.0
 	add_child(_loop_player)
@@ -57,26 +65,49 @@ func _on_sfx(sfx_name: StringName, world_pos: Vector3) -> void:
 		&"blower_off":
 			_loop_player.stop()
 			return
-	if not _streams.has(sfx_name) or get_child_count() > MAX_VOICES:
+	if toon:
+		sfx_name = _TOON_MAP.get(sfx_name, sfx_name)
+	elif _FALLBACK.has(sfx_name):
+		sfx_name = _FALLBACK[sfx_name]
+	if not _streams.has(sfx_name) or _voices >= MAX_VOICES:
 		return
 	var stream: AudioStream = _streams[sfx_name]
+	played += 1
+	_voices += 1
 	if world_pos.is_finite():
 		var p3 := AudioStreamPlayer3D.new()
 		p3.stream = stream
 		p3.unit_size = 12.0
 		p3.max_distance = 90.0
 		p3.pitch_scale = randf_range(0.9, 1.15)
+		p3.bus = &"Master"
+		p3.volume_db = DhMusic.vol_db(DhMusic.vol_sfx)
 		add_child(p3)
 		p3.global_position = world_pos
-		p3.finished.connect(p3.queue_free)
 		p3.play()
+		_free_later(p3, stream, p3.pitch_scale)
 	else:
 		var p := AudioStreamPlayer.new()
 		p.stream = stream
 		p.pitch_scale = randf_range(0.95, 1.05)
+		p.bus = &"Master"
+		p.volume_db = DhMusic.vol_db(DhMusic.vol_sfx)
 		add_child(p)
-		p.finished.connect(p.queue_free)
 		p.play()
+		_free_later(p, stream, p.pitch_scale)
+
+
+var _voices: int = 0
+static var played: int = 0
+
+
+## A voice is freed by a timer of its own length, not by its "finished" signal, and counted by hand: if a signal ever fails to come, the sounds do not run out.
+func _free_later(pl: Node, stream: AudioStream, pitch: float) -> void:
+	var life := stream.get_length() / maxf(pitch, 0.1) + 0.25
+	get_tree().create_timer(life).timeout.connect(func() -> void:
+		_voices = maxi(_voices - 1, 0)
+		if is_instance_valid(pl):
+			pl.queue_free())
 
 
 func _synth(f0: float, f1: float, dur: float, wave: int, vol: float, vibrato: float, noise_mix: float, decay: float) -> PackedByteArray:
@@ -99,6 +130,83 @@ func _synth(f0: float, f1: float, dur: float, wave: int, vol: float, vibrato: fl
 		var env := pow(1.0 - u, decay) * minf(1.0, t * 200.0)
 		data.encode_s16(i * 2, int(clampf(s * env * vol, -1.0, 1.0) * 32767.0))
 	return data
+
+
+func _build_new_voices() -> void:
+	_streams[&"explosion"] = _wav(_mixp([
+		_voice(0.9, 95.0, 26.0, 0.6, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.6, 0.8, 0.9),
+		_voice(0.9, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.55, 0.03, 0.0, 0.0, 2.2, 0.7, 0.7),
+		_voice(0.5, 900.0, 300.0, 1.0, Vector3(0, 0, 0), 1.0, 0.9, 0.2, 0.0, 0.0, 1.5, 3.0, 0.5)]))
+	await get_tree().process_frame
+	_streams[&"kaboom"] = _wav(_mixp([
+		_voice(1.5, 70.0, 20.0, 0.5, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.6, 1.0),
+		_voice(1.5, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.5, 0.015, 0.0, 0.0, 2.5, 0.55, 0.8),
+		_voice(0.7, 1400.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.95, 0.15, 0.0, 0.0, 2.0, 3.0, 0.5)]))
+	await get_tree().process_frame
+	_streams[&"sproing"] = _wav(_voice(0.55, 170.0, 640.0, 0.7, Vector3(0.9, 0.2, 0), 0.0, 0.0, 0.0, 13.0, 5.5, 1.0, 1.3, 0.6))
+	await get_tree().process_frame
+	_streams[&"boing2"] = _wav(_voice(0.6, 700.0, 110.0, 0.8, Vector3(0.9, 0.15, 0), 0.0, 0.0, 0.0, 11.0, 6.0, 1.0, 1.1, 0.6))
+	await get_tree().process_frame
+	_streams[&"stretch"] = _wav(_voice(0.5, 110.0, 1000.0, 2.2, Vector3(0.4, 0.6, 0), 0.04, 0.5, 0.5, 8.0, 2.5, 1.3, 0.5, 0.45))
+	await get_tree().process_frame
+	_streams[&"snap"] = _wav(_mixp([
+		_voice(0.12, 2200.0, 350.0, 0.5, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 3.5, 0.6),
+		_voice(0.07, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.95, 0.9, 0.0, 0.0, 1.5, 4.0, 0.6)]))
+	await get_tree().process_frame
+	_streams[&"splat"] = _wav(_mixp([
+		_voice(0.4, 260.0, 55.0, 0.7, Vector3(0.7, 0.3, 0), 0.2, 0.6, 0.1, 22.0, 4.0, 1.5, 1.4, 0.7),
+		_voice(0.3, 300.0, 300.0, 1.0, Vector3(0, 0, 0), 1.0, 0.7, 0.08, 0.0, 0.0, 1.3, 1.6, 0.5)]))
+	await get_tree().process_frame
+	_streams[&"zap"] = _wav(_voice(0.28, 2400.0, 160.0, 0.5, Vector3(0.0, 1.0, 0.2), 0.0, 0.0, 0.0, 70.0, 3.0, 2.0, 1.6, 0.4))
+	await get_tree().process_frame
+	_streams[&"rumble"] = _wav(_mixp([
+		_voice(1.4, 48.0, 36.0, 1.0, Vector3(1, 0, 0), 0.0, 0.0, 0.0, 6.0, 1.2, 1.2, 0.7, 0.8),
+		_voice(1.4, 200.0, 200.0, 1.0, Vector3(0, 0, 0), 1.0, 0.7, 0.05, 0.0, 0.0, 1.5, 0.8, 0.5)]))
+	await get_tree().process_frame
+	_streams[&"blip"] = _wav(_voice(0.11, 880.0, 1500.0, 0.6, Vector3(0.8, 0.0, 0.2), 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.4, 0.4))
+	await get_tree().process_frame
+
+
+## A general voice: the pitch glides f0 to f1 along a curve, sine/saw/square mixed (`wave`), noise with a low-pass that sweeps lp0 to lp1 (0..1 coefficients), an FM wobble
+## (fm_hz, fm_depth in radians), tanh drive, an exponential decay and a short attack. This is what makes springs, stretches, snaps, splats and the layered explosions.
+func _voice(dur: float, f0: float, f1: float, curve: float, wave: Vector3, noise: float, lp0: float, lp1: float, fm_hz: float, fm_depth: float, drive: float, decay: float, vol: float) -> PackedByteArray:
+	var n := int(RATE * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var phase := 0.0
+	var lp := 0.0
+	var norm := 1.0 / tanh(maxf(drive, 0.1))
+	for i in n:
+		var t := float(i) / RATE
+		var u := float(i) / float(n)
+		var f := f0 * pow(maxf(f1, 1.0) / maxf(f0, 1.0), pow(u, curve))
+		phase += TAU * f / RATE
+		var ph := phase + fm_depth * sin(TAU * fm_hz * t)
+		var q := fmod(ph, TAU) / TAU
+		var s := wave.x * sin(ph) + wave.y * (q * 2.0 - 1.0) + wave.z * (1.0 if q < 0.5 else -1.0)
+		if noise > 0.0:
+			lp += ((randf() * 2.0 - 1.0) - lp) * lerpf(lp0, lp1, u)
+			s += noise * lp * 2.0
+		s = tanh(s * drive) * norm
+		var env := exp(-decay * u * 5.0) * minf(1.0, t * 300.0)
+		data.encode_s16(i * 2, int(clampf(s * env * vol, -1.0, 1.0) * 32767.0))
+	return data
+
+
+## Mixes several sounds that start together (the longest sets the length).
+func _mixp(parts: Array) -> PackedByteArray:
+	var n := 0
+	for p: PackedByteArray in parts:
+		n = maxi(n, p.size() / 2)
+	var out := PackedByteArray()
+	out.resize(n * 2)
+	for i in n:
+		var v := 0.0
+		for p: PackedByteArray in parts:
+			if i * 2 + 1 < p.size():
+				v += float(p.decode_s16(i * 2)) / 32767.0
+		out.encode_s16(i * 2, int(clampf(tanh(v * 0.9), -1.0, 1.0) * 32767.0))
+	return out
 
 
 func _cat(parts: Array) -> PackedByteArray:

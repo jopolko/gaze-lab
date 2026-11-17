@@ -270,6 +270,7 @@ func setup(p_player: PlayerController) -> void:
 	vy = vel.y * SLOPE
 	_build_sled()
 	_build_mountains()
+	_build_skirt()
 	var layer := CanvasLayer.new()
 	layer.layer = 0
 	add_child(layer)
@@ -767,7 +768,7 @@ func _chunk_pump() -> void:
 	if int(job["epoch"]) != _gen_epoch:
 		_chunk_jobs.pop_front()
 		return
-	if _chunk_step(job, CHUNK_SLICE_US):
+	if _chunk_step(job, CHUNK_SLICE_US if int(job["j"]) > int(-spos.z / ROW_GAP) + 1 else 25000):          # the ground under you and just ahead is built at once (a short hitch beats a hole you can see under); the far stretches in thin slices
 		_chunk_jobs.pop_front()
 		var mi: MeshInstance3D = job["mi"]
 		_chunk_post(int(job["j"]), mi)
@@ -1403,6 +1404,12 @@ func _process(delta: float) -> void:
 	_animate_doors(delta)
 	if _mtn != null:
 		_wset(_mtn, Vector3(spos.x, spos.y - 160.0, spos.z))
+	if _skirt != null:
+		var zb := snappedf(spos.z, SKIRT_STEP)
+		_wset(_skirt, Vector3(0.0, SLOPE * zb, zb))
+		var senv: Environment = get_viewport().world_3d.environment if get_viewport().world_3d != null else null
+		if senv != null:
+			_skirt_mat.albedo_color = senv.fog_light_color.lerp(Color(0.93, 0.95, 1.0), 0.4)          # the same colour as the haze, so it fades into it in every world
 	_maybe_start_cal()
 	_update_focus(delta)
 	# sled orientation: follow the ground normal, lean into the turn, tuck low
@@ -1935,6 +1942,71 @@ func _make_flag_mesh() -> ArrayMesh:
 
 
 ## A ring of faceted peaks around the whole valley, drawn as one mesh. Far ones are tall, near ones are foothills.
+## THE EDGE OF THE WORLD. The ground is only built 150 m either side and 520 m ahead: from high in the air (a big jump) the end of it, and the empty ground past it, showed. This is a
+## coarse skin beyond it that carries on the same valley: the hillsides keep rising on both sides (up to 420 m) and the slope keeps going on down the hill, in the colour of the haze.
+## It is one mesh that follows the board in steps; the real ground lies over it.
+const SKIRT_STEP := 120.0
+var _skirt: MeshInstance3D
+var _skirt_mat: StandardMaterial3D
+
+
+func _skirt_h(x: float, zl: float) -> float:
+	var ax := maxf(absf(x) - W_HALF, 0.0)
+	return zl * SLOPE + minf(0.0085 * ax * ax, 420.0)
+
+
+func _build_skirt() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var xs := [-1600.0, -1200.0, -900.0, -650.0, -480.0, -350.0, -250.0, -190.0, -148.0, -80.0, 0.0, 80.0, 148.0, 190.0, 250.0, 350.0, 480.0, 650.0, 900.0, 1200.0, 1600.0]
+	# the two sides, from just outside the built ground (the same height as its edge) outward, and from behind the board to 650 m ahead
+	var zs_side: Array[float] = []
+	var zz := 300.0
+	while zz >= -700.0:
+		zs_side.append(zz)
+		zz -= 60.0
+	var zs_cap: Array[float] = []
+	zz = -700.0
+	while zz >= -3200.0:
+		zs_cap.append(zz)
+		zz -= 160.0
+	for part in 2:
+		var zs: Array[float] = zs_side if part == 0 else zs_cap
+		var drop := 0.0 if part == 0 else 3.0          # past the end of the ground it lies a little under it, so a seam does not show
+		for xi in xs.size() - 1:
+			var xa: float = xs[xi]
+			var xb: float = xs[xi + 1]
+			if part == 0 and absf(xa) < 148.0 and absf(xb) < 148.0 + 0.1 and not (xa <= -148.0 or xb >= 148.0) and xa > -148.0 and xb < 148.0:
+				continue          # the middle is the built ground itself
+			if part == 0 and xa >= -148.0 and xb <= 148.0:
+				continue
+			for zi in zs.size() - 1:
+				var za: float = zs[zi]
+				var zb2: float = zs[zi + 1]
+				var q := [Vector2(xa, za), Vector2(xb, za), Vector2(xb, zb2), Vector2(xa, zb2)]
+				var vs: Array[Vector3] = []
+				var cs: Array[Color] = []
+				for pt in q:
+					var h := _skirt_h(pt.x, pt.y) - drop
+					vs.append(Vector3(pt.x, h, pt.y))
+					var hh := clampf((h - pt.y * SLOPE) / 420.0, 0.0, 1.0)
+					cs.append(Color(0.95, 0.97, 1.0).lerp(Color(0.78, 0.84, 0.96), hh * 0.7))
+				for tri in [[0, 1, 2], [0, 2, 3]]:
+					for vi in tri:
+						st.set_color(cs[vi])
+						st.add_vertex(vs[vi])
+	_skirt_mat = StandardMaterial3D.new()
+	_skirt_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_skirt_mat.vertex_color_use_as_albedo = true
+	_skirt_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_skirt = MeshInstance3D.new()
+	_skirt.mesh = st.commit()
+	_skirt.material_override = _skirt_mat
+	_skirt.extra_cull_margin = 3000.0
+	_skirt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_skirt)
+
+
 func _build_mountains() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)

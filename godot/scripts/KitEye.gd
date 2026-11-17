@@ -464,6 +464,14 @@ func _zone_step(hx: float, dt: float, t: float) -> void:
 		_zside_s = 0.0
 	if zone == 0:
 		_zdrift += d * minf(1.0, dt / 3.0)
+		if bool(zones.get("auto", false)):
+			# the two sides are about the same size: one that has grown past 1.6x the other (a spike, the phone knocked) is pulled back, or its side could never be reached again
+			var al := absf(float(zones["dl"]))
+			var ar := absf(float(zones["dr"]))
+			if ar > al * 1.6:
+				zones["dr"] = signf(float(zones["dr"])) * al * 1.6
+			elif al > ar * 1.6:
+				zones["dl"] = signf(float(zones["dl"])) * ar * 1.6
 	else:
 		_zside_s += dt          # (a look held on a side is NOT taken as the resting place any more: a middle that was learned a little off would stay stuck on one side)
 	# the middle follows the long-run median of the readings, so a middle that was learned badly in the first second corrects itself within seconds

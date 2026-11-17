@@ -107,6 +107,102 @@ static func apply_to_level(level: MainLevel, rig: DownhillRig, id: String, inten
 	fx.reset_storm()
 
 
+## One piece of a look at a time, so a world can come on a layer at a time (and flicker in and out) instead of all at once: "sky" the sky, light, fog, the mountains and the
+## mist; "ground" the snow; "veg" the trees, rocks and their shapes (new stretches of the hill only); "light" the rider's lights, snow and the sandstorm clock.
+## apply_to_level must have been called once before (it keeps the plain alpine settings these go back to).
+static func apply_part(level: MainLevel, rig: DownhillRig, id: String, part: String, _intensity: float, dyn: bool, snow: bool, fluffy: bool) -> void:
+	var env: Environment = level.world_env.environment
+	var sky := env.sky
+	if not sky.has_meta("orig_sky"):
+		return
+	var data := Themes.theme_data(id)
+	match part:
+		"sky":
+			sky.sky_material = sky.get_meta("orig_sky")
+			var cfg: Dictionary = (sky.get_meta("alpine_cfg") as Dictionary).duplicate()
+			var te: Dictionary = data["env"]
+			for k in te:
+				cfg[k] = te[k]
+			level._apply_environment(cfg)
+			var sm := Themes.sky_material(id)
+			if sm != null:
+				sky.sky_material = sm
+			if rig._mtn != null:
+				if not rig.has_meta("orig_mtn"):
+					rig.set_meta("orig_mtn", rig._mtn.mesh)
+				rig._mtn.mesh = Themes.pyramid_mesh() if id == "egypt" else (Themes.candy_hills_mesh() if id == "candy" else (rig.get_meta("orig_mtn") as Mesh))
+			rig.mist_color = Themes.mist_color(id)
+			if rig._mist != null:
+				(rig._mist.material_override as ShaderMaterial).set_shader_parameter("tint", rig.mist_color)
+		"skymat":
+			var sm2 := Themes.sky_material(id)
+			sky.sky_material = sm2 if sm2 != null else sky.get_meta("orig_sky")
+			if rig._mtn != null:
+				if not rig.has_meta("orig_mtn"):
+					rig.set_meta("orig_mtn", rig._mtn.mesh)
+				rig._mtn.mesh = Themes.pyramid_mesh() if id == "egypt" else (Themes.candy_hills_mesh() if id == "candy" else (rig.get_meta("orig_mtn") as Mesh))
+			rig.mist_color = Themes.mist_color(id)
+			if rig._mist != null:
+				(rig._mist.material_override as ShaderMaterial).set_shader_parameter("tint", rig.mist_color)
+		"ground":
+			var gm := Themes.ground_material(id)
+			(rig._m_ground as ShaderMaterial).shader = gm.shader if gm != null else (rig.get_meta("orig_ground") as Shader)
+		"veg":
+			rig._veg_theme = Themes.veg_material(id)
+			rig.hazard_skin = Themes.hazard_skin(id)
+			var shapes: Array = rig.get_meta("orig_shapes")
+			if fluffy or id == "candy":
+				rig._m_cone = Themes.fluffy_tree_mesh(id)
+				rig._m_rock = Themes.gumdrop_mesh()
+				rig._m_rock_snow = Themes.gumdrop_mesh()
+			else:
+				rig._m_cone = shapes[0]
+				rig._m_rock = shapes[1]
+				rig._m_rock_snow = shapes[2]
+		"light":
+			var lt: DhLighting = level.get_node_or_null("Lighting") as DhLighting
+			if lt != null:
+				lt.setup(level, rig as RunRig, id, dyn, snow)
+			var fx: ThemeFX = level.get_node_or_null("ThemeFX") as ThemeFX
+			if fx != null:
+				fx._theme = id
+				fx.reset_storm()
+
+
+## The colours of a world mixed into the plain ones, k from 0 to 1: sky, fog, sun and light slide over instead of jumping. (The sky material itself, if it is a shader, is left as it is.)
+static func blend_env(level: MainLevel, id: String, k: float) -> void:
+	var env: Environment = level.world_env.environment
+	var sky := env.sky
+	if not sky.has_meta("alpine_cfg"):
+		return
+	var a: Dictionary = sky.get_meta("alpine_cfg")
+	var b: Dictionary = a.duplicate()
+	var te: Dictionary = Themes.theme_data(id)["env"]
+	for key in te:
+		b[key] = te[key]
+	var cfg: Dictionary = {}
+	for key in a:
+		var va: Variant = a[key]
+		var vb: Variant = b[key]
+		match typeof(va):
+			TYPE_COLOR:
+				cfg[key] = (va as Color).lerp(vb as Color, k)
+			TYPE_FLOAT:
+				cfg[key] = lerpf(float(va), float(vb), k)
+			TYPE_VECTOR3:
+				cfg[key] = (va as Vector3).lerp(vb as Vector3, k)
+			_:
+				cfg[key] = vb if k > 0.5 else va
+	var cur := sky.sky_material
+	var orig: Variant = sky.get_meta("orig_sky")
+	var swapped: bool = cur != orig
+	if swapped:
+		sky.sky_material = orig
+	level._apply_environment(cfg)
+	if swapped:
+		sky.sky_material = cur
+
+
 static func _snapshot(level: MainLevel) -> Dictionary:
 	var env: Environment = level.world_env.environment
 	var sm := env.sky.sky_material as ProceduralSkyMaterial
@@ -188,16 +284,18 @@ class ThemePost extends Node:
 		if m == 1 and trails_ok:
 			_make_trail()
 		elif trail_vp != null:
-			trail_vp.queue_free()
-			trail_vp = null
+			# kept, not freed: a phone's graphics memory is not asked for again with every wave (that is what loses the context). They just stop drawing.
+			trail_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
 			if cur_vp != null:
-				cur_vp.queue_free()
-				cur_vp = null
-			mat.set_shader_parameter("trail", null)
-		mat.set_shader_parameter("use_trail", 1.0 if trail_vp != null else 0.0)
+				cur_vp.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		mat.set_shader_parameter("use_trail", 1.0 if (trail_vp != null and m == 1) else 0.0)
 
 	func _make_trail() -> void:
 		if trail_vp != null:
+			trail_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			trail_vp.render_target_clear_mode = SubViewport.CLEAR_MODE_ONCE          # start from an empty pile of echoes
+			if cur_vp != null:
+				cur_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 			return
 		if not _own_tex:
 			# the overlay's own output ends up in the screen picture, so the screen cannot be fed back into itself: render the world once more, small, without any overlay
@@ -231,7 +329,8 @@ class ThemePost extends Node:
 
 	func _trail_size() -> Vector2i:
 		var s: Vector2 = src.get_visible_rect().size if src != get_tree().root else Vector2(get_tree().root.size)
-		return Vector2i(maxi(int(s.x * 0.5), 64), maxi(int(s.y * 0.5), 64))
+		var k := 0.4 if OS.has_feature("web") else 0.5          # smaller on the web: the echoes are soft anyway
+		return Vector2i(maxi(int(s.x * k), 64), maxi(int(s.y * k), 64))
 
 	func _process(_delta: float) -> void:
 		if trail_vp != null:

@@ -497,6 +497,8 @@ uniform float amount = 1.0;
 uniform float use_trail = 1.0;     // 0 when the tracer pass is switched off to save frame rate
 uniform float breathe = 0.0;     // 0..1 how hard the picture breathes
 uniform float trip = 0.0;        // 0..1 the TRIP: built up by sugar and combos, it swirls the picture, throws the colours apart and fills the air with tracers
+uniform float onset = 1.0;       // 0..1 how far the effect has come on: at first only a band around the horizon (the mountains) shimmers, then it spreads over the whole picture
+uniform float horizon = 0.42;    // where the horizon is on the screen (0 top, 1 bottom)
 """ + HSV + """
 void fragment() {
 	vec2 uv = SCREEN_UV;
@@ -523,6 +525,15 @@ void fragment() {
 		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55);
 		col *= 1.0 + trip * 0.25;
 		col *= 1.0 - 0.45 * smoothstep(0.45, 0.95, r);
+		if (onset < 0.999) {
+			vec3 plain = texture(screen_tex, uv).rgb;
+			float dh = abs(uv.y - horizon);
+			float wm = clamp(onset * 2.6 - dh * 2.6, 0.0, 1.0);
+			float fl = 0.6 + 0.4 * sin(TIME * 11.0 + uv.x * 7.0 + sin(TIME * 3.0) * 2.0);          // it flickers while it is only partly there
+			wm *= mix(fl, 1.0, onset);
+			float amt = onset * onset * (3.0 - 2.0 * onset);          // and how strong it is where it reaches grows too: a hint is only a hint
+			col = mix(plain, col, wm * amt);
+		}
 	} else if (mode < 2.5) {
 		// digital: green tint, scanlines, a little flicker, vignette
 		col = texture(screen_tex, uv).rgb;

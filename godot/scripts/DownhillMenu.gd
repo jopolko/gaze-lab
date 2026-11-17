@@ -9,11 +9,12 @@ const PRESET_NAMES := {"classic": "CLASSIC", "alpine": "ALPINE RUSH", "meadow": 
 const ZONE_LABELS := {"rush": "RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "bend": "BEND", "air": "SKY", "forest": "FOREST", "drop": "CLIFF"}
 
 var cfg: Dictionary = {
-	"v": 2, "theme": "psychedelic", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
+	"v": 4, "theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
 	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
-	"psy": false, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
+	"psy": false, "journey": true, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
 }
 
+var _defaults: Dictionary = cfg.duplicate(true)
 var _bg: ThemeBackdrop
 var _grid: GridContainer
 var _scroll: ScrollContainer
@@ -57,6 +58,8 @@ var _note: Label
 var _force_tabs: bool = false          # the panels do not fit side by side at a readable size: one at a time, with tabs
 var _fit: float = 1.0                  # shrinks everything in step until the whole page fits the screen
 var _fit_n: int = 0
+var _fit_w: int = 0
+var _fit_h: int = 0
 var _tab_btns: Array[Button] = []
 var _tabrow: HBoxContainer
 var _rep_card: PanelContainer
@@ -65,6 +68,13 @@ var _mix_grid: GridContainer
 var _tints: Array = [Color(0.45, 0.8, 1.0), Color(1.0, 0.7, 0.3), Color(0.8, 0.55, 1.0), Color(1.0, 0.45, 0.55), Color(0.6, 0.9, 0.6)]
 var _mh_s: Dictionary = {}
 var _hat_b: Button
+var _lvl_l: Label
+var _mus_btns: Dictionary = {}
+var _mvol_s: HSlider
+var _svol_s: HSlider
+var _mvol_l: Label
+var _svol_l: Label
+var _lvl_bar: ProgressBar
 var _sw_on: ImageTexture
 var _sw_off: ImageTexture
 var _mh_l: Dictionary = {}
@@ -345,6 +355,13 @@ func _build_header() -> void:
 	h.add_child(tb)
 	_title = _label("DOWNHILL", 40, Color(1.0, 0.9, 0.4), tb)
 	_sub = _label("Build your own ride, then go. The riding is always the same fun: rails, ramps, flow.", 17, Color(1, 1, 1, 0.8), tb)
+	_lvl_l = _label("", 17, Color(1.0, 0.85, 0.3), tb)
+	_lvl_bar = ProgressBar.new()
+	_lvl_bar.show_percentage = false
+	_lvl_bar.custom_minimum_size = Vector2(0, 6)
+	_lvl_bar.add_theme_stylebox_override("background", _style(Color(1, 1, 1, 0.14), Color(0, 0, 0, 0), 4, 0))
+	_lvl_bar.add_theme_stylebox_override("fill", _style(Color(1.0, 0.85, 0.3), Color(0, 0, 0, 0), 4, 0))
+	tb.add_child(_lvl_bar)
 	var rb := _button("REPORTS", 16, h)
 	rb.pressed.connect(func() -> void:
 		_rep_on = not _rep_on
@@ -355,6 +372,14 @@ func _build_header() -> void:
 
 func _build_theme_card() -> void:
 	var c := _card("WORLD", "what you ride through")
+	var jb := _switch_row(c, "All dressed: every world, in waves")
+	jb.toggled.connect(func(on: bool) -> void:
+		if _building:
+			return
+		cfg["journey"] = on
+		_sync_labels())
+	_toggles["journey"] = jb
+	_label("It plays like the plain run, then a different world washes over it, stronger each time: new speeds, new music, new ways things bounce. Off: one world, your pick below.", 15, Color(1, 1, 1, 0.55), c)
 	var f := _flow(c)
 	var grp := ButtonGroup.new()
 	var all_looks := OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('looks')"))          # one look at a time: Alpine is the demo, ?looks brings the others back
@@ -464,6 +489,40 @@ func _build_experience_card() -> void:
 			return
 		cfg["assist"] = v
 		_sync_labels())
+	_label("SOUND", 16, Color(1, 1, 1, 0.5), c)
+	var mf := _flow(c)
+	var mg := ButtonGroup.new()
+	for md in [["off", "OFF"], ["auto", "AUTO"], ["ambient", "AMBIENT"], ["techno", "TECHNO"], ["trance", "TRANCE"], ["jungle", "JUNGLE"], ["industrial", "INDUSTRIAL"]]:
+		var mb := _button(String(md[1]), 17, mf, true)
+		mb.button_group = mg
+		mb.pressed.connect(func() -> void:
+			cfg["mus"] = String(md[0])
+			_save())
+		_mus_btns[md[0]] = mb
+		_boxes.append([mb, 120.0, 44.0])
+	var mv := _slider(c, 0.0, 1.0, 0.05, "", 17, 34.0)
+	_mvol_s = mv[0]
+	_mvol_l = mv[1]
+	_mvol_s.value_changed.connect(func(v: float) -> void:
+		if _building:
+			return
+		cfg["mvol"] = v
+		_sync_labels())
+	var sv := _slider(c, 0.0, 1.0, 0.05, "", 17, 34.0)
+	_svol_s = sv[0]
+	_svol_l = sv[1]
+	_svol_s.value_changed.connect(func(v: float) -> void:
+		if _building:
+			return
+		cfg["svol"] = v
+		_sync_labels())
+	var tb := _switch_row(c, "Cartoon sounds")
+	tb.toggled.connect(func(on: bool) -> void:
+		if _building:
+			return
+		cfg["toon"] = on
+		_sync_labels())
+	_toggles["toon"] = tb
 	for t in [["faces", "Face challenges"], ["cine", "Cinematic jumps"], ["dynlight", "Dynamic light"], ["snow", "Snowfall"], ["fluffy", "Fluffy shapes"], ["phone", "Phone stabiliser"], ["haptics", "Haptics"], ["speed_first", "Speed first"], ["vehicle", "On a vehicle"], ["gps", "GPS speed"]]:
 		var b := _switch_row(c, String(t[1]))
 		b.toggled.connect(func(on: bool) -> void:
@@ -534,6 +593,30 @@ func _build_reports_card() -> void:
 	var dl := _button("DOWNLOAD", 20, f)
 	dl.pressed.connect(func() -> void:
 		RunLog.download(JSON.stringify(RunLog.load_all(), "  ")))
+	var ua := _button("UNLOCK ALL", 20, f)
+	ua.pressed.connect(func() -> void:
+		DhProgress.unlock_all()
+		_sync_widgets())
+	var rst := _button("RESET ALL SETTINGS", 20, f)
+	var rwarn := _label("This will reset all parameters and settings (your level and unlocks stay). Reset: yes or no?", 17, Color(1.0, 0.8, 0.4), c)
+	rwarn.visible = false
+	var rf := _flow(c)
+	var ryes := _button("YES, RESET", 20, rf)
+	var rno := _button("NO", 20, rf)
+	rf.visible = false
+	rst.pressed.connect(func() -> void:
+		rwarn.visible = true
+		rf.visible = true)
+	rno.pressed.connect(func() -> void:
+		rwarn.visible = false
+		rf.visible = false)
+	ryes.pressed.connect(func() -> void:
+		rwarn.visible = false
+		rf.visible = false
+		cfg = _defaults.duplicate(true)
+		_sync_widgets()
+		_save()
+		_status.text = "Everything is back to how it came.")
 	var cl := _button("CLEAR", 20, f)
 	cl.pressed.connect(func() -> void:
 		RunLog.clear_all()
@@ -585,6 +668,8 @@ func _build_footer() -> void:
 	_texts.append([_cam_btn, 30])
 	_boxes.append([_cam_btn, 0.0, 84.0])
 	_note = _label("The camera never leaves your device.  No camera? The mouse or your thumb steers instead.", 16, Color(1, 1, 1, 0.55), _root, true)
+	if OS.has_feature("web") and bool(JavaScriptBridge.eval("/iPhone|iPod/.test(navigator.userAgent) && !navigator.standalone")):
+		_note.text += "  On an iPhone the browser cannot go full screen: tap Share, then Add to Home Screen, and open the game from its icon."
 
 
 static func Game_presets() -> Array:
@@ -651,12 +736,42 @@ func _sync_widgets() -> void:
 		(_toggles[k] as Button).set_pressed_no_signal(bool(cfg[k]))
 	for k in _mh_s:
 		(_mh_s[k] as HSlider).value = float(cfg[k])
+	for id in _mus_btns:
+		(_mus_btns[id] as Button).set_pressed_no_signal(id == String(cfg["mus"]))
+	_mvol_s.value = float(cfg["mvol"])
+	_svol_s.value = float(cfg["svol"])
 	for id in _mode_btns:
 		(_mode_btns[id] as Button).set_pressed_no_signal(id == String(cfg["mode"]))
 	_int_s.value = float(cfg["intensity"])
 	_assist_s.value = float(cfg["assist"])
 	_building = was
 	_sync_labels()
+	_apply_locks()
+
+
+## A setting that is not open yet at this level: greyed out, with the level that opens it.
+func _locked(key: String) -> bool:
+	return not DhProgress.unlocked(key)
+
+
+func _apply_locks() -> void:
+	var p := DhProgress.progress()
+	_lvl_l.text = "LEVEL %d     %d / %d XP" % [DhProgress.level(), int(p.x), int(p.y)] if DhProgress.level() < DhProgress.LEVEL_XP.size() else "LEVEL %d  (MAX)" % DhProgress.level()
+	_lvl_bar.max_value = maxf(p.y, 1.0)
+	_lvl_bar.value = p.x
+	for id in _theme_btns:
+		var b: Button = _theme_btns[id]
+		var key := "theme:" + String(id)
+		var nm := String(Themes.theme_data(String(id))["name"])
+		b.disabled = _locked(key)
+		b.text = nm if not _locked(key) else "%s  ·  LV %d" % [nm, DhProgress.need(key)]
+	for k in _mh_s:
+		(_mh_s[k] as HSlider).editable = not _locked(String(k))
+	for k in _toggles:
+		if DhProgress.UNLOCK.has(String(k)):
+			(_toggles[k] as Button).disabled = _locked(String(k))
+	if _hat_b != null:
+		_hat_b.disabled = _locked("m_hat")
 
 
 func _sync_labels() -> void:
@@ -667,11 +782,13 @@ func _sync_labels() -> void:
 	_diff_l.text = "DIFFICULTY  %s" % _diff_word(float(cfg["diff"]))
 	_assist_l.text = "AUTO-HELP  %s" % ("OFF" if float(cfg["assist"]) < 0.05 else ("LIGHT" if float(cfg["assist"]) < 0.4 else ("BALANCED" if float(cfg["assist"]) < 0.75 else "STRONG")))
 	_len_l.text = "LENGTH  %s" % ("ENDLESS" if bool(cfg["endless"]) else "%.1f km" % float(cfg["length_km"]))
+	_mvol_l.text = "MUSIC VOLUME  %d%%" % int(float(cfg["mvol"]) * 100.0)
+	_svol_l.text = "EFFECTS VOLUME  %d%%" % int(float(cfg["svol"]) * 100.0)
 	_int_l.text = "TRIPPY  %d%%" % int(float(cfg["intensity"]) / 1.5 * 100.0) if _int_l != null else ""
 	for z in _zone_l:
 		(_zone_l[z] as Label).text = "%s · %s" % [ZONE_LABELS[z], _mix_word(float((cfg["zones"] as Dictionary).get(z, 1.0)))]
 	if _hat_b != null:
-		_hat_b.text = "HAT  %s" % ["NONE", "TOP HAT", "PARTY", "PROP"][int(cfg["m_hat"])]
+		_hat_b.text = ("HAT  %s" % ["NONE", "TOP HAT", "PARTY", "PROP"][int(cfg["m_hat"])]) if not _locked("m_hat") else "HAT  ·  LV %d" % DhProgress.need("m_hat")
 	for k in _mh_l:
 		var ml: Array = _mh_l[k]
 		var v := float(cfg[k])
@@ -682,10 +799,14 @@ func _sync_labels() -> void:
 			if v < float(th[ti]):
 				idx = ti
 				break
-		(ml[0] as Label).text = "%s · %s" % [ml[1], wd[idx]]
+		(ml[0] as Label).text = ("%s · %s" % [ml[1], wd[idx]]) if not _locked(String(k)) else "%s  ·  LV %d" % [ml[1], DhProgress.need(String(k))]
 	for k in _toggles:
 		var b: Button = _toggles[k]
 		if b is CheckButton:
+			if DhProgress.UNLOCK.has(String(k)):
+				var base := String(b.get_meta("base", b.text))
+				b.set_meta("base", base)
+				b.text = base if not _locked(String(k)) else "%s  ·  LV %d" % [base, DhProgress.need(String(k))]
 			continue
 	_title.add_theme_color_override("font_color", (d["c1"] as Color).lerp(Color(1, 1, 1), 0.55))
 	_save()
@@ -718,9 +839,9 @@ func _load() -> void:
 	var cf := ConfigFile.new()
 	if cf.load(SAVE) != OK:
 		return
-	var old_cfg := not cf.has_section_key("m", "v") or int(cf.get_value("m", "v")) != 2          # saved before Psychedelic became the default: take the new look and the new 50% once
+	var old_cfg := not cf.has_section_key("m", "v") or int(cf.get_value("m", "v")) != 4          # saved before Psychedelic became the default: take the new look and the new 50% once
 	for k in cfg.keys():
-		if old_cfg and (k == "theme" or k == "intensity"):
+		if old_cfg and (k == "theme" or k == "intensity" or k == "journey"):
 			continue
 		if cf.has_section_key("m", k):
 			var v: Variant = cf.get_value("m", k)
@@ -811,8 +932,27 @@ func _process(_delta: float) -> void:
 		size = vs
 		_fit = 1.0
 		_fit_n = 0
+		_fit_w = 0
+		_fit_h = 0
 		_force_tabs = false
 		_apply_unit(false)
+	if _root != null and _margin.visible and _fit_w < 10:
+		# nothing may be wider than the screen: if the widest row (the tabs, the buttons along the top, the footer) does not fit across, everything is scaled down until it does
+		var mw := _margin.get_combined_minimum_size().x
+		if mw > vs.x + 1.0 and _fit > 0.4:
+			_fit_w += 1
+			_fit = maxf(0.4, _fit * (vs.x / mw) * 0.97)
+			_apply_unit(true)
+	if _fit_h < 10 and _root != null and _margin.visible and _cols == 1:
+		# the settings card must keep a usable share of the screen: if the title, tabs and buttons around it take more than 60 % of the height (a phone on its side), scale them down
+		var fixed := float(_margin.get_theme_constant("margin_top") + _margin.get_theme_constant("margin_bottom"))
+		for ch in _root.get_children():
+			if ch != _scroll and (ch as Control).visible:
+				fixed += (ch as Control).get_combined_minimum_size().y + float(_root.get_theme_constant("separation"))
+		if fixed > vs.y * 0.6 and _fit > 0.4:
+			_fit_h += 1
+			_fit = maxf(0.4, _fit * (vs.y * 0.55 / fixed))
+			_apply_unit(true)
 	if _fit_n < 6 and _root != null and _margin.visible:
 		# everything must be on the page without scrolling: if it is taller than the screen, shrink it all a little and look again
 		var need := _grid.get_combined_minimum_size().y
@@ -853,6 +993,8 @@ func _apply_unit(force: bool) -> void:
 	var hk := 0.58 if compact else 1.0
 	_sub.visible = not compact
 	_note.visible = not compact
+	_lvl_l.visible = not compact
+	_lvl_bar.visible = not compact
 	var cols := 1 if tabs else 4
 	if not force and absf(u - _u) < 0.001 and cols == _cols:
 		return
@@ -902,6 +1044,12 @@ func _start(with_camera: bool) -> void:
 		with_camera = false
 	_save()
 	var out := cfg.duplicate(true)
+	for key in DhProgress.UNLOCK:
+		if key.begins_with("theme:") or not _locked(String(key)):
+			continue
+		out[key] = (1.0 if typeof(cfg[key]) == TYPE_FLOAT else (0 if typeof(cfg[key]) == TYPE_INT else false))
+	if _locked("theme:" + String(out["theme"])):
+		out["theme"] = "alpine"
 	if int(out["seed"]) == 0:
 		out["seed"] = randi_range(1000, 999999)                       # "random" stays random next time: only this run gets a number
 	visible = false
@@ -916,3 +1064,15 @@ func _start(with_camera: bool) -> void:
 		GazeProvider.set_backend(GazeProvider.Backend.TOUCH if Game.touch_mode else GazeProvider.Backend.MOUSE)
 	GazeProvider.set_active(true)
 	queue_free()
+
+
+var _cam_warm: bool = false
+
+
+## The camera and the tracker take a few seconds to wake up: the first touch of the menu starts them, so that by the time START is pressed they are nearly ready (the camera stays off for anyone who only landed here).
+func _input(event: InputEvent) -> void:
+	if _cam_warm or not OS.has_feature("web") or str(JavaScriptBridge.eval("window.location.search")).contains("nocam"):
+		return
+	if (event is InputEventMouseButton and event.pressed) or (event is InputEventScreenTouch and event.pressed):
+		_cam_warm = true
+		GazeProvider.start_camera()
