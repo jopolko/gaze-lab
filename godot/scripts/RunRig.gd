@@ -6410,7 +6410,7 @@ var trick_charge_override: bool = false
 const VX_LAUNCH := 46.0                   # m/s the vortex brings you to by the lip
 const VX_ACCEL := 34.0
 const VX_TRAIL := 37.0                   # m/s the trail swirl builds up to by the lip
-const VX_REACH := 62.0                   # m before the foot of the ramp where the swirl starts to take hold
+const VX_REACH := 90.0                   # m before the foot of the ramp where the swirl starts to take hold
 var _vx_pull: float = 0.0                # 0..1: how far into the swirl you are (the camera widens with it)
 var _vx_blast: float = 0.0               # 1 at the lip, running down to 0
 var _land_off: float = 0.0               # m across the trail the eyes have chosen to land at
@@ -6437,7 +6437,8 @@ func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bo
 			var cc := col.lerp(Color(1.0, 0.95, 0.6), f * 0.7)
 			var node := _mi(self, tm, _fx_mat("solid", Color(cc.r, cc.g, cc.b), 2.6), Vector3(kx, terrain_h(kx, rz) + 1.2 + 0.3 * rr, rz))
 			node.set_meta("R", rr)
-			node.basis = Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale(Vector3(rr, rr, rr * 0.7))          # facing down the slope from the start (they lay flat until the board was within 260 m)
+			node.set_meta("Z", rz)
+			node.basis = TrailCurve.basis_at(rz) * Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale(Vector3(rr, rr, rr * 0.7))          # the opening faces up the TRAIL as it runs there (it was turned to the straight strip, so on a bend the board met the ring edge on); facing down the slope from the start (they lay flat until the board was within 260 m)
 			(row["nodes"] as Array).append(node)
 			rings.append(node)
 		k["vx"] = rings
@@ -6450,7 +6451,8 @@ func _make_vortex(row: Dictionary, k: Dictionary, kx: float, kz: float, epic: bo
 		if big and ri % 2 == 1:
 			continue                                                     # two rings are enough on the trail
 		var node := _mi(self, tm, _fx_mat("add", Color(col.r, col.g, col.b, 0.8 - 0.12 * float(ri))), Vector3(kx, terrain_h(kx, kz + 8.0) + (6.5 if big else 5.0), kz + 8.0))
-		node.rotation.x = PI * 0.5
+		node.set_meta("Z", kz + 8.0)
+		node.basis = TrailCurve.basis_at(kz + 8.0) * Basis(Vector3(1, 0, 0), PI * 0.5)
 		var bs := 1.5 if big else 1.0
 		node.scale = Vector3((1.0 + 0.55 * float(ri)) * bs, (1.0 + 0.55 * float(ri)) * bs, bs)
 		node.set_meta("S", node.scale)
@@ -6491,9 +6493,9 @@ func _vortex_drive(delta: float) -> void:
 				if is_instance_valid(rn):
 					if (rn as Node3D).has_meta("R"):
 						var rr: float = (rn as Node3D).get_meta("R")
-						(rn as Node3D).basis = Basis(Vector3(0, 0, 1), _vx_spin * near_k * (1.2 + 0.5 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)) * Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale(Vector3(rr, rr, rr * 0.7))
+						(rn as Node3D).basis = TrailCurve.basis_at(float((rn as Node3D).get_meta("Z", kz))) * Basis(Vector3(0, 0, 1), _vx_spin * near_k * (1.2 + 0.5 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)) * Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale(Vector3(rr, rr, rr * 0.7))
 					else:
-						(rn as Node3D).basis = Basis(Vector3(0, 0, 1), _vx_spin * (2.2 + 0.7 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)) * Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale((rn as Node3D).get_meta("S", Vector3.ONE))          # spin about the ring's own axis, which points down the slope: the opening always faces the board
+						(rn as Node3D).basis = TrailCurve.basis_at(float((rn as Node3D).get_meta("Z", kz))) * Basis(Vector3(0, 0, 1), _vx_spin * (2.2 + 0.7 * float(gi)) * (1.0 if gi % 2 == 0 else -1.0)) * Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale((rn as Node3D).get_meta("S", Vector3.ONE))          # spin about the ring's own axis, which points down the slope: the opening always faces the board
 				gi += 1
 		if k.get("trail", false):
 			# on the trail: the swirl catches you when you are lined up with the ramp (or the eyes picked it): it eases you onto the middle of the ramp and the speed builds
@@ -6501,7 +6503,7 @@ func _vortex_drive(delta: float) -> void:
 			var half: float = float(k["w"]) * 0.5
 			var dxk := kx - spos.x
 			var picked: bool = not _line_pick.is_empty() and String(_line_pick["kind"]) == "jump" and absf(float(_line_pick.get("kx", 1.0e9)) - kx) < 0.5
-			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 4.0 and (absf(dxk) < half + 24.0 or (picked and absf(dxk) < half + 36.0)):          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
+			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 4.0 and (absf(dxk) < half + 36.0 or (picked and absf(dxk) < half + 50.0)):          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
 				active = true
 				if not _vx_snd:
 					_vx_snd = true
