@@ -12,3 +12,4 @@ godot/tools/frames/
 godot/tools/tune_results.jsonl
 godot/tools/deploy.sh
 godot/tools/vps/
+music_web/*.ogg

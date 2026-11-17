@@ -1155,6 +1155,16 @@ func _audio_setup(c: Dictionary) -> void:
 	_music_next = null
 	_music_style = ""
 	DhMusic.dbg = "off"
+	_audio_cfg = c
+	if _dir != null and is_instance_valid(_dir):
+		_dir.stop()
+		_dir.queue_free()
+	_dir = null
+	if String(c.get("mus", "auto")) == "auto" and OS.has_feature("web") and not _dir_failed:
+		_dir = DhDirector.new()          # the tracks and stems; the synthesised music below is only the fallback when the files cannot be fetched
+		add_child(_dir)
+		_dir.start()
+		return
 	if st != "off" and OS.has_feature("web"):
 		_music = DhMusic.new()
 		add_child(_music)
@@ -1166,7 +1176,24 @@ func _audio_setup(c: Dictionary) -> void:
 		_music_style = st
 
 
+var _dir: DhDirector = null
+var _dir_failed: bool = false
+var _audio_cfg: Dictionary = {}
+
+
 func _music_tick() -> void:
+	if _dir != null and is_instance_valid(_dir):
+		var hl: Array = []
+		for hi in 6:
+			hl.append(_mbody[hi] / 6.0)
+		_dir.update(get_physics_process_delta_time(), {"avg": _mol_avg(), "holds": hl, "dmt": _mol_dmt(), "exc": _exc, "paused": _paused})
+		DhMusic.dbg = _dir.dbg
+		if _dir.failed:
+			_dir.queue_free()
+			_dir = null
+			_dir_failed = true
+			_audio_setup(_audio_cfg)          # the synthesised music instead
+		return
 	if _music == null or not is_instance_valid(_music) or not _music.ready_to_play:
 		return
 	var sp := clampf(-vel.y / 45.0, 0.0, 1.0)

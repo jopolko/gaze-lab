@@ -109,5 +109,10 @@ self.addEventListener('fetch', (e) => {
 });
 """ % {"tag": tag, "keep": json.dumps(keep)}
 open(p("index.service.worker.js"), "w", encoding="utf-8").write(sw)
+# the music files are not in the game's download: they sit beside it and are fetched when wanted (see DhDirector)
+msrc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "music_web")
+if os.path.isdir(msrc):
+    import shutil
+    shutil.copytree(msrc, p("music"), dirs_exist_ok=True)
 open(p("build.json"), "w").write(json.dumps({"build": tag, "engine": etag, "wasm": sizes.get("wasm"), "pck": sizes.get("pck")}))
 print("finished: build %s  (wasm %.1f MB, pck %.2f MB)" % (tag, sizes.get("wasm", 0) / 1e6, sizes.get("pck", 0) / 1e6))
