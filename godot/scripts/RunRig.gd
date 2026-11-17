@@ -6712,7 +6712,9 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 		var side: float = [-1.0, 1.0, 0.0, -1.0, 1.0][_rng.randi() % 5]
 		var roll := _rng.randf()
 		var pill_odds := 0.06 if -tz < 500.0 else 0.2
-		if _journey != null and ((not _pill_seen and -tz > 160.0) or _rng.randf() < pill_odds):
+		if _mol_dbg and _journey != null:
+			_make_pills(row, toys, tz, [-1.0, 1.0, 0.0][_rng.randi() % 3])          # ?mol: every slot is a row of molecules
+		elif _journey != null and ((not _pill_seen and -tz > 160.0) or _rng.randf() < pill_odds):
 			_pill_seen = true
 			_make_pills(row, toys, tz, side)
 		elif roll < 0.20:
@@ -6733,6 +6735,7 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 var _journey: DhJourney = null
 var _exc: float = 0.0
 var _dbg_t: float = 1.0
+var _back_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("back")
 var _hi_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("high")          # ?high: the camera up where a big jump would take it, to look at the edges of the world
 
 
@@ -6985,6 +6988,7 @@ func _toy_feat(row: Dictionary, x: float, z: float, sd: float, g: int) -> void:
 
 
 var _pill_seen: bool = false
+var _mol_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("mol")          # ?mol: a row of molecules right at the start, to look at
 var _pill_k: float = 0.0          # how far the pill flash has come on, 0 to 1
 var _pill_t: float = 0.0          # how long it is still held
 var _pill_n: int = 0          # pills in this chain
@@ -7524,6 +7528,8 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	ahead.y = terrain_h(ahead.x, ahead.z) + 1.4 + _hop_cam * 0.5
 	if (ahead - eye).length() > 0.5:
 		cam.look_at(ahead, Vector3.UP)
+		if _back_dbg:
+			cam.rotate_object_local(Vector3.UP, PI)          # ?back: look behind (to check the ground back there)
 	cam.basis = cam.basis * Basis(Vector3(0, 0, 1), -steer * 0.10 - _trk_cam_roll) * Basis(Vector3(1, 0, 0), _trk_cam_pitch)
 	if pm_view > 0.0 and GazeProvider.pm.active:
 		var pmt := GazeProvider.pm

@@ -1970,8 +1970,15 @@ func _build_skirt() -> void:
 	while zz >= -3200.0:
 		zs_cap.append(zz)
 		zz -= 160.0
-	for part in 2:
-		var zs: Array[float] = zs_side if part == 0 else zs_cap
+	# and behind: the ground built behind the board is thrown away 90 m back, so looking round in the air showed a short flat sheet and then the bases of the mountains. The whole width,
+	# from the board back to the far range, a little under the real ground where that still exists.
+	var zs_back: Array[float] = []
+	zz = 0.0
+	while zz <= 1760.0:
+		zs_back.append(zz)
+		zz += 160.0
+	for part in 3:
+		var zs: Array[float] = zs_side if part == 0 else (zs_cap if part == 1 else zs_back)
 		var drop := 0.0 if part == 0 else 3.0          # past the end of the ground it lies a little under it, so a seam does not show
 		for xi in xs.size() - 1:
 			var xa: float = xs[xi]
