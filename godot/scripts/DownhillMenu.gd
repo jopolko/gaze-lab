@@ -847,7 +847,7 @@ func _sync_labels() -> void:
 	_int_row.visible = Themes.post_mode(id) > 0
 	_diff_l.text = "DIFFICULTY  %s" % _diff_word(float(cfg["diff"]))
 	_assist_l.text = "AUTO-HELP  %s" % ("OFF" if float(cfg["assist"]) < 0.05 else ("LIGHT" if float(cfg["assist"]) < 0.4 else ("BALANCED" if float(cfg["assist"]) < 0.75 else "STRONG")))
-	_len_l.text = "LENGTH  %s" % ("ENDLESS" if bool(cfg["endless"]) else "%.1f km" % float(cfg["length_km"]))
+	_len_l.text = "LENGTH  %s" % ("ENDLESS" if (bool(cfg["endless"]) or (bool(cfg["journey"]) and String(cfg["theme"]) == "alpine")) else "%.1f km" % float(cfg["length_km"]))
 	_mvol_l.text = "MUSIC VOLUME  %d%%" % int(float(cfg["mvol"]) * 100.0)
 	_svol_l.text = "EFFECTS VOLUME  %d%%" % int(float(cfg["svol"]) * 100.0)
 	_int_l.text = "TRIPPY  %d%%" % int(float(cfg["intensity"]) / 1.5 * 100.0) if _int_l != null else ""

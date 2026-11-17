@@ -26,7 +26,7 @@ const LV_LEN := [0.7, 1.0, 1.3]
 const LV_CALM := [1.3, 1.0, 0.75]
 
 ## How much has to be felt (RunRig._body: pills taken, slowly taking effect, plus a little from the passing of time) for each wave to start, and how it scales with the trip level.
-const THR := [0.9, 1.6, 2.4, 3.2, 4.0, 5.0, 2.5, 1.2]
+const THR := [0.9, 2.0, 3.6, 5.4, 7.4, 9.6, 4.5, 1.5]          # (0.42 a level: the peak wave wants about 23 of the 36 levels held)
 const LV_THR := [1.3, 1.0, 0.75]
 
 ## How each world changes the ride. spd top speed, haz rocks, pads boost pads, jumps ramps, glint glint rain, bump how hard the cupcakes bounce you, spring how high a spring
@@ -70,6 +70,7 @@ var _clock: float = 0.0
 var _mods_t: float = 0.0
 var _rng := RandomNumberGenerator.new()
 var _order: Array = []
+var _echo: bool = false                 # the wave now running is an echo of the last one (the next is still out of reach): it does not move the script on
 
 
 func start(r: RunRig, seed_v: int) -> void:
@@ -108,14 +109,23 @@ func _shuffle() -> void:
 
 
 ## How long each part of the coming wave lasts, from how many have gone before.
-func _plan_wave() -> void:
-	var a: Dictionary = ARC[wave % ARC.size()]
+func _plan_wave(w: int = -1) -> void:
+	if w < 0:
+		w = wave
+	var a: Dictionary = ARC[w % ARC.size()]
 	var lv := clampi(rig._cfg_trip, 0, 2)
 	var round_k := 1.0 + 0.08 * float(wave / ARC.size())          # each time round is a little stronger
 	strength = clampf(float(a["s"]) * LV_STR[lv] * round_k, 0.15, LV_STR[lv] * 1.0 if lv < 2 else 1.3)
 	_onset_len = float(a["on"])
-	_peak_len = float(a["peak"]) * LV_LEN[lv]
+	_peak_len = float(a["peak"]) * LV_LEN[lv] * _len_k()
 	_off_len = float(a["off"])
+
+
+## A short session has shorter waves and rests, a long one longer: half at ten minutes, one and a half from half an hour up.
+func _len_k() -> float:
+	if rig == null or rig._pacer == null:
+		return 1.0
+	return clampf(rig._pacer.session_s / 1200.0, 0.5, 1.5)
 
 
 func _thr(w: int) -> float:
@@ -125,7 +135,7 @@ func _thr(w: int) -> float:
 ## The rest before wave `w`, from the script.
 func _calm(w: int) -> float:
 	var a: Dictionary = ARC[w % ARC.size()]
-	return float(a["calm"]) * LV_CALM[clampi(rig._cfg_trip, 0, 2)] * _rng.randf_range(0.9, 1.15)
+	return float(a["calm"]) * LV_CALM[clampi(rig._cfg_trip, 0, 2)] * _rng.randf_range(0.9, 1.15) * _len_k()
 
 
 ## The world `k` waves ahead of the one coming now (the first one or two are built while the run loads).
@@ -208,11 +218,19 @@ func tick(delta: float) -> void:
 			# the wave comes in when the run is building (fast, a flow going, boosts): or, if it never does, after a while anyway
 			if t >= _calm_len and rig._body >= _thr(wave):          # a wave comes in when enough has taken effect, not on a timer
 				_set_phase(Phase.ONSET)
+			elif wave > 0 and t >= _calm_len * 2.0 + 25.0 and rig._body >= _thr(wave - 1) * 0.6:
+				# the next wave is still out of reach (a long session holds the climb back, or levels were lost): the last one comes round again, a little softer, so it never
+				# goes quiet for long. It does not move the script on.
+				_echo = true
+				world = String(ARC[(wave - 1) % ARC.size()]["w"])
+				_plan_wave(wave - 1)
+				strength *= 0.85
+				_set_phase(Phase.ONSET)
 		Phase.ONSET:
 			if t >= _onset_len:
 				_set_phase(Phase.PEAK)
 		Phase.PEAK:
-			if t >= _peak_len and (rig._body < _thr(wave) * 1.3 or t >= _peak_len * 3.0):          # more taken keeps it up longer
+			if t >= _peak_len and (rig._body < _thr(wave) * 1.3 or t >= _peak_len * 1.6):          # more taken keeps it up longer
 				_set_phase(Phase.OFFSET)
 		Phase.OFFSET:
 			if t >= _off_len:
@@ -236,7 +254,12 @@ func _set_phase(p: int) -> void:
 		Phase.OFFSET:
 			rig.music_morph(String(BIOME["alpine"]["mus"]), wave * 3 + 2)
 		Phase.CALM:
-			wave += 1
+			if not _echo:
+				wave += 1
+				# well past what the next wave needs (a short session climbs fast): go straight to the one after. Never past the peak wave itself.
+				if wave % ARC.size() < 5 and rig._body >= _thr(wave + 1) * 1.15:
+					wave += 1
+			_echo = false
 			world = String(ARC[wave % ARC.size()]["w"])
 			_calm_len = _calm(wave)
 			_prewarm_t = 6.0

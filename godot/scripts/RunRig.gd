@@ -6738,6 +6738,24 @@ func _toy_mat(key: String, col: Color, e: float) -> StandardMaterial3D:
 func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 	var toys: Array = []
 	row["toys"] = toys
+	# MOLECULES come at their own pace, not as one of the toys: a row every so many metres, closer together when the player is behind the session's curve (the pacer) and
+	# further apart when ahead of it. About one row every seven seconds at an even pace; a row is moved on a little if something already stands there.
+	if _mol_rows and not _mol_dbg:
+		var tries := 0
+		while _mol_next_z > z0 - 180.0 and _mol_next_z > finish_z + 130.0 and tries < 8:
+			tries += 1
+			var mz := minf(_mol_next_z, z0 - 6.0)
+			var blocked := false
+			for zt: float in taken:
+				if absf(zt - mz) < 34.0:
+					blocked = true
+			if blocked:
+				_mol_next_z = mz - 22.0
+				continue
+			_make_pills(row, toys, mz, 0.0)
+			taken.append(mz)
+			var bias := _pacer.spawn_bias(_mol_avg()) if _pacer != null else 1.0
+			_mol_next_z = mz - clampf(MOL_GAP_M / bias, 105.0, 900.0) * _rng.randf_range(0.85, 1.15)
 	for off: float in [48.0, 102.0, 156.0]:
 		var tz := z0 - off + _rng.randf_range(-8.0, 8.0)
 		if tz < finish_z + 130.0 or _rng.randf() > 0.62:
@@ -6753,7 +6771,7 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 		var pill_odds := (0.06 if -tz < 500.0 else 0.2) * (_pacer.spawn_bias(_mol_avg()) if _pacer != null else 1.0)          # the pacer: more when the player is behind the session's curve
 		if _mol_dbg and _journey != null:
 			_make_pills(row, toys, tz, [-1.0, 1.0, 0.0][_rng.randi() % 3])          # ?mol: every slot is a row of molecules
-		elif _journey != null and ((not _pill_seen and -tz > 160.0) or _rng.randf() < pill_odds):
+		elif _journey != null and not _mol_rows and ((not _pill_seen and -tz > 160.0) or _rng.randf() < pill_odds):
 			_pill_seen = true
 			_make_pills(row, toys, tz, side)
 		elif roll < 0.20:
@@ -7044,6 +7062,9 @@ func _toy_feat(row: Dictionary, x: float, z: float, sd: float, g: int) -> void:
 
 
 var _pacer: DhPacer = null
+const MOL_GAP_M := 250.0          # metres between molecule rows at an even pace (about seven seconds of riding)
+var _mol_rows: bool = false
+var _mol_next_z: float = -150.0
 var _pill_seen: bool = false
 var _mol_dbg: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("mol")          # ?mol: a row of molecules right at the start, to look at
 var _pill_k: float = 0.0          # how far the pill flash has come on, 0 to 1
@@ -7226,7 +7247,7 @@ func _mol_dmt() -> float:
 	var mn := 6.0
 	for i in 6:
 		mn = minf(mn, _mbody[i])
-	return smoothstep(0.72, 0.98, mn / 6.0)
+	return smoothstep(0.52, 0.75, mn / 6.0)          # on from about four of each, full at four and a half
 
 
 var _sb_mol: int = 0
@@ -7272,8 +7293,12 @@ func _pill_tick(delta: float) -> void:
 	if _pacer != null and not _paused:
 		_pacer.tick(delta)
 	_mol_hurt_t = maxf(_mol_hurt_t - delta * 1.5, 0.0)
+	# THE WAY DOWN: what is held above the session's curve wears off faster, so the plateau eases and the comedown really comes down (and a long session climbs slowly)
+	var wear := 1.0
+	if _pacer != null:
+		wear = 1.0 + 12.0 * maxf(_mol_avg() - _pacer.target() - 0.05, 0.0)
 	for i in 6:
-		_mdose[i] = maxf(_mdose[i] - (0.004 if i == 1 else 0.008) * delta, 0.0)          # each wears off slowly (DOM, the long one, half as fast)
+		_mdose[i] = maxf(_mdose[i] - (0.004 if i == 1 else 0.008) * wear * delta, 0.0)          # each wears off slowly (DOM, the long one, half as fast)
 		var rate := 25.0 if _mdose[i] > _mbody[i] else 8.0
 		_mbody[i] += (_mdose[i] - _mbody[i]) * (1.0 - exp(-delta / rate))
 	var dm := _mol_dmt()
@@ -7297,7 +7322,9 @@ func _pill_tick(delta: float) -> void:
 		fxm.post.mat.set_shader_parameter("dmt", dm)
 	_pill_gap = maxf(_pill_gap - delta, 0.0)
 	_flick = maxf(_flick - delta * 2.0, 0.0)          # half a second
-	_dose = maxf(_dose - 0.006 * delta, 0.0)
+	_dose = maxf(_dose - 0.006 * wear * delta, 0.0)
+	if _mol_rows:
+		_dose = minf(_dose, (_mdose[0] + _mdose[1] + _mdose[2] + _mdose[3] + _mdose[4] + _mdose[5]) * 0.42 + 1.2)          # the waves follow what is held now, not everything ever taken
 	_body += (_dose - _body) * (1.0 - exp(-delta / 25.0))
 	if _journey != null:
 		_drift_t -= delta
@@ -7983,7 +8010,10 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	var zones: Dictionary = (c.get("zones", {}) as Dictionary).duplicate()
 	var km := float(c.get("length_km", 4.2))
 	params["seed"] = int(c.get("seed", 424242))
-	apply_params({"length": 0.0 if bool(c.get("endless", false)) else km * 1000.0, "diff": float(c.get("diff", 1.0)), "zones": zones})
+	_mol_rows = bool(c.get("journey", true)) and String(c.get("theme", "alpine")) == "alpine"          # All dressed: molecules come at their own steady pace (see _gen_toys)
+	_mol_next_z = -150.0
+	_pacer = null
+	apply_params({"length": 0.0 if (bool(c.get("endless", false)) or _mol_rows) else km * 1000.0, "diff": float(c.get("diff", 1.0)), "zones": zones})
 	face_enabled = bool(c.get("faces", true))
 	mode = String(c.get("mode", mode))
 	cine_enabled = bool(c.get("cine", true))
