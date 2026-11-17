@@ -189,6 +189,62 @@ func _ready() -> void:
 					air += dt
 					high = maxf(high, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z))
 				vmax = maxf(vmax, rig.vel.length())
+		var worst := 0.0
+		var nchk := 0
+		var wk := ""
+		for rk in rig._rows:
+			var rr: Dictionary = rig._rows[rk]
+			if rr.has("toys"):
+				for t in rr["toys"]:
+					if t.has("n") and t.has("x") and is_instance_valid(t["n"]):
+						var nd := t["n"] as Node3D
+						var exp := TrailCurve.w(Vector3(float(t["x"]), nd.global_position.y, float(t["z"])))
+						var er := Vector2(nd.global_position.x - exp.x, nd.global_position.z - exp.z).length()
+						nchk += 1
+						if er > worst:
+							worst = er
+							wk = String(t["kind"])
+		var worst_p := 0.0
+		var npads := 0
+		var worst_b := 0.0
+		for rk in rig._rows:
+			var rr2: Dictionary = rig._rows[rk]
+			for pp in rr2["pads"]:
+				if pp.has("gem") and is_instance_valid(pp["gem"]):
+					var gm := pp["gem"] as Node3D
+					var ex := TrailCurve.w(Vector3(float(pp["x"]), gm.global_position.y, float(pp["z"]) - 2.2))
+					npads += 1
+					worst_p = maxf(worst_p, Vector2(gm.global_position.x - ex.x, gm.global_position.z - ex.z).length())
+			for bb in rr2["buffs"]:
+				if is_instance_valid(bb["n"]):
+					var bn := bb["n"] as Node3D
+					var eb := TrailCurve.w(Vector3(float(bb["x"]), bn.global_position.y, float(bb["z"])))
+					worst_b = maxf(worst_b, Vector2(bn.global_position.x - eb.x, bn.global_position.z - eb.z).length())
+		# build one of each kind of toy by hand, a long way down a bend, and see where it is drawn against where the ground is
+		var synth := {"j": 99, "z": -9000.0, "nodes": [], "feats": [], "toys": [], "pads": [], "buffs": []}
+		var tl: Array = synth["toys"]
+		rig._make_bumpers(synth, tl, -2000.0, 1.0)
+		rig._make_spring(synth, tl, -2100.0, -1.0)
+		rig._make_gates(synth, tl, -2200.0)
+		rig._make_pills(synth, tl, -2300.0, 0.0)
+		var sw := 0.0
+		var kinds := {}
+		for t in tl:
+			var node: Node3D = null
+			if t.has("n"):
+				node = t["n"]
+			elif t.has("lanes"):
+				node = (t["lanes"][0]["n"] as Node3D)
+			if node == null:
+				continue
+			var sx: float = float(t["x"]) if t.has("x") else float(t["lanes"][0]["x"])
+			var ex2 := TrailCurve.w(Vector3(sx, node.global_position.y, float(t["z"])))
+			var e2 := Vector2(node.global_position.x - ex2.x, node.global_position.z - ex2.z).length()
+			sw = maxf(sw, e2)
+			kinds[String(t["kind"])] = snappedf(e2, 0.1)
+		print("TRAIL curve: hand-built toys (z -2000 to -2300), worst offset %.1f m  %s" % [sw, str(kinds)])
+		print("TRAIL curve: pad crystals checked %d, worst offset %.1f m;  buffs worst offset %.1f m" % [npads, worst_p, worst_b])
+		print("TRAIL curve on=%s  toys checked %d  worst horizontal offset from where the ground is drawn: %.1f m (%s)" % [str(TrailCurve.on), nchk, worst, wk])
 		print("TRAIL run %d: %d m in 90 s, crashes %d, poles %d (clean %d, shaved %d, wrong side %d), off the middle %.1f m on average and %.1f m at worst, %.1f s in the air (highest %.1f m), top speed %d km/h, best flow x%.1f, score %d" % [run, int(-rig.spos.z), rig.crashes, rig.poles_clean + rig.poles_wrong, rig.poles_clean, rig.poles_shaved, rig.poles_wrong, off_sum / maxf(float(n), 1.0), off_max, air, high, int(vmax * 3.6), rig.best_flow, rig.score])
 		print("TRAIL   %s: jumps %d of %d, rails %d of %d (%d m), treats %d of %d (orbs %d), choices %d, chosen %d (left %d, right %d), time penalty %.0f s, pops %d" % [rig.mode, rig.jumps_done, rig.jumps_built, rig.rails_done, rig.rails_built, int(rig.rail_m), rig.buffs_got, rig.buffs_spawned, rig.orbs_got, rig.choices_built, rig.picks, int(rig.picks_side.get(-1, 0)), int(rig.picks_side.get(1, 0)), rig.time_pen, rig.pops_flat])
 		print("TRAIL   swing: %d turns of the board's heading back the other way by more than 8 deg, fastest heading change %d deg/s" % [hrev, int(hrate)])

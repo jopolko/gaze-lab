@@ -889,18 +889,19 @@ func _kick_lift(kk: Dictionary, cur: Dictionary) -> void:
 	var rws: Array = _rows.values()
 	if not _rows.has(cur["j"]):
 		rws.append(cur)
+	var zhi := float(kk["z"]) + 20.0
+	var zlo := float(kk["z"]) - float(kk["len"]) - 20.0
 	for r: Dictionary in rws:
 		for n in r["nodes"]:
 			if not (n is Node3D) or not is_instance_valid(n):
 				continue
 			var nd := n as Node3D
-			if nd.position.length() < 0.05:
+			if nd.global_position.length() < 0.05 and nd.get_child_count() > 0:
 				for c in nd.get_children():
 					if c is Node3D:
-						var cd := c as Node3D
-						cd.position.y += _kick_dh(kk, cd.position.x, cd.position.z)
+						_lift_node(c as Node3D, kk, zlo, zhi)
 			else:
-				nd.position.y += _kick_dh(kk, nd.position.x, nd.position.z)
+				_lift_node(nd, kk, zlo, zhi)
 		for b in r["buffs"]:
 			b["y"] = float(b["y"]) + _kick_dh(kk, float(b["x"]), float(b["z"]))
 		for pp in r["pads"]:
@@ -910,6 +911,16 @@ func _kick_lift(kk: Dictionary, cur: Dictionary) -> void:
 			for t in r["toys"]:
 				if t.has("y") and t.has("x"):
 					t["y"] = float(t["y"]) + _kick_dh(kk, float(t["x"]), float(t["z"]))
+
+
+func _lift_node(nd: Node3D, kk: Dictionary, zlo: float, zhi: float) -> void:
+	var gp := nd.global_position
+	var sp := TrailCurve.strip_near(gp, zlo, zhi) if TrailCurve.on else gp
+	if sp.z > zhi or sp.z < zlo:
+		return
+	var dh := _kick_dh(kk, sp.x, sp.z)
+	if dh > 0.005:
+		nd.global_position = Vector3(gp.x, gp.y + dh, gp.z)
 
 
 func _in_rects(x: float, z: float, rects: Array[Rect2], grow: float) -> bool:
@@ -3500,13 +3511,13 @@ func _fx_mat(kind: String, col: Color, energy: float = 1.8) -> StandardMaterial3
 	return m
 
 
-func _mi(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+func _mi(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3 = Vector3.ZERO, world: bool = false) -> MeshInstance3D:
 	var n := MeshInstance3D.new()
 	n.mesh = mesh
 	n.material_override = mat
 	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(n)
-	if parent == self:
+	if parent == self or world:          # `world`: the parent is a holder sitting at the origin, so pos is still a strip point and has to be laid onto the winding trail
 		_place(n, pos)
 	else:
 		n.position = pos
@@ -6667,14 +6678,14 @@ func _make_pad(row: Dictionary, x: float, z: float, epic: bool, with_pool: bool 
 	var mat := _fx_mat("solid", col, 2.6)
 	var holder := Node3D.new()
 	add_child(holder)
-	var bars := _mi(holder, _pad_mesh_get(), mat, Vector3(x, terrain_h(x, z - 2.2), z))
+	var bars := _mi(holder, _pad_mesh_get(), mat, Vector3(x, terrain_h(x, z - 2.2), z), true)
 	bars.rotation.x = -atan(_grad(x, z - 2.2).y)
 	if with_pool:
-		var pool := _mi(holder, _quad(8.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.5)), Vector3(x, terrain_h(x, z - 2.2) + 0.15, z - 2.2))
+		var pool := _mi(holder, _quad(8.0), _fx_mat("ground", Color(col.r, col.g, col.b, 0.5)), Vector3(x, terrain_h(x, z - 2.2) + 0.15, z - 2.2), true)
 		pool.rotation.x = -PI * 0.5 - atan(_grad(x, z - 2.2).y)
 	# and a crystal hanging just over it, turning slowly: the flat bars cannot be seen from far off at the height of the board, this can
 	var gy := terrain_h(x, z - 2.2) + 1.35
-	var gem := _mi(holder, _gem_mesh_get(), _fx_mat("solid", Color(1.0, 0.62, 0.15) if not epic else Color(1.0, 0.3, 0.6), 3.0), Vector3(x, gy, z - 2.2))
+	var gem := _mi(holder, _gem_mesh_get(), _fx_mat("solid", Color(1.0, 0.62, 0.15) if not epic else Color(1.0, 0.3, 0.6), 3.0), Vector3(x, gy, z - 2.2), true)
 	gem.scale = Vector3.ONE * 1.5
 	(row["nodes"] as Array).append(holder)
 	(row["pads"] as Array).append({"x": x, "z": z, "used": false, "epic": epic, "gem": gem, "gy": gy, "ph": _rng.randf() * TAU})
@@ -7060,7 +7071,7 @@ func _make_pills(row: Dictionary, toys: Array, z: float, side: float) -> void:
 		var ca: Color = MolData.MOLS[mid]["c"]
 		var hold := Node3D.new()
 		add_child(hold)
-		hold.position = Vector3(px, terrain_h(px, pz) + 2.2, pz)
+		_place(hold, Vector3(px, terrain_h(px, pz) + 2.2, pz))
 		var spin := Node3D.new()
 		hold.add_child(spin)
 		_mi(spin, _mol_mesh(mid), _mol_material(), Vector3.ZERO)
@@ -7319,7 +7330,7 @@ func _make_bumpers(row: Dictionary, toys: Array, z: float, side: float) -> void:
 		var pz := z + p.y
 		var hold := Node3D.new()
 		add_child(hold)
-		hold.position = Vector3(px, terrain_h(px, pz), pz)
+		_place(hold, Vector3(px, terrain_h(px, pz), pz))
 		_mi(hold, _tm("cup"), _toy_mat("cup", Color(0.75, 0.55, 0.95), 0.8), Vector3(0.0, 0.48, 0.0))
 		var fr := _mi(hold, _tm("frost"), _toy_mat("frost", Color(1.0, 0.45, 0.75), 1.0), Vector3(0.0, 1.35, 0.0))
 		fr.scale = Vector3(1.0, 0.85, 1.0)
@@ -7339,7 +7350,7 @@ func _make_spring(row: Dictionary, toys: Array, z: float, side: float) -> void:
 	var x := trail_x(z) + side * 7.0
 	var holder := Node3D.new()
 	add_child(holder)
-	holder.position = Vector3(x, terrain_h(x, z), z)
+	_place(holder, Vector3(x, terrain_h(x, z), z))
 	var core := SphereMesh.new()
 	core.radius = 1.0
 	core.height = 2.0
@@ -7427,7 +7438,7 @@ func _make_gates(row: Dictionary, toys: Array, z: float) -> void:
 			var y0 := terrain_h(gx, gz)
 			var hold := Node3D.new()
 			add_child(hold)
-			hold.position = Vector3(gx, y0, gz)
+			_place(hold, Vector3(gx, y0, gz))
 			_mi(hold, _tm("stick"), _toy_mat("stick", Color(0.95, 0.95, 0.95), 0.8), Vector3(0.0, 1.15, 0.0))
 			var head := _mi(hold, _tm("lolly"), _toy_mat("gate%d" % ci, col, 1.3), Vector3(0.0, 2.9, 0.0))
 			head.rotation.x = PI * 0.5

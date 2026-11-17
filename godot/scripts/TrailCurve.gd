@@ -74,6 +74,25 @@ static func w(p: Vector3) -> Vector3:
 	return Vector3(c.x + p.x * cos(c.y), p.y, c.z + p.x * sin(c.y))
 
 
+## The other way: a world point back to a strip point, looked for only between strip z_lo and z_hi (the nearest stored point of the line along the trail, then across and along from it).
+static func strip_near(p: Vector3, z_lo: float, z_hi: float) -> Vector3:
+	if not on or _phi.is_empty():
+		return p
+	var i0 := maxi(int(-z_hi / STEP) - 1, 0)
+	var i1 := mini(int(-z_lo / STEP) + 1, _phi.size() - 2)
+	var best := Vector3(p.x, p.y, p.z)
+	var bd := 1.0e9
+	for i in range(i0, i1 + 1):
+		var ph := _phi[i]
+		var dx := p.x - _cx[i]
+		var dz := p.z - _cz[i]
+		var along := dx * sin(ph) - dz * cos(ph)
+		if absf(along) < bd:
+			bd = absf(along)
+			best = Vector3(dx * cos(ph) + dz * sin(ph), p.y, -(float(i) * STEP + along))
+	return best
+
+
 ## How things standing at strip z are turned: the strip's "down the hill" (-z) becomes the trail's direction there.
 static func basis_at(z: float) -> Basis:
 	if not on:
