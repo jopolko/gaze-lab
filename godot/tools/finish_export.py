@@ -109,6 +109,12 @@ self.addEventListener('fetch', (e) => {
 });
 """ % {"tag": tag, "keep": json.dumps(keep)}
 open(p("index.service.worker.js"), "w", encoding="utf-8").write(sw)
+# the page title: the game's own name only (the project name in project.godot still says "Gaze Lab: Downhill", and is left alone because the saved settings and unlocks are filed under it)
+hp = p("index.html")
+ht = open(hp, encoding="utf-8").read()
+ht2 = ht.replace("Gaze Lab: Downhill", "Downhill")
+if ht2 != ht:
+    open(hp, "w", encoding="utf-8").write(ht2)
 # the music files are not in the game's download: they sit beside it and are fetched when wanted (see DhDirector)
 msrc = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "music_web")
 if os.path.isdir(msrc):

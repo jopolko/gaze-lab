@@ -1160,7 +1160,7 @@ func _audio_setup(c: Dictionary) -> void:
 		_dir.stop()
 		_dir.queue_free()
 	_dir = null
-	if String(c.get("mus", "auto")) == "auto" and OS.has_feature("web") and not _dir_failed:
+	if String(c.get("mus", "auto")) == "auto" and OS.has_feature("web") and not _dir_failed and not str(JavaScriptBridge.eval("window.location.search")).contains("nomusic"):
 		_dir = DhDirector.new()          # the tracks and stems; the synthesised music below is only the fallback when the files cannot be fetched
 		add_child(_dir)
 		_dir.start()
@@ -1424,7 +1424,7 @@ func _trip_tick(delta: float) -> void:
 		trip = maxf(trip - (0.018 + 0.02 * trip) * delta, 0.0)          # it fades slowly, a little faster the further gone you are
 		if _journey != null:
 			trip = maxf(trip, _journey.trip_floor())          # a wave holds the picture at least this far gone
-		trip = maxf(trip, _mol_avg() * 0.9)          # and so do the molecules
+		trip = maxf(trip, pow(_mol_avg(), 1.8) * 0.9)          # and so do the molecules: slowly at first, hard only near the top
 	var tier := 0 if trip < 0.25 else (1 if trip < 0.55 else (2 if trip < 0.85 else 3))
 	if tier > _trip_tier and _trip_force < 0.0:
 		_cheer(["", "things get colourful...", "WHOA", "FULL TRIP!!"][tier], Color.from_hsv(0.8 - 0.2 * float(tier), 0.8, 1.0), 0.8 + 0.4 * float(tier))
@@ -6817,6 +6817,11 @@ func biome_apply(m: Dictionary, k: float, diff: float) -> void:
 	jump_chance = clampf(jump_chance * (1.0 + 0.35 * _mbody[3] / 6.0), 0.0, 1.0)          # 2C-E: more ramps
 	_bm_spring *= 1.0 + 0.6 * _mbody[4] / 6.0          # 2C-T-2: stronger slingshots
 	_spd_k = clampf(_spd_k * (1.0 + 0.12 * _mbody[5] / 6.0), 0.8, 1.9)          # 2C-T-7: faster
+	if _dir != null and is_instance_valid(_dir):
+		var pace := 0.7 + 0.6 * _dir.wave_at(8.0)          # the course is built about eight seconds ahead of the board: where the wave will be when you get there
+		hazard_share = clampf(hazard_share * pace, 0.0, 1.0)          # more on the crest of a wave, fewer in the lull
+		jump_chance = clampf(jump_chance * (1.6 - 0.6 * pace), 0.0, 1.0)          # and big easy ramps in the lull
+		pad_chance = clampf(pad_chance * (1.6 - 0.6 * pace), 0.0, 1.0)
 
 
 ## One piece of a world at a time (see ThemeFX.apply_part): the journey lets a world come on layer by layer, flickering, and go the same way.
@@ -6898,7 +6903,7 @@ func journey_post(world: String, onset: float, want_trip: bool, strength: float)
 		return
 	var mav := _mol_avg()
 	if mav > 0.01:          # what is felt of the six holds the pass on, deeper the more of them and the higher
-		onset = maxf(onset, clampf(mav * 2.4, 0.0, 1.0))
+		onset = maxf(onset, clampf(mav * 1.3, 0.0, 1.0))
 		want_trip = true
 		strength = maxf(strength, 0.5 + 0.7 * mav)
 	var light := onset < 0.3          # a hint or a flicker needs no tracers: no second render of the world, nothing to build, so it can come and go instantly
@@ -7270,8 +7275,15 @@ func _pill_tick(delta: float) -> void:
 		_dmt_on = false
 	var fxm := _lvl.get_node_or_null("ThemeFX") as ThemeFX if _lvl != null else null
 	if fxm != null and fxm.post != null and fxm.post.mat != null:
-		fxm.post.mat.set_shader_parameter("mA", Vector3(_mbody[0], _mbody[1], _mbody[2]) / 6.0)
-		fxm.post.mat.set_shader_parameter("mB", Vector3(_mbody[3], _mbody[4], _mbody[5]) / 6.0)
+		var wk := 1.0
+		if _dir != null and is_instance_valid(_dir):
+			wk = 0.7 + 0.6 * _dir.wave_at(0.0)          # the effects breathe with the music's wave
+		var ma := Vector3(_mbody[0], _mbody[1], _mbody[2]) / 6.0
+		var mb := Vector3(_mbody[3], _mbody[4], _mbody[5]) / 6.0
+		ma = Vector3(pow(ma.x, 1.5), pow(ma.y, 1.5), pow(ma.z, 1.5)) * wk          # each look comes in gently and only at a high level does it take over
+		mb = Vector3(pow(mb.x, 1.5), pow(mb.y, 1.5), pow(mb.z, 1.5)) * wk
+		fxm.post.mat.set_shader_parameter("mA", ma)
+		fxm.post.mat.set_shader_parameter("mB", mb)
 		fxm.post.mat.set_shader_parameter("dmt", dm)
 	_pill_gap = maxf(_pill_gap - delta, 0.0)
 	_flick = maxf(_flick - delta * 2.0, 0.0)          # half a second
@@ -8013,6 +8025,10 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_mbody.fill(0.0)
 	_mol_seen = false
 	_dmt_on = false
+	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("dose"):
+		_mdose.fill(3.0)          # ?dose: begin with half of every molecule taken (to look at the trip and the stems from the start)
+		_mbody.fill(3.0)
+		_mol_seen = true
 	_drift_t = 110.0
 	_dress_rider()
 	if _rider != null:

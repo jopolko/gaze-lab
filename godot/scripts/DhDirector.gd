@@ -24,6 +24,7 @@ const STEMS := ["ambience", "pulse", "bass", "drums", "piano", "guitar", "synth"
 const STEM_CREDIT := {"title": "Alien Warfare Stems", "artist": "Kamihamiha", "lic": "CC BY-NC 3.0", "url": "ccmixter.org/files/Kamihamiha/60882"}
 const BPM := 128.0          # the stems
 const FADE_S := 5.0
+const BAR_S := 4.0 * 60.0 / BPM          # one bar of the stems, in seconds
 
 var failed: bool = false
 var dbg: String = ""
@@ -48,6 +49,17 @@ var _down: bool = false
 var _band: String = ""
 var _pick: int = -1
 var _paused: bool = false
+var _paused_sent: bool = false
+var _mix_t: float = 0.0
+var _sent_db: Dictionary = {}          # what was last sent to each player or stem: every change costs the audio server, so a value goes out only when it has moved
+
+
+## Sends a volume only when it has moved enough to matter (changing a player's volume every frame was what dropped the game to 8 fps on the web).
+func _vol(p: AudioStreamPlayer, db: float) -> void:
+	var k := p.get_instance_id()
+	if absf(db - float(_sent_db.get(k, 999.0))) > 0.5 or (db <= -79.0 and float(_sent_db.get(k, 0.0)) > -79.0):
+		_sent_db[k] = db
+		p.volume_db = db
 
 
 static func credits_text() -> String:
@@ -60,7 +72,10 @@ static func credits_text() -> String:
 
 
 var _base: String = ""
+var _nostem: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nostem")          # ?nostem: tracks only (to measure what the stems cost)
 var _want_key: String = ""
+var _still: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("still")          # ?still: play, but leave the players alone after starting them (to measure)
+var _noplay: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("noplay")          # ?noplay: fetch but never play (to measure)
 
 
 func start() -> void:
@@ -82,6 +97,29 @@ func secs_to_beat(div: float = 1.0) -> float:
 	var pos := _stem_p.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
 	var beat := 60.0 / BPM * maxf(div, 0.01)
 	return beat - fposmod(pos, beat)
+
+
+var _lq: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]          # the stem levels as last settled on a bar line
+var _last_bar: int = -1
+var _first_q: bool = true
+
+
+## Where the stems are in their 16-bar loop, in bars (0 to 16), or -1 when they are not playing.
+func bar_pos() -> float:
+	if _stem_p == null or not _stem_p.playing or mode != "stems":
+		return -1.0
+	var pos := _stem_p.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+	return fposmod(pos, 16.0 * BAR_S) / BAR_S
+
+
+## The wave, 0 to 1, `ahead` seconds from now: it swells over six bars and falls away over two, over and over (so each wave comes on slowly and lets go quickly). 0.5 when the stems
+## are not playing. The effects breathe with it and the course is paced by it.
+func wave_at(ahead: float) -> float:
+	var b := bar_pos()
+	if b < 0.0:
+		return 0.5
+	b = fposmod(b + ahead / BAR_S, 8.0)
+	return smoothstep(0.0, 1.0, b / 6.0) if b < 6.0 else 1.0 - (b - 6.0) / 2.0
 
 
 func _fetch(key: String, file: String, loop: bool) -> void:
@@ -122,6 +160,8 @@ func _db(g: float) -> float:
 
 
 func _play_track(key: String) -> void:
+	if _noplay:
+		return
 	if _old_p != null and is_instance_valid(_old_p):
 		_old_p.stop()
 		_old_p.queue_free()
@@ -130,6 +170,8 @@ func _play_track(key: String) -> void:
 	_cur_p = _mk_player()
 	_cur_p.stream = _cache[key]
 	_cur_p.play(0.0)
+	if _still:
+		_cur_p.volume_db = -8.0
 	_cur_g = 0.0
 	cur = key
 	mode = "track"
@@ -154,9 +196,13 @@ func update(delta: float, st: Dictionary) -> void:
 	_age += delta
 	_dwell += delta
 	_paused = bool(st.get("paused", false))
-	for p in [_cur_p, _old_p, _stem_p]:
-		if p != null and is_instance_valid(p):
-			p.stream_paused = _paused
+	if _still and mode == "track":
+		return
+	if _paused != _paused_sent:
+		_paused_sent = _paused
+		for p in [_cur_p, _old_p, _stem_p]:
+			if p != null and is_instance_valid(p):
+				p.stream_paused = _paused
 	if _fails >= 3 and _cache.is_empty():
 		failed = true
 		dbg = "music: files not found"
@@ -174,7 +220,7 @@ func update(delta: float, st: Dictionary) -> void:
 		for n in STEMS:
 			_fetch("stem_" + n, "stem_" + n + ".ogg", true)          # the stems come down in the background once the run is going
 	# ------------------------------------------------ what should be playing
-	var want_mode := "stems" if trip else "track"
+	var want_mode := "stems" if (trip and not _nostem) else "track"
 	var want_band := "down" if _down else _band_for(exc)
 	var stems_ready := true
 	for n in STEMS:
@@ -208,30 +254,48 @@ func update(delta: float, st: Dictionary) -> void:
 		elif mode == "none" and _age < 1.0:
 			var k0 := String(BANDS["sunny"][0])
 			_fetch(k0, String(TRACKS[k0]["file"]), bool(TRACKS[k0]["loop"]))
-	# ------------------------------------------------ the mix
-	var step := delta / FADE_S
-	if mode == "track" and _cur_p != null:
-		_cur_g = minf(_cur_g + step, 1.0) if want_mode == "track" else maxf(_cur_g - step * 1.4, 0.0)
-	if _old_p != null and is_instance_valid(_old_p):
-		_old_g = maxf(_old_g - step, 0.0)
-		_old_p.volume_db = _db(_old_g)
-		if _old_g <= 0.0:
-			_old_p.stop()
-			_old_p.queue_free()
-			_old_p = null
-	if _cur_p != null and is_instance_valid(_cur_p):
-		_cur_p.volume_db = _db(_cur_g * 0.9)
-		if want_mode == "stems" and mode == "stems":
-			_cur_g = maxf(_cur_g - step * 1.4, 0.0)
-	if _stem_p != null and is_instance_valid(_stem_p):
-		_stem_g = move_toward(_stem_g, _stem_want, step * 1.2)
-		_stem_p.volume_db = _db(_stem_g * 0.85)
-		var lv := [1.0, float(holds[0]), maxf(float(holds[5]), avg * 1.3), maxf(float(holds[5]), avg * 1.3), float(holds[1]), float(holds[4]), float(holds[2]), float(holds[3]), float(st.get("dmt", 0.0))]
-		for i in STEMS.size():
-			_sv[i] = lerpf(_sv[i], clampf(float(lv[i]), 0.0, 1.0), clampf(delta * 1.2, 0.0, 1.0))
-			_sync.set_sync_stream_volume(i, -80.0 if _sv[i] < 0.02 else lerpf(-24.0, 0.0, pow(_sv[i], 0.7)))
-		if mode != "stems" and _stem_g <= 0.0 and _stem_p.playing:
-			_stem_p.stop()
+	# ------------------------------------------------ the mix (ten times a second, not every frame)
+	_mix_t += delta
+	if _mix_t >= 0.1:
+		var d := _mix_t
+		_mix_t = 0.0
+		var step := d / FADE_S
+		if mode == "track" and _cur_p != null:
+			_cur_g = minf(_cur_g + step, 1.0) if want_mode == "track" else maxf(_cur_g - step * 1.4, 0.0)
+		if _old_p != null and is_instance_valid(_old_p):
+			_old_g = maxf(_old_g - step, 0.0)
+			_vol(_old_p, _db(_old_g))
+			if _old_g <= 0.0:
+				_old_p.stop()
+				_old_p.queue_free()
+				_old_p = null
+		if _cur_p != null and is_instance_valid(_cur_p):
+			_vol(_cur_p, _db(_cur_g * 0.9))
+			if want_mode == "stems" and mode == "stems":
+				_cur_g = maxf(_cur_g - step * 1.4, 0.0)
+		if _stem_p != null and is_instance_valid(_stem_p):
+			_stem_g = move_toward(_stem_g, _stem_want, step * 1.2)
+			_vol(_stem_p, _db(_stem_g * 0.85))
+			var lv := [1.0, float(holds[0]), maxf(float(holds[5]), avg * 1.3), maxf(float(holds[5]), avg * 1.3), float(holds[1]), float(holds[4]), float(holds[2]), float(holds[3]), float(st.get("dmt", 0.0))]
+			# parts come in and go out on bar lines (every second bar), not whenever the number happens to change
+			var bp := bar_pos()
+			if bp >= 0.0:
+				var bi := int(floor(bp))
+				if _first_q or (bi != _last_bar and bi % 2 == 0):
+					_lq = lv.duplicate()
+					_first_q = false
+				_last_bar = bi
+			else:
+				_first_q = true
+				_lq = lv.duplicate()
+			for i in STEMS.size():
+				_sv[i] = lerpf(_sv[i], clampf(float(_lq[i]), 0.0, 1.0), clampf(d * 1.6, 0.0, 1.0))
+				var sdb := -80.0 if _sv[i] < 0.02 else lerpf(-24.0, 0.0, pow(_sv[i], 0.7))
+				if absf(sdb - float(_sent_db.get(1000 + i, 999.0))) > 0.5:
+					_sent_db[1000 + i] = sdb
+					_sync.set_sync_stream_volume(i, sdb)
+			if mode != "stems" and _stem_g <= 0.0 and _stem_p.playing:
+				_stem_p.stop()
 	dbg = "music: %s %s" % [mode, cur if mode == "track" else "%d/9 stems" % _loaded_stems()]
 
 
@@ -244,6 +308,8 @@ func _loaded_stems() -> int:
 
 
 func _start_stems() -> void:
+	if _noplay:
+		return
 	if _sync == null:
 		_sync = AudioStreamSynchronized.new()
 		_sync.stream_count = STEMS.size()
