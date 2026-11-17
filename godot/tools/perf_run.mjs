@@ -40,9 +40,12 @@ try {
   const out = JSON.parse(await ev('__sp.summary(40)'));
   console.log(`play ${secs} s: ${out.frames} frames (${(out.frames / secs).toFixed(1)} fps), ${out.slowFrames} frames over 50 ms, programs ${out.programs}`);
   for (const s of out.slow) console.log(`  at ${s.at}s  ${s.ms} ms (graphics calls ${s.glMs} ms)  ${s.top.map((t) => `${t[0]} x${t[1]} ${t[2]}ms`).join(', ')}`);
+  if (process.env.DETAIL) for (const s of out.slow) if (s.ms < 700 && (s.src || []).length) { console.log(`  -- ${s.at}s ${s.ms} ms built:`); for (const x of s.src) console.log('       ' + x.split(' IN_SHADOW_PASS')[0].slice(0, 230)); }
   const seen = new Map(); for (const s of out.slow) for (const x of s.src || []) seen.set(x, (seen.get(x) || 0) + 1);
   for (const [x, n] of seen) console.log(`     built in play x${n}: ${x}`);
   const all = JSON.parse(await ev("JSON.stringify((__sp.all||[]).filter(function(e){return /m_glow|m_boost/.test(e[2]);}))"));
   for (const e of all) console.log(`     ${e[0]}s len ${e[1]} ${e[2]}: ${e[3]}`);
+  if (process.env.EV) { const evs = JSON.parse(await ev("JSON.stringify((window.__ev||[]).map(function(e){return [Math.round((e[0]-__sp.t0)/100)/10, e[1]];}))")); for (const s of out.slow) if (s.ms < 700 && s.glMs > 40) console.log(`  ~~ ${s.at}s: ` + evs.filter((e) => e[0] > s.at - 1.2 && e[0] < s.at + 0.4).map((e) => e[1] + '@' + e[0]).join(' ')); console.log('  all events: ' + evs.map((e) => e[1] + '@' + e[0]).join(' ')); }
+  if (process.env.DUMP) { const fs = await import('node:fs'); const fl = JSON.parse(await ev("JSON.stringify(__sp.fulls||[])")); console.log('unshaded colour sources:', fl.map((e) => e[0] + ':' + e[1].length).join(' ')); fl.forEach((e, i) => fs.writeFileSync(join(process.env.DUMP, 'src' + i + '.glsl'), e[1])); }
   await shot('play.jpg');
 } finally { chrome.kill(); }

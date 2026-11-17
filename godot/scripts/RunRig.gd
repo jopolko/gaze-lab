@@ -3828,7 +3828,8 @@ func _cheer(text: String, col: Color, size: float = 1.0) -> void:
 	_psy_pulse(2 if size >= 1.5 else 5, col)
 	_trip_add(0.04 * size)
 	var cp := spos + Vector3(0.0, 2.0, -4.0)
-	Fx.confetti(self, cp, int(50.0 * size), 1.0 + 0.4 * size)
+	if not _nofx.contains("c"):
+		Fx.confetti(self, cp, int(50.0 * size), 1.0 + 0.4 * size)
 	_ring(spos + Vector3(0.0, 0.8, 0.0), col, 7.0 + 5.0 * size, 0.5, true)
 	_burst(cp, col, int(30.0 * size), 10.0, 0.8, 1.0, Vector3(0, 1, 0), 120.0, -6.0)
 	Game.sfx(&"coin")
@@ -4338,6 +4339,8 @@ var _burst_live: int = 0
 
 
 func _burst(pos: Vector3, col: Color, n_in: int, speed: float, life: float, size: float, dir: Vector3 = Vector3.UP, spread: float = 180.0, grav: float = -6.0) -> void:
+	if _nofx.contains("b"):
+		return
 	var cap := 12 if OS.has_feature("web") else 40          # every burst is a node whose particles the CPU moves each frame: only so many at once, and on a phone smaller ones
 	if _burst_live >= cap:
 		return
@@ -4375,13 +4378,25 @@ func _burst(pos: Vector3, col: Color, n_in: int, speed: float, life: float, size
 
 
 ## A ring of light that expands and fades: standing (facing the camera) or flat on the snow.
+var _nofx: String = str(JavaScriptBridge.eval("new URLSearchParams(window.location.search).get('nofx') || ''")) if OS.has_feature("web") else ""          # ?nofx=rbc: no rings / bursts / confetti (to find what an effect costs)
+
+
+var _ring_pool: Array = []
+var _ring_i: int = 0
+
+
 func _ring(pos: Vector3, col: Color, r_end: float, dur: float, standing: bool) -> void:
+	if _nofx.contains("r"):
+		return
 	var m := MeshInstance3D.new()
 	m.mesh = _torus(0.9, 1.0)
-	var mat := Mats.glow()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	# the ring's material comes from a small pool that is never freed: a new one per ring had its shader thrown away and built again each time (a tenth of a second of
+	# stopped picture at every pickup)
+	if _ring_pool.is_empty():
+		for i in 10:
+			_ring_pool.append(Mats.glow())
+	_ring_i = (_ring_i + 1) % _ring_pool.size()
+	var mat: StandardMaterial3D = _ring_pool[_ring_i]
 	mat.albedo_color = Color(col.r, col.g, col.b, 0.95)
 	m.material_override = mat
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -5775,12 +5790,54 @@ var _warming: bool = false           # the board waits at the top while this run
 var _warm_k: float = 0.0             # 0..1, for the bar
 
 
+# ONE OF EVERY KIND, KEPT: the engine throws a shader away when the last material using it is freed and builds it again the next time one like it is made (a tenth of a second
+# of stopped picture, every time). So every plain material that turns up on anything added to the scene is looked at once, and the first of each kind (each combination of
+# switches) is copied and kept for the session. An effect that makes a material, shows it and frees it then costs its build once, not every time.
+var _held_kinds: Dictionary = {}
+
+
+func _hold_node(n: Node) -> void:
+	if n is GeometryInstance3D:
+		_hold_check.call_deferred(n)
+
+
+func _hold_check(n: Node) -> void:
+	if not is_instance_valid(n):
+		return
+	_hold_mat((n as GeometryInstance3D).material_override)
+	var me: Mesh = null
+	if n is MeshInstance3D:
+		me = (n as MeshInstance3D).mesh
+	elif n is CPUParticles3D:
+		me = (n as CPUParticles3D).mesh
+	elif n is MultiMeshInstance3D and (n as MultiMeshInstance3D).multimesh != null:
+		me = (n as MultiMeshInstance3D).multimesh.mesh
+	if me != null:
+		for si in me.get_surface_count():
+			_hold_mat(me.surface_get_material(si))
+
+
+func _hold_mat(m: Material) -> void:
+	var b := m as BaseMaterial3D
+	if b == null:
+		return
+	var key := "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d" % [b.shading_mode, b.transparency, b.blend_mode, b.cull_mode, b.depth_draw_mode, int(b.no_depth_test),
+		int(b.vertex_color_use_as_albedo), b.billboard_mode, int(b.emission_enabled), int(b.disable_fog), int(b.albedo_texture != null), b.texture_filter, b.distance_fade_mode,
+		int(b.disable_receive_shadows), b.specular_mode, b.diffuse_mode, int(b.use_particle_trails) * 2 + int(b.vertex_color_is_srgb)]
+	if not _held_kinds.has(key):
+		var kept := b.duplicate() as BaseMaterial3D
+		kept.get_shader_rid()          # a material that has never been drawn has not claimed its shader yet: asking for it makes it claim one, and that is what keeps the shader alive
+		_held_kinds[key] = kept
+
+
 func _warm_shaders() -> void:
 	if _warmed or cam == null:
 		return
 	_warmed = true
 	if not OS.has_feature("web"):
 		return                                             # only a browser builds shaders this slowly; tests and the desktop build go straight in
+	if not get_tree().node_added.is_connected(_hold_node):
+		get_tree().node_added.connect(_hold_node)
 	_warming = true
 	_warm_k = 0.0
 	Mats.keep_alive([_fx_mat("solid", Color.WHITE), _fx_mat("add", Color.WHITE), _fx_mat("halo", Color.WHITE), _fx_mat("ground", Color.WHITE), _fx_mat("spark", Color.WHITE)])

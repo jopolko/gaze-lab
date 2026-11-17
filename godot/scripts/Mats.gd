@@ -53,6 +53,9 @@ static func keep_alive(extra: Array = []) -> void:
 	for m in extra:
 		if m != null and not _keep.has(m):
 			_keep.append(m)
+	for m in _keep:
+		if m is BaseMaterial3D:
+			(m as BaseMaterial3D).get_shader_rid()          # claim the shader now: a material that was never drawn holds nothing
 
 
 static var _shaders: Dictionary = {}

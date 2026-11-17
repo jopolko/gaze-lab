@@ -13,3 +13,4 @@ godot/tools/tune_results.jsonl
 godot/tools/deploy.sh
 godot/tools/vps/
 music_web/*.ogg
+godot/tools/serve-tls.log

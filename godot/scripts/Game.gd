@@ -81,8 +81,15 @@ func banner(text: String, color: Color = Color.WHITE, seconds: float = 2.0) -> v
 
 
 ## Request a sound effect. Pass Vector3.INF for a non-positional sound.
+var _evlog: int = -1
+
+
 func sfx(sfx_name: StringName, world_pos: Vector3 = Vector3.INF) -> void:
 	sfx_requested.emit(sfx_name, world_pos)
+	if _evlog < 0:
+		_evlog = 1 if (OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('evlog')"))) else 0
+	if _evlog == 1:
+		JavaScriptBridge.eval("(window.__ev = window.__ev || []).push([performance.now(), '%s'])" % String(sfx_name))          # ?evlog: what happened when (the profiler lines these up with slow frames)
 
 
 func add_chaos(amount: int = 1) -> void:

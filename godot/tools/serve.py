@@ -175,7 +175,14 @@ class TLSThreadingServer(http.server.ThreadingHTTPServer):
                 request.settimeout(15)
                 request = self.ctx.wrap_socket(request, server_side=True)
                 request.settimeout(None)
-            except Exception:
+            except Exception as e:
+                # a failed handshake is the one thing a phone cannot report back: keep a line about it (tools/serve-tls.log)
+                try:
+                    import time
+                    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "serve-tls.log"), "a") as lf:
+                        lf.write("%s  %s  handshake failed: %r\n" % (time.strftime("%H:%M:%S"), client_address[0], e))
+                except Exception:
+                    pass
                 try:
                     request.close()
                 except Exception:
