@@ -45,6 +45,8 @@ var _dwell: float = 0.0
 var _peak: float = 0.0
 var _down: bool = false
 var _band: String = ""
+var _deep: bool = false
+const OPENING: Array = []          # keys of TRACKS for the opening of a run (fresh, awake): none chosen yet, so the run opens on the wind alone
 var _pick: int = -1
 var _paused: bool = false
 var _paused_sent: bool = false
@@ -191,12 +193,70 @@ func _play_track(key: String) -> void:
 	_dwell = 0.0
 
 
+## THE WIND: a soft rush of air that rises with speed and opens up in the air off a ramp. Not music: it is the sound of going downhill, and it is all there is under the
+## opening until a track is chosen for it. One short loop of smoothed noise, made once.
+var _wind_p: AudioStreamPlayer = null
+var _wind_g: float = 0.0
+
+
+func _wind_make() -> void:
+	var sr := 22050
+	var n := sr * 4
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var a := PackedFloat32Array()
+	a.resize(n)
+	var lp1 := 0.0
+	var lp2 := 0.0
+	var hp := 0.0
+	for i in n:
+		var w := rng.randf_range(-1.0, 1.0)
+		lp1 += (w - lp1) * 0.09          # two gentle low-passes: a soft rush with no hiss
+		lp2 += (lp1 - lp2) * 0.09
+		hp += (lp2 - hp) * 0.004          # and the rumble taken out from underneath
+		var slow := 0.75 + 0.25 * sin(TAU * float(i) / float(n) * 3.0)          # it breathes, three times a loop (whole cycles, so the loop joins)
+		a[i] = (lp2 - hp) * slow
+	var c := sr / 2          # half a second of the end blended into the start
+	var pk := 0.001
+	for i in c:
+		var k := float(i) / float(c)
+		a[i] = a[i] * k + a[n - c + i] * (1.0 - k)
+	n -= c
+	for i in n:
+		pk = maxf(pk, absf(a[i]))
+	var bytes := PackedByteArray()
+	bytes.resize(n * 2)
+	for i in n:
+		bytes.encode_s16(i * 2, int(clampf(a[i] / pk, -1.0, 1.0) * 30000.0))
+	var wv := AudioStreamWAV.new()
+	wv.format = AudioStreamWAV.FORMAT_16_BITS
+	wv.mix_rate = sr
+	wv.stereo = false
+	wv.data = bytes
+	wv.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wv.loop_begin = 0
+	wv.loop_end = n
+	_wind_p = _mk_player()
+	_wind_p.stream = wv
+	_wind_p.play()
+
+
+func _wind_mix(spd: float, air: bool, d: float) -> void:
+	if _wind_p == null:
+		_wind_make()
+	var want := clampf((spd - 0.15) * 1.1, 0.0, 0.8) * (1.5 if air else 1.0)
+	if _paused:
+		want = 0.0
+	_wind_g = move_toward(_wind_g, want, d * (1.6 if air else 0.6))
+	_vol(_wind_p, -80.0 if _wind_g < 0.01 else linear_to_db(_wind_g) - 23.0 + DhMusic.vol_db(DhMusic.vol_sfx))
+
+
 func _band_for(exc: float) -> String:
 	return "sunny" if exc < 0.3 else ("lift" if exc < 0.6 else "rush")
 
 
 func _next_in(band: String) -> String:
-	var l: Array = BANDS[band]
+	var l: Array = OPENING if band == "opening" else BANDS[band]
 	_pick += 1
 	var k := String(l[_pick % l.size()])
 	if k == cur and l.size() > 1:
@@ -225,6 +285,12 @@ func update(delta: float, st: Dictionary) -> void:
 	var holds: Array = st.get("holds", [0, 0, 0, 0, 0, 0])
 	_peak = maxf(_peak - 0.003 * delta, avg)
 	var trip := avg >= 0.03
+	# THE ORDER OF THE NIGHT: the plain run opens without the funk (OPENING holds the opening music once it is chosen; until then there is the wind and the board), the funk comes
+	# in when the first molecules are felt, and the stems take over once it runs deeper. Going back down, the funk returns.
+	if avg >= 0.2:
+		_deep = true
+	elif avg < 0.11:
+		_deep = false
 	if trip:
 		_down = false
 	elif _peak > 0.2 and avg < _peak * 0.4:
@@ -233,8 +299,10 @@ func update(delta: float, st: Dictionary) -> void:
 		for n in STEMS:
 			_fetch("stem_" + n, "stem_" + n + ".ogg", true)          # the stems come down in the background once the run is going
 	# ------------------------------------------------ what should be playing
-	var want_mode := "stems" if (trip and not _nostem) else "track"
+	var want_mode := "stems" if (_deep and not _nostem) else ("track" if (trip or _down or not OPENING.is_empty()) else "none")
 	var want_band := "down" if _down else _band_for(exc)
+	if not trip and not _down and not OPENING.is_empty():
+		want_band = "opening"
 	var stems_ready := true
 	for n in STEMS:
 		if not _cache.has("stem_" + n):
@@ -249,8 +317,8 @@ func update(delta: float, st: Dictionary) -> void:
 		_stem_want = 0.0
 		if mode == "stems" and _stem_g < 0.02:
 			mode = "none"
-		var need_new := mode != "track"
-		if mode == "track":
+		var need_new := mode != "track" and want_mode == "track"
+		if mode == "track" and want_mode == "track":
 			var l: Array = BANDS.get(_band, [])
 			var ended: bool = _cur_p != null and not TRACKS[cur]["loop"] and _cur_p.stream != null and _cur_p.get_playback_position() > (_cur_p.stream as AudioStream).get_length() - FADE_S - 1.0
 			if ended or (want_band != _band and _dwell > 40.0 and not l.has(cur)):
@@ -273,6 +341,7 @@ func update(delta: float, st: Dictionary) -> void:
 		var d := _mix_t
 		_mix_t = 0.0
 		_duck = maxf(_duck - d * 4.0, 0.0)
+		_wind_mix(float(st.get("spd", 0.0)), bool(st.get("air", false)), d)
 		var step := d / FADE_S
 		if mode == "track" and _cur_p != null:
 			_cur_g = minf(_cur_g + step, 1.0) if want_mode == "track" else maxf(_cur_g - step * 1.4, 0.0)

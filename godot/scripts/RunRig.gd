@@ -1047,8 +1047,11 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 		for pdz0: float in [22.0, 78.0, 134.0]:
 			if _rng.randf() < minf(1.0, pad_chance * 6.0):
 				var pdz := z0 - pdz0
-				var pdx := trail_x(pdz) + _rng.randf_range(-2.5, 2.5)
+				var plane := _lane_turn()
+				var pdx := trail_x(pdz) + plane * 7.0 + _rng.randf_range(-1.5, 1.5)
 				_make_pad(row, pdx, pdz, false)
+				_toy_feat(row, pdx, pdz, plane, _toy_g)          # a pad can be looked at and chosen like anything else
+				_toy_g += 1
 	var rz0: float = row["z"]
 	var n0 := int(floor((-z0 / TRAIL_TURN_LEN + _tr_p1) / PI))
 	for n in range(n0, n0 + 12):
@@ -1072,7 +1075,8 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 			var tmp: String = kinds[i]
 			kinds[i] = kinds[jx]
 			kinds[jx] = tmp
-		var sd := 1.0 if _rng.randf() < 0.5 else -1.0
+		_sd_flip = -_sd_flip
+		var sd := _sd_flip if _rng.randf() < 0.8 else -_sd_flip          # mostly taking turns: the better thing is not on the same side time after time
 		choices_built += 1
 		taken.append(zi)
 		# LAYOUTS. Every choice point is dressed differently, so no two feel alike:
@@ -1087,7 +1091,7 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 		elif roll < 0.58:
 			layout = "triple"
 			while kinds.size() < 3:
-				kinds.append("boost" if not kinds.has("boost") else ("loot" if can_loot else "rail"))
+				kinds.append("boost" if not kinds.has("boost") else ("loot" if can_loot else ("rail" if not kinds.has("rail") else "boost")))
 		elif roll < 0.78:
 			layout = "flank"
 		var harder := 0.45 if _cur_m < 0.7 else (1.4 if _cur_m > 1.2 else 1.0)
@@ -1121,6 +1125,7 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 	_gen_toys(row, z0, taken)
 
 
+var _sd_flip: float = 1.0
 var hazard_share: float = 0.6            # the sandbox: how often something nasty sits in the middle lane
 var _jump_gap_z: float = 0.0          # how far down the hill (m) the last ramp was built: a long stretch without one makes the next choice point have one
 var jump_chance: float = 0.72            # the sandbox: how often a choice pair has a ramp in it
@@ -1199,7 +1204,7 @@ func _music_tick() -> void:
 		var hl: Array = []
 		for hi in 6:
 			hl.append(_mbody[hi] / 6.0)
-		_dir.update(get_physics_process_delta_time(), {"avg": _mol_avg(), "holds": hl, "dmt": _mol_dmt(), "exc": _exc, "paused": _paused})
+		_dir.update(get_physics_process_delta_time(), {"avg": _mol_avg(), "holds": hl, "dmt": _mol_dmt(), "exc": _exc, "paused": _paused, "spd": clampf(vel.length() / 45.0, 0.0, 1.0), "air": not grounded and air_t > 0.2})
 		DhMusic.dbg = _dir.dbg
 		if _dir.failed:
 			_dir.queue_free()
@@ -3674,7 +3679,8 @@ func _make_item(t: String) -> Dictionary:
 	var body := Node3D.new()
 	spin.add_child(body)
 	body.scale = Vector3(1.3, 1.3, 1.3)
-	var built := _food_variant(body, t, _fx_rng.randi() % 4)
+	var built := true
+	_mi(body, _kit_mesh(String({"boost": "crystal", "shield": "cage", "mult": "rings", "donut": "tetra"}.get(t, "tetra")), col), _mol_material())
 	match ("skip" if built else t):
 		"skip":
 			pass
@@ -5797,6 +5803,8 @@ func _warm_shaders() -> void:
 		break
 	mats.append(_food_mat(Color.WHITE))                     # the pickups are lit and glow: a different program from the plain lit one, and the first one in view used to stall the frame before it was eaten
 	mats.append(_food_mat(Color(1.0, 0.5, 0.2), 1.2))
+	mats.append(_mol_material())                             # the molecules and everything built like them (pads, pickups, bumpers, gates)
+	mats.append(_shaft_material())                           # the light shafts
 	if _veg_theme != null:
 		mats.append(_veg_theme)                           # the theme's trees and rocks: built here, not the first time one comes into a lamp's reach
 	var box := BoxMesh.new()
@@ -6680,8 +6688,9 @@ func _make_pad(row: Dictionary, x: float, z: float, epic: bool, with_pool: bool 
 		pool.rotation.x = -PI * 0.5 - atan(_grad(x, z - 2.2).y)
 	# and a crystal hanging just over it, turning slowly: the flat bars cannot be seen from far off at the height of the board, this can
 	var gy := terrain_h(x, z - 2.2) + 1.35
-	var gem := _mi(holder, _gem_mesh_get(), _fx_mat("solid", Color(1.0, 0.62, 0.15) if not epic else Color(1.0, 0.3, 0.6), 3.0), Vector3(x, gy, z - 2.2), true)
-	gem.scale = Vector3.ONE * 1.5
+	var gem := _mi(holder, _kit_mesh("crystal", Color(1.0, 0.62, 0.15) if not epic else Color(1.0, 0.3, 0.6)), _mol_material(), Vector3(x, gy, z - 2.2), true)
+	gem.scale = Vector3.ONE * 1.25
+	_mi(gem, _quad(3.6), _fx_mat("halo", Color(col.r, col.g, col.b, 0.55)), Vector3.ZERO)
 	(row["nodes"] as Array).append(holder)
 	(row["pads"] as Array).append({"x": x, "z": z, "used": false, "epic": epic, "gem": gem, "gy": gy, "ph": _rng.randf() * TAU})
 
@@ -6737,9 +6746,72 @@ func _toy_mat(key: String, col: Color, e: float) -> StandardMaterial3D:
 	return _toy_mats[key]
 
 
+var _lane_n := [0, 0, 0]
+
+
+## Left, middle or right for the next thing: whichever has had least so far (a tie is broken by chance), so the three lanes fill evenly and it is never side after side the same.
+func _lane_turn() -> float:
+	var lo: int = mini(_lane_n[0], mini(_lane_n[1], _lane_n[2]))
+	var pick: Array = []
+	for i in 3:
+		if _lane_n[i] == lo:
+			pick.append(i)
+	var li: int = pick[_rng.randi() % pick.size()]
+	_lane_n[li] += 1
+	return float(li - 1)
+
+
+# LIGHT SHAFTS: tall soft beams of sun slanting down between the trees beside the trail, two or three to a stretch. Plain and warm on the plain run; as the molecules come on they
+# take on moving bands of colour and brighten, so the light itself goes strange. One shared material and one draw per stretch; nothing is lit by them.
+var _shaft_mat: ShaderMaterial = null
+var _shaft_mesh: QuadMesh = null
+const SHAFT_SHADER := """shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
+uniform float dose = 0.0;
+void fragment() {
+	float e = smoothstep(0.0, 0.4, UV.x) * smoothstep(1.0, 0.6, UV.x);
+	float v = smoothstep(1.0, 0.7, UV.y) * smoothstep(0.0, 0.55, UV.y);
+	float sh = 0.75 + 0.25 * sin(UV.x * 23.0 + TIME * 0.7) * sin(UV.x * 7.0 - TIME * 0.4);
+	vec3 rb = 0.5 + 0.5 * cos(6.2831 * (UV.y * 1.5 + TIME * 0.15 + vec3(0.0, 0.33, 0.67)));
+	ALBEDO = mix(COLOR.rgb, rb, clamp(dose * 1.4, 0.0, 0.85));
+	ALPHA = e * v * sh * COLOR.a * (1.0 + dose * 1.6);
+}
+"""
+
+
+func _shaft_material() -> ShaderMaterial:
+	if _shaft_mat == null:
+		var sh := Shader.new()
+		sh.code = SHAFT_SHADER
+		_shaft_mat = ShaderMaterial.new()
+		_shaft_mat.shader = sh
+		_shaft_mesh = QuadMesh.new()
+		_shaft_mesh.size = Vector2(13.0, 64.0)
+	return _shaft_mat
+
+
+func _gen_shafts(row: Dictionary, z0: float) -> void:
+	if not trail or not _cfg_dyn:
+		return
+	_shaft_material()
+	var xf: Array[Transform3D] = []
+	var cols := PackedColorArray()
+	for off: float in [30.0, 95.0, 150.0]:
+		if _rng.randf() > 0.7:
+			continue
+		var sz := z0 - off - _rng.randf_range(0.0, 20.0)
+		var sd := -1.0 if _rng.randf() < 0.5 else 1.0
+		var sx := trail_x(sz) + sd * _rng.randf_range(15.0, 30.0)
+		var bs := Basis(Vector3.UP, sd * 0.35) * Basis(Vector3(0, 0, 1), -sd * 0.42)          # leaning in over the trail, turned a little toward the rider
+		xf.append(Transform3D(bs.scaled(Vector3(_rng.randf_range(0.7, 1.5), 1.0, 1.0)), Vector3(sx, terrain_h(sx, sz) + 24.0, sz)))
+		cols.append(Color(1.0, 0.9, 0.72, _rng.randf_range(0.09, 0.15)))
+	_add_mm(row, _shaft_mesh, xf, cols, _shaft_mat)
+
+
 func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 	var toys: Array = []
 	row["toys"] = toys
+	_gen_shafts(row, z0)
 	# MOLECULES come at their own pace, not as one of the toys: a row every so many metres, closer together when the player is behind the session's curve (the pacer) and
 	# further apart when ahead of it. About one row every seven seconds at an even pace; a row is moved on a little if something already stands there.
 	if _mol_rows and not _mol_dbg:
@@ -6760,15 +6832,15 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 			_mol_next_z = mz - clampf(MOL_GAP_M / bias, 105.0, 900.0) * _rng.randf_range(0.85, 1.15)
 	for off: float in [48.0, 102.0, 156.0]:
 		var tz := z0 - off + _rng.randf_range(-8.0, 8.0)
-		if tz < finish_z + 130.0 or _rng.randf() > 0.62:
+		if tz < finish_z + 130.0 or _rng.randf() > 0.8:
 			continue
 		var near := false
 		for zt: float in taken:
-			if absf(zt - tz) < 66.0:
+			if absf(zt - tz) < 30.0:
 				near = true
 		if near:
 			continue
-		var side: float = [-1.0, 1.0, 0.0, -1.0, 1.0][_rng.randi() % 5]
+		var side: float = _lane_turn()
 		var roll := _rng.randf()
 		var pill_odds := (0.06 if -tz < 500.0 else 0.2) * (_pacer.spawn_bias(_mol_avg()) if _pacer != null else 1.0)          # the pacer: more when the player is behind the session's curve
 		if _mol_dbg and _journey != null:
@@ -6783,7 +6855,7 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 		elif roll < 0.60:
 			_make_gates(row, toys, tz)
 		else:
-			var bs: float = [-1.0, 1.0, 0.0, -1.0, 1.0][_rng.randi() % 5]
+			var bs: float = _lane_turn()
 			_boost_row(row, trail_x(tz) + bs * 7.0, tz, bs, _toy_g)
 			_toy_g += 1
 
@@ -6982,6 +7054,137 @@ func _boost_row(row: Dictionary, x: float, z: float, sd: float, g: int) -> void:
 	(row["nodes"] as Array).append(pool)
 	_beacon(row, x, z - 2.0, Color(1.0, 0.6, 0.15))
 	(row["feats"] as Array).append({"kind": "toy", "kx": x, "za": z + 24.0, "zl": z, "zb": z - 30.0, "sd": sd, "done": false, "want": 0.0, "away": 0.0, "g": g, "cd": true})
+# --------------------------------------------------------------------------
+# THE KIT: everything you can pick up or bounce off is built the way the molecules are (balls joined by sticks, colours in the vertices, the same material and the same light),
+# so the whole course reads as one set. Each shape is one mesh, built once per colour and shared.
+#   crystal  an octahedron cell round a bright core            (boost pads and the boost pickup)
+#   cage     an icosahedron cage round a core                  (the shield)
+#   rings    two six-rings locked through each other           (the multiplier)
+#   tetra    four big atoms round a small one                  (the treat)
+#   atom     a big atom with eight small ones standing off it  (the bumpers)
+#   hex      one six-ring, upright, with a core                (the colour gates)
+# --------------------------------------------------------------------------
+var _kit_cache: Dictionary = {}
+
+
+func _kit_mesh(kind: String, col: Color) -> ArrayMesh:
+	var key := kind + col.to_html(false)
+	if _kit_cache.has(key):
+		return _kit_cache[key]
+	var pts: Array = []          # [position, radius, colour]
+	var bonds: Array = []        # [i, j]
+	var pale := col.lerp(Color(1, 1, 1), 0.72)
+	var deep := col.darkened(0.25)
+	var stick := 0.07
+	match kind:
+		"crystal":
+			pts.append([Vector3.ZERO, 0.36, col])
+			for v: Vector3 in [Vector3(0, 1.15, 0), Vector3(0, -1.15, 0), Vector3(0.8, 0, 0), Vector3(-0.8, 0, 0), Vector3(0, 0, 0.8), Vector3(0, 0, -0.8)]:
+				pts.append([v, 0.17, pale])
+			for i in range(3, 7):
+				bonds.append([1, i])
+				bonds.append([2, i])
+			for pr in [[3, 5], [5, 4], [4, 6], [6, 3]]:
+				bonds.append(pr)
+		"cage":
+			pts.append([Vector3.ZERO, 0.42, col])
+			var ph := (1.0 + sqrt(5.0)) * 0.5
+			for a: float in [-1.0, 1.0]:
+				for b: float in [-ph, ph]:
+					pts.append([Vector3(0, a, b).normalized() * 1.15, 0.14, pale])
+					pts.append([Vector3(a, b, 0).normalized() * 1.15, 0.14, pale])
+					pts.append([Vector3(b, 0, a).normalized() * 1.15, 0.14, pale])
+			for i in range(1, 13):
+				for j in range(i + 1, 13):
+					if ((pts[i][0] as Vector3) - (pts[j][0] as Vector3)).length() < 1.3:
+						bonds.append([i, j])
+			stick = 0.055
+		"rings":
+			for r in 2:
+				for i in 6:
+					var a2 := float(i) * TAU / 6.0
+					var v2 := Vector3(cos(a2), sin(a2), 0.0) * 0.85
+					if r == 1:
+						v2 = Vector3(v2.x + 0.85, 0.0, v2.y)
+					else:
+						v2.x -= 0.0
+					pts.append([v2 - Vector3(0.42, 0, 0), 0.19, col if r == 0 else pale])
+				for i in 6:
+					bonds.append([r * 6 + i, r * 6 + (i + 1) % 6])
+		"tetra":
+			pts.append([Vector3.ZERO, 0.24, pale])
+			for v3: Vector3 in [Vector3(1, 1, 1), Vector3(1, -1, -1), Vector3(-1, 1, -1), Vector3(-1, -1, 1)]:
+				pts.append([v3.normalized() * 0.85, 0.4, col])
+			for i in range(1, 5):
+				bonds.append([0, i])
+			stick = 0.1
+		"atom":
+			pts.append([Vector3.ZERO, 0.72, col])
+			for sx: float in [-1.0, 1.0]:
+				for sy: float in [-1.0, 1.0]:
+					for sz: float in [-1.0, 1.0]:
+						pts.append([Vector3(sx, sy, sz).normalized() * 1.2, 0.2, pale])
+						bonds.append([0, pts.size() - 1])
+			stick = 0.08
+		_:
+			pts.append([Vector3.ZERO, 0.3, pale])
+			for i in 6:
+				var a3 := float(i) * TAU / 6.0
+				pts.append([Vector3(cos(a3), sin(a3), 0.0) * 1.2, 0.22, col if i % 2 == 0 else deep])
+			for i in 6:
+				bonds.append([1 + i, 1 + (i + 1) % 6])
+			stick = 0.09
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var ball := SphereMesh.new()
+	ball.radius = 1.0
+	ball.height = 2.0
+	ball.radial_segments = 10
+	ball.rings = 5
+	var ba := ball.get_mesh_arrays()
+	var bv: PackedVector3Array = ba[Mesh.ARRAY_VERTEX]
+	var bn: PackedVector3Array = ba[Mesh.ARRAY_NORMAL]
+	var bi: PackedInt32Array = ba[Mesh.ARRAY_INDEX]
+	for pt in pts:
+		for k in bi:
+			st.set_color(pt[2])
+			st.set_normal(bn[k])
+			st.add_vertex((pt[0] as Vector3) + bv[k] * float(pt[1]))
+	var rod := CylinderMesh.new()
+	rod.top_radius = 1.0
+	rod.bottom_radius = 1.0
+	rod.height = 1.0
+	rod.radial_segments = 6
+	rod.rings = 1
+	rod.cap_top = false
+	rod.cap_bottom = false
+	var ra := rod.get_mesh_arrays()
+	var rv: PackedVector3Array = ra[Mesh.ARRAY_VERTEX]
+	var rn: PackedVector3Array = ra[Mesh.ARRAY_NORMAL]
+	var ri: PackedInt32Array = ra[Mesh.ARRAY_INDEX]
+	var bcol := Color(0.86, 0.88, 0.95)
+	for bd in bonds:
+		var a: Vector3 = pts[int(bd[0])][0]
+		var b: Vector3 = pts[int(bd[1])][0]
+		var d := b - a
+		var ln := d.length()
+		if ln < 0.001:
+			continue
+		var y := d / ln
+		var x := y.cross(Vector3.UP if absf(y.y) < 0.95 else Vector3.RIGHT).normalized()
+		var z := x.cross(y)
+		var rb := Basis(x, y, z)
+		var sb := Basis(x * stick, y * ln, z * stick)
+		var mid := (a + b) * 0.5
+		for k in ri:
+			st.set_color(bcol)
+			st.set_normal(rb * rn[k])
+			st.add_vertex(mid + sb * rv[k])
+	var m := st.commit()
+	_kit_cache[key] = m
+	return m
+
+
 var _toy_meshes: Dictionary = {}
 
 
@@ -7097,7 +7300,7 @@ func _make_pills(row: Dictionary, toys: Array, z: float, side: float) -> void:
 		_mi(spin, _mol_mesh(mid), _mol_material(), Vector3.ZERO)
 		spin.rotation = Vector3(0.5, 0.0, 0.3)
 		_mi(hold, _quad(5.0), _fx_mat("halo", Color(ca.r, ca.g, ca.b, 0.6)), Vector3.ZERO)
-		hold.scale = Vector3.ONE * 1.3
+		hold.scale = Vector3.ONE * 1.6
 		(row["nodes"] as Array).append(hold)
 		toys.append({"kind": "pill", "x": px, "z": pz, "n": hold, "spin": spin, "t": 0, "col": ca, "y": hold.position.y, "name": String(MolData.MOLS[mid]["name"]), "id": mid})
 		_beacon(row, px, pz, ca)
@@ -7322,6 +7525,8 @@ func _pill_tick(delta: float) -> void:
 		fxm.post.mat.set_shader_parameter("mA", ma)
 		fxm.post.mat.set_shader_parameter("mB", mb)
 		fxm.post.mat.set_shader_parameter("dmt", dm)
+	if _shaft_mat != null:
+		_shaft_mat.set_shader_parameter("dose", _mol_avg())
 	_pill_gap = maxf(_pill_gap - delta, 0.0)
 	_flick = maxf(_flick - delta * 2.0, 0.0)          # half a second
 	_dose = maxf(_dose - 0.006 * wear * delta, 0.0)
@@ -7359,10 +7564,9 @@ func _make_bumpers(row: Dictionary, toys: Array, z: float, side: float) -> void:
 		var hold := Node3D.new()
 		add_child(hold)
 		_place(hold, Vector3(px, terrain_h(px, pz), pz))
-		_mi(hold, _tm("cup"), _toy_mat("cup", Color(0.75, 0.55, 0.95), 0.8), Vector3(0.0, 0.48, 0.0))
-		var fr := _mi(hold, _tm("frost"), _toy_mat("frost", Color(1.0, 0.45, 0.75), 1.0), Vector3(0.0, 1.35, 0.0))
-		fr.scale = Vector3(1.0, 0.85, 1.0)
-		_mi(hold, _tm("cherry"), _toy_mat("cherry", Color(1.0, 0.1, 0.2), 1.2), Vector3(0.0, 2.25, 0.0))
+		var fr := _mi(hold, _kit_mesh("atom", Color(1.0, 0.4, 0.75)), _mol_material(), Vector3(0.0, 1.7, 0.0))
+		fr.scale = Vector3.ONE * 1.25
+		fr.rotation = Vector3(0.4, p.x, 0.2)
 		_mi(hold, _quad(4.5), _fx_mat("halo", Color(1.0, 0.45, 0.75, 0.55)), Vector3(0.0, 1.4, 0.0))
 		(row["nodes"] as Array).append(hold)
 		toys.append({"kind": "bump", "x": px, "z": pz, "n": hold, "t": 0})
@@ -7468,10 +7672,7 @@ func _make_gates(row: Dictionary, toys: Array, z: float) -> void:
 			add_child(hold)
 			_place(hold, Vector3(gx, y0, gz))
 			_mi(hold, _tm("stick"), _toy_mat("stick", Color(0.95, 0.95, 0.95), 0.8), Vector3(0.0, 1.15, 0.0))
-			var head := _mi(hold, _tm("lolly"), _toy_mat("gate%d" % ci, col, 1.3), Vector3(0.0, 2.9, 0.0))
-			head.rotation.x = PI * 0.5
-			var sw := _mi(hold, _tm("lring"), _toy_mat("lring", Color(1, 1, 1), 1.2), Vector3(0.0, 2.9, 0.2))
-			sw.rotation.x = PI * 0.5
+			_mi(hold, _kit_mesh("hex", col), _mol_material(), Vector3(0.0, 2.9, 0.0))
 			_mi(hold, _quad(5.5), _fx_mat("halo", Color(col.r, col.g, col.b, 0.7)), Vector3(0.0, 2.9, 0.0))
 			(row["nodes"] as Array).append(hold)
 			lanes.append({"x": gx, "c": ci, "n": hold, "y0": y0})

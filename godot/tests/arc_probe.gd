@@ -43,6 +43,9 @@ func _ready() -> void:
 	var in_wave := 0.0
 	var strong := 0.0
 	var ring_n := 0
+	var feat_seen := {}
+	var feat_n := {}
+	var feat_seq: Array = []
 	var ring_worst := 0.0
 	var ring_bend := 0.0
 	print("ARC session %d min, trip level %d, takes %.0f%% of rows, %.1f hits a minute" % [sess, trip, eat * 100.0, hit])
@@ -105,10 +108,33 @@ func _ready() -> void:
 						ring_n += 1
 						ring_worst = maxf(ring_worst, off)
 						ring_bend = maxf(ring_bend, absf(rad_to_deg(TrailCurve.heading(zz))))
+		if i % 60 == 0:
+			for rk3 in rig._rows:
+				for ff in (rig._rows[rk3] as Dictionary).get("feats", []):
+					if ff.has("hz"):
+						continue
+					var fk := "%s@%d" % [String(ff["kind"]), int(float(ff.get("zl", ff.get("za", 0.0))))]
+					if not feat_seen.has(fk):
+						feat_seen[fk] = true
+						var lane: String = ["L", "C", "R"][int(signf(float(ff["sd"]))) + 1]
+						var nm := String(ff["kind"]) + " " + lane
+						feat_n[nm] = int(feat_n.get(nm, 0)) + 1
+						feat_seq.append([float(ff.get("zl", ff.get("za", 0.0))), String(ff["kind"]).substr(0, 2) + lane])
 		if rig._finished:
 			print("ARC finished early at %.1f min" % (tm / 60.0))
 			break
 	print("ARC SUMMARY first wave at %.1f min, %.0f%% of the time inside a wave, %.0f%% in a strong one, waves done %d, rows met %d, taken %d" % [first_wave / 60.0, in_wave / (mins * 60.0) * 100.0, strong / (mins * 60.0) * 100.0, j.wave, rows_met, eaten])
+	var ks := feat_n.keys()
+	ks.sort()
+	var line := ""
+	for kq in ks:
+		line += "%s %d   " % [kq, feat_n[kq]]
+	print("ARC TARGETS over %.1f km: %s" % [-rig.spos.z / 1000.0, line])
+	feat_seq.sort_custom(func(x, y): return x[0] > y[0])
+	var sq := ""
+	for e in feat_seq.slice(0, 70):
+		sq += String(e[1]) + " "
+	print("ARC TARGET ORDER (first 70): ", sq)
 	if ring_n > 0:
 		print("ARC RINGS checked %d: worst angle between a ring's opening and the trail there %.1f deg (trail bends up to %.0f deg from straight)" % [ring_n, ring_worst, ring_bend])
 	get_tree().quit()
