@@ -552,6 +552,13 @@ void fragment() {
 			col = mix(col, col * hsv(fract(TIME * 0.2 + r * 2.0), 0.8, 1.4), dmt * 0.6 * keep);
 			col += hsv(fract(r * 8.0 - TIME * 0.6), 0.9, 1.0) * 0.18 * dmt * (0.5 + 0.5 * sin(r * 40.0 - TIME * 4.0)) * keep;
 		}
+		// soft shoulder: light added by the effects is folded back instead of clipping to white, so bright areas keep their colour (this is what made it pale and washed out)
+		float mxc = max(max(col.r, col.g), col.b);
+		if (mxc > 0.75) {
+			float tm = 0.75 + 0.25 * (1.0 - exp(-(mxc - 0.75) * 2.5));
+			col *= tm / mxc;
+		}
+		col *= 0.92;
 		if (onset < 0.999) {
 			vec3 plain = texture(screen_tex, uv).rgb;
 			float dh = abs(uv.y - horizon);

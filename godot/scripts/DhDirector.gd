@@ -17,9 +17,13 @@ const TRACKS := {
 	"dnb": {"file": "dnb.ogg", "loop": true, "title": "1 Minute DnB", "artist": "Of Far Different Nature", "lic": "CC-BY 4.0", "url": "opengameart.org/content/1-minute-dnb"},
 	"exodus": {"file": "exodus.ogg", "loop": false, "title": "Electric Exodus", "artist": "FoxSynergy", "lic": "CC-BY 3.0", "url": "opengameart.org/content/electric-exodus"},
 	"bouncer": {"file": "bouncer.ogg", "loop": true, "title": "Bouncer", "artist": "Of Far Different Nature", "lic": "CC0", "url": "opengameart.org/node/107501"},
+	# the three funk tracks are used exactly as they are (no editing at all: two are NoDerivatives, one ShareAlike): only the playback volume is set, from their measured loudness
+	"funk_it": {"file": "funk_it.ogg", "loop": false, "gain": -1.8, "title": "Funk it!", "artist": "SunnyScy", "lic": "CC BY-NC-SA 4.0", "url": "freemusicarchive.org/music/sunnyscy/single/funk-it-1/"},
+	"quirky_funk": {"file": "quirky_funk.ogg", "loop": false, "gain": -7.2, "title": "Quirky Funk", "artist": "butterflystudio", "lic": "CC BY-NC-ND 4.0", "url": "freemusicarchive.org/music/butterflystudio/quirky-funk/quirky-funk/"},
+	"funk_express": {"file": "funk_express.ogg", "loop": false, "gain": -8.9, "title": "Funk Express", "artist": "butterflystudio", "lic": "CC BY-NC-ND 4.0", "url": "freemusicarchive.org/music/butterflystudio/funky-grooves/funk-express/"},
 	"moodless": {"file": "moodless.ogg", "loop": false, "title": "Moodless Refrain (ft. Quiana Nadine)", "artist": "Apoxode", "lic": "CC BY-NC 4.0", "url": "ccmixter.org/files/Apoxode/67475"},
 }
-const BANDS := {"sunny": ["mechanichal", "space_echo"], "lift": ["dnb"], "rush": ["exodus", "bouncer"], "down": ["moodless", "space_echo"]}
+const BANDS := {"sunny": ["mechanichal", "funk_it", "quirky_funk", "space_echo"], "lift": ["funk_express", "dnb"], "rush": ["exodus", "bouncer"], "down": ["moodless", "space_echo"]}
 const STEMS := ["ambience", "pulse", "bass", "drums", "piano", "guitar", "synth", "acid", "fx"]
 const STEM_CREDIT := {"title": "Alien Warfare Stems", "artist": "Kamihamiha", "lic": "CC BY-NC 3.0", "url": "ccmixter.org/files/Kamihamiha/60882"}
 const BPM := 128.0          # the stems
@@ -270,7 +274,7 @@ func update(delta: float, st: Dictionary) -> void:
 				_old_p.queue_free()
 				_old_p = null
 		if _cur_p != null and is_instance_valid(_cur_p):
-			_vol(_cur_p, _db(_cur_g * 0.9))
+			_vol(_cur_p, _db(_cur_g * 0.9) + (float(TRACKS[cur].get("gain", 0.0)) if mode == "track" and TRACKS.has(cur) else 0.0))
 			if want_mode == "stems" and mode == "stems":
 				_cur_g = maxf(_cur_g - step * 1.4, 0.0)
 		if _stem_p != null and is_instance_valid(_stem_p):
