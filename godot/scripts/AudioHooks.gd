@@ -161,6 +161,19 @@ func _build_new_voices() -> void:
 	# a speed pad: a soft air riser, a tone climbing A3 to A4 under it, and a low push at the start
 	_streams[&"pad_boost"] = _wav(_mixp([_air(0.75, 0.02, 0.3, 0.55, 0.08, 1.3), _tone(220.0, 440.0, 0.75, 0.32, 0.06, 1.2, 0.2), _tone(82.0, 55.0, 0.4, 0.55, 0.01, 2.0)]))
 	await get_tree().process_frame
+	# the cues: a good moment (two rising notes, E5 then A5, warm), a bad one (a low falling pair), and the glint ladder (one rung higher each time up A C D E G)
+	_streams[&"cue_good"] = _wav(_cat([_tone(659.3, 659.3, 0.08, 0.34, 0.01, 1.2, 0.25), _tone(880.0, 880.0, 0.22, 0.34, 0.01, 2.5, 0.25)]))
+	_streams[&"cue_bad"] = _wav(_mixp([_tone(220.0, 165.0, 0.3, 0.4, 0.01, 2.0, 0.2), _tone(110.0, 82.0, 0.3, 0.35, 0.01, 2.2)]))
+	await get_tree().process_frame
+	var ladder := [440.0, 523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66, 1318.5, 1568.0]
+	for li in 10:
+		_streams[StringName("lad%d" % li)] = _wav(_tone(ladder[li], ladder[li], 0.16, 0.3, 0.006, 2.5, 0.2))
+	await get_tree().process_frame
+	# leaving a ramp: a soft air lift with a tone rising under it; grabbing a rail: a short bright tick with air; a landing: a soft low thump
+	_streams[&"launch"] = _wav(_mixp([_air(0.45, 0.02, 0.2, 0.45, 0.04, 1.4), _tone(220.0, 440.0, 0.4, 0.22, 0.04, 1.6, 0.15)]))
+	_streams[&"rail_on"] = _wav(_mixp([_tone(880.0, 784.0, 0.12, 0.28, 0.006, 2.5, 0.3), _air(0.1, 0.12, 0.05, 0.3, 0.004, 2.5)]))
+	_streams[&"land"] = _wav(_mixp([_tone(110.0, 55.0, 0.3, 0.7, 0.006, 2.2), _air(0.18, 0.05, 0.02, 0.35, 0.004, 2.5)]))
+	await get_tree().process_frame
 	# a chime for each molecule, on the pentatonic scale rising from the first to the last: C5 D5 E5 G5 A5 C6
 	var notes := [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5]
 	for i in 6:

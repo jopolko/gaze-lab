@@ -1378,26 +1378,16 @@ func _cue_init() -> void:
 
 ## kind 1: a good moment (two rising notes and a warm tint); kind -1: a bad one (one low note and a cool tint); kind 2: a rung of the glint ladder, `step` higher each time.
 func _cue(kind: int, step: int = 0) -> void:
-	_cue_init()
 	if kind == 1:
-		_cue_pl.volume_db = -25.0
-		_cue_pl.pitch_scale = 1.0
-		_cue_pl.play()
-		get_tree().create_timer(0.09).timeout.connect(func() -> void:
-			_cue_pl.pitch_scale = 1.5
-			_cue_pl.play())
+		Game.sfx(&"cue_good")          # the same soft sounds as everything else (the old separate player was at -25 dB: it could not be heard over the music)
 		_cue_tint = 1.0
 		_cue_col = Color(1.0, 0.9, 0.5)
 	elif kind == -1:
-		_cue_pl.volume_db = -23.0
-		_cue_pl.pitch_scale = 0.6
-		_cue_pl.play()
+		Game.sfx(&"cue_bad")
 		_cue_tint = 1.0
 		_cue_col = Color(0.3, 0.4, 0.95)
 	else:
-		_cue_pl.volume_db = -30.0
-		_cue_pl.pitch_scale = minf(1.0 + 0.09 * float(step), 2.2)
-		_cue_pl.play()
+		Game.sfx(StringName("lad%d" % mini(step, 9)))          # a rung of the glint ladder: one note higher each time, up the pentatonic scale
 var _xp_t: float = 0.0
 
 
@@ -1893,6 +1883,7 @@ func _feat_tick(delta: float) -> void:
 			var near_top := spos.z > float(f["za"]) - 10.0
 			if absf(spos.x - _feat_x(f, spos.z)) < (2.6 if near_top else 1.3) and spos.y - _rail_y(f, spos.z) < 2.0:
 				_rail = f
+				Game.sfx(&"rail_on")
 				_rail_dx = spos.x - _feat_x(f, spos.z)
 				_rail_z0 = spos.z
 				_rail_pops0 = pops_flat
@@ -7830,6 +7821,8 @@ var _air_peak: float = 0.0
 
 ## A hard landing costs speed but never wipes you out: the hill is steep and a landing is rarely your fault (a bump, a ramp you chose).
 func _land(impact: float, gh: float, gvy: float) -> void:
+	if impact > 4.0:
+		Game.sfx(&"land")          # every real landing is felt: a soft low thump
 	var t_air := air_t
 	var lo := _land_off
 	_psy_pulse(3, Color(0.5, 1.0, 0.9))
@@ -8536,6 +8529,7 @@ func _update_tricks(delta: float, key: float, pk: Vector3) -> void:
 	if air:
 		if not _in_air:
 			_in_air = true
+			Game.sfx(&"launch")
 			_trk_spin = 0.0
 			_trk_spin_v = 0.0
 			_trk_flip = 0.0
