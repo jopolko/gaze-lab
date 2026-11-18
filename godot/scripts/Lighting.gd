@@ -223,7 +223,7 @@ func _apply_tier() -> void:
 		# a big desktop window has several times the pixels of a phone: draw the 3D picture at about a million pixels at most (the HUD stays sharp)
 		var px := RScale.full_px()
 		var cap := clampf(sqrt((0.95e6 if Game.touch_mode else 2.1e6) / px), 0.5, 1.0) if OS.has_feature("web") else 1.0          # a phone: about a million pixels; a laptop: up to full HD
-		var tier_s: float = [1.0, 1.0, 0.8, 0.58][tier] if Game.touch_mode else [1.0, 1.0, 0.92, 0.82][tier]          # (a laptop or desktop keeps much more of its picture: the whole canvas, HUD included, shrinks in the browser)
+		var tier_s: float = [1.0, 1.0, 0.88, 0.76][tier] if Game.touch_mode else [1.0, 1.0, 0.92, 0.82][tier]          # (a laptop or desktop keeps much more of its picture: the whole canvas, HUD included, shrinks in the browser)
 		var floor_s := float(rig.call("fx", "x_sharp")) if rig.has_method("fx") else 0.0          # the lab's "sharpness floor": 0 = automatic
 		if floor_s > 0.4:
 			tier_s = maxf(tier_s, floor_s)
