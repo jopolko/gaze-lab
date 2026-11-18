@@ -303,14 +303,14 @@ class ThemePost extends Node:
 			trail_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 			trail_vp.render_target_clear_mode = SubViewport.CLEAR_MODE_ONCE          # start from an empty pile of echoes
 			if cur_vp != null:
-				cur_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+				cur_vp.render_target_update_mode = SubViewport.UPDATE_ONCE          # (see _process: the second picture is redrawn only every few frames)
 			return
 		if not _own_tex:
 			# the overlay's own output ends up in the screen picture, so the screen cannot be fed back into itself: render the world once more, small, without any overlay
 			cur_vp = SubViewport.new()
 			cur_vp.world_3d = get_tree().root.world_3d
 			cur_vp.msaa_3d = Viewport.MSAA_DISABLED
-			cur_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+			cur_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 			cur_vp.size = _trail_size()
 			add_child(cur_vp)
 			cur_cam = Camera3D.new()
@@ -340,7 +340,15 @@ class ThemePost extends Node:
 		var k := 0.4 if OS.has_feature("web") else 0.5          # smaller on the web: the echoes are soft anyway
 		return Vector2i(maxi(int(s.x * k), 64), maxi(int(s.y * k), 64))
 
+	var _cur_n: int = 0
+
 	func _process(_delta: float) -> void:
+		# THE SECOND PICTURE. The tracers are made from a second render of the whole world (every draw call twice, which was the biggest single cost on a weak graphics chip). The echoes
+		# are soft and slow, so it is redrawn only every third frame (every second on a fast machine); the pile of echoes still takes it in at every frame.
+		if cur_vp != null and trail_vp != null and trail_vp.render_target_update_mode == SubViewport.UPDATE_ALWAYS:
+			_cur_n += 1
+			if _cur_n % (2 if Engine.get_frames_per_second() >= 50.0 else 3) == 0:
+				cur_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 		if trail_vp != null:
 			var ts := _trail_size()
 			if ts != trail_vp.size:
