@@ -320,7 +320,7 @@ func _make_assets() -> void:
 	_m_trunk.top_radius = 0.28
 	_m_trunk.bottom_radius = 0.34
 	_m_trunk.height = 1.4
-	_m_trunk.radial_segments = 4 if Game.touch_mode else 5
+	_m_trunk.radial_segments = 4
 	_m_trunk.rings = 1
 	_m_rock = _make_rock_mesh()
 	var rs := SphereMesh.new()
@@ -1997,7 +1997,7 @@ func _make_tree_mesh() -> ArrayMesh:
 		var y0: float = tier[1]
 		var h: float = tier[2]
 		var apex := Vector3(0.0, y0 + h, 0.0)
-		var n := 6 if Game.touch_mode else 8          # (a phone draws thousands of these: fewer sides)
+		var n := 6
 		for i in n:
 			var a0 := TAU * float(i) / float(n)
 			var a1 := TAU * float(i + 1) / float(n)
@@ -2007,9 +2007,7 @@ func _make_tree_mesh() -> ArrayMesh:
 			var b1 := Vector3(cos(a1) * r1, y0, sin(a1) * r1)
 			var m0 := Vector3(cos(a0) * r0 * 0.5, y0 + h * 0.5, sin(a0) * r0 * 0.5)
 			var m1 := Vector3(cos(a1) * r1 * 0.5, y0 + h * 0.5, sin(a1) * r1 * 0.5)
-			_tri(st, b0, green, b1, green, m1, snow)
-			_tri(st, b0, green, m1, snow, m0, snow)
-			_tri(st, m0, snow, m1, snow, apex, white)
+			_tri(st, b0, green, b1, green, apex, white)          # the simplest cone: one face a side (the speed and the effects carry the picture, not the trees)
 	st.generate_normals()
 	return st.commit()
 
@@ -2019,8 +2017,8 @@ func _make_rock_mesh() -> ArrayMesh:
 	var sm := SphereMesh.new()
 	sm.radius = 1.5
 	sm.height = 2.4
-	sm.radial_segments = 8
-	sm.rings = 5
+	sm.radial_segments = 6
+	sm.rings = 3
 	var arr := sm.get_mesh_arrays()
 	var verts: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 	var norms: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
