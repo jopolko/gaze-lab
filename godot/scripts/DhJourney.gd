@@ -273,7 +273,7 @@ func _set_phase(p: int) -> void:
 ## The sky's colours blend in over the first part of the coming-on and breathe as they do. The rest goes over one layer at a time, when the screen is already well washed by the
 ## effect, so each change is hidden inside it: the sky itself and the mountains, then the ground, then the trees, then the lights; each with a soft pulse of the world's colour.
 ## It goes out the same way, with a margin so a swell cannot flip a layer back and forth.
-const SWAP_ON := {"skymat": 0.55, "ground": 0.66, "veg": 0.78, "light": 0.88}
+const SWAP_ON := {"skymat": 0.55, "ground": 0.5, "veg": 0.78, "light": 0.88}
 const SWAP_OFF := {"skymat": 0.30, "ground": 0.45, "veg": 0.58, "light": 0.70}
 
 

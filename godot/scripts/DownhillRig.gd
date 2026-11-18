@@ -714,7 +714,7 @@ func _chunk_step(job: Dictionary, budget_us: int) -> bool:
 				var t := 0.5 + 0.5 * sin(x * 0.07 + z2 * 0.05) * sin(z2 * 0.021)
 				var stripe := 0.5 + 0.5 * sin(z2 * 0.9 + sin(x * 0.2) * 2.0)
 				var chev := 0.5 + 0.5 * sin(z2 * 0.5 + absf(x) * 0.2)          # long V marks pointing down the hill: you feel the speed, and the way the slope runs shows at a glance
-				var c := Color(0.97, 0.98, 1.0).lerp(Color(0.8, 0.86, 0.97), clampf(0.35 * t + 0.08 * stripe + 0.2 * chev * chev, 0.0, 1.0))
+				var c := Color(0.97, 0.98, 1.0).lerp(Color(0.8, 0.86, 0.97), clampf(0.35 * t + 0.0 * stripe + 0.0 * chev, 0.0, 1.0))
 				if absf(x) > W_HALF:
 					c = c.lerp(Color(0.8, 0.84, 0.88), 0.3)
 				c = _ground_color(j, x, z2, c)
@@ -1859,17 +1859,16 @@ void fragment() {
 	float sp = step(0.9985, tw) * near * (0.55 + 0.45 * sin(TIME * 3.0 + tw * 60.0));
 	EMISSION = vec3(sp) * 0.8;
 	float dist = length(VERTEX);
-	if (gglow > 0.001) {
-		float run = 0.5 + 0.5 * sin(TIME * 1.6 - dist * 0.09);
-		EMISSION += vec3(0.35, 0.75, 1.0) * gglow * run * run * 0.16 * (1.0 - smoothstep(40.0, 150.0, dist));
-	}
 	if (grid > 0.001) {
-		// SQUARES in the snow, fixed to the ground, three metres a side, light and dark like a board: they rush by underfoot and measure the speed. Shade only, no lines
-		// and no colour: nothing here may hide the way ahead. (The moire lives in the psychedelic world's ground: see Themes.GROUND_PSY.)
+		// A SOFT MOIRE in the snow: two grids of squares, the second a little finer and turning slowly about the board, multiplied. Only shade, no lines and no colour, so
+		// nothing crosses the way ahead; the slow shapes drift over the ground and the fixed grid underneath makes them rush by. (The full colour moire is Themes.GROUND_PSY.)
 		vec2 g1 = wp.xz / 6.0;
-		float sq = smoothstep(-0.06, 0.06, sin(g1.x * 6.283) * sin(g1.y * 6.283));
-		float a = grid * (1.0 - smoothstep(60.0, 170.0, dist));
-		ALBEDO *= mix(1.0, mix(0.8, 1.04, sq), a);
+		float t = TIME * 0.045;
+		vec2 rp = wp.xz - gcen;
+		vec2 g2 = vec2(rp.x * cos(t) - rp.y * sin(t), rp.x * sin(t) + rp.y * cos(t)) / 6.0 * 1.037;
+		float m = sin(g1.x * 6.283) * sin(g1.y * 6.283) * sin(g2.x * 6.283) * sin(g2.y * 6.283);
+		float a = grid * (1.0 - smoothstep(90.0, 260.0, dist));
+		ALBEDO *= mix(1.0, 0.9 + 0.12 * smoothstep(-0.5, 0.5, m), a);
 	}
 }
 """
@@ -1968,11 +1967,13 @@ func _make_flag_mesh() -> ArrayMesh:
 const SKIRT_STEP := 120.0
 var _skirt: MeshInstance3D
 var _skirt_mat: StandardMaterial3D
+## On the winding trail the skirt is flat and a little under the ground: it is one straight mesh, and the trail wanders off its axis, so hillsides rising on it stood across the road ahead and hid it until the board went through them.
+var _skirt_flat: bool = OS.has_feature("web") and not str(JavaScriptBridge.eval("window.location.search")).contains("straight")
 
 
 func _skirt_h(x: float, zl: float) -> float:
 	var ax := maxf(absf(x) - W_HALF, 0.0)
-	return zl * SLOPE + minf(0.0085 * ax * ax, 420.0)
+	return zl * SLOPE + (0.0 if _skirt_flat else minf(0.0085 * ax * ax, 420.0))
 
 
 func _build_skirt() -> void:
@@ -1999,7 +2000,7 @@ func _build_skirt() -> void:
 		zz += 160.0
 	for part in 3:
 		var zs: Array[float] = zs_side if part == 0 else (zs_cap if part == 1 else zs_back)
-		var drop := 0.0 if part == 0 else 3.0          # past the end of the ground it lies a little under it, so a seam does not show
+		var drop := (6.0 if _skirt_flat else 0.0) if part == 0 else (6.0 if _skirt_flat else 3.0)          # past the end of the ground it lies a little under it, so a seam does not show
 		for xi in xs.size() - 1:
 			var xa: float = xs[xi]
 			var xb: float = xs[xi + 1]

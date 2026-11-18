@@ -17,6 +17,9 @@ const _TOON_MAP := {&"boom": &"explosion", &"coin": &"blip", &"boing": &"sproing
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nosound"):
+		AudioServer.set_bus_mute(0, true)          # ?nosound: no sound at all, effects and buffs included: nothing is built, nothing is mixed, nothing listens for a sound to play
+		return
 	DhMusic.ensure_buses()
 	# SOFT SOUNDS. Sine tones with a few gentle harmonics and a slow-ish attack, no square or saw, no hard clicks; every pitch is in A minor pentatonic (A C D E G), the key of
 	# the music, so an effect that lands on a note sounds like part of it. Notes: A3 220, C4 261.6, D4 293.7, E4 329.6, G4 392, A4 440, C5 523.3, D5 587.3, E5 659.3, G5 784, A5 880, C6 1047.

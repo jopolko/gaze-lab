@@ -213,7 +213,7 @@ func _apply_tier() -> void:
 		rig.shafts_ok = tier < 2
 		rig.sky_ok = tier < 3
 		if rig._m_ground is ShaderMaterial:
-			(rig._m_ground as ShaderMaterial).set_shader_parameter("detail", 1.0 if tier < 2 else 0.0)
+			(rig._m_ground as ShaderMaterial).set_shader_parameter("detail", 1.0 if tier < 1 else 0.0)
 	var env: Environment = level.world_env.environment
 	if tier >= 2:
 		env.glow_enabled = false

@@ -54,6 +54,7 @@ var zone: int = 0                 # -1 left, 0 middle, +1 right
 var zn: float = 0.0               # the same thing unrounded: -1 = on the left target, +1 = on the right target
 var zone_t: float = 0.0           # when the zone last changed
 var _zh: Array = []
+var zh_n: int = 3          # readings the zone is judged from (the median of the last few): the game sets 2 at speed, trading a little steadiness for about a tenth of a second sooner
 var _zdrift: float = 0.0
 var _zbuf: Array = []             # the last ~12 s of readings: where the eyes REST is where most of them are, whatever the middle was first taken to be
 var _zbt: float = 0.0
@@ -438,7 +439,7 @@ func _zn_of(d: float) -> float:
 
 func _zone_step(hx: float, dt: float, t: float) -> void:
 	_zh.append(hx)
-	if _zh.size() > 3:
+	if _zh.size() > zh_n:
 		_zh.pop_front()
 	var d := _median(_zh) - float(zones["m"]) - _zdrift
 	zn = _zn_of(d)

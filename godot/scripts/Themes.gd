@@ -86,10 +86,10 @@ void fragment() {
 	vec2 rp = wp.xz - gcen;
 	vec2 g2 = vec2(rp.x * ca - rp.y * sa, rp.x * sa + rp.y * ca) * sc * 1.037;
 	float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
-	float far = 1.0 - smoothstep(70.0, 190.0, dist);          // (in the distance the squares are finer than a pixel: there the pattern eases to its average instead of shimmering)
+	float far = 1.0 - smoothstep(130.0, 340.0, dist);          // (in the distance the squares are finer than a pixel: there the pattern eases to its average instead of shimmering)
 	float amp = mix(0.5, grid1 * grid2 * 0.5 + 0.5, far);
 	float sq = mix(0.5, smoothstep(-0.06, 0.06, grid1), far);          // the squares themselves, crisp, light and dark like a board
-	vec3 col = hsv(fract(amp * 0.5 + TIME * 0.03), 0.9, pow(amp, 0.65)) * (0.42 + 0.58 * sq);
+	vec3 col = hsv(fract(amp * 0.5 + TIME * 0.03), 0.9, 0.25 + 0.75 * pow(amp, 0.65)) * (0.62 + 0.38 * sq);
 	col *= 0.75 + 0.25 * speed;
 	ALBEDO = col * col;                                          // authored in screen colours: square it into the linear space the renderer wants
 }

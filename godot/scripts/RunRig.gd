@@ -1247,6 +1247,8 @@ func _audio_setup(c: Dictionary) -> void:
 		_dir.stop()
 		_dir.queue_free()
 	_dir = null
+	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nosound"):
+		return          # ?nosound: no music of any kind
 	if String(c.get("mus", "auto")) == "auto" and OS.has_feature("web"):
 		# AUTO is the real tracks and stems. If they cannot be fetched (or ?nomusic) there is silence, not the synthesised music: that is only for the styles picked by hand in SOUND.
 		if not _dir_failed and not str(JavaScriptBridge.eval("window.location.search")).contains("nomusic"):
@@ -1623,13 +1625,25 @@ func _zoned() -> bool:
 
 ## How far ahead a thing can be chosen. It was a fixed 130 m, which is five seconds at an easy pace and barely three flat out: now it is about four and a half seconds of
 ## riding at whatever speed you are doing (never less than the old 130 m, never further than things are drawn), so going faster does not take the time to choose away.
+## How much quicker choosing gets with speed: 1 at an easy pace (30 m/s and under), 0.62 at 43 m/s and 0.5 flat out. The tracker's own reading takes about a fifteenth of a second, so
+## this is about asking for fewer of its readings before a look counts, not for a faster eye.
+func _qk() -> float:
+	return clampf(pow(30.0 / maxf(-vel.y, 1.0), 1.4), 0.45, 1.0)
+
+
+## How fast the board may slide across to what was chosen: 30 m/s at an easy pace, up to 40 at speed (more of the screen is reachable in the time there is).
+func slide_max() -> float:
+	return SLIDE_MAX * clampf(-vel.y / 30.0, 1.0, 1.35)
+
+
 func offer_m() -> float:
-	return clampf(-vel.y * 4.5, 130.0, 245.0)
+	return clampf(-vel.y * 5.4, 130.0, 285.0)          # (5.4 s of riding: at the top pace 235 m, up from 195)
 
 
 func _trail_pick(delta: float, s_in: float) -> Dictionary:
 	var v := pick_override if pick_override != 0.0 else s_in
 	_lock_age += delta
+	GazeProvider.kit.zh_n = 2 if -vel.y > 32.0 else 3          # at speed the zone is judged from two readings, not three
 	_switch_slow = maxf(_switch_slow - delta, 0.0)
 	if not _line_pick.is_empty() and (spos.z < float(_line_pick["zb"]) + 4.0 or bool(_line_pick["done"])):
 		_line_pick = {}
@@ -1644,7 +1658,7 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 				continue
 			# only what the board can still reach is offered: crossing over takes time, and a thing that will be gone by then is not a choice
 			if not is_same(f, _line_pick) and not is_same(f, _rail):
-				var reach_t := absf(_feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x) / (SLIDE_MAX * 0.85) + 0.3 + (0.25 if not _line_pick.is_empty() else 0.0)
+				var reach_t := absf(_feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"]))) - spos.x) / (slide_max() * 0.85) + 0.3 + (0.25 if not _line_pick.is_empty() else 0.0)
 				var end_z := float(f["zl"]) if f.has("zl") else float(f["zb"]) + 8.0          # a jump or a treat is taken at one spot; a rail anywhere along it
 				if (spos.z - end_z) / maxf(-vel.y, MIN_SPEED) < reach_t:
 					if not f.has("dr"):
@@ -1784,14 +1798,14 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 			continue
 		if is_same(fd, tgt) if zoned else (look_side == float(fd["sd"])):
 			# a look at the side is a decision; a look at the middle is also where resting eyes go, so taking the middle thing needs a longer, steadier look
-			fd["want"] = minf(float(fd["want"]) + delta * (0.35 / clampf(30.0 / maxf(-vel.y, 1.0), 0.6, 1.0) if (zoned and is_same(fd, fm)) else 1.0), 0.5)
+			fd["want"] = minf(float(fd["want"]) + delta * (0.35 / _qk() if (zoned and is_same(fd, fm)) else 1.0), 0.5)
 		else:
 			fd["want"] = maxf(float(fd["want"]) - delta * (3.0 if look_side != 0.0 else 0.6), 0.0)
 		# LOCK ON. The first look settles on a thing after a fifth of a second. Once something is locked it holds, however the eyes wander: another thing takes the lock only
 		# after a steady look at it (0.35 s), and not in the last half second before the board reaches the one it is going for.
 		# AT SPEED everything about choosing is quicker in proportion (30 m/s is the pace these times were set at; flat out they are 0.6 of that): a look settles sooner, a
 		# change of mind is allowed sooner, and the turn to the new thing starts faster. The time you have to choose is the same number of looks, not fewer.
-		var qk := clampf(30.0 / maxf(-vel.y, 1.0), 0.6, 1.0)
+		var qk := _qk()
 		var need_w := 0.11 * qk          # a look settles on a thing after a ninth of a second
 		if not _line_pick.is_empty() and zoned:
 			need_w = (0.14 if _lock_age >= COMMIT_S * qk else 0.35) * qk          # just locked: committed for half a second, a change of mind in that window needs a longer, steadier look
@@ -5084,7 +5098,7 @@ func _guard_path(delta: float, s_in: float) -> float:
 				var gx := _feat_x(pkf, clampf(spos.z, float(pkf["zb"]), float(pkf["za"])))
 				var t_left := maxf((spos.z - float(pkf["za"])) / spd_t - 0.25, 0.04)
 				var need := gx - spos.x
-				var rate := clampf(absf(need) / t_left, 0.0, SLIDE_MAX)
+				var rate := clampf(absf(need) / t_left, 0.0, slide_max())
 				# eased in and out: the sideways speed builds up and dies away over a fraction of a second instead of starting and stopping at once
 				var v_want := signf(need) * rate if (rate > 3.0 or spos.z <= float(pkf["za"])) else 0.0
 				_slide_v += (v_want * (0.55 if _switch_slow > 0.0 else 1.0) - _slide_v) * (1.0 - exp(-delta / (((0.35 if _switch_slow > 0.0 else 0.2) if t_left > 0.5 else 0.12) * grip_lag)))
@@ -8264,7 +8278,7 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	# high in the air the spot on the ground 18 m ahead is almost straight down: the view tipped over until there was only snow (and no board). The look is held between a
 	# little above level and 24 degrees down, eased, so a flight looks out over the slope and down at where you will land.
 	var flat_d := Vector2(ahead.x - eye.x, ahead.z - eye.z).length()
-	var want_dy := clampf(ahead.y - eye.y, -flat_d * 0.45, flat_d * 0.12)
+	var want_dy := clampf(ahead.y - eye.y, -flat_d * 0.2, flat_d * 0.1)
 	_fp_dy = want_dy if snap else lerpf(_fp_dy, want_dy, 1.0 - exp(-6.0 * delta))
 	ahead.y = eye.y + _fp_dy
 	if (ahead - eye).length() > 0.5:
@@ -8679,25 +8693,8 @@ void fragment() {
 
 	// THE GROUND: a grid laid on the snow in perspective that streams at you, with a second one running the other way, so the eyes cannot settle:
 	// stripes across the slope, lines along it that bend with the colour, and a checker flicker that quickens with speed
-	float hz = 0.40;
-	float gy = UV.y - hz;
+	// (No lines on the ground any more: this overlay drew stripes across the slope and lines along it, which cut the road up. The ground's own moire does that job, in the ground.)
 	vec4 ground = vec4(0.0);
-	if (gy > 0.01) {
-		float gd = 1.0 / gy;                                       // distance along the ground
-		float gx = (UV.x - 0.5) * gd;                              // across it
-		float flow = t * (4.0 + 22.0 * speed);
-		float s1 = sin((gd - flow) * 1.6);
-		float s2 = sin((gd + flow * 0.5) * 3.1 + gx * 1.2);
-		float l1 = sin(gx * 2.2);
-		float chk = sign(s1) * sign(l1);
-		float lines = smoothstep(0.55, 1.0, abs(s1)) * 0.6 + smoothstep(0.8, 1.0, abs(l1)) * 0.6;
-		vec3 gc = pal(gd * 0.05 - flow * 0.02 + 0.3 * s2 + float(chk > 0.0) * 0.2);
-		float fade_far = smoothstep(0.0, 0.18, gy);                // melts into the horizon
-		float gal = (0.12 + 0.3 * lines + 0.12 * abs(chk)) * fade_far * (0.4 + 0.6 * speed) * amount * 2.0;
-		// the board's own patch stays calm
-		gal *= 0.35 + 0.65 * smoothstep(0.1, 0.4, length((UV - vec2(0.5, 0.78)) * vec2(1.4, 1.0)));
-		ground = vec4(gc, clamp(gal, 0.0, 0.6));
-	}
 
 	vec3 outc = mix(col, ground.rgb, ground.a / max(al + ground.a, 0.001));
 	float outa = clamp(al + ground.a * (1.0 - al), 0.0, 0.85);
@@ -10146,33 +10143,65 @@ func _draw_setup_guide(s: Vector2, k: float, delta_hint: float) -> void:
 
 
 ## The six, along the top: a ring for each in its colour. The dim arc is how much has been taken, the bright arc is how much is felt, the number is the level (out of 6). A crash flashes them red.
+var _mol_pop: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # each disc's pop when its level goes up (1 to 0)
+var _mol_lvp: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # the level it was last drawn at
+
+
 func _draw_mol_bar(font: Font, k: float, s: Vector2, m: float) -> void:
 	if not _mol_seen:
 		return
-	var gap := 56.0 * k
+	# Big, bright and playful: a coloured disc for each molecule (dark and quiet at level 0, filled with its colour and glowing once held), the level in it, six little stars under it
+	# (one lit for each level), and a pop when a level goes up. The dim arc round it is how much has been taken, the bright arc how much is felt. Its own row, clear of the stats.
+	var dt := get_process_delta_time()
+	var gap := 82.0 * k
+	var r := 27.0 * k
 	var x0 := s.x * 0.5 - gap * 2.5
-	var y := m + 70.0 * k
+	var y := m + 40.0 * k
 	for i in 6:
 		var id: String = MolData.ORDER[i]
 		var col: Color = MolData.MOLS[id]["c"]
+		var lvl := int(floor(_mdose[i] + 0.001))
+		if lvl > int(_mol_lvp[i]):
+			_mol_pop[i] = 1.0
+		_mol_lvp[i] = float(lvl)
+		_mol_pop[i] = maxf(_mol_pop[i] - dt * 1.6, 0.0)
+		var pop := _mol_pop[i]
+		var held := lvl > 0
+		var rr := r * (1.0 + 0.22 * sin(pop * PI))
 		var c := Vector2(x0 + gap * float(i), y)
-		var lv := _mdose[i] / 6.0
 		var felt := _mbody[i] / 6.0
-		_hud.draw_circle(c, 18.0 * k, Color(0.0, 0.0, 0.0, 0.5))
+		var lv := _mdose[i] / 6.0
+		if held:
+			_hud.draw_circle(c, rr * (1.5 + 0.3 * pop), Color(col.r, col.g, col.b, 0.10 + 0.18 * pop + 0.05 * sin(_age * 3.0 + float(i))))          # the glow
+		_hud.draw_circle(c, rr + 2.0 * k, Color(0.0, 0.0, 0.0, 0.55))
+		_hud.draw_circle(c, rr, Color(col.r * 0.55, col.g * 0.55, col.b * 0.55, 0.92) if held else Color(col.r * 0.18, col.g * 0.18, col.b * 0.18, 0.75))
+		if held:
+			_hud.draw_circle(c - Vector2(0.0, rr * 0.28), rr * 0.62, Color(col.r, col.g, col.b, 0.35))          # the shine on the top of it
 		if lv > 0.001:
-			Draw2D.arc(_hud, c, 17.0 * k, -PI * 0.5, -PI * 0.5 + TAU * lv, 32, Color(col.r, col.g, col.b, 0.35), 5.0 * k)
+			Draw2D.arc(_hud, c, rr + 4.0 * k, -PI * 0.5, -PI * 0.5 + TAU * lv, 32, Color(col.r, col.g, col.b, 0.4), 5.0 * k)
 		if felt > 0.001:
-			Draw2D.arc(_hud, c, 17.0 * k, -PI * 0.5, -PI * 0.5 + TAU * felt, 32, col, 5.0 * k)
+			Draw2D.arc(_hud, c, rr + 4.0 * k, -PI * 0.5, -PI * 0.5 + TAU * felt, 32, col.lightened(0.25), 5.0 * k)
 		if _mol_hurt_t > 0.0 and i == _mol_hurt_i:
-			_hud.draw_circle(c, 19.0 * k, Color(1.0, 0.2, 0.2, 0.6 * _mol_hurt_t))
-		var cnt := "%d" % int(floor(_mdose[i] + 0.001))
-		_text(font, c + Vector2(-_tw(font, cnt, int(16.0 * k)) * 0.5, 6.0 * k), cnt, 16, Color(1, 1, 1, 0.95 if lv > 0.001 else 0.35))
+			_hud.draw_circle(c, rr + 6.0 * k, Color(1.0, 0.2, 0.2, 0.6 * _mol_hurt_t))
+		var cnt := "%d" % lvl
+		var fs := int(26.0 * k * (1.0 + 0.3 * pop))
+		_text(font, c + Vector2(-_tw(font, cnt, fs) * 0.5, fs * 0.36), cnt, int(26.0 * (1.0 + 0.3 * pop)), Color(1, 1, 1, 1.0 if held else 0.4))
+		for j in 6:
+			var sc := c + Vector2((float(j) - 2.5) * 12.5 * k, rr + 17.0 * k)
+			var on := j < lvl
+			var sr := (6.2 + (2.0 * pop if j == lvl - 1 else 0.0)) * k
+			var pts := PackedVector2Array()
+			for q in 10:
+				var ang := -PI * 0.5 + TAU * float(q) / 10.0
+				var rad := sr if q % 2 == 0 else sr * 0.45
+				pts.append(sc + Vector2(cos(ang), sin(ang)) * rad)
+			Draw2D.poly(_hud, pts, Color(1.0, 0.9, 0.4, 0.98) if on else Color(col.r, col.g, col.b, 0.22))
 		var nm := String(MolData.MOLS[id]["name"]).to_upper()
 		if nm == "MESCALINE":
 			nm = "MESC"
-		_text(font, c + Vector2(-_tw(font, nm, int(10.0 * k)) * 0.5, 33.0 * k), nm, 10, Color(col.r, col.g, col.b, 0.85))
+		_text(font, c + Vector2(-_tw(font, nm, int(12.0 * k)) * 0.5, rr + 36.0 * k), nm, 12, Color(col.r, col.g, col.b, 1.0 if held else 0.6).lightened(0.2))
 	if _dmt_on:
-		_text(font, Vector2(s.x * 0.5 - _tw(font, "ALL SIX", int(14.0 * k)) * 0.5, y + 50.0 * k), "ALL SIX", 14, Color(1.0, 0.85, 0.3, 0.7 + 0.3 * sin(_age * 6.0)))
+		_text(font, Vector2(s.x * 0.5 - _tw(font, "ALL SIX", int(16.0 * k)) * 0.5, y + r + 60.0 * k), "ALL SIX", 16, Color(1.0, 0.85, 0.3, 0.7 + 0.3 * sin(_age * 6.0)))
 
 
 var _diag: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("diag")          # ?diag: the tracking made visible (targets, the gaze point, the readings)
@@ -10424,7 +10453,7 @@ func _draw_hud_inner() -> void:
 		pt += "   SND %d %s" % [AudioHooks.played, DhMusic.dbg if DhMusic.dbg != "" else "-"]
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x
-		_text(font, Vector2(s.x * 0.5 - pw * 0.5, m + 66.0 * k), pt, 18, pcol)
+		_text(font, Vector2(s.x * 0.5 - pw * 0.5, s.y - m * 0.6), pt, 18, pcol)          # along the bottom edge: its own place, clear of the molecules
 	_draw_mol_bar(font, k, s, m)
 	if _diag:
 		_draw_track_dbg(font, k, s, m)
