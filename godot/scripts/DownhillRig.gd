@@ -1416,7 +1416,7 @@ func _process(delta: float) -> void:
 		_wset(_skirt, Vector3(0.0, SLOPE * zb, zb))
 		var senv: Environment = get_viewport().world_3d.environment if get_viewport().world_3d != null else null
 		if senv != null:
-			_skirt_mat.albedo_color = senv.fog_light_color.lerp(Color(0.93, 0.95, 1.0), 0.4)          # the same colour as the haze, so it fades into it in every world
+			_skirt_mat.set_shader_parameter("albedo_color", senv.fog_light_color.lerp(Color(0.93, 0.95, 1.0), 0.4))          # the same colour as the haze, so it fades into it in every world
 	_maybe_start_cal()
 	_update_focus(delta)
 	# sled orientation: follow the ground normal, lean into the turn, tuck low
@@ -1830,12 +1830,31 @@ func _animate_doors(delta: float) -> void:
 # --------------------------------------------------------------------------
 # Art: all built from code (no downloads), kept low-poly so a phone can draw it
 # --------------------------------------------------------------------------
+## The far valley sheet, as a shader (it was an unshaded standard material) so that it can bend up with the ground.
+const SKIRT_SHADER := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, shadows_disabled;
+uniform vec4 albedo_color : source_color = vec4(1.0);
+uniform float bend_k = 0.0;
+void vertex() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float bd = max(length(wp.xz - CAMERA_POSITION_WORLD.xz) - 140.0, 0.0);          // HORIZON BEND: past 140 m the world curls UP with the square of the distance, so far slopes lift into view and the run ahead rises into the sky like the inside of a ring
+	wp.y += bend_k * bd * bd;
+	VERTEX = (inverse(MODEL_MATRIX) * vec4(wp, 1.0)).xyz;
+}
+void fragment() {
+	ALBEDO = COLOR.rgb * albedo_color.rgb;
+}
+"""
+
+
 const GROUND_SHADER := """
 shader_type spatial;
 render_mode cull_disabled;
 uniform float grid = 0.0;        // 0..1: squares in the snow, fixed to the ground, so they rush by underfoot (the best measure of speed there is) and pulse in travelling bands
 uniform float gglow = 0.0;       // 0..1: slow waves of light running out along the ground from the board
 uniform vec2 gcen = vec2(0.0);   // where the board is: the second grid of the moire turns about it
+uniform float bend_k = 0.0;       // horizon bend (the lab's "horizon bend": 0 = flat world)
 uniform float path_on = 0.0;     // 1 on the trail: the road is drawn apart from the scenery (its distance from the middle of the trail rides in the vertex alpha)
 uniform float path_half = 13.0;  // half the width of the road, m
 uniform float m_tri = 0.0;       // 0..1 a third grid at another angle joins the interference
@@ -1869,7 +1888,12 @@ float vn(vec2 p) {
 	f = f * f * (3.0 - 2.0 * f);
 	return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y);
 }
-void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void vertex() {
+	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float bd = max(length(wp.xz - CAMERA_POSITION_WORLD.xz) - 140.0, 0.0);          // HORIZON BEND: past 140 m the world curls UP with the square of the distance, so far slopes lift into view and the run ahead rises into the sky like the inside of a ring
+	wp.y += bend_k * bd * bd;
+	VERTEX = (inverse(MODEL_MATRIX) * vec4(wp, 1.0)).xyz;
+}
 void fragment() {
 	float near = 1.0 - smoothstep(30.0, 120.0, length(VERTEX));
 	float big = vn(wp.xz * 0.11);
@@ -2042,7 +2066,7 @@ func _make_flag_mesh() -> ArrayMesh:
 ## It is one mesh that follows the board in steps; the real ground lies over it.
 const SKIRT_STEP := 120.0
 var _skirt: MeshInstance3D
-var _skirt_mat: StandardMaterial3D
+var _skirt_mat: ShaderMaterial
 ## On the winding trail the skirt is flat and a little under the ground: it is one straight mesh, and the trail wanders off its axis, so hillsides rising on it stood across the road ahead and hid it until the board went through them.
 var _skirt_flat: bool = OS.has_feature("web") and not str(JavaScriptBridge.eval("window.location.search")).contains("straight")
 
@@ -2099,10 +2123,10 @@ func _build_skirt() -> void:
 					for vi in tri:
 						st.set_color(cs[vi])
 						st.add_vertex(vs[vi])
-	_skirt_mat = StandardMaterial3D.new()
-	_skirt_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_skirt_mat.vertex_color_use_as_albedo = true
-	_skirt_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_skirt_mat = ShaderMaterial.new()
+	var skirt_sh := Shader.new()
+	skirt_sh.code = SKIRT_SHADER
+	_skirt_mat.shader = skirt_sh
 	_skirt = MeshInstance3D.new()
 	_skirt.mesh = st.commit()
 	_skirt.material_override = _skirt_mat

@@ -6007,6 +6007,7 @@ const VEG_LIVE_SHADER := """shader_type spatial;
 render_mode cull_disabled;
 uniform float wob = 0.0;
 uniform float breathe = 0.0;
+uniform float bend_k = 0.0;
 uniform float mo_k = 0.0;
 uniform vec2 mo_t = vec2(0.0);
 uniform float face_k = 0.0;
@@ -6067,6 +6068,10 @@ void vertex() {
 		VERTEX.y *= 1.0 + sin(TIME * 2.1 + ph) * wob * 0.07;
 	}
 	wpv = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float bd = max(length(wpv.xz - CAMERA_POSITION_WORLD.xz) - 140.0, 0.0);          // horizon bend, as on the ground
+	vec3 wb = wpv;
+	wb.y += bend_k * bd * bd;
+	VERTEX = (inverse(MODEL_MATRIX) * vec4(wb, 1.0)).xyz;
 }
 void fragment() {
 	ALBEDO = COLOR.rgb;
@@ -6134,6 +6139,7 @@ const FX_KNOBS := [
 	["GROUND", "g_glow", "light waves", 1.0, 3.0],
 	["ROAD", "r_edge", "edge line", 1.0, 3.0],
 	["ROAD", "r_apron", "dark band outside", 1.0, 2.0],
+	["WORLD", "w_bend", "horizon bend: the far world curls up (ground, far valley, plain trees; other objects do not bend yet)", 0.0, 3.0],
 	["TREES", "t_sway", "sway", 1.0, 3.0],
 	["TREES", "t_breathe", "breathing", 0.6, 3.0],
 	["TREES", "t_moire", "moire on the trees", 0.0, 2.0],
@@ -6763,6 +6769,18 @@ func _efc_heading() -> float:
 	return atan2(fwd.x, -fwd.z)
 
 
+## HORIZON BEND, driven by the lab's knob and a little by speed (the faster you go the more the horizon curls). 0.00012 per m squared at knob 1: a slope 400 m away is lifted about 8 m.
+func _bend_tick() -> void:
+	var spd := clampf(vel.length() / 50.0, 0.0, 1.0)
+	var k := 0.00012 * fx("w_bend") * (0.4 + 0.6 * spd)
+	if _m_ground is ShaderMaterial:
+		(_m_ground as ShaderMaterial).set_shader_parameter("bend_k", k)
+	if _skirt_mat != null:
+		_skirt_mat.set_shader_parameter("bend_k", k)
+	if _veg_live != null:
+		_veg_live.set_shader_parameter("bend_k", k)
+
+
 ## THE MOIRE KNOBS, played with the game. Cell size, turning speed, how far apart the two grids are, how strongly the shapes show and how much colour: each follows something.
 ##   turning speed: your speed, and a kick on every sharpening      cell size: bigger the higher you are (the ground opens out), tighter inside a tube
 ##   second-grid ratio: breathes with the buzz, wider apart the deeper in you are      depth and colour: the molecules held (the colour only comes with the molecules)
@@ -6838,6 +6856,7 @@ func _stage_tick(delta: float) -> void:
 		(_m_ground as ShaderMaterial).set_shader_parameter("path_half", TRAIL_HALF)
 		_moire_tick(delta, h)
 	_sky_dome_tick(h)
+	_bend_tick()
 	_wander_tick(delta, h)
 	stage_post = smoothstep(0.22, 0.5, h)
 	if cam == null:
