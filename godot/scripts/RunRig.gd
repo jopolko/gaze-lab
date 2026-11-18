@@ -6156,7 +6156,7 @@ const FX_KNOBS := [
 	["ROAD", "r_apron", "dark band outside", 1.0, 2.0],
 	["WORLD", "w_caves", "caverns off the spring (1 = on; off by default: they were just tunnels in the way)", 0.0, 1.0],
 	["WORLD", "w_backdrop", "distant backdrop: 0 mountains, 1 ridge-bands, 2 monoliths, 3 rings", 0.0, 3.0],
-	["WORLD", "w_bend", "horizon bend: the far world curls up (ground, far valley, plain trees; other objects do not bend yet). ?fx=w_bend:0 turns it off", 1.0, 3.0],
+	["WORLD", "w_bend", "horizon bend: the far world curls up (ground, far valley, plain trees; other objects do not bend yet). ?fx=w_bend:0 turns it off", 0.0, 3.0],
 	["TREES", "t_sway", "sway", 1.0, 3.0],
 	["TREES", "t_breathe", "breathing", 0.6, 3.0],
 	["TREES", "t_moire", "moire on the trees", 0.0, 2.0],
@@ -6171,11 +6171,11 @@ const FX_KNOBS := [
 	["PICTURE", "p_face_auto", "...appears by itself, rarely", 1.0, 2.0],
 	["SKY", "p_god", "the whole sky is a face looking down (1 = shown now)", 0.0, 1.0],
 	["SKY", "p_god_auto", "...appears by itself, very rarely", 1.0, 2.0],
-	["WORLD", "w_moguls", "flow-state moguls: stretches built while you are in flow get gentle rhythmic bumps (All dressed)", 1.0, 2.0],
-	["WORLD", "w_echo", "astral echoes: faint coloured copies trail behind the board (All dressed)", 1.0, 2.0],
-	["WORLD", "w_carve", "chromatic carve trail: colour dots left where you cut hard (All dressed)", 1.0, 2.0],
-	["PICTURE", "p_rewind", "rewind: a crash tears and splits the picture as the board is put back (All dressed)", 1.0, 2.0],
-	["PICTURE", "p_smear", "boost smear: the picture streaks out from the middle while boosting", 1.0, 2.0],
+	["WORLD", "w_moguls", "flow-state moguls: stretches built while you are in flow get gentle rhythmic bumps (All dressed)", 0.0, 2.0],
+	["WORLD", "w_echo", "astral echoes: faint coloured copies trail behind the board (All dressed)", 0.0, 2.0],
+	["WORLD", "w_carve", "chromatic carve trail: colour dots left where you cut hard (All dressed)", 0.0, 2.0],
+	["PICTURE", "p_rewind", "rewind: a crash tears and splits the picture as the board is put back (All dressed)", 0.0, 2.0],
+	["PICTURE", "p_smear", "boost smear: the picture streaks out from the middle while boosting", 0.0, 2.0],
 	["PICTURE", "p_hueedge", "hue-cycling outlines in All dressed (rainbow ink at every edge: off by default, it cluttered the picture and costs a full-screen filter)", 0.0, 2.0],
 	["PICTURE", "p_edge", "cel outlines (ink lines at every edge)", 0.0, 1.5],
 	["PICTURE", "p_cel", "cel bands (flat steps of light: it can flatten the ground in bright scenes)", 0.0, 1.0],
@@ -9278,8 +9278,8 @@ func _tf_mat(col: Color) -> StandardMaterial3D:
 
 
 func _trail_fx_tick(delta: float) -> void:
-	if _journey == null or _finished or _paused or _warming:
-		return
+	if _journey == null or _finished or _paused or _warming or (fx("w_echo") < 0.01 and fx("w_carve") < 0.01):
+		return          # (both off: nothing is built or run)
 	var want := 1.0 if (fx("w_echo") > 0.01 and (maxf(_mol_avg(), fx_level()) > 0.08 or _boost_t > 0.0)) else 0.0
 	_tf_on = lerpf(_tf_on, want, 1.0 - exp(-2.5 * delta))
 	if _tf_echo.is_empty():
