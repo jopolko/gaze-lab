@@ -856,6 +856,8 @@ func _build_footer() -> void:
 	# the two ways to ride the same trail: one choice, remembered
 	var mrow := HBoxContainer.new()
 	mrow.add_theme_constant_override("separation", 12)
+	mrow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_footer.add_child(mrow)
 	var mgrp := ButtonGroup.new()
 	for md in [["score", "FREESTYLE  ·  biggest score"], ["race", "RACE  ·  fastest line"]]:
@@ -868,17 +870,21 @@ func _build_footer() -> void:
 		_mode_btns[md[0]] = mb
 	_cam_btn = Button.new()
 	_cam_btn.text = "START"
-	_cam_btn.alignment = HORIZONTAL_ALIGNMENT_RIGHT          # the browser's own "exit full screen" notice sits over the middle of the bottom edge for a few seconds: the word goes where it is not covered
+	_cam_btn.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cam_btn.focus_mode = Control.FOCUS_NONE
 	for st in ["normal", "hover", "pressed", "focus"]:
-		var sb := _style(_accent if st != "hover" else Color(0.25, 0.62, 1.0), Color(0, 0, 0, 0), 20, 0)
-		sb.content_margin_right = 90
+		var col := _accent if st != "hover" else Color(0.25, 0.62, 1.0)
+		if st == "pressed":
+			col = _accent.darkened(0.25)
+		var sb := _style(col, Color(1, 1, 1, 0.22), 18, 2)          # a proper button: rounded, a thin light rim, a fixed size at the right-hand end, not a bar across the screen
+		sb.shadow_color = Color(0, 0, 0, 0.35)
+		sb.shadow_size = 8
 		_cam_btn.add_theme_stylebox_override(st, sb)
-	_cam_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_cam_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
 	_cam_btn.pressed.connect(_start.bind(not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nocam"))))          # ?nocam: start with the mouse as your eyes (tests)
 	_footer.add_child(_cam_btn)
 	_texts.append([_cam_btn, 30])
-	_boxes.append([_cam_btn, 0.0, 84.0])
+	_boxes.append([_cam_btn, 340.0, 76.0])
 	_note = _label("The camera never leaves your device.  No camera? The mouse or your thumb steers instead.", 16, Color(1, 1, 1, 0.55), _root, true)
 	if OS.has_feature("web") and bool(JavaScriptBridge.eval("/iPhone|iPod/.test(navigator.userAgent) && !navigator.standalone")):
 		_note.text += "  On an iPhone the browser cannot go full screen: tap Share, then Add to Home Screen, and open the game from its icon."
@@ -1247,6 +1253,7 @@ func _apply_unit(force: bool) -> void:
 	_margin.add_theme_constant_override("margin_bottom", int(16.0 * u))
 	_root.add_theme_constant_override("separation", int(10.0 * u))
 	_footer.vertical = portrait or size.x < 760.0
+	_cam_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL if _footer.vertical else Control.SIZE_SHRINK_END          # side by side: a button of its own size on the right; stacked (portrait): across the width
 	_footer.add_theme_constant_override("separation", int(10.0 * u))
 	for pc in _cards:
 		var sb := pc.get_theme_stylebox("panel") as StyleBoxFlat
