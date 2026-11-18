@@ -7173,6 +7173,10 @@ func _kit_prebuild() -> void:
 			_ring_pool.append(Mats.glow())
 
 
+var _warm_full: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("fullwarm")          # ?fullwarm: the old, complete warm-up (to compare, or if something stutters that did not)
+var _warm_time: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("warmtime")
+
+
 func _warm_shaders() -> void:
 	if _warmed or cam == null:
 		return
@@ -7228,9 +7232,15 @@ func _warm_shaders() -> void:
 	for i in mats.size():
 		var m: Material = mats[i]
 		if m != null:
-			for near in [true, false]:
+			var t_m := Time.get_ticks_usec()
+			# (an unshaded material has no lamp in it, so near a lamp and far from one is the same program: build it once. ?fullwarm brings back building everything both ways)
+			var both := _warm_full or not (m is ShaderMaterial and (m as ShaderMaterial).shader != null and (m as ShaderMaterial).shader.code.contains("unshaded"))
+			for near in ([true, false] if both else [true]):
 				_warm_one(holder, col_box, m, i, near)
 				_warm_one(holder, plain_box, m, i, near)          # a mesh without vertex colours (rings, glints, poles, beacons) is a different program from one with them
+			if _warm_time:
+				await get_tree().process_frame          # ?warmtime: one frame per material, so each one's build can be timed
+				print("[warmtime] %d  %s  %.0f ms" % [i, m.get_class() + (" " + str((m as ShaderMaterial).shader.code.length()) if m is ShaderMaterial else ""), float(Time.get_ticks_usec() - t_m) / 1000.0])
 	print("[warm] materials drawn %d ms" % (Time.get_ticks_msec() - t_w0))
 	_warm_k = 0.5
 	var puff := CPUParticles3D.new()
@@ -7308,7 +7318,7 @@ func _warm_one(holder: Node3D, mesh: Mesh, m: Material, i: int, near: bool) -> v
 	holder.add_child(root)
 	root.position = (Vector3(0.0, -0.4, -3.0) if near else Vector3(0.0, -2.0, -40.0)) + Vector3(float(i) * (0.008 if near else 0.06), 0.0, 0.0)
 	root.scale = Vector3.ONE * (0.004 if near else 0.03)
-	for shadow in [false, true]:
+	for shadow in ([false, true] if (_warm_full or (_lvl != null and _lvl.sun != null and _lvl.sun.shadow_enabled)) else [false]):          # (when the sun casts no shadow the shadow-pass program is never needed)
 		var mi := MeshInstance3D.new()
 		mi.mesh = mesh
 		mi.material_override = m
