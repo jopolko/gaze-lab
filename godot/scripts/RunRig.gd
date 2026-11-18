@@ -4712,7 +4712,7 @@ func _process(delta: float) -> void:
 	_exc_tick(delta)
 	_dbg_t -= delta
 	if _dbg_t <= 0.0 and OS.has_feature("web"):
-		_dbg_t = 1.0
+		_dbg_t = 5.0
 		JavaScriptBridge.eval("window.__dbg={draws:%d,objs:%d,prims:%d,fps:%d}" % [int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME)), int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)), int(RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME)), int(Engine.get_frames_per_second())])          # for looking at what a frame costs (read window.__dbg)
 	if _journey != null and not _finished:
 		_journey.tick(delta)
@@ -7093,6 +7093,9 @@ func _moire_tick(delta: float, h: float) -> void:
 	gm.set_shader_parameter("m_warp", _mo_warp)
 
 
+var _stg_acc: float = 0.0
+
+
 ## Every frame: how far each piece has come, from what is held.
 func _stage_tick(delta: float) -> void:
 	if _journey == null:
@@ -7114,12 +7117,18 @@ func _stage_tick(delta: float) -> void:
 		(_m_ground as ShaderMaterial).set_shader_parameter("gcen", Vector2(wpos.x, wpos.z))
 		(_m_ground as ShaderMaterial).set_shader_parameter("path_on", 1.0 if trail else 0.0)
 		(_m_ground as ShaderMaterial).set_shader_parameter("path_half", TRAIL_HALF)
-		_moire_tick(delta, h)
-	_sky_dome_tick(h)
-	_clarity_tick(delta)
-	_bend_tick()
-	_bd_tick(delta)
-	_wander_tick(delta, h)
+	# the slow-moving world effects need not run every frame: on a slow phone they run every other frame, with the time they missed added in
+	_stg_acc += delta
+	if Engine.get_frames_per_second() >= 45.0 or (Engine.get_process_frames() & 1) == 0:
+		var sd := _stg_acc
+		_stg_acc = 0.0
+		if _m_ground is ShaderMaterial:
+			_moire_tick(sd, h)
+		_sky_dome_tick(h)
+		_clarity_tick(sd)
+		_bend_tick()
+		_bd_tick(sd)
+		_wander_tick(sd, h)
 	stage_post = smoothstep(0.22, 0.5, h)
 	if cam == null:
 		return

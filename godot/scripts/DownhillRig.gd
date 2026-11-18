@@ -1457,7 +1457,8 @@ func _process(delta: float) -> void:
 	if _coach_t <= 0.0:
 		_coach_good = false
 	_hud.size = get_viewport().get_visible_rect().size
-	if Engine.get_frames_per_second() >= 45.0 or (Engine.get_process_frames() & 1) == 0:
+	var fps_now := Engine.get_frames_per_second()
+	if fps_now >= 45.0 or (fps_now >= 35.0 and (Engine.get_process_frames() & 1) == 0) or (Engine.get_process_frames() % 3) == 0:
 		_hud.queue_redraw()                                # on a slow machine the HUD is drawn every other frame: it is the biggest single part of a frame in a browser
 
 

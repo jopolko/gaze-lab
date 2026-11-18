@@ -9,7 +9,7 @@ extends Node
 ## sensor (camera track ended / muted), feltbad (the player pressed THAT FELT BAD: the last 40 seconds ride along).
 
 const TICK := 10.0          # one summary every ten seconds (it was every second: the report itself cost a frame or two each time on a phone)
-const LIGHT_EVERY := 8.0
+const LIGHT_EVERY := 45.0          # reading the camera picture back costs a frame or two: rarely, once play is under way
 const MIN_FLAG_S := 2.0
 
 static var inst: Telemetry = null
