@@ -6147,7 +6147,7 @@ const FX_KNOBS := [
 	["GROUND", "g_glow", "light waves", 1.0, 3.0],
 	["ROAD", "r_edge", "edge line", 1.0, 3.0],
 	["ROAD", "r_apron", "dark band outside", 1.0, 2.0],
-	["WORLD", "w_caves", "caverns off the spring (1 = on)", 1.0, 1.0],
+	["WORLD", "w_caves", "caverns off the spring (1 = on; off by default: they were just tunnels in the way)", 0.0, 1.0],
 	["WORLD", "w_backdrop", "distant backdrop: 0 mountains, 1 ridge-bands, 2 monoliths, 3 rings", 0.0, 3.0],
 	["WORLD", "w_bend", "horizon bend: the far world curls up (ground, far valley, plain trees; other objects do not bend yet)", 0.0, 3.0],
 	["TREES", "t_sway", "sway", 1.0, 3.0],

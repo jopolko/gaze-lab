@@ -320,7 +320,7 @@ func _make_assets() -> void:
 	_m_trunk.top_radius = 0.28
 	_m_trunk.bottom_radius = 0.34
 	_m_trunk.height = 1.4
-	_m_trunk.radial_segments = 5
+	_m_trunk.radial_segments = 4 if Game.touch_mode else 5
 	_m_trunk.rings = 1
 	_m_rock = _make_rock_mesh()
 	var rs := SphereMesh.new()
@@ -1997,7 +1997,7 @@ func _make_tree_mesh() -> ArrayMesh:
 		var y0: float = tier[1]
 		var h: float = tier[2]
 		var apex := Vector3(0.0, y0 + h, 0.0)
-		var n := 8
+		var n := 6 if Game.touch_mode else 8          # (a phone draws thousands of these: fewer sides)
 		for i in n:
 			var a0 := TAU * float(i) / float(n)
 			var a1 := TAU * float(i + 1) / float(n)
