@@ -123,7 +123,7 @@ func _ready() -> void:
 	_build_tabs()
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED          # no scrolling anywhere: every page is made to fit the screen
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO          # the page scrolls if it is taller than the room: START below it must never be pushed off the screen          # no scrolling anywhere: every page is made to fit the screen
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_root.add_child(_scroll)
 	_grid = GridContainer.new()
