@@ -47,6 +47,7 @@ var _int_row: Control
 var _status: Label
 var _reports_l: Label
 var _cam_btn: Button
+var _world_cols: BoxContainer
 var _helps: Array = []          # the long explanations: shown where there is room (a computer), left out on a short phone screen
 var _mode_btns: Dictionary = {}
 var _u: float = 1.0
@@ -561,7 +562,21 @@ func _build_theme_card() -> void:
 	_toggles["journey"] = jb
 	_helps.append(_label("A night out in waves: a first taste, warmth, the rush, the peak, the comedown. Glowing molecules bring it on early. Picking a world yourself gives that world in full.", 15, Color(1, 1, 1, 0.55), c))
 	_helps.append(_label("DOSE, in game units (ug is a joke, not a real amount): how strong the waves go and how long the night is, set together. Fine-tune below if you want.", 15, Color(1, 1, 1, 0.55), c))
-	var uf := _flow(c)
+	# TWO GROUPS side by side when the screen is wide (left: the night, right: the world), one above the other when it is narrow: the same touch-sized controls, a lot less height
+	_world_cols = BoxContainer.new()
+	_world_cols.add_theme_constant_override("separation", 28)
+	c.add_child(_world_cols)
+	var lc := VBoxContainer.new()
+	lc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lc.add_theme_constant_override("separation", 10)
+	_world_cols.add_child(lc)
+	var rc := VBoxContainer.new()
+	rc.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rc.add_theme_constant_override("separation", 10)
+	_world_cols.add_child(rc)
+	_label("THE NIGHT   dose, strength, length", 15, Color(1, 1, 1, 0.5), lc)
+	_label("THE WORLD   what you ride through", 15, Color(1, 1, 1, 0.5), rc)
+	var uf := _flow(lc)
 	var ug_g := ButtonGroup.new()
 	for uv in [[25, 15, 0, "25 ug  15 min"], [50, 30, 1, "50 ug  30 min"], [75, 60, 2, "75 ug  1 h"], [1000, 480, 2, "1000 ug  endless"]]:
 		var ub := _button(String(uv[3]), 17, uf, true)
@@ -574,7 +589,7 @@ func _build_theme_card() -> void:
 			_save())
 		_ug_btns[uv[0]] = ub
 		_boxes.append([ub, 190.0, 44.0])
-	var tf := _flow(c)
+	var tf := _flow(lc)
 	var tg := ButtonGroup.new()
 	for tv in [[0, "GENTLE"], [1, "NORMAL"], [2, "WILD"]]:
 		var tb := _button(String(tv[1]), 17, tf, true)
@@ -585,7 +600,7 @@ func _build_theme_card() -> void:
 		_trip_btns[tv[0]] = tb
 		_boxes.append([tb, 120.0, 44.0])
 	_helps.append(_label("HOW LONG A SESSION: the climb, the peak and the way down are stretched to fit. It goes round again, a little higher, if you play on.", 15, Color(1, 1, 1, 0.55), c))
-	var sf := _flow(c)
+	var sf := _flow(lc)
 	var sg := ButtonGroup.new()
 	for sv in [[15, "15 MIN"], [30, "30 MIN"], [60, "1 H"], [120, "2 H"], [240, "4 H"], [480, "8 H"]]:
 		var sb := _button(String(sv[1]), 17, sf, true)
@@ -595,7 +610,7 @@ func _build_theme_card() -> void:
 			_save())
 		_sess_btns[sv[0]] = sb
 		_boxes.append([sb, 100.0, 44.0])
-	var f := _flow(c)
+	var f := _flow(rc)
 	var grp := ButtonGroup.new()
 	var all_looks := OS.has_feature("web") and bool(JavaScriptBridge.eval("new URLSearchParams(window.location.search).has('looks')"))          # one look at a time: Alpine is the demo, ?looks brings the others back
 	for id in Themes.ORDER:
@@ -607,8 +622,8 @@ func _build_theme_card() -> void:
 		b.pressed.connect(_pick_theme.bind(id))
 		_theme_btns[id] = b
 		_boxes.append([b, 190.0, 64.0])
-	_blurb = _label("", 20, Color(1, 1, 1, 0.8), c)
-	var r := _slider(c, 0.0, 1.5, 0.05, "TRIPPY INTENSITY", 17, 34.0)
+	_blurb = _label("", 20, Color(1, 1, 1, 0.8), rc)
+	var r := _slider(rc, 0.0, 1.5, 0.05, "TRIPPY INTENSITY", 17, 34.0)
 	_int_s = r[0]
 	_int_l = r[1]
 	_int_row = _int_s.get_parent()
@@ -1191,7 +1206,7 @@ func _process(_delta: float) -> void:
 			_fit_h += 1
 			_fit = maxf(0.4, _fit * (vs.y * 0.55 / fixed))
 			_apply_unit(true)
-	if _fit_n < 24 and _root != null and _margin.visible:
+	if _fit_n < 40 and _root != null and _margin.visible:
 		# everything must be on the page without scrolling: if it is taller than the screen, shrink it all a little and look again
 		var need := _grid.get_combined_minimum_size().y
 		for ch in _root.get_children():
@@ -1208,6 +1223,10 @@ func _process(_delta: float) -> void:
 				_fit_n += 1                                   # no scrolling: the whole page, the footer included, is scaled until it fits the height
 				_fit = maxf(0.28, _fit * vs.y / need * 0.97)
 				_apply_unit(true)
+		elif need < vs.y * 0.82 and _fit < 1.0:
+			_fit_n += 1                                       # room to spare: grow back up (it only ever shrank), so the text is as big as the screen allows
+			_fit = minf(1.0, _fit * vs.y * 0.94 / need)
+			_apply_unit(true)
 	if visible and GazeProvider.camera_status != "" and _status != null:
 		_status.text = GazeProvider.camera_status
 
@@ -1263,6 +1282,7 @@ func _apply_unit(force: bool) -> void:
 	_margin.add_theme_constant_override("margin_bottom", int(16.0 * u))
 	_root.add_theme_constant_override("separation", int(10.0 * u))
 	_footer.vertical = portrait or size.x < 760.0
+	_world_cols.vertical = portrait or size.x * _css_per_unit() < 640.0
 	_cam_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL if _footer.vertical else Control.SIZE_SHRINK_END          # side by side: a button of its own size on the right; stacked (portrait): across the width
 	_footer.add_theme_constant_override("separation", int(10.0 * u))
 	for pc in _cards:
