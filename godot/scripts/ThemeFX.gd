@@ -145,8 +145,14 @@ static func apply_part(level: MainLevel, rig: DownhillRig, id: String, part: Str
 			if rig._mist != null:
 				(rig._mist.material_override as ShaderMaterial).set_shader_parameter("tint", rig.mist_color)
 		"ground":
-			var gm := Themes.ground_material(id)
-			(rig._m_ground as ShaderMaterial).shader = gm.shader if gm != null else (rig.get_meta("orig_ground") as Shader)
+			# ONE GROUND for every world: the game's own shader (hard squares, road edge, moire) stays, and the world only changes its colours
+			var gmat := rig._m_ground as ShaderMaterial
+			gmat.shader = rig.get_meta("orig_ground") as Shader
+			var pal: Array = Themes.ground_pal(id)
+			gmat.set_shader_parameter("w_a", pal[0])
+			gmat.set_shader_parameter("w_b", pal[1])
+			gmat.set_shader_parameter("w_line", pal[2])
+			gmat.set_shader_parameter("w_mix", float(pal[3]))
 		"veg":
 			rig._veg_theme = Themes.veg_material(id)
 			rig.hazard_skin = Themes.hazard_skin(id)

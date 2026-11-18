@@ -648,6 +648,10 @@ func _chunk_tint(_j: int) -> Color:
 	return Color.WHITE
 
 
+func _path_lat_a(_x: float, _z: float) -> float:
+	return 0.5          # (the trail game overrides this: the distance from the middle of the trail)
+
+
 func _ground_color(_j: int, _x: float, _z: float, c: Color) -> Color:
 	return c
 
@@ -718,7 +722,9 @@ func _chunk_step(job: Dictionary, budget_us: int) -> bool:
 				if absf(x) > W_HALF:
 					c = c.lerp(Color(0.8, 0.84, 0.88), 0.3)
 				c = _ground_color(j, x, z2, c)
-				cols.append(c * _chunk_tint(j))
+				var cc: Color = c * _chunk_tint(j)
+				cc.a = _path_lat_a(x, z2)
+				cols.append(cc)
 			iz2 += 1
 			if Time.get_ticks_usec() - t0 > budget_us:
 				job["iz"] = iz2
@@ -1830,6 +1836,29 @@ render_mode cull_disabled;
 uniform float grid = 0.0;        // 0..1: squares in the snow, fixed to the ground, so they rush by underfoot (the best measure of speed there is) and pulse in travelling bands
 uniform float gglow = 0.0;       // 0..1: slow waves of light running out along the ground from the board
 uniform vec2 gcen = vec2(0.0);   // where the board is: the second grid of the moire turns about it
+uniform float path_on = 0.0;     // 1 on the trail: the road is drawn apart from the scenery (its distance from the middle of the trail rides in the vertex alpha)
+uniform float path_half = 13.0;  // half the width of the road, m
+uniform float m_tri = 0.0;       // 0..1 a third grid at another angle joins the interference
+uniform float m_rad = 0.0;       // 0..1 rings round the board replace the second grid: a bullseye in the snow
+uniform float m_warp = 0.0;      // 0..1 the second grid ripples and flows
+uniform vec2 m_drift = vec2(0.0);   // how far the second grid has slid over the ground (the game adds it up slowly: the shapes wander without ever following the board)
+uniform vec2 m_rc = vec2(0.0);       // where the rings of the bullseye are centred (fixed in the world when they start)
+uniform vec3 w_a = vec3(1.0);       // the world's colours on the one shared lattice: light square, dark square, line, and how much of it replaces the snow (0 = plain snow)
+uniform vec3 w_b = vec3(1.0);
+uniform vec3 w_line = vec3(1.0);
+uniform float w_mix = 0.0;
+uniform float face_k = 0.0;       // the emergent face, in the ground's own squares: each square takes the tone of the face as seen from where it began
+uniform float face_az = 0.0;
+uniform vec3 face_o = vec3(0.0);
+uniform float k_sq = 1.0;        // the lab: how hard the squares show, the road edge and the dark band (1 = as designed)
+uniform float k_edge = 1.0;
+uniform float k_apron = 1.0;
+uniform float m_cell = 6.0;      // metres to a square
+uniform float m_ang = 0.0;       // how far the second grid has turned (the game adds up its turning speed, so changing the speed never makes it jump)
+uniform float m_ratio = 1.037;   // how much finer the second grid is: the closer to 1, the bigger and slower the shapes
+uniform float m_depth = 0.12;    // how strongly the shapes show in the snow
+uniform float m_sat = 0.0;       // 0 snow shade only, up to full colour in the shapes
+uniform float m_hue = 0.0;       // where the colours start (the game turns it)
 uniform float detail = 1.0;      // 0 on the low quality levels: no fine grain in the snow
 vec3 hsv2rgb(vec3 c) { vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0); return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y); }
 varying vec3 wp;
@@ -1859,17 +1888,64 @@ void fragment() {
 	float sp = step(0.9985, tw) * near * (0.55 + 0.45 * sin(TIME * 3.0 + tw * 60.0));
 	EMISSION = vec3(sp) * 0.8;
 	float dist = length(VERTEX);
+	// the road: clean and bright, its edges drawn hard, a dark band outside them, so the way is never in doubt whatever colours the scenery has
+	float al = abs((COLOR.a - 0.5) * 60.0);
+	float onp = path_on * (1.0 - smoothstep(path_half - 0.3, path_half + 0.3, al));
+	float edge = path_on * (1.0 - smoothstep(0.35, 1.1, abs(al - path_half))) * (1.0 - smoothstep(160.0, 340.0, dist));
+	float apron = path_on * smoothstep(path_half, path_half + 0.3, al) * (1.0 - smoothstep(path_half + 0.3, path_half + 9.0, al));
+	vec2 g1 = wp.xz / 6.0;          // the squares are 6 m, fixed to the ground, ALWAYS: only the second grid (the shapes) is ever rescaled
+	float gr1 = sin(g1.x * 6.283) * sin(g1.y * 6.283);
+	float sw = fwidth(gr1) * 1.1 + 0.002;
+	float sq0 = smoothstep(-sw, sw, gr1);
+	// THE FAR GROUND: the same squares at 4x and 16x the size further out, cross-faded, so distant slopes are never a plain flat plane (it read as a wall of colour hiding the way on),
+	// and the squares keep streaming toward you at every distance, which is most of the feeling of speed and depth.
+	vec2 g24 = wp.xz / 24.0;
+	float gr24 = sin(g24.x * 6.283) * sin(g24.y * 6.283);
+	float sw24 = fwidth(gr24) * 1.1 + 0.002;
+	vec2 g96 = wp.xz / 96.0;
+	float gr96 = sin(g96.x * 6.283) * sin(g96.y * 6.283);
+	float sw96 = fwidth(gr96) * 1.1 + 0.002;
+	float fw1 = smoothstep(80.0, 200.0, dist);
+	float fw2 = smoothstep(300.0, 700.0, dist);
+	float sq = mix(mix(sq0, smoothstep(-sw24, sw24, gr24), fw1), smoothstep(-sw96, sw96, gr96), fw2);          // (outside the branch: derivatives are only defined where every pixel takes the same path)
 	if (grid > 0.001) {
-		// A SOFT MOIRE in the snow: two grids of squares, the second a little finer and turning slowly about the board, multiplied. Only shade, no lines and no colour, so
+		// THE MOIRE (hard squares, soft shapes) in the snow: two grids of squares, the second a little finer and turning slowly about the board, multiplied. Only shade, no lines and no colour, so
 		// nothing crosses the way ahead; the slow shapes drift over the ground and the fixed grid underneath makes them rush by. (The full colour moire is Themes.GROUND_PSY.)
-		vec2 g1 = wp.xz / 6.0;
-		float t = TIME * 0.045;
-		vec2 rp = wp.xz - gcen;
-		vec2 g2 = vec2(rp.x * cos(t) - rp.y * sin(t), rp.x * sin(t) + rp.y * cos(t)) / 6.0 * 1.037;
-		float m = sin(g1.x * 6.283) * sin(g1.y * 6.283) * sin(g2.x * 6.283) * sin(g2.y * 6.283);
+		// BOTH GRIDS STAY FIXED TO THE GROUND. (They used to be centred on the board: then the second grid travelled with you, the first stayed put, and the pattern between them
+		// flickered at your speed. Now the interference shapes are as much a part of the ground as the squares, rush by at the same speed, and only slide slowly over it.)
+		vec2 wq = wp.xz + m_warp * 5.0 * vec2(sin(wp.z * 0.06 + TIME * 0.7), cos(wp.x * 0.05 - TIME * 0.5));
+		vec2 g2 = (vec2(wq.x * 0.99939 - wq.y * 0.03499, wq.x * 0.03499 + wq.y * 0.99939) * m_ratio + m_drift) / m_cell;
+		float gr2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
+		vec2 g3 = (vec2(wq.x * 0.99820 + wq.y * 0.05996, -wq.x * 0.05996 + wq.y * 0.99820) * (m_ratio * 1.021) + m_drift * vec2(-0.7, 0.9)) / m_cell;
+		float gr3 = sin(g3.x * 6.283) * sin(g3.y * 6.283);
+		float grr = sin(length(wp.xz - m_rc) / m_cell * 6.283 - TIME * 2.0);
 		float a = grid * (1.0 - smoothstep(90.0, 260.0, dist));
-		ALBEDO *= mix(1.0, 0.9 + 0.12 * smoothstep(-0.5, 0.5, m), a);
+		float m = gr1 * mix(gr2, grr, m_rad) * mix(1.0, gr3, m_tri);
+		float mm = smoothstep(-0.5, 0.5, m);
+		// the squares: hard-edged (a little antialiasing only), fixed to the ground, so they rush by and show the speed
+		float sqk = grid * (1.0 - smoothstep(1800.0, 3200.0, dist));
+		ALBEDO *= mix(1.0, mix(1.0 - (0.26 - 0.10 * fw2) * k_sq, 1.0, sq), sqk * (0.55 + 0.45 * onp));
+		ALBEDO *= mix(1.0, (1.0 - m_depth * 0.6) + m_depth * 0.6 * mm, a * (1.0 - onp));
+		if (m_sat > 0.01) {          // colour in the interference shapes (HSV by hand), mostly on the scenery: the road stays calm
+			vec3 hc = clamp(abs(fract(vec3(mm * 0.5 + m_hue) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+			vec3 mc = mix(vec3(1.0), hc, m_sat) * (0.35 + 0.65 * pow(mm, 0.65));
+			float ck = a * m_sat * (0.55 - 0.45 * onp);
+			ALBEDO = mix(ALBEDO, mc, ck);
+			EMISSION += mc * ck * 0.22;
+		}
 	}
+	if (w_mix > 0.001) {          // the world's palette on the same squares: two tones and a steady-width line along the square edges
+		vec2 fl = abs(fract(g1) - 0.5);
+		float lw = 0.035 + 0.0014 * dist;
+		float ln = max(smoothstep(0.5 - lw, 0.5, fl.x), smoothstep(0.5 - lw, 0.5, fl.y));
+		vec3 wc = mix(w_b, w_a, sq);
+		wc = mix(wc, w_line, ln * 0.9 * (1.0 - smoothstep(60.0, 300.0, dist)));
+		ALBEDO = mix(ALBEDO, wc * wc, w_mix);
+		EMISSION += w_line * ln * 0.25 * w_mix;
+	}
+	ALBEDO = mix(ALBEDO, ALBEDO * 0.4, clamp(apron * 0.9 * k_apron, 0.0, 1.0));
+	ALBEDO = mix(ALBEDO, vec3(0.92, 1.0, 1.0), clamp(edge * k_edge, 0.0, 1.0));
+	EMISSION += vec3(0.15, 0.95, 1.0) * edge * 1.6 * k_edge;
 }
 """
 

@@ -138,6 +138,9 @@ func _tick(dt: float) -> void:
 		r["light"] = _light
 	var cam := P.backend == P.Backend.CAMERA
 	r["cam"] = cam
+	var ws := DisplayServer.window_get_size()
+	r["port"] = ws.y > ws.x          # portrait or landscape: to compare how the tracking does in each
+	r["win"] = [ws.x, ws.y]
 	var fresh := false
 	if cam:
 		fresh = P._camera_fresh()
@@ -164,6 +167,10 @@ func _tick(dt: float) -> void:
 		_tr = []
 	if rig != null and is_instance_valid(rig):
 		r["pf"] = [snappedf(float(rig.get("_pf_phys")), 0.1), snappedf(float(rig.get("_pf_hud")), 0.1), snappedf(float(rig.get("_pf_focus")), 0.1)]          # where a game frame goes, ms: physics, HUD drawing, aim / focus
+	if rig != null and is_instance_valid(rig):
+		r["z"] = int(-float((rig.get("spos") as Vector3).z))          # where on the course
+		r["reg"] = str(rig.get("_player_region"))
+		r["warm"] = int(rig.get("warm_ms"))          # how long GET READY took on this device, ms
 	r["shake"] = snappedf(P.pm.shake, 0.01)
 	r["tilt"] = [snappedf(P.pm.tilt_x, 0.1), snappedf(P.pm.tilt_y, 0.1)]
 	r["lap"] = snappedf(P.pm.lap, 0.01)

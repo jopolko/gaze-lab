@@ -111,6 +111,10 @@ func _draw() -> void:
 	var hw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hsz).x
 	var pulse := 0.55 + 0.45 * sin(_t * 3.0)
 	draw_string(font, Vector2(w * 0.5 - hw * 0.5, h * 0.95), hint, HORIZONTAL_ALIGNMENT_LEFT, -1, hsz, Color(1, 1, 1, pulse * fade))
+	if OS.has_feature("web") and DisplayServer.is_touchscreen_available():          # a phone: it needs to be held sideways
+		var lt := "BEST PLAYED IN LANDSCAPE: TURN YOUR PHONE SIDEWAYS"
+		var lsz2 := int(15.0 * s)
+		draw_string(font, Vector2(w * 0.5 - font.get_string_size(lt, HORIZONTAL_ALIGNMENT_LEFT, -1, lsz2).x * 0.5, h * 0.95 - 46.0 * s), lt, HORIZONTAL_ALIGNMENT_LEFT, -1, lsz2, Color(1.0, 0.85, 0.3, 0.9 * fade))
 
 
 ## One cartoon badge picture in a box of about +-34 units, scaled by u: fat shapes, bright fills, dark outlines, a face or a burst in each so it reads at a glance.

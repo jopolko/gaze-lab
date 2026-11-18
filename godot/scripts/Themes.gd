@@ -128,13 +128,16 @@ render_mode cull_disabled, unshaded;
 varying vec3 wp;
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
-	vec2 g = wp.xz / 5.0;
+	// A REGULAR LATTICE, the same everywhere: 3 m squares, lines the same width on the ground at every distance (so they stay a few pixels thick as they run away), and the
+	// squares themselves alternately light and dark. Lines only in the two directions of the grid, so the eye reads the pattern streaming toward it as one moving surface.
+	vec2 g = wp.xz / 3.0;
 	vec2 f = abs(fract(g) - 0.5);
-	float w = 0.035 + 0.0025 * length(VERTEX);                          // lines stay visible far away
-	float line = max(smoothstep(0.5 - w, 0.5, f.x * 1.0 + 0.0), smoothstep(0.5 - w, 0.5, f.y));
-	float pulse = 0.65 + 0.35 * sin(wp.z * 0.05 - TIME * 2.0);
+	float w = 0.05 + 0.0016 * length(VERTEX);
+	float line = max(smoothstep(0.5 - w, 0.5, f.x), smoothstep(0.5 - w, 0.5, f.y));
+	float chk = step(0.0, sin(g.x * 3.14159) * sin(g.y * 3.14159));
+	float pulse = 0.75 + 0.25 * sin(wp.z * 0.05 - TIME * 2.0);
 	vec3 neon = mix(vec3(1.0, 0.1, 0.65), vec3(0.15, 0.85, 1.0), 0.5 + 0.5 * sin(wp.x * 0.02 + TIME * 0.3));
-	vec3 col = vec3(0.03, 0.0, 0.07) + neon * line * pulse * 0.9;
+	vec3 col = vec3(0.03, 0.0, 0.07) + vec3(0.07, 0.02, 0.14) * chk + neon * line * pulse * 0.9;
 	ALBEDO = col * col;
 }
 """
@@ -422,21 +425,11 @@ const SKY_PSY := """
 shader_type sky;
 vec3 pal(float t) { return 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67))); }
 void sky() {
+	// (the sky was a folded fractal, a mandala over everything above the horizon: now slow bands of colour that drift, so the glow of the world is what stands out)
 	vec3 d = EYEDIR;
-	float t = TIME * 0.04;
-	// a stereographic map of the whole sky, folded again and again: a slowly turning mandala of glowing filaments on a deep field
-	vec2 p = d.xz / (1.0 + abs(d.y) * 1.3 + 0.001) * 1.5;
-	float c = cos(t), s = sin(t);
-	p = mat2(vec2(c, s), vec2(-s, c)) * p;
-	float acc = 0.0;
-	float m = 1.0e3;
-	for (int i = 0; i < 9; i++) {
-		p = abs(p) / (dot(p, p) + 0.002) - vec2(0.90 + 0.05 * sin(TIME * 0.11), 0.58 + 0.04 * cos(TIME * 0.09));
-		acc += length(p);
-		m = min(m, abs(p.x) + abs(p.y) * 0.7);
-	}
-	float glow = exp(-m * 4.0);
-	vec3 col = pal(acc * 0.025 + TIME * 0.025 + d.y * 0.3) * (0.04 + 0.62 * glow * glow);
+	float az = atan(d.x, -d.z);
+	float band = 0.5 + 0.5 * sin(az * 2.0 + d.y * 5.0 + sin(d.y * 3.0 + TIME * 0.15) * 1.2 + TIME * 0.05);
+	vec3 col = pal(d.y * 0.5 + az * 0.08 + TIME * 0.02) * (0.05 + 0.20 * band * smoothstep(0.0, 0.6, d.y));
 	col += vec3(0.02, 0.0, 0.06);
 	float horizon = smoothstep(-0.1, 0.3, d.y);
 	COLOR = mix(vec3(0.10, 0.01, 0.16), col, horizon);
@@ -499,7 +492,40 @@ uniform float horizon = 0.42;    // where the horizon is on the screen (0 top, 1
 uniform vec3 mA = vec3(0.0);     // how far each of six molecules is felt, 0..1: mescaline, DOM, 2C-B
 uniform vec3 mB = vec3(0.0);     // 2C-E, 2C-T-2, 2C-T-7
 uniform float dmt = 0.0;         // all six at the top at once
+uniform float buzz = 0.0;        // 0..1 slow waves: bloom and colour swell and ease
+uniform float k_warp = 1.0;     // 1 = the gentle warps of now; 5 = the original strength
+uniform float k_fold = 0.0;     // the mirrored-segment fold (the mandala): 0 off
+uniform float k_pulse = 1.0;    // 1 = the soft 2C-T-7 pulse of now; 4 = the original
+uniform float k_rings = 0.0;    // rings of trip radiating from the middle: 0 off
+uniform float k_dmtr = 0.0;     // the rings when all six are held: 0 off
+uniform float face = 0.0;       // 0..1 a FACE emerges in the picture (rarely, for a few seconds): not drawn on it, but found in its light and shade
+uniform float k_wash = 0.0;     // a colour wash over the WHOLE picture that turns with the trip (the tie-dye): 0 off. It covered everything in a soft rainbow, so it is off
+uniform float k_edge = 0.0;      // CEL OUTLINES: ink lines where the picture changes (0 off)
+uniform float k_cel = 0.0;       // CEL BANDS: light and shade in a few flat steps (0 off)
+uniform float k_chroma = 1.0;   // the lab: how much each part of the picture pass counts (1 = as designed)
+uniform float k_trace = 1.0;
+uniform float k_punch = 1.0;
+uniform float tube = 0.0;       // 0..1 inside a tube: colour rays and rings run out from the middle of the picture along its edges
+uniform float sharp = 0.0;       // 0..1 rare: everything bright snaps crisp and hard, then softens
 """ + HSV + """
+float ell(vec2 p, vec2 c, vec2 r) {
+	vec2 q = (p - c) / r;
+	return 1.0 - smoothstep(0.88, 1.0, length(q));
+}
+// A WOMAN'S FACE, as light and shade only: the head a little lighter, the hair a lot darker, the eyes, brows and the shadow of the nose dark, the lips warm. Returns x = shade, y = lips.
+vec2 woman(vec2 p) {
+	float head = ell(p, vec2(0.0, 0.0), vec2(0.50, 0.70));
+	float hair_o = ell(p, vec2(0.0, 0.08), vec2(0.74, 0.92));
+	float hair_fall = (1.0 - smoothstep(0.60, 0.70, abs(p.x))) * step(abs(p.x), 0.74) * step(-1.5, p.y) * step(p.y, 0.1);
+	float hair = clamp(max(hair_o, hair_fall * smoothstep(0.42, 0.52, abs(p.x))) - head, 0.0, 1.0);
+	float eyes = max(ell(p, vec2(-0.21, 0.14), vec2(0.115, 0.045)), ell(p, vec2(0.21, 0.14), vec2(0.115, 0.045)));
+	float brows = max(ell(p, vec2(-0.21, 0.27), vec2(0.15, 0.02)), ell(p, vec2(0.21, 0.27), vec2(0.15, 0.02)));
+	float nose = ell(p, vec2(0.035, -0.06), vec2(0.03, 0.15)) * 0.7 + ell(p, vec2(0.0, -0.2), vec2(0.07, 0.03)) * 0.6;
+	float lips = ell(p, vec2(0.0, -0.40), vec2(0.15, 0.055));
+	float cheeks = max(ell(p, vec2(-0.27, -0.12), vec2(0.13, 0.09)), ell(p, vec2(0.27, -0.12), vec2(0.13, 0.09)));
+	float shade = 0.14 * head - 0.34 * hair - 0.55 * eyes - 0.32 * brows - 0.28 * nose + 0.10 * cheeks - 0.10 * lips;
+	return vec2(shade, lips);
+}
 void fragment() {
 	vec2 uv = SCREEN_UV;
 	vec2 c = uv - 0.5;
@@ -509,7 +535,7 @@ void fragment() {
 		col = texture(screen_tex, uv).rgb;
 	} else if (mode < 1.5) {
 		// psychedelic: a gentle breathing warp, chromatic split that grows toward the edges, tracers
-		float w = sin(TIME * 0.7 + r * 9.0) * 0.0035 * amount * breathe;
+		float w = sin(TIME * 0.7 + r * 9.0) * 0.0012 * k_warp * amount * breathe;
 		float tw = trip * trip;
 		float ang = 0.0;          // no swirl: the heavy swirling was too much
 		vec2 cw = vec2(c.x * cos(ang) - c.y * sin(ang), c.x * sin(ang) + c.y * cos(ang));
@@ -517,26 +543,26 @@ void fragment() {
 		// the six, each in its own way. Everything is eased down in the middle of the picture and round the board, so it stays playable.
 		float keep = mix(0.35, 1.0, smoothstep(0.05, 0.38, length(c * vec2(1.0, 1.25))));
 		float pl = pow(max(sin(TIME * 6.0), 0.0), 3.0);
-		wuv += c * (mA.x * 0.010 * keep * sin(TIME * 0.5 + r * 6.0));          // mescaline: slow warm waves
-		wuv += c * (mB.y * 0.008 * keep * sin(r * 34.0 - TIME * 3.0));          // 2C-T-2: ripples running out from the middle
-		if (mB.x + dmt > 0.01) {          // 2C-E: the picture folds into mirrored segments
+		wuv += c * (mA.x * 0.002 * k_warp * keep * sin(TIME * 0.5 + r * 6.0));          // mescaline: slow warm waves
+		wuv += c * (mB.y * 0.0015 * k_warp * keep * sin(r * 34.0 - TIME * 3.0));          // 2C-T-2: ripples running out from the middle
+		if (k_fold > 0.001 && mB.x + dmt > 0.01) {          // 2C-E: the picture folds into mirrored segments
 			// (only out toward the edges, and never most of the picture: folded all the way in, the ground stopped reading as ground and the feeling of speed went)
-			float kf = clamp(mB.x * 0.22 + dmt * 0.4, 0.0, 0.55) * smoothstep(0.24, 0.5, r);
+			float kf = clamp(mB.x * 0.22 + dmt * 0.4, 0.0, 0.55) * smoothstep(0.24, 0.5, r) * k_fold;
 			float seg = 6.2831853 / (6.0 + 2.0 * dmt);
 			float an = atan(c.y, c.x);
 			float af = abs(mod(an, seg) - seg * 0.5);
 			wuv = mix(wuv, vec2(0.5) + vec2(cos(af), sin(af)) * r, kf);
 		}
-		wuv = vec2(0.5) + (wuv - vec2(0.5)) * (1.0 - 0.025 * mB.z * pl * keep + 0.025 * dmt * sin(TIME * 0.8) * keep);          // 2C-T-7: a pulse that pushes in
-		float ca = (0.003 + r * 0.012) * amount * (1.0 + trip * 1.4 + mA.z * 1.2 + dmt * 1.5);          // 2C-B: the colours split apart
+		wuv = vec2(0.5) + (wuv - vec2(0.5)) * (1.0 - 0.006 * k_pulse * mB.z * pl * keep + 0.006 * k_pulse * dmt * sin(TIME * 0.8) * keep);          // 2C-T-7: a pulse that pushes in
+		float ca = (0.003 + r * 0.012) * amount * k_chroma * (1.0 + trip * 0.5 + mA.z * 0.5 + dmt * 0.6);          // 2C-B: the colours split apart
 		col = vec3(texture(screen_tex, wuv + c * ca).r, texture(screen_tex, wuv).g, texture(screen_tex, wuv - c * ca).b);
 		vec3 old = texture(trail, uv).rgb;
 		vec3 diff = max(old - texture(cur, uv).rgb * 0.92 - 0.02, vec3(0.0));
-		float m = clamp(dot(diff, vec3(0.34)) * 3.2 * (1.0 + trip * 1.0) * (0.4 + 0.6 * smoothstep(0.1, 0.45, r)) + trip * 0.06 * (0.5 + 0.5 * sin(r * 22.0 - TIME * 2.5)), 0.0, 1.0);
+		float m = clamp(dot(diff, vec3(0.34)) * 3.2 * (1.0 + trip * 1.0) * (0.4 + 0.6 * smoothstep(0.1, 0.45, r)) + trip * 0.06 * k_rings * (0.5 + 0.5 * sin(r * 22.0 - TIME * 2.5)), 0.0, 1.0);
 		vec3 ghost = hsv(fract(TIME * 0.12 + r * 0.9 + m * 0.5), 0.95, 1.0) * m;
-		col += ghost * 0.45 * amount * use_trail;          // (added light washes a picture out: less of it, and the colour is pushed instead, below)
+		col += ghost * 0.45 * amount * use_trail * k_trace;          // (added light washes a picture out: less of it, and the colour is pushed instead, below)
 		col = mix(col, col * hsv(fract(TIME * 0.05), 0.25, 1.1), 0.12 * amount);
-		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55);
+		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55 * k_wash);
 		col *= 1.0 + trip * 0.08;
 		col *= 1.0 - 0.45 * smoothstep(0.45, 0.95, r);
 		col = mix(col, col * vec3(1.15, 0.95, 0.78), mA.x * 0.5);          // mescaline: warm
@@ -544,11 +570,22 @@ void fragment() {
 		col *= 1.0 + mB.z * 0.30 * pl * keep;          // 2C-T-7: the pulse is bright too
 		// punch: richer colour and deeper darks, so the effect is vivid and not pale
 		float lm = dot(col, vec3(0.299, 0.587, 0.114));
-		col = mix(vec3(lm), col, 1.3 + 0.5 * trip + 0.8 * mA.z + 0.4 * dmt);          // 2C-B: vivid
+		col = mix(vec3(lm), col, 1.0 + (0.45 + 0.6 * trip + 0.8 * mA.z + 0.5 * dmt) * k_punch);          // 2C-B: vivid (a bit more: the colour is the point)
+		col += max(col - 0.55, vec3(0.0)) * (0.30 + 0.25 * buzz + 1.0 * sharp) * amount;
+		col = max((col - 0.5) * (1.0 + 0.3 * sharp) + 0.5, vec3(0.0));          // sharpening is crisp contrast too
+		col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 1.0 + 0.4 * sharp);          // the bright things (glows, moire, trees) bloom a little harder
 		col = max((col - 0.5) * (1.14 + 0.2 * trip + 0.2 * mA.y) + 0.5 - 0.05, vec3(0.0));          // DOM: deeper
 		if (dmt > 0.001) {          // all six: the colours cycle through everything and rings run outward
-			col = mix(col, col * hsv(fract(TIME * 0.2 + r * 2.0), 0.8, 1.4), dmt * 0.6 * keep);
-			col += hsv(fract(r * 8.0 - TIME * 0.6), 0.9, 1.0) * 0.18 * dmt * (0.5 + 0.5 * sin(r * 40.0 - TIME * 4.0)) * keep;
+			col = mix(col, col * hsv(fract(TIME * 0.2 + r * 2.0), 0.8, 1.4), dmt * 0.6 * keep * k_wash);
+			col += hsv(fract(r * 8.0 - TIME * 0.6), 0.9, 1.0) * 0.18 * k_dmtr * dmt * (0.5 + 0.5 * sin(r * 40.0 - TIME * 4.0)) * keep;
+		}
+		if (tube > 0.001) {          // an enclosed tube: rays and rings streaming past at the edges (the middle stays clear, so the path is never hidden)
+			float ta = atan(c.y, c.x);
+			float rays = 0.5 + 0.5 * sin(ta * 18.0 + sin(TIME * 1.7) * 3.0 + r * 8.0 - TIME * 12.0);
+			float rng = 0.5 + 0.5 * sin(r * 34.0 - TIME * 20.0);
+			vec3 rc2 = hsv(fract(TIME * 0.35 + r * 1.4 + ta * 0.16), 0.9, 1.0);
+			float edge = smoothstep(0.16, 0.62, r);
+			col = mix(col, col * (1.0 + 0.5 * rng * edge) + rc2 * rays * 0.55 * edge, tube * 0.9);
 		}
 		// soft shoulder: light added by the effects is folded back instead of clipping to white, so bright areas keep their colour (this is what made it pale and washed out)
 		float mxc = max(max(col.r, col.g), col.b);
@@ -581,6 +618,38 @@ void fragment() {
 		col += max(col - 0.75, 0.0) * vec3(0.8, 0.2, 0.6) * 0.8;
 		col *= 1.0 - 0.4 * smoothstep(0.45, 0.95, r);
 	}
+	if (face > 0.001) {          // THE FACE: found in the picture's own light and shade. It sits high, over the mountains and sky, and leaves the road alone.
+		float asp = SCREEN_PIXEL_SIZE.y / SCREEN_PIXEL_SIZE.x;
+		vec2 fp = (uv - vec2(0.5, 0.30)) * vec2(asp, 1.0) / 0.36;
+		fp.y = -fp.y;
+		vec2 fs = woman(fp);
+		float lumf = dot(col, vec3(0.299, 0.587, 0.114));
+		float fk = face * (0.6 + 0.4 * smoothstep(0.1, 0.6, lumf)) * (1.0 - smoothstep(0.55, 0.75, uv.y));
+		col *= 1.0 + fs.x * fk * 1.6;
+		col = mix(col, vec3(1.0, 0.35, 0.5) * (0.4 + lumf), fs.y * fk * 0.5);
+	}
+	if (k_edge > 0.001) {          // outlines: a Sobel over the UNtouched picture (so the lines are as sharp as the geometry, not smeared by the other effects), drawn as dark ink
+		vec2 px = SCREEN_PIXEL_SIZE * 1.4;
+		vec3 t00 = texture(screen_tex, uv + px * vec2(-1.0, -1.0)).rgb;
+		vec3 t10 = texture(screen_tex, uv + px * vec2(0.0, -1.0)).rgb;
+		vec3 t20 = texture(screen_tex, uv + px * vec2(1.0, -1.0)).rgb;
+		vec3 t01 = texture(screen_tex, uv + px * vec2(-1.0, 0.0)).rgb;
+		vec3 t21 = texture(screen_tex, uv + px * vec2(1.0, 0.0)).rgb;
+		vec3 t02 = texture(screen_tex, uv + px * vec2(-1.0, 1.0)).rgb;
+		vec3 t12 = texture(screen_tex, uv + px * vec2(0.0, 1.0)).rgb;
+		vec3 t22 = texture(screen_tex, uv + px * vec2(1.0, 1.0)).rgb;
+		vec3 gxv = (t20 + 2.0 * t21 + t22) - (t00 + 2.0 * t01 + t02);
+		vec3 gyv = (t02 + 2.0 * t12 + t22) - (t00 + 2.0 * t10 + t20);
+		float eg = length(vec3(length(vec2(gxv.r, gyv.r)), length(vec2(gxv.g, gyv.g)), length(vec2(gxv.b, gyv.b))));
+		float line = smoothstep(0.30, 0.85, eg);
+		col = mix(col, vec3(0.02, 0.0, 0.09), clamp(line * k_edge, 0.0, 0.92));
+	}
+	if (k_cel > 0.001) {          // bands: the light is stepped, so surfaces read as flat shapes with crisp edges between them
+		float lc = dot(col, vec3(0.299, 0.587, 0.114));
+		float bands = 5.0;
+		float lq = (floor(lc * bands) + smoothstep(0.35, 0.65, fract(lc * bands))) / bands;
+		col *= mix(1.0, lq / max(lc, 0.02), clamp(k_cel, 0.0, 1.0));
+	}
 	COLOR = vec4(col, 1.0);
 }
 """
@@ -600,6 +669,26 @@ static func make_shader(code: String) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = Mats.shader(code.replace("//HSV", HSV))          # shared: the title backdrop and the run use the same look, and must not build its shaders twice
 	return m
+
+
+## Each world's ground is the same lattice in its own colours: [light square, dark square, line, how much of it replaces the snow].
+static func ground_pal(id: String) -> Array:
+	match id:
+		"psychedelic":
+			return [Color(0.30, 0.08, 0.55), Color(0.95, 0.50, 1.0), Color(1.0, 0.9, 0.3), 0.85]
+		"synthwave":
+			return [Color(0.10, 0.02, 0.20), Color(0.03, 0.0, 0.07), Color(1.0, 0.1, 0.65), 0.95]
+		"matrix":
+			return [Color(0.0, 0.07, 0.03), Color(0.0, 0.015, 0.005), Color(0.1, 1.0, 0.3), 0.95]
+		"tunnel":
+			return [Color(0.07, 0.05, 0.16), Color(0.03, 0.02, 0.08), Color(0.2, 0.9, 1.0), 0.95]
+		"candy":
+			return [Color(1.0, 0.62, 0.80), Color(0.66, 0.92, 0.84), Color(0.98, 0.88, 0.84), 0.95]
+		"egypt":
+			return [Color(0.92, 0.70, 0.38), Color(0.72, 0.46, 0.22), Color(0.42, 0.22, 0.10), 0.95]
+		"desert":
+			return [Color(0.92, 0.52, 0.40), Color(0.66, 0.22, 0.24), Color(0.15, 0.04, 0.08), 0.95]
+	return [Color(1, 1, 1), Color(1, 1, 1), Color(1, 1, 1), 0.0]
 
 
 static func ground_material(id: String) -> ShaderMaterial:

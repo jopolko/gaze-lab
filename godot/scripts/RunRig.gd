@@ -1877,6 +1877,8 @@ func _rail_off(how: String) -> void:
 	if _gl_run >= 6:
 		_boost_t = maxf(_boost_t, 1.2 + 0.08 * float(_gl_run))      # a rail full of glints scooped: it fires you off the end
 		_cheer("GLINT RUSH! x%d" % _gl_run, Color(1.0, 0.85, 0.3), 1.4)
+	if f.has("chain") and how == "end":
+		_lk_payoff()
 	_toast(("POPPED OFF  %d m" if how == "pop" else "RAIL  %d m") % int(m), Color(0.5, 0.95, 1.0))
 	_burst(spos + Vector3(0, 0.3, 0), Color(0.6, 0.95, 1.0), 26, 9.0, 0.6, 0.8, Vector3(0, 1, 0.4), 60.0, -5.0)
 	_fov_punch = maxf(_fov_punch, 3.0)
@@ -1886,6 +1888,15 @@ func _rail_off(how: String) -> void:
 ## Per physics frame, after the board has moved: getting on a rail, riding it, coming off it.
 func _feat_tick(delta: float) -> void:
 	if not trail or _finished:
+		return
+	_lk_recent_t = maxf(_lk_recent_t - delta, 0.0)
+	if _orbs_on:
+		_orb_tick(delta)
+	if not _lk.is_empty():
+		_lk_step(delta)          # in a tube the board is carried along it: nothing else steers it
+		return
+	if not _lkp.is_empty():
+		_lkp_step(delta)
 		return
 	if not _rail.is_empty():
 		var f := _rail
@@ -1901,8 +1912,8 @@ func _feat_tick(delta: float) -> void:
 			_rail_off("end")
 			return
 		_rail_out_t = _rail_out_t + delta if (_s_in_now * float(f["sd"]) < -0.8 or (not _zoned() and absf(_s_in_now) > 0.8)) else 0.0          # read as left / middle / right, only a look to the OTHER side lets go
-		if _zoned() and not _line_pick.is_empty() and not is_same(_line_pick, f):
-			_rail_off("drop")                                      # the eyes chose something else: off this rail and over to it
+		if _zoned() and not _line_pick.is_empty() and not is_same(_line_pick, f) and not f.has("chain"):
+			_rail_off("drop")                                      # the eyes chose something else: off this rail and over to it (a rail in a chain is not let go of by a glance)
 			return
 		if _rail_out_t > 0.3:
 			_rail_off("drop")                                      # a hard look away lets go of it
@@ -2151,11 +2162,13 @@ func _trail_h(x: float, z: float) -> float:
 	return h
 
 
+const SWELL_K := 0.35          # how much the rolling swells count: they are what hides the path ahead (a crest on a swell, every 100 m or so), so they are small
+
 func terrain_h(x: float, z: float) -> float:
 	var u := maxf(-z, 0.0)
 	var h := _base_h(z) - 0.00002 * u * u
-	h += 0.9 * sin(z * 0.031 + 1.3) * cos(x * 0.045) + 0.5 * sin(z * 0.011 - x * 0.02)          # swells, much gentler than the lane game's: a bump must never launch you by accident
-	h += 0.6 * sin(z * 0.045 + x * 0.025 + 0.7) * sin(x * 0.03 - z * 0.02)
+	h += SWELL_K * (0.9 * sin(z * 0.031 + 1.3) * cos(x * 0.045) + 0.5 * sin(z * 0.011 - x * 0.02))          # swells, much gentler than the lane game's: a bump must never launch you by accident
+	h += SWELL_K * 0.6 * sin(z * 0.045 + x * 0.025 + 0.7) * sin(x * 0.03 - z * 0.02)
 	var ax := absf(x) - W_HALF
 	if ax > 0.0:
 		h += 0.0085 * ax * ax
@@ -2420,7 +2433,7 @@ const FOOD_BY_ZONE := {
 	"drop": {"boost": 0.1, "shield": 0.3, "mult": 0.3, "donut": 0.3},              # already fast enough: the sensible gifts are the ones that do not add speed
 }
 const DEFAULT_ZONE_WEIGHTS := {"rush": 1.0, "flat": 0.9, "tunnel": 0.8, "bend": 1.4, "air": 0.9, "forest": 0.8, "drop": 0.5,
-	"highway": 0.8, "interzone": 0.8, "hive": 0.7, "eyes": 0.8, "melt": 0.7, "mandala": 0.7, "glowcave": 1.0, "crystal": 0.9, "lava": 0.8, "abyss": 0.8, "canyon": 1.0, "mammoth": 1.0}
+	"highway": 0.8, "interzone": 0.8, "hive": 0.7, "eyes": 0.8, "melt": 0.7, "mandala": 0.0, "glowcave": 1.0, "crystal": 0.9, "lava": 0.8, "abyss": 0.8, "canyon": 1.0, "mammoth": 1.0}
 
 ## Regions: the world comes in stretches of four to seven zones with a character of their own (which zones are likely, and the colour of the snow). A banner says when you cross into one.
 const REGIONS := {
@@ -2460,10 +2473,21 @@ func _base_h(z: float) -> float:
 	while i > 0 and float(_pitch[i]["z"]) < z:
 		i -= 1
 	var e: Dictionary = _pitch[i]
-	return float(e["h"]) + (z - float(e["z"])) * float(e["s"])
+	var d := float(e["z"]) - z          # how far into this stretch
+	var s1 := float(e["s"])
+	if i > 0 and d < PITCH_EASE_M:
+		# the change of slope is eased in over PITCH_EASE_M instead of kinking: a kink where it steepens is a crest, and a crest hides the path ahead
+		var s0 := float((_pitch[i - 1] as Dictionary)["s"])
+		var t := d / PITCH_EASE_M
+		return float(e["h"]) - s0 * d - (s1 - s0) * PITCH_EASE_M * (t * t * t - t * t * t * t * 0.5)
+	if i > 0:
+		var s0b := float((_pitch[i - 1] as Dictionary)["s"])
+		return float(e["h"]) - s1 * d + (s1 - s0b) * PITCH_EASE_M * 0.5
+	return float(e["h"]) - s1 * d
 
 
-var _cur_m: float = 1.0                 # the pitch of the stretch being built, as a multiple of the base slope
+const PITCH_EASE_M := 110.0          # metres over which one stretch's slope eases into the next
+var _cur_m: float = 1.0                # the pitch of the stretch being built, as a multiple of the base slope
 
 ## THE STAGES. The course builds from slow to as fast as you can handle, in stages that repeat and each time get steeper: long mild slopes where speed has to be made
 ## (boost pads, burgers, rail slingshots and ramps matter most), a short build-up, then steep drops where the speed is free and the thing that matters is choosing
@@ -2924,6 +2948,12 @@ func _zone_at(z: float) -> String:
 func _chunk_post(j: int, mi: MeshInstance3D) -> void:
 	if Realms.is_realm(String(_zone_by_j.get(j, ""))):
 		mi.material_override = Realms.ground_material()          # a realm has its own ground, whatever theme is on
+
+
+func _path_lat_a(x: float, z: float) -> float:
+	if not trail:
+		return 0.5
+	return clampf(0.5 + (x - trail_x(z)) / 60.0, 0.0, 1.0)
 
 
 func _ground_color(j: int, x: float, z: float, c: Color) -> Color:
@@ -4634,11 +4664,26 @@ func _view_juice() -> void:
 			var slip := vel.dot(right)
 			var sp := clampf(vel.length() / 45.0, 0.0, 1.0)
 			_tip_yaw = lerpf(_tip_yaw, -d, 1.0 - exp(-6.0 * dt))
-			_tip_roll = lerpf(_tip_roll, -steer * 0.26, 1.0 - exp(-5.0 * dt))
+			# THE LEAN comes from how fast the board is really turning in the world (the trail's own bends included: on the winding trail the board holds the strip's heading and the
+			# bends are laid on afterwards, so the steering alone never showed them), and from a sideways slide; the board's pitch follows the ground under it (or the flight in the air).
+			var wh := heading + (TrailCurve.heading(spos.z) if TrailCurve.on else 0.0)
+			var yr := wrapf(wh - _tip_prev_wh, -PI, PI) / maxf(dt, 0.001)
+			_tip_prev_wh = wh
+			_tip_yr = lerpf(_tip_yr, clampf(yr, -1.5, 1.5), 1.0 - exp(-8.0 * dt))
+			var lean := -clampf(_tip_yr * 1.6 * (0.5 + 0.5 * sp), -0.55, 0.55) - clampf(_slide_v * 0.006, -0.2, 0.2) - steer * 0.08
+			_tip_roll = lerpf(_tip_roll, lean, 1.0 - exp(-6.0 * dt))
+			var fwd2 := Vector2(sin(heading), -cos(heading))
+			var gp := 0.0
+			if grounded:
+				gp = atan((terrain_h(spos.x + fwd2.x * 3.0, spos.z + fwd2.y * 3.0) - terrain_h(spos.x - fwd2.x * 3.0, spos.z - fwd2.y * 3.0)) / 6.0)
+			else:
+				gp = atan2(vy, maxf(vel.length(), 1.0)) * 0.9
+			var cam_pitch := asin(clampf(-cam.global_transform.basis.z.y, -1.0, 1.0))
+			_tip_pitch = lerpf(_tip_pitch, clampf(gp - cam_pitch, -0.5, 0.5), 1.0 - exp(-7.0 * dt))
 			_tip_x = lerpf(_tip_x, clampf(-slip * 0.012, -0.14, 0.14), 1.0 - exp(-4.0 * dt))
 			var hum := (0.008 * sin(_age * 17.0) + 0.005 * sin(_age * 29.0)) * sp if grounded else 0.0
-			_tip_pivot.position = Vector3(_tip_x, -1.15 + hum - (0.1 if grabbing else 0.0), 0.0)
-			_tip_pivot.rotation = Vector3(tf + _hop_vis_pitch + (0.2 if grabbing else 0.0) + 0.02 * sp, _tip_yaw + ts + _hop_vis_spin, _tip_roll)
+			_tip_pivot.position = Vector3(_tip_x, -1.15 + hum - (0.1 if grabbing else 0.0) - _crest_lift * 0.95, 0.0)
+			_tip_pivot.rotation = Vector3(tf + _hop_vis_pitch + (0.2 if grabbing else 0.0) + _tip_pitch, _tip_yaw + ts + _hop_vis_spin, _tip_roll)
 
 
 ## THE WINDING TRAIL (see TrailCurve). On in the browser unless the address has ?straight; tests switch it on to check it.
@@ -5623,7 +5668,7 @@ func _ring_bell(ox: float, oz: float, orad: float) -> void:
 
 
 func _crash(msg: String, ctx: String = "", mol: int = -1) -> void:
-	if hurt_t > 0.0 or _finished:
+	if hurt_t > 0.0 or _finished or not _lk.is_empty() or not _lkp.is_empty():          # (nothing hurts you inside a tube)
 		return
 	GazeProvider.pm.buzz([90, 40, 60])
 	if shield > 0:
@@ -5888,6 +5933,7 @@ func _finish() -> void:
 ## Builds every shader the run can need NOW, at the start, instead of the moment each thing first appears (a browser freezes the picture for 70 to 800 ms every time it
 ## builds one: the first loot effect, the first realm, the first glow...). One tiny copy of each kind of material is drawn just in front of the camera for a few frames, once
 ## as a single mesh and once as a batch (the two are different programs), next to a small light, then removed.
+var warm_ms: int = 0          # how long GET READY took, in ms (it goes in the run log)
 var _warmed: bool = false
 var _warming: bool = false           # the board waits at the top while this runs
 var _warm_k: float = 0.0             # 0..1, for the bar
@@ -5960,7 +6006,58 @@ void fragment() {
 const VEG_LIVE_SHADER := """shader_type spatial;
 render_mode cull_disabled;
 uniform float wob = 0.0;
+uniform float breathe = 0.0;
+uniform float mo_k = 0.0;
+uniform vec2 mo_t = vec2(0.0);
+uniform float face_k = 0.0;
+uniform float face_az = 0.0;
+uniform vec3 face_o = vec3(0.0);
+uniform sampler2D face_tex : filter_linear, repeat_disable;
+uniform float face_lift = 0.0;          // how far down the picture is slid (positive = lower: it rises up from behind the ridge)
+// THE TERRAIN PICTURE: the portrait as seen in a direction (az, el), covering about 60 degrees of the view. x = light, y = inside the picture, z = fade towards its edges.
+vec3 face_sample(float az, float el) {
+	vec2 p = vec2(az, el - 0.02 + face_lift) / 0.55;
+	vec2 uv = vec2(0.5 + p.x * 0.5 / 0.667, 0.5 - p.y * 0.5);
+	float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+	float vig = smoothstep(0.0, 0.10, uv.x) * smoothstep(1.0, 0.90, uv.x) * smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y);
+	vec2 cu = clamp(uv, vec2(0.0), vec2(1.0));
+	float l = (texture(face_tex, cu).r + texture(face_tex, clamp(uv + vec2(0.04, 0.0), vec2(0.0), vec2(1.0))).r + texture(face_tex, clamp(uv - vec2(0.04, 0.0), vec2(0.0), vec2(1.0))).r + texture(face_tex, clamp(uv + vec2(0.0, 0.03), vec2(0.0), vec2(1.0))).r + texture(face_tex, clamp(uv - vec2(0.0, 0.03), vec2(0.0), vec2(1.0))).r) * 0.2;          // (blurred: only the big shapes survive)
+	l = mix(0.62, l, 0.6);          // and flattened: barely any contrast, so it is vague
+	return vec3(l * inside, inside, vig * inside);
+}
+uniform float fm_ratio = 1.2;          // the mosaic's own moire: how much finer the second grid inside each cell is
+uniform float fm_ang = 0.0;            // how far the second grid is turned
+uniform vec2 fm_drift = vec2(0.0);     // how far it has slid
+uniform float fm_sat = 0.7;            // how much colour (0 = grey beats)
+uniform float fm_cyc = 3.0;            // grid lines per cell
+// WHAT EACH SQUARE OF THE MOSAIC IS MADE OF: two fine grids multiplied, the second finer, turned and slid by the same knobs that drive the ground's moire, and pushed in phase by the
+// tone at that square, so the beats of the interference ARE the picture.
+vec3 face_moire_fill(vec2 f, float tone) {
+	vec2 a = f * 6.2831 * fm_cyc;
+	float s1 = sin(a.x) * sin(a.y);
+	float ca = cos(fm_ang);
+	float sa = sin(fm_ang);
+	vec2 b = vec2(f.x * ca - f.y * sa, f.x * sa + f.y * ca) * 6.2831 * fm_cyc * fm_ratio + fm_drift + vec2(tone * 3.14159);
+	float s2 = sin(b.x) * sin(b.y);
+	float m = smoothstep(-0.5, 0.5, s1 * s2);
+	vec3 hc = clamp(abs(fract(vec3(m * 0.5 + tone * 0.3 + TIME * 0.04) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+	return mix(vec3(m), hc, fm_sat) * (0.35 + 0.65 * m);
+}
+// A dark halftone dot: bigger where the portrait is dark, so a print of it appears on the surface (on snow, on foliage). Nothing outside the picture.
+float face_ink(vec2 f, vec3 ls) {
+	float rad = 0.36 * sqrt(clamp(1.0 - ls.x, 0.0, 1.0)) * ls.y;
+	float d = length(f);
+	float aa = fwidth(d) + 0.02;
+	return smoothstep(rad + aa, rad - aa, d) * ls.z;
+}
+varying vec3 wpv;
 void vertex() {
+	if (breathe > 0.001) {          // BREATHING (your page's displacement effect): the whole tree swells and shrinks in a wave that rolls across the forest
+		vec3 ob = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+		float bw = sin(TIME * 1.1 + ob.x * 0.045 + ob.z * 0.035) + 0.5 * sin(TIME * 1.9 - ob.z * 0.08);
+		VERTEX.y *= 1.0 + bw * breathe * 0.22;
+		VERTEX.xz *= 1.0 + bw * breathe * 0.10;
+	}
 	if (wob > 0.001) {
 		vec3 o = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 		float ph = o.x * 0.21 + o.z * 0.17;
@@ -5969,11 +6066,34 @@ void vertex() {
 		VERTEX.z += cos(TIME * 1.3 + ph * 1.3) * wob * 0.14 * hgt;
 		VERTEX.y *= 1.0 + sin(TIME * 2.1 + ph) * wob * 0.07;
 	}
+	wpv = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 void fragment() {
 	ALBEDO = COLOR.rgb;
 	ROUGHNESS = 1.0;
 	SPECULAR = 0.0;
+	if (mo_k > 0.001) {          // MOIRE ON THE TREES: two grids over the branches, the second a little finer and sliding; colour from how far they are in step
+		vec2 q = (wpv.xz + wpv.y * 1.3) * 2.2;
+		float s1 = sin(q.x) * sin(q.y);
+		float s2 = sin(q.x * 1.037 + mo_t.x) * sin(q.y * 1.037 + mo_t.y);
+		float mm = smoothstep(-0.5, 0.5, s1 * s2);
+		vec3 hc = clamp(abs(fract(vec3(mm * 0.5 + mo_t.x * 0.05) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+		ALBEDO = mix(ALBEDO, hc * (0.4 + 0.6 * mm), clamp(mo_k, 0.0, 1.0) * 0.65);
+		EMISSION = hc * mm * mo_k * 0.55;
+	}
+	if (face_k > 0.001) {          // the portrait printed on the trees: dark halftone dots on every branch, bigger where the picture is dark
+		vec3 dv = normalize(wpv - face_o);
+		float azv = atan(dv.x, -dv.z) - face_az;
+		azv = atan(sin(azv), cos(azv));
+		float csv = 0.010;
+		vec2 qv = vec2(azv, dv.y);
+		vec2 cidv = floor(qv / csv);
+		vec3 ls = face_sample((cidv.x + 0.5) * csv, (cidv.y + 0.5) * csv);
+		float dt = face_ink(fract(qv / csv) - 0.5, ls);
+		vec3 ink = mix(vec3(0.10, 0.03, 0.26), face_moire_fill(fract(qv / csv) - 0.5, ls.x), fm_sat);
+		ALBEDO = mix(ALBEDO, ink, dt * face_k);
+		EMISSION += ink * dt * face_k * 0.25;
+	}
 }
 """
 var _sky_fx: MeshInstance3D = null
@@ -5989,6 +6109,7 @@ func _stage_assets() -> void:
 		vs.code = VEG_LIVE_SHADER
 		_veg_live = ShaderMaterial.new()
 		_veg_live.shader = vs
+		_veg_live.set_shader_parameter("face_tex", FaceTone.texture())
 	if _sky_mat == null:
 		var ss := Shader.new()
 		ss.code = SKY_SHADER
@@ -5996,24 +6117,732 @@ func _stage_assets() -> void:
 		_sky_mat.shader = ss
 
 
+# --------------------------------------------------------------------------
+# THE EFFECTS LAB (F2, or the FX button when the page is opened with ?fxlab): every effect is a knob, grouped by what it lands on. 1 = as designed, 0 = off, more = stronger.
+# A group's tick switches the whole group off, so two looks can be compared in a second. "pretend this far in" plays the molecule level from the start, so nothing has to be collected
+# to see the effects. Settings are kept on the device; COPY puts them on the clipboard as text and ?fx=g_col:0,s_polar:1.2 sets some from the address.
+# --------------------------------------------------------------------------
+const FX_KNOBS := [
+	["LAB", "x_level", "pretend this far in (molecules)", 0.0, 1.0],
+	["LAB", "x_wander", "effects wander between elements (0 = fixed)", 0.6, 2.0],
+	["GROUND", "g_sq", "hard squares", 1.0, 2.0],
+	["GROUND", "g_shape", "interference shapes", 1.0, 3.0],
+	["GROUND", "g_col", "shape colour", 1.0, 2.0],
+	["GROUND", "g_tri", "third grid", 1.0, 2.0],
+	["GROUND", "g_rad", "bullseye", 1.0, 2.0],
+	["GROUND", "g_warp", "flowing grid", 1.0, 2.0],
+	["GROUND", "g_glow", "light waves", 1.0, 3.0],
+	["ROAD", "r_edge", "edge line", 1.0, 3.0],
+	["ROAD", "r_apron", "dark band outside", 1.0, 2.0],
+	["TREES", "t_sway", "sway", 1.0, 3.0],
+	["TREES", "t_breathe", "breathing", 0.6, 3.0],
+	["TREES", "t_moire", "moire on the trees", 0.0, 2.0],
+	["MOUNTAINS", "m_moire", "moire on the mountains", 1.0, 2.0],
+	["MOUNTAINS", "m_breathe", "breathing", 0.5, 3.0],
+	["MOUNTAINS", "m_polar", "polar field", 0.0, 2.0],
+	["SKY", "s_bands", "colour bands", 1.0, 3.0],
+	["SKY", "s_polar", "overhead polar field (your page's effect 4)", 0.45, 2.0],
+	["SKY", "s_tunnel", "overhead infinite tunnel (your page's effect 2)", 0.6, 2.0],
+	["PICTURE", "p_wash", "whole-picture colour wash (the tie-dye)", 0.0, 1.0],
+	["PICTURE", "p_face", "portrait printed on the mountains + trees (1 = shown now)", 0.0, 1.0],
+	["PICTURE", "p_face_auto", "...appears by itself, rarely", 1.0, 2.0],
+	["SKY", "p_god", "the whole sky is a face looking down (1 = shown now)", 0.0, 1.0],
+	["SKY", "p_god_auto", "...appears by itself, very rarely", 1.0, 2.0],
+	["PICTURE", "p_edge", "cel outlines (ink lines at every edge)", 0.0, 1.5],
+	["PICTURE", "p_cel", "cel bands (flat steps of light: it can flatten the ground in bright scenes)", 0.0, 1.0],
+	["PICTURE", "p_chroma", "colour split", 1.0, 3.0],
+	["PICTURE", "p_trace", "tracers", 1.0, 3.0],
+	["PICTURE", "p_punch", "colour punch", 1.0, 2.0],
+	["PICTURE", "p_bloom", "bloom + sharpen", 1.0, 3.0],
+	["PICTURE", "p_tube", "tube rays", 1.0, 2.0],
+	["PICTURE", "p_warp", "warp waves + ripples (5 = the original)", 1.0, 5.0],
+	["PICTURE", "p_fold", "mirror fold (the mandala)", 0.0, 1.0],
+	["PICTURE", "p_pulse", "pulse push (4 = the original)", 1.0, 4.0],
+	["PICTURE", "p_rings", "trip rings", 0.0, 1.5],
+	["PICTURE", "p_dmtr", "all-six rings", 0.0, 1.0],
+]
+var _fx_val: Dictionary = {}          # key -> what the slider says
+var _fx_eff: Dictionary = {}          # key -> what the game reads (the slider, or 0 when its group is off)
+var _fx_group_on: Dictionary = {}
+var _fx_layer: CanvasLayer = null
+var _fx_started: bool = false
+const FX_SAVE := "user://fxlab.cfg"
+
+
+func fx(k: String) -> float:
+	if _fx_eff.is_empty():
+		_fx_init()
+	return float(_fx_eff.get(k, 1.0))
+
+
+func fx_level() -> float:
+	return fx("x_level")
+
+
+func _fx_init() -> void:
+	for kn in FX_KNOBS:
+		_fx_val[kn[1]] = float(kn[3])
+		_fx_group_on[kn[0]] = true
+	var cf := ConfigFile.new()
+	if cf.load(FX_SAVE) == OK:
+		for kn in FX_KNOBS:
+			if cf.has_section_key("v", kn[1]):
+				_fx_val[kn[1]] = float(cf.get_value("v", kn[1]))
+		for g in _fx_group_on:
+			if cf.has_section_key("g", g):
+				_fx_group_on[g] = bool(cf.get_value("g", g))
+	if OS.has_feature("web"):
+		var q := str(JavaScriptBridge.eval("(new URLSearchParams(window.location.search)).get('fx') || ''"))
+		for part in q.split(","):
+			var kv := part.split(":")
+			if kv.size() == 2 and _fx_val.has(kv[0]):
+				_fx_val[kv[0]] = float(kv[1])
+	_fx_apply()
+
+
+func _fx_apply() -> void:
+	for kn in FX_KNOBS:
+		_fx_eff[kn[1]] = float(_fx_val[kn[1]]) * (1.0 if bool(_fx_group_on.get(kn[0], true)) or kn[0] == "LAB" else 0.0)
+
+
+func _fx_save() -> void:
+	var cf := ConfigFile.new()
+	for kn in FX_KNOBS:
+		cf.set_value("v", kn[1], _fx_val[kn[1]])
+	for g in _fx_group_on:
+		cf.set_value("g", g, _fx_group_on[g])
+	cf.save(FX_SAVE)
+
+
+func _fx_start() -> void:
+	_fx_started = true
+	_fx_init()
+	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("fxlab"):
+		var layer := CanvasLayer.new()
+		layer.layer = 119
+		add_child(layer)
+		var b := Button.new()
+		b.text = "FX"
+		b.position = Vector2(8.0, 40.0)
+		b.custom_minimum_size = Vector2(48.0, 36.0)
+		b.pressed.connect(_fx_toggle)
+		layer.add_child(b)
+		_fx_build()          # (open to begin with)
+
+
+func _fx_toggle() -> void:
+	if _fx_layer == null:
+		_fx_build()
+	_fx_layer.visible = not _fx_layer.visible
+
+
+func _fx_build() -> void:
+	if _fx_eff.is_empty():
+		_fx_init()
+	_fx_layer = CanvasLayer.new()
+	_fx_layer.layer = 120
+	add_child(_fx_layer)
+	var vs := get_viewport().get_visible_rect().size
+	var pw := minf(vs.x * 0.5, 440.0)
+	var pc := PanelContainer.new()
+	pc.anchor_left = 1.0
+	pc.anchor_right = 1.0
+	pc.anchor_top = 0.0
+	pc.anchor_bottom = 1.0
+	pc.offset_left = -pw
+	pc.offset_right = 0.0
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.0, 0.0, 0.0, 0.74)
+	pc.add_theme_stylebox_override("panel", sb)
+	_fx_layer.add_child(pc)
+	var vb := VBoxContainer.new()
+	pc.add_child(vb)
+	var title := Label.new()
+	title.text = "EFFECTS LAB   (F2 hides)"
+	title.add_theme_font_size_override("font_size", 15)
+	vb.add_child(title)
+	var br := HBoxContainer.new()
+	vb.add_child(br)
+	var sliders := {}
+	var vlabels := {}
+	var reset := Button.new()
+	reset.text = "RESET"
+	reset.pressed.connect(func() -> void:
+		for kn in FX_KNOBS:
+			_fx_val[kn[1]] = float(kn[3])
+			(sliders[kn[1]] as HSlider).set_value_no_signal(float(kn[3]))
+			(vlabels[kn[1]] as Label).text = "%.2f" % float(kn[3])
+		_fx_apply()
+		_fx_save())
+	br.add_child(reset)
+	var copy := Button.new()
+	copy.text = "COPY"
+	copy.pressed.connect(func() -> void:
+		var parts: Array = []
+		for kn in FX_KNOBS:
+			parts.append("%s:%.2f" % [kn[1], float(_fx_val[kn[1]])])
+		var off: Array = []
+		for g in _fx_group_on:
+			if not bool(_fx_group_on[g]):
+				off.append(g)
+		DisplayServer.clipboard_set("fx=" + ",".join(parts) + ("   off: " + ",".join(off) if not off.is_empty() else "")))
+	br.add_child(copy)
+	var hide := Button.new()
+	hide.text = "HIDE"
+	hide.pressed.connect(func() -> void: _fx_layer.visible = false)
+	br.add_child(hide)
+	var sc := ScrollContainer.new()
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vb.add_child(sc)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sc.add_child(rows)
+	var last := ""
+	for kn in FX_KNOBS:
+		var key: String = kn[1]
+		if String(kn[0]) != last:
+			last = String(kn[0])
+			if last == "LAB":
+				var hl := Label.new()
+				hl.text = "LAB"
+				hl.add_theme_font_size_override("font_size", 14)
+				rows.add_child(hl)
+			else:
+				var cb := CheckBox.new()
+				cb.text = last
+				cb.button_pressed = bool(_fx_group_on.get(last, true))
+				cb.add_theme_font_size_override("font_size", 15)
+				var gname := last
+				cb.toggled.connect(func(on: bool) -> void:
+					_fx_group_on[gname] = on
+					_fx_apply()
+					_fx_save())
+				rows.add_child(cb)
+		var row := HBoxContainer.new()
+		rows.add_child(row)
+		var nm := Label.new()
+		nm.text = String(kn[2])
+		nm.custom_minimum_size = Vector2(pw * 0.40, 0.0)
+		nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		nm.add_theme_font_size_override("font_size", 12)
+		row.add_child(nm)
+		var sl := HSlider.new()
+		sl.min_value = 0.0
+		sl.max_value = float(kn[4])
+		sl.step = 0.05
+		sl.value = float(_fx_val[key])
+		sl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sl.custom_minimum_size = Vector2(80.0, 28.0)
+		row.add_child(sl)
+		var vl := Label.new()
+		vl.text = "%.2f" % float(_fx_val[key])
+		vl.custom_minimum_size = Vector2(38.0, 0.0)
+		vl.add_theme_font_size_override("font_size", 12)
+		row.add_child(vl)
+		sliders[key] = sl
+		vlabels[key] = vl
+		sl.value_changed.connect(func(v: float) -> void:
+			_fx_val[key] = v
+			vl.text = "%.2f" % v
+			_fx_apply()
+			_fx_save())
+
+
+# THE OVERHEAD SKY (the polar sine field and infinite tunnel from the owner's page, in 3D): a big inside-out sphere around the camera, added light only, patterned by direction.
+# Both live over the head (the middle of the view ahead is left alone, so the path stays clear): the polar field fills the sky as you look up, the tunnel runs up the zenith.
+const SKYDOME_SHADER := """shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_front, fog_disabled, shadows_disabled;
+uniform float polar = 0.0;
+uniform float tun = 0.0;
+uniform float spd = 0.0;
+uniform float face_k = 0.0;
+uniform float face_az = 0.0;
+varying vec3 dir;
+void vertex() { dir = VERTEX; }
+void fragment() {
+	vec3 d = normalize(dir);
+	float up = d.y;
+	float r = acos(clamp(up, -1.0, 1.0));
+	float a = atan(d.x, d.z);
+	float over = smoothstep(0.08, 0.55, up);
+	float rad = sin(r * 18.0 - TIME * 1.2);
+	float ang = sin(a * 14.0 + TIME * 0.5);
+	float dia = sin((r * 12.6 + a * 7.0) * 1.2 + TIME * 0.7);
+	float f = (rad + ang + dia) / 3.0;
+	vec3 pc = 0.5 + 0.5 * cos(6.2831 * (vec3(f * 0.45 + TIME * 0.04) + vec3(0.0, 0.33, 0.67)));
+	float pa = polar * over * (0.25 + 0.75 * smoothstep(-0.1, 0.9, f));
+	float depth = 0.4 / max(r, 0.04);
+	float ph = fract(depth - TIME * (0.18 + 0.4 * spd));
+	float band = smoothstep(0.0, 0.15, ph) * smoothstep(0.7, 0.45, ph);
+	float sec = 0.5 + 0.5 * sin(a * 11.0);
+	vec3 tc = 0.5 + 0.5 * cos(6.2831 * (vec3(depth * 0.12 + TIME * 0.06 + sec * 0.2) + vec3(0.0, 0.33, 0.67)));
+	float ta = tun * over * band * (0.35 + 0.65 * sec) * smoothstep(0.0, 0.25, r);
+	ALBEDO = pc * pa + tc * ta;
+	ALPHA = 0.6;
+}
+"""
+var _sky_dome: MeshInstance3D = null
+var _sky_dome_mat: ShaderMaterial = null
+
+
+func _sky_dome_tick(h: float) -> void:
+	if not _fx_started:
+		_fx_start()
+	var pol := fx("s_polar") * smoothstep(0.02, 0.3, h)
+	var tun := fx("s_tunnel") * smoothstep(0.02, 0.3, h)
+	var on := (pol + tun) > 0.01 and cam != null and sky_ok
+	if on and _sky_dome == null:
+		var sh := Shader.new()
+		sh.code = SKYDOME_SHADER
+		_sky_dome_mat = ShaderMaterial.new()
+		_sky_dome_mat.shader = sh
+		var sm := SphereMesh.new()
+		sm.radius = 900.0
+		sm.height = 1800.0
+		sm.radial_segments = 32
+		sm.rings = 16
+		_sky_dome = MeshInstance3D.new()
+		_sky_dome.mesh = sm
+		_sky_dome.material_override = _sky_dome_mat
+		_sky_dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_sky_dome.extra_cull_margin = 4000.0
+		add_child(_sky_dome)
+	if _sky_dome != null:
+		_sky_dome.visible = on
+		if on:
+			_sky_dome.global_position = cam.global_position
+			_sky_dome_mat.set_shader_parameter("polar", pol)
+			_sky_dome_mat.set_shader_parameter("tun", tun)
+			_sky_dome_mat.set_shader_parameter("face_k", _efc_k)
+			_sky_dome_mat.set_shader_parameter("face_az", _efc_az)
+			_sky_dome_mat.set_shader_parameter("spd", clampf(vel.length() / 50.0, 0.0, 1.0))
+
+
+# EFFECTS WANDER BETWEEN ELEMENTS. The moire starts on the ground; as you go deeper it climbs onto the trees and then the mountains, each fading in and out on its own slow clock
+# (and the mountains breathe and take the polar field the same way), so the dream keeps changing while the road underneath stays as it is. The lab's own sliders (moire on the
+# trees, on the mountains...) set a floor under the wander; x_wander is how strongly it wanders (0 = nothing moves by itself).
+const MTNFX_SHADER := """shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
+uniform float mo_k = 0.0;
+uniform float br_k = 0.0;
+uniform float pol_k = 0.0;
+uniform vec2 mo_t = vec2(0.0);
+uniform float trav = 0.0;
+uniform vec3 cam_pos = vec3(0.0);
+varying vec3 lp;
+varying vec3 wpm;
+void vertex() {
+	lp = VERTEX;          // the mountain's OWN coordinates: the pattern is glued to the rock, so it never slides about as you move or turn
+	VERTEX.y += sin(TIME * 0.9 + VERTEX.x * 0.004 + VERTEX.z * 0.003) * br_k * 7.0;
+	wpm = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+	// MOIRE ON THE ROCK. Two grids over the mountainside (the second finer and sliding), fringes in colour, and three things for depth and movement:
+	//  - the pattern creeps along as you travel, a hundredth of the speed, like something very far away
+	//  - contour bands roll up the slope all the time, so the mountain seems to breathe upward
+	//  - the grid is finer the further the rock is, so far ridges shimmer with tight fringes and near slopes have broad slow ones
+	float dist = length(wpm - cam_pos);
+	vec2 q = (lp.xz + lp.y * 1.2) * 0.157;
+	q += vec2(0.0, trav * 0.012);
+	float fine = 1.0 + 0.9 * smoothstep(300.0, 1500.0, dist);
+	float s1 = sin(q.x * fine) * sin(q.y * fine);
+	float s2 = sin(q.x * fine * 1.037 + mo_t.x * 0.3) * sin(q.y * fine * 1.037 + mo_t.y * 0.3);
+	float mm = smoothstep(-0.5, 0.5, s1 * s2);
+	vec3 hc = clamp(abs(fract(vec3(mm * 0.5 + TIME * 0.04 + lp.y * 0.0008) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+	float band = 0.5 + 0.5 * sin(lp.y * 0.085 - TIME * 1.1 + trav * 0.015);
+	band = smoothstep(0.55, 0.95, band);
+	vec3 bc = clamp(abs(fract(vec3(lp.y * 0.0015 + TIME * 0.06) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+	float pf = 0.5 + 0.5 * sin(length(lp.xz) * 0.02 - TIME * 1.1) * sin(atan(lp.z, lp.x) * 9.0 + TIME * 0.3);
+	vec3 pc = 0.5 + 0.5 * cos(6.2831 * (vec3(pf * 0.5 + TIME * 0.05) + vec3(0.0, 0.33, 0.67)));
+	ALBEDO = mix(mix(hc, bc, band * 0.5), pc, clamp(pol_k * pf, 0.0, 1.0));          // painted over the rock, not added to it: added light vanishes on pale snow
+	ALPHA = clamp(mo_k * (0.30 + 0.45 * mm + 0.30 * band) + pol_k * pf * 0.6, 0.0, 0.88);          // (a floor under it: no face of the rock is left plain)
+}
+"""
+var _mtn_fx: MeshInstance3D = null
+var _mtn_fx_mat: ShaderMaterial = null
+var _wd_t: float = 0.0
+var _wd_drift: Vector2 = Vector2.ZERO
+
+
+## 0..1 that comes and goes on its own clock (period in seconds), only once the trip is deep enough (gate), and never when the lab's wander is off.
+func _wd_w(period: float, phase: float, gate: float, h: float) -> float:
+	return smoothstep(0.35, 0.75, 0.5 + 0.5 * sin(_wd_t * TAU / period + phase)) * smoothstep(gate, gate + 0.12, h) * clampf(fx("x_wander"), 0.0, 2.0) * 0.5
+
+
+func _wander_tick(delta: float, h: float) -> void:
+	_wd_t += delta
+	_wd_drift += Vector2(cos(_wd_t * 0.05), sin(_wd_t * 0.037)) * 0.6 * delta
+	var tree_mo := clampf(maxf(fx("t_moire"), _wd_w(70.0, 0.0, 0.2, h) * 2.0), 0.0, 2.0)
+	var mtn_gate := smoothstep(0.04, 0.22, h)          # on from the first molecules
+	var mtn_mo := clampf(maxf(fx("m_moire") * mtn_gate, _wd_w(110.0, 2.1, 0.35, h) * 2.0), 0.0, 2.0)
+	var mtn_br := clampf(maxf(fx("m_breathe") * mtn_gate, _wd_w(90.0, 4.0, 0.3, h) * 3.0), 0.0, 3.0)
+	var mtn_pol := clampf(maxf(fx("m_polar"), _wd_w(130.0, 1.0, 0.4, h) * 2.0), 0.0, 2.0)
+	_veg_live.set_shader_parameter("mo_k", tree_mo)
+	_veg_live.set_shader_parameter("mo_t", _wd_drift)
+	var on := (mtn_mo + mtn_br + mtn_pol) > 0.02 and _mtn != null and is_instance_valid(_mtn)
+	if on and _mtn_fx == null:
+		var sh := Shader.new()
+		sh.code = MTNFX_SHADER
+		_mtn_fx_mat = ShaderMaterial.new()
+		_mtn_fx_mat.shader = sh
+		_mtn_fx = MeshInstance3D.new()
+		_mtn_fx.mesh = _mtn.mesh
+		_mtn_fx.material_override = _mtn_fx_mat
+		_mtn_fx.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_mtn_fx.extra_cull_margin = 2000.0
+		_mtn.add_child(_mtn_fx)
+	if _mtn_fx != null and _mtn != null and is_instance_valid(_mtn) and _mtn_fx.mesh != _mtn.mesh:
+		_mtn_fx.mesh = _mtn.mesh
+	if _mtn_fx != null:
+		_mtn_fx.visible = on
+		if on:
+			_mtn_fx_mat.set_shader_parameter("mo_k", mtn_mo)
+			_mtn_fx_mat.set_shader_parameter("br_k", mtn_br)
+			_mtn_fx_mat.set_shader_parameter("pol_k", mtn_pol)
+			_mtn_fx_mat.set_shader_parameter("mo_t", _wd_drift)
+			_mtn_fx_mat.set_shader_parameter("trav", -spos.z)
+			_mtn_fx_mat.set_shader_parameter("face_k", _efc_k)
+			_mtn_fx_mat.set_shader_parameter("face_az", _efc_az)
+			if cam != null:
+				_mtn_fx_mat.set_shader_parameter("cam_pos", cam.global_position)
+
+
+# THE FACE. Now and then, deep in the trip, a face shows up in the whole picture for a few seconds (a woman, for now): not an overlay, a shift of light and shade across the mountains
+# and sky that the eye puts together. Rare enough that some players miss it and some shout "did you see that?"; p_face holds it on for looking at.
+var _efc_t: float = -1.0          # seconds into the one being shown (-1 = none)
+var _efc_next: float = 60.0
+
+
+const FACEFX_SHADER := """shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
+uniform float face_k = 0.0;
+uniform float face_az = 0.0;
+uniform float mode = 0.0;
+uniform vec3 cam_pos = vec3(0.0);
+uniform sampler2D face_tex : filter_linear, repeat_disable;
+uniform float face_lift = 0.0;          // how far down the picture is slid (positive = lower: it rises up from behind the ridge)
+// THE TERRAIN PICTURE: the portrait as seen in a direction (az, el), covering about 60 degrees of the view. x = light, y = inside the picture, z = fade towards its edges.
+vec3 face_sample(float az, float el) {
+	vec2 p = vec2(az, el - 0.02 + face_lift) / 0.55;
+	vec2 uv = vec2(0.5 + p.x * 0.5 / 0.667, 0.5 - p.y * 0.5);
+	float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+	float vig = smoothstep(0.0, 0.10, uv.x) * smoothstep(1.0, 0.90, uv.x) * smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y);
+	vec2 cu = clamp(uv, vec2(0.0), vec2(1.0));
+	float l = (texture(face_tex, cu).r + texture(face_tex, clamp(uv + vec2(0.04, 0.0), vec2(0.0), vec2(1.0))).r + texture(face_tex, clamp(uv - vec2(0.04, 0.0), vec2(0.0), vec2(1.0))).r + texture(face_tex, clamp(uv + vec2(0.0, 0.03), vec2(0.0), vec2(1.0))).r + texture(face_tex, clamp(uv - vec2(0.0, 0.03), vec2(0.0), vec2(1.0))).r) * 0.2;          // (blurred: only the big shapes survive)
+	l = mix(0.62, l, 0.6);          // and flattened: barely any contrast, so it is vague
+	return vec3(l * inside, inside, vig * inside);
+}
+uniform float fm_ratio = 1.2;          // the mosaic's own moire: how much finer the second grid inside each cell is
+uniform float fm_ang = 0.0;            // how far the second grid is turned
+uniform vec2 fm_drift = vec2(0.0);     // how far it has slid
+uniform float fm_sat = 0.7;            // how much colour (0 = grey beats)
+uniform float fm_cyc = 3.0;            // grid lines per cell
+// WHAT EACH SQUARE OF THE MOSAIC IS MADE OF: two fine grids multiplied, the second finer, turned and slid by the same knobs that drive the ground's moire, and pushed in phase by the
+// tone at that square, so the beats of the interference ARE the picture.
+vec3 face_moire_fill(vec2 f, float tone) {
+	vec2 a = f * 6.2831 * fm_cyc;
+	float s1 = sin(a.x) * sin(a.y);
+	float ca = cos(fm_ang);
+	float sa = sin(fm_ang);
+	vec2 b = vec2(f.x * ca - f.y * sa, f.x * sa + f.y * ca) * 6.2831 * fm_cyc * fm_ratio + fm_drift + vec2(tone * 3.14159);
+	float s2 = sin(b.x) * sin(b.y);
+	float m = smoothstep(-0.5, 0.5, s1 * s2);
+	vec3 hc = clamp(abs(fract(vec3(m * 0.5 + tone * 0.3 + TIME * 0.04) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+	return mix(vec3(m), hc, fm_sat) * (0.35 + 0.65 * m);
+}
+// A dark halftone dot: bigger where the portrait is dark, so a print of it appears on the surface (on snow, on foliage). Nothing outside the picture.
+float face_ink(vec2 f, vec3 ls) {
+	float rad = 0.47 * sqrt(clamp(1.0 - ls.x, 0.0, 1.0)) * ls.y;
+	float d = length(f);
+	float aa = fwidth(d) + 0.02;
+	return smoothstep(rad + aa, rad - aa, d) * ls.z;
+}
+// THE SKY PICTURE: the whole sky is the portrait, seen from the zenith as the eye of a god looking down at you; the top of the picture is overhead behind you, the chin toward the
+// horizon ahead. Light dots, bigger where the portrait is light.
+vec4 face_god(vec3 d, float az0, float k) {
+	float az = atan(d.x, -d.z) - az0;
+	float th = acos(clamp(d.y, -1.0, 1.0));
+	float r = tan(th * 0.5);
+	vec2 p = r * vec2(sin(az), -cos(az));
+	float cs = 0.014;
+	vec2 cid = floor(p / cs);
+	vec2 f = fract(p / cs) - 0.5;
+	vec2 cc = (cid + 0.5) * cs;
+	vec2 uv = vec2(0.5 + cc.x * 0.5 / (0.85 * 0.667), 0.5 - cc.y * 0.5 / 0.85);
+	float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+	float vig = smoothstep(0.0, 0.10, uv.x) * smoothstep(1.0, 0.90, uv.x) * smoothstep(0.0, 0.08, uv.y) * smoothstep(1.0, 0.92, uv.y) * inside;
+	float lum = texture(face_tex, clamp(uv, vec2(0.0), vec2(1.0))).r;
+	float rad = 0.07 + 0.42 * sqrt(lum);
+	float dd = length(f);
+	float aa = fwidth(dd) + 0.02;
+	float dt = smoothstep(rad + aa, rad - aa, dd) * vig;
+	vec3 col = face_moire_fill(f, lum);
+	return vec4(col, dt * k * smoothstep(0.02, 0.18, d.y));
+}
+// THE TERRAIN VERSION on the mountains: dark ink dots in the picture's place.
+vec4 face_terrain(vec3 d, float az0, float k) {
+	// d is the position on the mountain in its OWN coordinates: the picture is carved into the ring itself (compass direction across, height up), so it is always in the same place on
+	// the rock however you turn or move. 1 up = about 450 m of slope.
+	float az = atan(d.x, -d.z) - az0;
+	az = atan(sin(az), cos(az));
+	float cs = 0.010;
+	vec2 q = vec2(az, d.y * 0.0022 - 0.40);
+	vec2 cid = floor(q / cs);
+	vec3 ls = face_sample((cid.x + 0.5) * cs, (cid.y + 0.5) * cs);
+	float dt = face_ink(fract(q / cs) - 0.5, ls);
+	vec3 ink = mix(vec3(0.10, 0.03, 0.26), face_moire_fill(fract(q / cs) - 0.5, ls.x), fm_sat);
+	return vec4(ink, dt * k);
+}
+vec4 face_dots(vec3 d, float az0, float k) {
+	return mode < 0.5 ? face_god(d, az0, k) : face_terrain(d, az0, k);
+}
+varying vec3 dirv;
+void vertex() {
+	dirv = VERTEX;          // the sky: a direction; the mountains: the rock's own coordinates
+}
+void fragment() {
+	vec4 fm = face_dots(mode < 0.5 ? normalize(dirv) : dirv, face_az, face_k);
+	ALBEDO = fm.rgb;
+	ALPHA = fm.a;
+}
+"""
+var _face_sky: MeshInstance3D = null
+var _face_mtn: MeshInstance3D = null
+var _face_mat_a: ShaderMaterial = null
+var _face_mat_b: ShaderMaterial = null
+
+
+## The face, drawn twice with the same shader: on the sky (a sphere round the camera) and on the mountainside (a copy of the mountains' own mesh). Both read the same direction in the
+## world, so the one face runs across the sky and down onto the ridge. It paints over what is there (the lines are opaque where they are bright): added light would vanish on a pale sky.
+func _face_fx_tick() -> void:
+	var on := (_efc_k > 0.01 or _god_k > 0.01) and cam != null
+	if on and _face_sky == null:
+		var sh := Shader.new()
+		sh.code = FACEFX_SHADER
+		_face_mat_a = ShaderMaterial.new()
+		_face_mat_a.shader = sh
+		_face_mat_a.set_shader_parameter("mode", 0.0)
+		_face_mat_a.set_shader_parameter("face_tex", FaceTone.texture())
+		_face_mat_a.render_priority = 5
+		var sm := SphereMesh.new()
+		sm.radius = 880.0
+		sm.height = 1760.0
+		sm.radial_segments = 48
+		sm.rings = 24
+		_face_sky = MeshInstance3D.new()
+		_face_sky.mesh = sm
+		_face_sky.material_override = _face_mat_a
+		_face_sky.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_face_sky.extra_cull_margin = 4000.0
+		add_child(_face_sky)
+		if _mtn != null and is_instance_valid(_mtn):
+			_face_mat_b = ShaderMaterial.new()
+			_face_mat_b.shader = sh
+			_face_mat_b.set_shader_parameter("mode", 1.0)
+			_face_mat_b.set_shader_parameter("face_tex", FaceTone.texture())
+			_face_mat_b.render_priority = 6
+			_face_mtn = MeshInstance3D.new()
+			_face_mtn.mesh = _mtn.mesh
+			_face_mtn.material_override = _face_mat_b
+			_face_mtn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_face_mtn.extra_cull_margin = 2000.0
+			_mtn.add_child(_face_mtn)
+	if not on and _veg_live != null:
+		_veg_live.set_shader_parameter("face_k", 0.0)
+	if not on and _m_ground is ShaderMaterial:
+		(_m_ground as ShaderMaterial).set_shader_parameter("face_k", 0.0)
+	if _face_mtn != null and _mtn != null and is_instance_valid(_mtn) and _face_mtn.mesh != _mtn.mesh:
+		_face_mtn.mesh = _mtn.mesh
+	if _face_sky != null:
+		_face_sky.visible = _god_k > 0.01 and cam != null
+		if _face_mtn != null:
+			_face_mtn.visible = _efc_k > 0.01 and cam != null
+		if on:
+			_face_sky.global_position = cam.global_position
+			for m in [_face_mat_a, _face_mat_b]:
+				if m != null:
+					(m as ShaderMaterial).set_shader_parameter("face_k", _god_k if m == _face_mat_a else _efc_k)
+					(m as ShaderMaterial).set_shader_parameter("face_az", _god_az if m == _face_mat_a else _efc_az)
+					(m as ShaderMaterial).set_shader_parameter("cam_pos", cam.global_position)
+					(m as ShaderMaterial).set_shader_parameter("face_lift", _efc_lift)
+					_face_moire_params(m as ShaderMaterial)
+		if _veg_live != null:
+			_veg_live.set_shader_parameter("face_k", _efc_k)
+		if _veg_live != null:
+			_veg_live.set_shader_parameter("face_az", _efc_az)
+			_veg_live.set_shader_parameter("face_o", _efc_o)
+			_veg_live.set_shader_parameter("face_lift", _efc_lift)
+			_face_moire_params(_veg_live)
+		if _m_ground is ShaderMaterial:
+			(_m_ground as ShaderMaterial).set_shader_parameter("face_tex", FaceTone.texture())
+			(_m_ground as ShaderMaterial).set_shader_parameter("face_k", 0.0)
+			(_m_ground as ShaderMaterial).set_shader_parameter("face_lift", _efc_lift)
+			(_m_ground as ShaderMaterial).set_shader_parameter("face_az", _efc_az)
+			(_m_ground as ShaderMaterial).set_shader_parameter("face_o", _efc_o)
+
+
+var _god_t: float = -1.0
+var _god_next: float = 150.0
+var _god_k: float = 0.0
+var _god_az: float = 0.0
+## The mosaic's squares are filled with a moire driven by the same variable parameters as the ground's (speed, altitude, the buzz, the sharpenings, the molecules held), so the picture
+## is made of shifting interference and never sits still: cell scale follows the second-grid ratio, turning follows the turning speed, saturation follows the colour.
+func _face_moire_params(m: ShaderMaterial) -> void:
+	m.set_shader_parameter("fm_ratio", 1.0 + (_mo_ratio - 1.0) * 6.0 + 0.04 * sin(_buzz_t * 0.3))
+	m.set_shader_parameter("fm_ang", _mo_ang * 0.6)
+	m.set_shader_parameter("fm_drift", _mo_drift * 2.0)
+	m.set_shader_parameter("fm_sat", clampf(0.55 + _mo_sat * 0.45, 0.0, 1.0))
+	m.set_shader_parameter("fm_cyc", 2.0 + 2.0 * clampf(_mo_cell / 6.0 - 0.5, 0.0, 1.5))
+
+
+var _efc_k: float = 0.0          # 0..1 how much of the face is showing
+var _efc_o: Vector3 = Vector3.ZERO          # where the camera was when it began: the face is the landscape seen from there
+var _efc_lift: float = 0.0
+var _efc_peek: bool = false          # this one rises up from behind the mountains and sinks back, instead of hanging in the sky
+var _efc_az: float = 0.0          # the compass direction it hangs in (where you were looking when it began)
+
+
+func _efc_tick(delta: float, fxm: ThemeFX) -> void:
+	var deep := maxf(_mol_avg(), fx_level())
+	var auto := fx("p_face_auto")
+	if _efc_t < 0.0:
+		if deep > 0.25 and auto > 0.01:
+			_efc_next -= delta * auto
+			if _efc_next <= 0.0:
+				_efc_t = 0.0
+				_efc_next = randf_range(70.0, 150.0)
+				_efc_az = _efc_heading()
+				_efc_peek = randf() < 0.45
+				_efc_o = cam.global_position if cam != null else Vector3.ZERO
+	else:
+		_efc_t += delta
+		if _efc_t > 14.0:
+			_efc_t = -1.0
+	var env_k := 0.0
+	if _efc_t >= 0.0:
+		env_k = smoothstep(0.0, 5.0, _efc_t) * (1.0 - smoothstep(9.0, 14.0, _efc_t))          # in over five seconds, held, out over five
+	var manual := fx("p_face")
+	if manual > 0.001 and _efc_t < 0.0:
+		_efc_az = _efc_heading()          # held on for looking at (the lab slider): it stays dead ahead, wherever the trail turns
+		_efc_o = cam.global_position if cam != null else Vector3.ZERO
+	_efc_k = clampf(maxf(manual, env_k * 0.6), 0.0, 1.0)          # (the terrain print is vague on purpose: some will notice, some will not)
+	# THE GOD: the whole sky, now and then and for longer, much more rarely
+	var gauto := fx("p_god_auto")
+	if _god_t < 0.0:
+		if deep > 0.35 and gauto > 0.01:
+			_god_next -= delta * gauto
+			if _god_next <= 0.0:
+				_god_t = 0.0
+				_god_next = randf_range(200.0, 360.0)
+				_god_az = _efc_heading()
+	else:
+		_god_t += delta
+		if _god_t > 26.0:
+			_god_t = -1.0
+	var genv := 0.0
+	if _god_t >= 0.0:
+		genv = smoothstep(0.0, 6.0, _god_t) * (1.0 - smoothstep(18.0, 26.0, _god_t))
+	var gman := fx("p_god")
+	if gman > 0.001 and _god_t < 0.0:
+		_god_az = _efc_heading()
+	_god_k = clampf(maxf(gman, genv * 0.85), 0.0, 1.0)
+	if manual > 0.001 and _efc_t < 0.0:
+		_efc_lift = 0.0
+	elif _efc_peek:
+		_efc_lift = lerpf(0.70, 0.28, smoothstep(0.0, 6.0, _efc_t)) if _efc_t < 9.0 else lerpf(0.28, 0.70, smoothstep(9.0, 14.0, _efc_t))          # up over the ridge, held, back down behind it
+	else:
+		_efc_lift = -0.10
+	_face_fx_tick()
+
+
+func _efc_heading() -> float:
+	if cam == null:
+		return 0.0
+	var fwd := -cam.global_transform.basis.z
+	return atan2(fwd.x, -fwd.z)
+
+
+## THE MOIRE KNOBS, played with the game. Cell size, turning speed, how far apart the two grids are, how strongly the shapes show and how much colour: each follows something.
+##   turning speed: your speed, and a kick on every sharpening      cell size: bigger the higher you are (the ground opens out), tighter inside a tube
+##   second-grid ratio: breathes with the buzz, wider apart the deeper in you are      depth and colour: the molecules held (the colour only comes with the molecules)
+var _mo_ang: float = 0.0
+var _mo_asp: float = 0.045
+var _mo_cell: float = 6.0
+var _mo_ratio: float = 1.037
+var _mo_depth: float = 0.12
+var _mo_sat: float = 0.0
+var _mo_hue: float = 0.0
+var _mo_tri: float = 0.0
+var _mo_drift: Vector2 = Vector2.ZERO
+var _mo_rc: Vector2 = Vector2.ZERO
+var _mo_rad_prev: float = 0.0
+var _mo_rad: float = 0.0
+var _mo_warp: float = 0.0
+
+
+func _moire_tick(delta: float, h: float) -> void:
+	var spd := clampf(vel.length() / 50.0, 0.0, 1.0)
+	var alt := clampf((spos.y - terrain_h(spos.x, spos.z)) / 30.0, 0.0, 1.0)
+	var tube := 1.0 if (not _lk.is_empty() or not _lkp.is_empty()) else 0.0
+	var k := 1.0 - exp(-3.0 * delta)
+	_mo_asp = lerpf(_mo_asp, 0.045 + 0.20 * spd + 0.5 * _sharp + 0.25 * tube, k)
+	_mo_cell = lerpf(_mo_cell, 6.0 * (1.0 + 1.2 * alt) * (1.0 - 0.4 * tube) * (1.0 - 0.3 * _sharp), k)
+	_mo_ratio = lerpf(_mo_ratio, 1.037 + 0.02 * sin(_buzz_t * 0.4) * smoothstep(0.1, 0.5, h) + 0.03 * smoothstep(0.3, 0.9, h), k)
+	_mo_depth = lerpf(_mo_depth, (0.12 + 0.30 * smoothstep(0.1, 0.6, h) + 0.25 * _sharp) * fx("g_shape"), k)
+	_mo_sat = lerpf(_mo_sat, clampf((smoothstep(0.1, 0.55, h) * 0.9 + 0.5 * _sharp + 0.4 * tube) * fx("g_col"), 0.0, 1.0), k)
+	_mo_tri = lerpf(_mo_tri, (smoothstep(0.35, 0.8, h) * 0.9 + 0.5 * _sharp) * fx("g_tri"), k)          # three grids once deep in
+	_mo_rad = lerpf(_mo_rad, clampf((0.9 * _sharp + 0.7 * tube + (0.5 if not _rail.is_empty() else 0.0)) * fx("g_rad"), 0.0, 1.0), k)          # a bullseye on every sharpening, in a tube and on a rail
+	_mo_warp = lerpf(_mo_warp, (0.5 + 0.5 * sin(_buzz_t * 0.55)) * smoothstep(0.1, 0.5, h) * fx("g_warp"), k)          # flowing with the buzz waves
+	_mo_ang += _mo_asp * delta * 0.3          # (the direction the shapes slide in wanders; how fast they slide is the turning speed)
+	_mo_drift += Vector2(cos(_mo_ang), sin(_mo_ang)) * (0.10 + 0.9 * _mo_asp) * delta
+	if _mo_rad > 0.05 and _mo_rad_prev <= 0.05:
+		var wp0 := TrailCurve.w(spos)
+		_mo_rc = Vector2(wp0.x, wp0.z)          # the bullseye is centred where you were when it started, and stays there
+	_mo_rad_prev = _mo_rad
+	_mo_hue = fposmod(_mo_hue + delta * (0.03 + 0.1 * spd), 1.0)
+	var gm := _m_ground as ShaderMaterial
+	gm.set_shader_parameter("m_cell", _mo_cell)
+	gm.set_shader_parameter("m_ang", _mo_ang)
+	gm.set_shader_parameter("m_ratio", _mo_ratio)
+	gm.set_shader_parameter("m_depth", _mo_depth)
+	gm.set_shader_parameter("m_sat", _mo_sat)
+	gm.set_shader_parameter("m_hue", _mo_hue)
+	gm.set_shader_parameter("k_sq", fx("g_sq"))
+	gm.set_shader_parameter("k_edge", fx("r_edge"))
+	gm.set_shader_parameter("k_apron", fx("r_apron"))
+	gm.set_shader_parameter("m_tri", _mo_tri)
+	gm.set_shader_parameter("m_drift", _mo_drift)
+	gm.set_shader_parameter("m_rc", _mo_rc)
+	gm.set_shader_parameter("m_rad", _mo_rad)
+	gm.set_shader_parameter("m_warp", _mo_warp)
+
+
 ## Every frame: how far each piece has come, from what is held.
 func _stage_tick(delta: float) -> void:
 	if _journey == null:
 		return
 	_stage_assets()
-	var h := _mol_avg()
+	var h := maxf(_mol_avg(), fx_level())          # (the lab can pretend to be that far in)
 	_sky_flash = maxf(_sky_flash - delta / 1.3, 0.0)
 	var breath := 0.85 + 0.15 * sin(_age * 0.9)
 	var sky_k := clampf(maxf(_sky_flash * _sky_flash * 0.9, (0.3 * smoothstep(0.0, 0.08, h) - 0.12 * smoothstep(0.25, 0.6, h)) * breath), 0.0, 1.0)          # the sky is the first hint: once the rest has come on it steps back, so the picture does not go pale
-	_veg_live.set_shader_parameter("wob", smoothstep(0.03, 0.32, h) * (1.0 + 0.5 * smoothstep(0.5, 0.9, h)))
+	_veg_live.set_shader_parameter("wob", smoothstep(0.03, 0.32, h) * (1.0 + 0.5 * smoothstep(0.5, 0.9, h)) * fx("t_sway"))
+	_veg_live.set_shader_parameter("breathe", smoothstep(0.1, 0.5, h) * fx("t_breathe"))
 	if _m_ground is ShaderMaterial:
-		(_m_ground as ShaderMaterial).set_shader_parameter("gglow", smoothstep(0.05, 0.25, h))
+		(_m_ground as ShaderMaterial).set_shader_parameter("gglow", smoothstep(0.05, 0.25, h) * fx("g_glow"))
 		(_m_ground as ShaderMaterial).set_shader_parameter("grid", smoothstep(0.08, 0.34, h))
 		var wpos := TrailCurve.w(spos)
 		(_m_ground as ShaderMaterial).set_shader_parameter("gcen", Vector2(wpos.x, wpos.z))
+		(_m_ground as ShaderMaterial).set_shader_parameter("path_on", 1.0 if trail else 0.0)
+		(_m_ground as ShaderMaterial).set_shader_parameter("path_half", TRAIL_HALF)
+		_moire_tick(delta, h)
+	_sky_dome_tick(h)
+	_wander_tick(delta, h)
 	stage_post = smoothstep(0.22, 0.5, h)
 	if cam == null:
 		return
+	sky_k *= fx("s_bands")
 	if not sky_ok:
 		sky_k = 0.0
 	if sky_k > 0.004 and (_sky_fx == null or not is_instance_valid(_sky_fx)):
@@ -6058,9 +6887,11 @@ func _warm_shaders() -> void:
 	if _warmed or cam == null:
 		return
 	_warmed = true
+	var t_w0 := Time.get_ticks_msec()
 	if not OS.has_feature("web"):
 		return                                             # only a browser builds shaders this slowly; tests and the desktop build go straight in
 	_kit_prebuild()
+	print("[warm] kit prebuilt %d ms" % (Time.get_ticks_msec() - t_w0))
 	_warming = true
 	_warm_k = 0.0
 	Mats.keep_alive([_fx_mat("solid", Color.WHITE), _fx_mat("add", Color.WHITE), _fx_mat("halo", Color.WHITE), _fx_mat("ground", Color.WHITE), _fx_mat("spark", Color.WHITE)])
@@ -6110,6 +6941,7 @@ func _warm_shaders() -> void:
 			for near in [true, false]:
 				_warm_one(holder, col_box, m, i, near)
 				_warm_one(holder, plain_box, m, i, near)          # a mesh without vertex colours (rings, glints, poles, beacons) is a different program from one with them
+	print("[warm] materials drawn %d ms" % (Time.get_ticks_msec() - t_w0))
 	_warm_k = 0.5
 	var puff := CPUParticles3D.new()
 	puff.mesh = _sphere_mesh(0.1)
@@ -6137,12 +6969,13 @@ func _warm_shaders() -> void:
 		env.glow_enabled = g0
 		env.adjustment_enabled = a0
 		lt._apply_tier()
+	print("[warm] both flavours done %d ms" % (Time.get_ticks_msec() - t_w0))
 	if _journey != null and _lvl != null:
 		# every world's sky, ground, trees and full-screen looks are built here, behind the GET READY screen, so none of them stalls the game when it comes on
-		for wi in 2:
+		for wi in 1:          # (the second world is warmed by journey_prewarm in the calm before it, like every later one: GET READY is only the first)
 			var wid := _journey.peek_world(wi)
 			_pw_done[wid] = true
-			_warm_k = 0.9 + 0.08 * float(wi) / 2.0
+			_warm_k = 0.9 + 0.08 * float(wi)
 			for part in ["sky", "skymat", "ground", "veg", "light"]:
 				ThemeFX.apply_part(_lvl, self, wid, part, 1.0, _cfg_dyn, _cfg_snow, _cfg_fluffy)
 			var vm := Themes.veg_material(wid)
@@ -6176,6 +7009,8 @@ func _warm_shaders() -> void:
 	await get_tree().process_frame
 	holder.queue_free()
 	_warming = false
+	print("[warm] DONE %d ms" % (Time.get_ticks_msec() - t_w0))
+	warm_ms = Time.get_ticks_msec() - t_w0
 
 
 func _warm_one(holder: Node3D, mesh: Mesh, m: Material, i: int, near: bool) -> void:
@@ -6240,6 +7075,11 @@ func _restart() -> void:
 	_cho.clear()
 	_dg_hist.clear()
 	_rail = {}
+	_lk = {}
+	_lk_next_z = -260.0
+	_lk_follow = {}
+	_lk_depth = 0
+	_lk_recent_t = 0.0
 	_line_pick = {}
 	TrailCurve.on = bend
 	_cam_strip_ok = false
@@ -6701,7 +7541,7 @@ var trick_charge_override: bool = false
 const VX_LAUNCH := 46.0                   # m/s the vortex brings you to by the lip
 const VX_ACCEL := 34.0
 const VX_TRAIL := 37.0                   # m/s the trail swirl builds up to by the lip
-const VX_REACH := 90.0                   # m before the foot of the ramp where the swirl starts to take hold
+const VX_REACH := 130.0                   # m before the foot of the ramp where the swirl starts to take hold
 var _vx_lock_x: float = 0.0
 var _vx_lock_t: float = 0.0
 var _vx_lock_hard: bool = false
@@ -6798,11 +7638,11 @@ func _vortex_drive(delta: float) -> void:
 			var half: float = float(k["w"]) * 0.5
 			var dxk := kx - spos.x
 			var picked: bool = not _line_pick.is_empty() and String(_line_pick["kind"]) == "jump" and absf(float(_line_pick.get("kx", 1.0e9)) - kx) < 0.5
-			var side_look: bool = _eye_on and absf(eye_now()) > 0.22 and signf(eye_now()) == signf(kx - trail_x(kz)) and (_line_pick.is_empty() or picked)          # looking over to the ramp's side of the trail, and at nothing else
+			var side_look: bool = _eye_on and absf(eye_now()) > 0.12 and signf(eye_now()) == signf(kx - trail_x(kz)) and (_line_pick.is_empty() or picked)          # looking over to the ramp's side of the trail, and at nothing else
 			var on_it: bool = spos.z < kz + 4.0 and absf(dxk) < half + 1.5
 			# the swirl takes a board that is on the ramp or close beside it, and from much further out one whose rider is looking that way. A board in the middle of the trail
 			# whose rider is looking elsewhere is left alone: the ramp is a choice.
-			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 1.0 and (on_it or absf(dxk) < half + 9.0 or ((picked or side_look) and absf(dxk) < half + 50.0)):
+			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 1.0 and (on_it or absf(dxk) < half + 16.0 or ((picked or side_look) and absf(dxk) < half + 80.0)):
 				_vx_lock_x = kx          # and while it has you, the board's own steering aims for the ramp too (it used to aim for the middle of the trail and win: you slid off the side)
 				_vx_lock_t = 0.2
 				_vx_lock_hard = on_it          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
@@ -6992,20 +7832,28 @@ func _make_pad(row: Dictionary, x: float, z: float, epic: bool, with_pool: bool 
 
 
 func _update_pads() -> void:
-	if _finished or (not grounded and spos.y - terrain_h(spos.x, spos.z) > 2.5):          # a board skimming just over the snow still takes a pad (at speed it is off the ground half the time)
+	if _finished or not _lk.is_empty():
+		return
+	var pad_alt := spos.y - terrain_h(spos.x, spos.z)
+	var low := grounded or pad_alt <= 2.5          # a board skimming just over the snow still takes a pad (at speed it is off the ground half the time)
+	if not low and pad_alt > 16.0:
 		return
 	for k in _rows:
 		var r: Dictionary = _rows[k]
 		if absf(float(r["z"]) - spos.z) > 230.0:          # (a stretch is 180 m long and its pads can be at the far end of it: at 130 m those were never looked at)
 			continue
 		for p in r["pads"]:
-			if p["used"]:
+			if p["used"] or (not low and not p.has("lk")):          # only a spring reaches up to a board that is flying over it
 				continue
-			if absf(float(p["z"]) - 2.2 - spos.z) < 3.6 and absf(float(p["x"]) - spos.x) < 4.6:
+			var lkp: bool = p.has("lk")
+			if absf(float(p["z"]) - 2.2 - spos.z) < (4.5 if lkp else 3.6) and absf(float(p["x"]) - spos.x) < (7.5 if lkp else 4.6):          # (a spring's catch is wider)
 				p["used"] = true
 				if p.has("gem") and is_instance_valid(p["gem"]):
 					(p["gem"] as Node3D).visible = false
 				pads_hit += 1
+				if p.has("lk"):
+					_lk_start(p["lk"])          # a spring: not a push but a ride through the tube
+					return
 				Game.sfx(&"pad_boost")          # the push of a speed pad is heard
 				_boost_t = maxf(_boost_t, 1.8)
 				var fwd := Vector2(sin(heading), -cos(heading))
@@ -7125,9 +7973,66 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 				_mol_next_z = mz - 22.0
 				continue
 			_make_pills(row, toys, mz, 0.0)
+			_mol_last_z = mz
 			taken.append(mz)
 			var bias := _pacer.spawn_bias(_mol_avg()) if _pacer != null else 1.0
-			_mol_next_z = mz - clampf(MOL_GAP_M / bias, 105.0, 900.0) * _rng.randf_range(0.85, 1.15)
+			_mol_next_z = mz - _mol_gap() / clampf(bias, 0.6, 1.6) * _rng.randf_range(0.85, 1.15)
+	if _lk_on and trail:
+		var ltries := 0
+		while _lk_next_z > z0 - 70.0 and _lk_next_z > finish_z + 260.0 and ltries < 4:          # the whole piece (about 100 m) has to stand inside this stretch
+			ltries += 1
+			var cz := minf(_lk_next_z, z0 - 10.0)
+			var blk := false
+			for zt: float in taken:
+				if absf(zt - cz) < 40.0:
+					blk = true
+			if blk:
+				_lk_next_z = cz - 25.0
+				continue
+			# a piece that FOLLOWS a chain is built where the chain's rail throws the board: in the lane across from the one it started in, about 85 m on
+			var fl: Dictionary = _lk_follow
+			_lk_follow = {}
+			var fk := String(fl.get("kind", "chain"))
+			var fside := float(fl.get("side", 0.0))
+			if fk == "pills" and not _pills_ok(cz):
+				fk = "boost"          # a molecule row only where the pacing allows one: otherwise a boost row to land on
+			if fk == "pills":
+				_make_pills(row, toys, cz, fside)
+				_pills_made(cz)
+				_lk_next_z = cz - LK_GAP_M * _rng.randf_range(0.85, 1.2)
+			elif fk == "boost":
+				_boost_row(row, trail_x(cz) + fside * 7.0, cz, fside, _toy_g)
+				_toy_g += 1
+				_lk_next_z = cz - LK_GAP_M * _rng.randf_range(0.85, 1.2)
+			elif _rng.randf() < 0.22:
+				_make_launch(row, cz, fside if fside != 0.0 else (-1.0 if _rng.randf() < 0.5 else 1.0))
+			else:
+				_make_link_chain(row, cz, fside, int(fl.get("depth", 0)))          # (it sets where the next one goes itself)
+			var alt := String(fl.get("alt", ""))
+			if alt == "pills" and fk != "pills" and not _pills_ok(cz):
+				alt = "boost"
+			if alt == "pills" and fk == "pills":
+				alt = "boost"
+			if alt == "pills":
+				_make_pills(row, toys, cz, -fside)
+				_pills_made(cz)
+			elif alt == "boost":
+				_boost_row(row, trail_x(cz) - fside * 7.0, cz, -fside, _toy_g)
+				_toy_g += 1
+			taken.append(cz)
+			taken.append(cz - 45.0)
+			taken.append(cz - 90.0)
+	if _orbs_on and _lk_on and trail and _rng.randf() < 0.5:
+		var oz := z0 - _rng.randf_range(15.0, 90.0)
+		var ofree := true
+		for zt2: float in taken:
+			if absf(zt2 - oz) < 60.0 or absf(zt2 - (oz - 90.0)) < 40.0:
+				ofree = false
+		if ofree:
+			_make_orb_run(row, oz)
+			taken.append(oz)
+			taken.append(oz - 45.0)
+			taken.append(oz - 90.0)
 	for off: float in [48.0, 102.0, 156.0]:
 		var tz := z0 - off + _rng.randf_range(-8.0, 8.0)
 		if tz < finish_z + 130.0 or _rng.randf() > 0.8:
@@ -7336,6 +8241,574 @@ func journey_reset() -> void:
 
 
 var _toy_g: int = 100000
+
+
+# --------------------------------------------------------------------------
+# LINKED SET PIECES (the first one): a SPRING pad in one of the side lanes fires the board up through a TUBE of rings and lands it on the start of a RAIL, which grinds out and
+# slings you off the end (the rail's own slingshot). Each piece hands the board to the next one: the exit of the tube is the start of the rail, so the chain is built, not luck.
+# Take the spring (look at it, as with any choice) and the whole thing plays out; the payoff at the end is a big score, a free level of the lowest molecule, a boost and a trip surge.
+# ?nochain leaves them out.
+# --------------------------------------------------------------------------
+const LK_GAP_M := 360.0                 # metres between one set piece and the next (about every ten seconds at a good pace)
+const LK_TUBE_L := 70.0                 # how far down the hill the tube carries you
+const LK_RAIL_L := 30.0                 # the rail it lands you on
+const LK_SHIFT := 14.0                  # the tube carries you this far across the trail, toward the other side
+const LK_FOLLOW_M := 85.0               # how far past the rail's end the next piece stands
+var _lk_follow: Dictionary = {}         # what is to be built next, and in which lane (see _make_link_chain)
+var _lk_depth: int = 0                  # chains taken one after another (each within a few seconds of the last)
+var _lk_recent_t: float = 0.0
+var _lk_on: bool = not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nochain"))
+var _lk_next_z: float = -260.0
+var _lk: Dictionary = {}                # the ride in progress through a tube
+var lk_done: int = 0
+
+
+## A point a fraction u of the way (by length) along the tube's path, which is a list of sampled points (see _lk_path).
+func _lk_pt(d: Dictionary, u: float) -> Vector3:
+	var pts: PackedVector3Array = d["pts"]
+	var cum: PackedFloat32Array = d["cum"]
+	var tl: float = cum[cum.size() - 1]
+	var sd := clampf(u, 0.0, 1.0) * tl
+	var i := 1
+	while i < cum.size() - 1 and cum[i] < sd:
+		i += 1
+	var seg := maxf(cum[i] - cum[i - 1], 0.0001)
+	return pts[i - 1].lerp(pts[i], clampf((sd - cum[i - 1]) / seg, 0.0, 1.0))
+
+
+func _lk_tan(d: Dictionary, u: float) -> Vector3:
+	var tl: float = (d["cum"] as PackedFloat32Array)[(d["cum"] as PackedFloat32Array).size() - 1]
+	var e := 2.0 / maxf(tl, 1.0)
+	return (_lk_pt(d, minf(u + e, 1.0)) - _lk_pt(d, maxf(u - e, 0.0))).normalized()
+
+
+## THE PATHS. Every tube is a base line from the spring to the rail's start with a SHAPE added on top of it, in the frame of that line (forward, up, across):
+## an ARC (the original), a LOOP (a real vertical loop-the-loop), a SPIRAL (a corkscrew round the line) and a SKY arc (high, with a long hang). Returns the sampled points.
+func _lk_path(kind: String, p0: Vector3, p1: Vector3) -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	var n := 64
+	var fwd := Vector3(p1.x - p0.x, 0.0, p1.z - p0.z)
+	var flen := maxf(fwd.length(), 1.0)
+	var across := Vector3(-fwd.z, 0.0, fwd.x) / flen
+	for i in n + 1:
+		var t := float(i) / float(n)
+		var base := p0.lerp(p1, t)
+		var up := 0.0
+		var side := 0.0
+		var df := 0.0
+		match kind:
+			"arc":
+				up = 4.0 * 12.0 * t * (1.0 - t)
+			"sky":
+				up = 4.0 * 26.0 * t * (1.0 - t)
+			"launch":
+				up = 9.0 * sin(PI * t)          # (the end point itself is high up: a shot into the sky)
+			"loop":
+				up = 4.0 * 7.0 * t * (1.0 - t)
+				if t > 0.28 and t < 0.72:
+					var th := TAU * (t - 0.28) / 0.44
+					df = 9.5 * sin(th)
+					up += 9.5 * (1.0 - cos(th))
+					side = 2.5 * sin(th * 0.5)
+			"spiral":
+				up = 4.0 * 5.0 * t * (1.0 - t)
+				var env := pow(sin(PI * t), 0.6)
+				var ph := TAU * 1.75 * t
+				side = 6.5 * env * sin(ph)
+				up += 6.5 * env * (1.0 - cos(ph))
+		var pt := base + across * side + (fwd / flen) * df
+		pt.y += up
+		pts.append(pt)
+	return pts
+
+
+func _lk_prep(d: Dictionary) -> void:
+	var pts: PackedVector3Array = d["pts"]
+	var cum := PackedFloat32Array()
+	cum.append(0.0)
+	for i in range(1, pts.size()):
+		cum.append(cum[i - 1] + pts[i].distance_to(pts[i - 1]))
+	d["cum"] = cum
+	d["len"] = cum[cum.size() - 1]
+
+
+## The tube's rings (laid along the path every few metres, turned to face along it, alternating pink and cyan) and, if wanted, the ribbon of gold glints along it.
+func _lk_dress(row: Dictionary, d: Dictionary, loot: bool, every: float) -> void:
+	var nring := int(float(d["len"]) / 8.0)
+	d["nring"] = nring
+	for i in range(1, nring):
+		var u := float(i) / float(nring)
+		var pt := _lk_pt(d, u)
+		var tn := _lk_tan(d, u)
+		var col := Color(1.0, 0.3, 0.9, 0.9) if i % 2 == 0 else Color(0.3, 0.95, 1.0, 0.9)
+		var nd := _mi(self, _air_ring_mesh(), _fx_mat("add", col), pt)
+		nd.global_transform = Transform3D((Basis.looking_at(tn, Vector3.UP) * Basis(Vector3.RIGHT, PI * 0.5)).scaled(Vector3.ONE * 0.66), Vector3.ZERO)
+		_place(nd, pt)
+		(row["nodes"] as Array).append(nd)
+	if _orbs_on:
+		var nst: int = {"loop": 5, "spiral": 6, "sky": 6, "launch": 5, "arc": 3}.get(String(d.get("shape", "arc")), 3)
+		for si in nst:
+			var su := 0.08 + 0.84 * (float(si) + 0.5) / float(nst)
+			_orb_station(row, _lk_pt(d, su), _lk_tan(d, su), 6.5)
+	if loot:
+		var ng := int(float(d["len"]) / every)
+		var gl := PackedVector3Array()
+		for i in range(2, ng - 1):
+			gl.append(_lk_pt(d, float(i) / float(ng)) + Vector3(0.0, 0.2, 0.0))
+		_glint_line(row, Array(gl), 2.4)
+
+
+# --------------------------------------------------------------------------
+# GAZE ORBS: prizes that only need to be LOOKED at. In threes (left, middle, right) beside a tube, a rail or the ground, each one fills while the eyes rest on its side and is collected
+# when it is full: the board does not turn, does not move, does not touch anything. One of the three is gold and worth double: which one is a thing to spot. Several in a row build
+# a streak. They are the one prize that does not change the path, so they can sit anywhere, on top of everything else. ?noorbs leaves them out.
+# --------------------------------------------------------------------------
+const ORB_DWELL := 0.36          # seconds of looking to fill one
+const ORB_RANGE := 70.0          # m ahead where an orb can be collected
+var _orbs_on: bool = not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("noorbs"))
+var _orb_streak: int = 0
+var gz_got: int = 0
+var gz_seen: int = 0
+var _orb_streak_t: float = 0.0
+var _orb_sphere: SphereMesh = null
+
+
+func _orb_add(row: Dictionary, p: Vector3, side: int, big: bool) -> void:
+	if _orb_sphere == null:
+		_orb_sphere = SphereMesh.new()
+		_orb_sphere.radius = 0.8
+		_orb_sphere.height = 1.6
+		_orb_sphere.radial_segments = 10
+		_orb_sphere.rings = 5
+	var col := Color(1.0, 0.85, 0.3) if big else Color(0.72, 0.5, 1.0)
+	var nd := _mi(self, _orb_sphere, _fx_mat("add", Color(col.r, col.g, col.b, 0.9)), p)
+	_place(nd, p)
+	(row["nodes"] as Array).append(nd)
+	if not row.has("orbs"):
+		row["orbs"] = []
+	gz_seen += 1
+	(row["orbs"] as Array).append({"p": p, "side": side, "big": big, "dwell": 0.0, "got": false, "n": nd, "col": col})
+
+
+## Three at one station: left, middle (a little above the line) and right of `pt`, across the way the path runs, one of them gold.
+func _orb_station(row: Dictionary, pt: Vector3, tn: Vector3, gap: float) -> void:
+	var hz := Vector3(-tn.z, 0.0, tn.x)
+	hz = hz.normalized() if hz.length() > 0.05 else Vector3.RIGHT
+	var gold := _rng.randi_range(0, 2)
+	for k in 3:
+		var off := float(k - 1)
+		var p := pt + hz * (off * gap) + Vector3(0.0, 3.6 if k == 1 else 0.6, 0.0)
+		_orb_add(row, p, k - 1, k == gold)
+
+
+func _make_orb_run(row: Dictionary, z: float) -> void:
+	for i in 5:
+		var oz := z - float(i) * 22.0
+		var ox := trail_x(oz)
+		_orb_station(row, Vector3(ox, terrain_h(ox, oz) + 2.0, oz), Vector3(0.0, 0.0, -1.0), 9.0)
+
+
+func _orb_tick(delta: float) -> void:
+	_orb_streak_t = maxf(_orb_streak_t - delta, 0.0)
+	if _orb_streak_t <= 0.0:
+		_orb_streak = 0
+	var e := eye_now()
+	var look := 0 if absf(e) < 0.3 else (1 if e > 0.0 else -1)
+	var best: Dictionary = {}
+	var best_dz := 1.0e9
+	for k in _rows:
+		var r: Dictionary = _rows[k]
+		if not r.has("orbs"):
+			continue
+		for o in r["orbs"]:
+			if o["got"]:
+				continue
+			var dz := spos.z - float((o["p"] as Vector3).z)
+			if dz < 2.0 or dz > ORB_RANGE:
+				if float(o["dwell"]) > 0.0:
+					o["dwell"] = 0.0
+					if is_instance_valid(o["n"]):
+						(o["n"] as Node3D).scale = Vector3.ONE
+				continue
+			if int(o["side"]) == look and dz < best_dz:
+				best = o
+				best_dz = dz
+			else:
+				o["dwell"] = maxf(float(o["dwell"]) - delta * 1.5, 0.0)
+				if is_instance_valid(o["n"]):
+					(o["n"] as Node3D).scale = Vector3.ONE * (1.0 + 0.9 * float(o["dwell"]) / ORB_DWELL)
+	if best.is_empty():
+		return
+	best["dwell"] = float(best["dwell"]) + delta
+	var nd: Node3D = best["n"]
+	if is_instance_valid(nd):
+		nd.scale = Vector3.ONE * (1.0 + 0.9 * float(best["dwell"]) / ORB_DWELL)
+	if float(best["dwell"]) >= ORB_DWELL:
+		best["got"] = true
+		if is_instance_valid(nd):
+			nd.visible = false
+		_orb_streak += 1
+		gz_got += 1
+		_orb_streak_t = 2.6
+		var col: Color = best["col"]
+		_gain(int((130.0 if bool(best["big"]) else 60.0) * groove * float(mini(_orb_streak, 8))))
+		_trip_add(0.015)
+		_psy_pulse(1, col)
+		_burst(best["p"], col, 14, 8.0, 0.5, 0.7)
+		_flow_touch()
+		Game.sfx(&"coin")
+		if _orb_streak >= 3:
+			_toast("LOOK x%d" % _orb_streak, col)
+
+
+## THE LAUNCH (an open tube): a spring that shoots the board up into the sky with nothing to land on. Three CATCHERS hang ahead, left, middle and right, each a different prize,
+## and the eyes choose: look at the one you want and the board glides to it. Gold is a jackpot of points and glints, orange a long turbo, cyan a molecule (or a jackpot if none is due).
+const LKP_AHEAD := 58.0
+var _lkp: Dictionary = {}
+
+
+func _make_launch(row: Dictionary, cz: float, side: float) -> void:
+	var lim := W_HALF - 12.0
+	var x0 := clampf(trail_x(cz) + side * 7.0, -lim, lim)
+	var x1 := clampf(trail_x(cz - 95.0), -lim, lim)
+	var z1 := cz - 95.0
+	var p0 := Vector3(x0, terrain_h(x0, cz - 2.2) + 1.3, cz - 2.2)
+	var p1 := Vector3(x1, terrain_h(x1, z1) + 30.0, z1)
+	var d := {"p0": p0, "p1": p1, "shape": "launch", "open": true}
+	d["pts"] = _lk_path("launch", p0, p1)
+	_lk_prep(d)
+	_lk_dress(row, d, true, 2.6)
+	var kinds := ["gold", "boost", "mol"]
+	for i in range(2, 0, -1):
+		var j := _rng.randi_range(0, i)
+		var tmp: String = kinds[i]
+		kinds[i] = kinds[j]
+		kinds[j] = tmp
+	var cs: Array = []
+	var z2 := z1 - LKP_AHEAD
+	for k in 3:
+		var kind: String = kinds[k]
+		if kind == "mol" and not (_mol_rows and _pills_ok(cz)):
+			kind = "gold"
+		var cx := clampf(x1 + float(k - 1) * 17.0, -lim, lim)
+		var cy := p1.y - 3.0
+		var col := Color(1.0, 0.85, 0.3) if kind == "gold" else (Color(1.0, 0.5, 0.1) if kind == "boost" else Color(0.4, 0.95, 1.0))
+		var cp := Vector3(cx, cy, z2)
+		for ri in 3:
+			var nd := _mi(self, _air_ring_mesh(), _fx_mat("add", Color(col.r, col.g, col.b, 0.95 - 0.2 * float(ri))), cp)
+			nd.global_transform = Transform3D((Basis.looking_at(Vector3(0, 0, -1), Vector3.UP) * Basis(Vector3.RIGHT, PI * 0.5)).scaled(Vector3.ONE * (2.4 - 0.6 * float(ri))), Vector3.ZERO)
+			_place(nd, cp)
+			(row["nodes"] as Array).append(nd)
+		var lab := Label3D.new()
+		lab.text = "JACKPOT" if kind == "gold" else ("TURBO" if kind == "boost" else "MOLECULE")
+		lab.font_size = 96
+		lab.pixel_size = 0.045
+		lab.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lab.no_depth_test = true
+		lab.modulate = col
+		lab.outline_size = 24
+		add_child(lab)
+		_place(lab, cp + Vector3(0.0, 9.0, 0.0))
+		(row["nodes"] as Array).append(lab)
+		cs.append({"p": cp, "kind": kind, "col": col})
+	d["catch"] = cs
+	_make_pad(row, x0, cz, true, true)
+	((row["pads"] as Array).back() as Dictionary)["lk"] = d
+	_beacon(row, x0, cz - 2.0, Color(1.0, 0.85, 0.3))
+	(row["feats"] as Array).append({"kind": "toy", "kx": x0, "za": cz + 26.0, "zl": cz, "zb": cz - 8.0, "sd": side, "done": false, "want": 0.0, "away": 0.0, "g": _toy_g, "cd": true})
+	_toy_g += 1
+	_lk_follow = {}
+	_lk_next_z = z2 - 90.0
+
+
+## The open end of the tube: the board is let go in the air, and the eyes pick a catcher.
+func _lk_open(d: Dictionary) -> void:
+	_lk = {}
+	_lkp = {"c": d["catch"], "t": 0.0}
+	grounded = false
+	air_t = 0.0
+	_toast("LOOK AT ONE!", Color(1.0, 0.9, 0.4))
+	_fov_punch = maxf(_fov_punch, 8.0)
+
+
+func _lkp_step(delta: float) -> void:
+	_lkp["t"] = float(_lkp["t"]) + delta
+	var cs: Array = _lkp["c"]
+	var e := eye_now()
+	var sel := 1 if absf(e) < 0.3 else (2 if e > 0.0 else 0)
+	var c: Dictionary = cs[sel]
+	var tp: Vector3 = c["p"]
+	spos.x = lerpf(spos.x, tp.x, 1.0 - exp(-1.8 * delta))
+	vy = clampf((tp.y - spos.y) * 1.3, -14.0, 14.0)
+	hurt_t = 0.0
+	if spos.z <= tp.z + 1.0 or float(_lkp["t"]) > 4.0:
+		_lk_catch(c)
+
+
+func _lk_catch(c: Dictionary) -> void:
+	_lkp = {}
+	var kind: String = c["kind"]
+	var col: Color = c["col"]
+	var cp: Vector3 = c["p"]
+	var gift := ""
+	if kind == "mol":
+		gift = _mol_gift()
+		if gift == "":
+			kind = "gold"
+	if kind == "gold":
+		_gain(int(4000.0 * groove))
+		glints += 40
+		_cheer("JACKPOT!", col, 2.6)
+	elif kind == "boost":
+		_boost_t = maxf(_boost_t, 7.0)
+		_mult_t = maxf(_mult_t, 12.0)
+		_gain(int(900.0 * groove))
+		_cheer("TURBO!", col, 2.2)
+	else:
+		_gain(int(900.0 * groove))
+		_cheer("MOLECULE!" + gift, col, 2.6)
+	_sharpen(1.0)
+	vy = minf(vy, -2.0)          # let go: down it comes
+	lk_done += 1
+	_lk_recent_t = 10.0
+	_vx_active_t = maxf(_vx_active_t, 3.0)
+	_burst(cp, col, 60, 16.0, 0.9, 1.2)
+
+
+func _make_link_chain(row: Dictionary, cz: float, force_side: float = 0.0, depth: int = 0) -> void:
+	var side := force_side
+	if side == 0.0:
+		side = _lane_turn()
+	if side == 0.0:
+		side = -1.0 if _rng.randf() < 0.5 else 1.0
+	var lim := W_HALF - 12.0
+	var x0 := clampf(trail_x(cz) + side * 7.0, -lim, lim)
+	var x1 := clampf(x0 - side * LK_SHIFT, -lim, lim)
+	var sr := _rng.randf()
+	var shape: String = "arc" if sr < 0.22 else ("loop" if sr < 0.5 else ("spiral" if sr < 0.78 else "sky"))
+	var tube_l: float = {"arc": LK_TUBE_L, "loop": 105.0, "spiral": 115.0, "sky": 95.0}[shape]
+	var z1: float = cz - tube_l
+	var rail := {"kind": "rail", "za": z1, "zb": z1 - LK_RAIL_L, "sd": 0.0, "kx": x1, "done": false, "want": 0.0, "away": 0.0, "g": -99, "cd": true, "chain": true}
+	_build_rail(row, rail)
+	var p0 := Vector3(x0, terrain_h(x0, cz - 2.2) + 1.3, cz - 2.2)
+	var p1 := Vector3(x1, _rail_y(rail, z1) + 0.45, z1)
+	var d := {"p0": p0, "p1": p1, "rail": rail, "shape": shape}
+	d["pts"] = _lk_path(shape, p0, p1)
+	_lk_prep(d)
+	_lk_dress(row, d, shape != "arc", 2.2 if shape == "sky" else 3.0)
+	if _orbs_on:
+		for ri2 in 3:
+			var rz2 := z1 - 6.0 - 9.0 * float(ri2)
+			_orb_station(row, Vector3(x1, _rail_y(rail, rz2) + 1.6, rz2), Vector3(0.0, 0.0, -1.0), 7.0)
+	_make_pad(row, x0, cz, true, true)
+	((row["pads"] as Array).back() as Dictionary)["lk"] = d
+	_beacon(row, x0, cz - 2.0, Color(1.0, 0.3, 0.9))
+	_beacon(row, x1, z1, Color(0.3, 0.95, 1.0))
+	(row["feats"] as Array).append({"kind": "toy", "kx": x0, "za": cz + 26.0, "zl": cz, "zb": cz - 8.0, "sd": side, "done": false, "want": 0.0, "away": 0.0, "g": _toy_g, "cd": true})
+	_toy_g += 1
+	# WHAT COMES NEXT. The rail throws the board out of its end into the lane across from the spring, a flight of about 85 m: that is where the next thing is built. Mostly another
+	# spring (a chain of chains: up to three, each worth more), else a row of molecules or a boost row to land on.
+	# Both lanes get something different, and in the air the eyes choose the lane the board comes down in: looking left or right in the flight decides which of the two it lands on
+	# (looking at neither drifts it to the middle of the trail, between them, and it lands on neither).
+	var r := _rng.randf()
+	if depth < 2 and r < 0.5:
+		_lk_follow = {"kind": "chain", "side": -side, "depth": depth + 1, "alt": "pills" if _rng.randf() < 0.5 else "boost"}
+	elif r < 0.78:
+		_lk_follow = {"kind": "pills", "side": -side, "alt": "boost"}
+	else:
+		_lk_follow = {"kind": "boost", "side": -side, "alt": "pills"}
+	_lk_next_z = z1 - LK_RAIL_L - LK_FOLLOW_M
+
+
+func _lk_start(d: Dictionary) -> void:
+	var chord := float(d["len"])
+	var sp := maxf(-vel.y, 24.0) + 8.0
+	_lk = {"d": d, "t": 0.0, "dur": chord / sp, "sp": sp}
+	_lk_depth = _lk_depth + 1 if _lk_recent_t > 0.0 else 1          # a spring taken soon after the last chain's end is the next link of a run of them
+	_line_pick = {}
+	_slide_v = 0.0
+	grounded = false
+	air_t = 0.0
+	_vx_active_t = maxf(_vx_active_t, 2.6)
+	Game.sfx(&"pad_boost")
+	_cheer("SPRING!", Color(1.0, 0.4, 0.9), 1.3)
+	_flow_up(1)
+	_gain(int(150.0 * groove))
+	_burst(spos + Vector3(0, 0.6, 0), Color(1.0, 0.4, 0.9), 50, 14.0, 0.7, 1.0, Vector3(0, 1, 0), 60.0, -3.0)
+	_fov_punch = maxf(_fov_punch, 11.0)
+	_shake = maxf(_shake, 0.35)
+
+
+func _lk_step(delta: float) -> void:
+	_lk["t"] = float(_lk["t"]) + delta
+	var d: Dictionary = _lk["d"]
+	var u := clampf(float(_lk["t"]) / maxf(float(_lk["dur"]), 0.1), 0.0, 1.0)
+	var pt := _lk_pt(d, u)
+	var tn := _lk_tan(d, u)
+	var sp := float(_lk["sp"])
+	var nr: int = int(d.get("nring", 0))
+	if nr > 0:
+		var ri := int(u * float(nr))
+		if ri > int(_lk.get("ri", 0)):
+			_lk["ri"] = ri
+			var rc := Color(1.0, 0.3, 0.9) if ri % 2 == 0 else Color(0.3, 0.95, 1.0)
+			_psy_pulse(1, rc)          # every ring you pass through: a pulse of its colour through the picture
+			_burst(spos + Vector3(0, 0.4, 0), rc, 8, 7.0, 0.4, 0.5)
+			_sharpen(0.45)
+	_fov_punch = maxf(_fov_punch, 7.0)
+	var gh := terrain_h(pt.x, pt.z)
+	spos = Vector3(pt.x, maxf(pt.y, gh + 0.8), pt.z)
+	vel = Vector2(tn.x, tn.z) * sp
+	vy = tn.y * sp
+	heading = atan2(tn.x, -tn.z)
+	grounded = false
+	air_t = 0.0
+	hurt_t = 0.0
+	_slide_v = 0.0
+	_gh_prev = gh
+	if u >= 1.0:
+		_lk_end(d)
+
+
+func _lk_end(d: Dictionary) -> void:
+	if bool(d.get("open", false)):
+		_lk_open(d)
+		return
+	var f: Dictionary = d["rail"]
+	_lk = {}
+	_rail = f
+	Game.sfx(&"rail_on")
+	_rail_dx = 0.0
+	_rail_z0 = spos.z
+	_rail_pops0 = pops_flat
+	_gl_run = 0
+	_rail_py_ok = false
+	_rail_out_t = 0.0
+	_rail_spark = 0.0
+	grounded = true
+	vy = 0.0
+	_flow_up(1)
+	_toast("TUBE TO RAIL", Color(0.3, 0.95, 1.0))
+	_burst(spos + Vector3(0, 0.5, 0), Color(0.3, 0.95, 1.0), 30, 10.0, 0.5, 0.8)
+
+
+var _mol_last_z: float = 0.0          # where the last molecule row was built
+
+
+## May a molecule row stand at cz? Not within 60% of the usual gap of the last one, whoever builds it (the pacing, or a chain's prize).
+func _pills_ok(cz: float) -> bool:
+	return (_mol_last_z - cz) > _mol_gap() * 0.6
+
+
+## A molecule row was built at cz: the pacing counts from here.
+func _pills_made(cz: float) -> void:
+	_mol_last_z = cz
+	if _mol_next_z > cz - _mol_gap() * 0.5:
+		_mol_next_z = cz - _mol_gap() * _rng.randf_range(0.85, 1.15)
+
+
+## Metres to the next molecule row. One of each a run: six finds (and two rows to spare, for a missed one to come round again) spread over the whole session at about 33 m/s; once all
+## six are found only the odd top-up row comes.
+func _mol_gap() -> float:
+	if _mol_count() >= 6:
+		return 1100.0
+	var mins := (_pacer.session_s / 60.0) if _pacer != null else 10.0
+	return clampf(mins * 60.0 * 33.0 / 8.0, 700.0, 4200.0)
+
+
+## A set-piece prize: a molecule not yet found, if there is one (a way back for one that was missed), else a top-up of the weakest. Returns what to say.
+func _mol_gift() -> String:
+	if not _mol_rows:
+		return ""
+	var pick := -1
+	for q in 6:
+		if not bool(_mol_got[q]):
+			pick = q
+			break
+	if pick >= 0:
+		_mol_got[pick] = true
+		_mdose[pick] = 6.0
+		_dose += 0.30 * 6.0
+		_flick = 1.0
+		_mol_seen = true
+		return "  FOUND " + String(MolData.MOLS[MolData.ORDER[pick]]["name"]).to_upper()
+	var lo := 0
+	for mi2 in 6:
+		if _mdose[mi2] < _mdose[lo]:
+			lo = mi2
+	if _mdose[lo] < 6.0:
+		_mdose[lo] = minf(_mdose[lo] + 2.0, 6.0)
+		_dose += 0.30 * 2.0
+		_flick = 1.0
+		return "  +" + String(MolData.MOLS[MolData.ORDER[lo]]["name"]).to_upper()
+	return ""
+
+
+## THE BUZZ. Glow and bloom come in slow waves (the buzz), and now and then, rarely, they SHARPEN: everything bright snaps hard and crisp for a couple of seconds, then softens back.
+## The sharpening comes on its own every half minute or so (more often the deeper in you are), and on the big moments (a chain payoff, a molecule found).
+var _buzz_t: float = 0.0
+var _sharp: float = 0.0
+var _sharp_next: float = 30.0
+var _glow_base: float = -1.0
+var _tube_k: float = 0.0          # 0..1 how far inside a tube (or a chain rail, half) the picture is: the speed-rays and colour rings at its edges
+var _bloom_base: float = -1.0
+
+
+func _sharpen(k: float = 1.0) -> void:
+	_sharp = maxf(_sharp, k)
+	_sharp_next = maxf(_sharp_next, 14.0)          # never twice close together
+
+
+func _buzz_tick(delta: float, fxm: ThemeFX) -> void:
+	_buzz_t += delta
+	var deep := clampf(maxf(_mol_avg(), fx_level()) / 3.0, 0.0, 1.0)
+	var wave := 0.5 + 0.5 * sin(_buzz_t * 0.55) * (0.6 + 0.4 * sin(_buzz_t * 0.17 + 1.0))          # slow swells, about ten seconds each
+	var buzz := wave * (0.35 + 0.65 * deep)
+	_sharp_next -= delta * (0.7 + 0.8 * deep)
+	if _sharp_next <= 0.0:
+		_sharpen(1.0)
+		_sharp_next = randf_range(26.0, 48.0)
+	_sharp = maxf(_sharp - delta * 0.42, 0.0)          # it is set to 1 in one step (a snap) and eases off over about two and a half seconds
+	fxm.post.mat.set_shader_parameter("sharp", _sharp)
+	fxm.post.mat.set_shader_parameter("buzz", buzz)
+	var tube_to := 1.0 if (not _lk.is_empty() or not _lkp.is_empty()) else (0.5 if (not _rail.is_empty() and _rail.has("chain")) else 0.0)
+	_tube_k = lerpf(_tube_k, tube_to, 1.0 - exp(-(7.0 if tube_to > _tube_k else 2.0) * delta))
+	fxm.post.mat.set_shader_parameter("tube", _tube_k * fx("p_tube"))
+	fxm.post.mat.set_shader_parameter("k_chroma", fx("p_chroma"))
+	fxm.post.mat.set_shader_parameter("k_edge", fx("p_edge"))
+	fxm.post.mat.set_shader_parameter("k_cel", fx("p_cel"))
+	fxm.post.mat.set_shader_parameter("k_wash", fx("p_wash"))
+	_efc_tick(delta, fxm)
+	fxm.post.mat.set_shader_parameter("k_trace", fx("p_trace"))
+	fxm.post.mat.set_shader_parameter("k_punch", fx("p_punch"))
+	fxm.post.mat.set_shader_parameter("k_warp", fx("p_warp"))
+	fxm.post.mat.set_shader_parameter("k_fold", fx("p_fold"))
+	fxm.post.mat.set_shader_parameter("k_pulse", fx("p_pulse"))
+	fxm.post.mat.set_shader_parameter("k_rings", fx("p_rings"))
+	fxm.post.mat.set_shader_parameter("k_dmtr", fx("p_dmtr"))
+	var env: Environment = _lvl.world_env.environment if _lvl != null and _lvl.world_env != null else null
+	if env != null and env.glow_enabled:
+		if _glow_base < 0.0:
+			_glow_base = env.glow_intensity
+			_bloom_base = env.glow_bloom
+		env.glow_intensity = _glow_base * (1.0 + (0.3 * buzz + 1.0 * _sharp) * fx("p_bloom"))
+		env.glow_bloom = _bloom_base + (0.12 * buzz + 0.3 * _sharp) * fx("p_bloom")
+
+
+func _lk_payoff() -> void:
+	_sharpen(1.0)
+	lk_done += 1
+	var gift := _mol_gift()
+	var dp := maxi(_lk_depth, 1)
+	_lk_recent_t = 10.0          # the next spring within ten seconds counts as the next link
+	_gain(int(500.0 * groove * float(dp)))
+	_mult_t = maxf(_mult_t, 8.0 + 3.0 * float(dp))
+	_boost_t = maxf(_boost_t, 3.0 + 0.5 * float(dp))
+	_vx_active_t = maxf(_vx_active_t, 2.4)
+	_trip_add(0.08 + 0.03 * float(dp))
+	_flash = maxf(_flash, 0.35)
+	_cheer(("CHAIN!" if dp == 1 else "CHAIN x%d!" % dp) + gift, Color(1.0, 0.4, 0.9), 2.0 + 0.4 * float(dp))
+	Game.sfx(&"kaboom")
 
 
 ## A row of three boost pads down one lane, one after another: a thing to look at and carve over to, and a chain in itself (every pad is a link).
@@ -7612,7 +9085,7 @@ func _pick_molecule(exclude: Array = []) -> String:
 	var wsum := 0.0
 	var ws: Array = []
 	for i in 6:
-		var w := 0.3 if _mdose[i] >= 5.5 else 1.0 + 0.5 * (6.0 - _mdose[i])
+		var w := 4.0 if not bool(_mol_got[i]) else (0.2 if _mdose[i] >= 5.5 else 0.7)          # one not yet found keeps turning up: a missed one comes round again in the next molecule row
 		if exclude.has(String(MolData.ORDER[i])):
 			w = 0.0
 		ws.append(w)
@@ -7719,19 +9192,34 @@ func _pill_eat(t: Dictionary) -> void:
 	(t["n"] as Node3D).visible = false
 	_pill_n = _pill_n + 1 if _pill_gap > 0.0 else 1
 	_pill_gap = 6.0
-	_dose += 0.42          # (all six together open the waves)
 	var mi: int = MolData.ORDER.find(String(t["id"]))
-	_mdose[mi] = minf(_mdose[mi] + 1.0, 6.0)
+	# ONE OF EACH A RUN: the first pickup of a molecule FINDS it, for good, and it comes on at full strength (the felt part still rises slowly, so the waves come some while after).
+	# A second pickup of the same one only tops up what has worn off.
+	var first := not bool(_mol_got[mi])
+	var old_dose := _mdose[mi]
+	if first:
+		_mol_got[mi] = true
+		_mdose[mi] = 6.0
+	else:
+		_mdose[mi] = minf(_mdose[mi] + 2.0, 6.0)
+	_dose += 0.30 * (_mdose[mi] - old_dose)          # (all six together open the waves)
 	_mol_seen = true
 	_flick = 1.0          # but there is an instant glimmer
 	_burst(Vector3(float(t["x"]), float(t["y"]), float(t["z"])), t["col"], 22, 8.0, 0.6, 1.0)
-	_gain(int(120.0 * groove * float(_pill_n)))
+	_gain(int(120.0 * groove * float(_pill_n)) * (3 if first else 1))
 	_trip_add(0.25)
 	_flow_up(1)
 	_mix_add("pill")
 	_shake = maxf(_shake, 0.12)
 	Game.sfx(StringName("mol%d" % mi))          # each molecule has its own note
-	_toast("%s  %d/6" % [String(t["name"]), int(_mdose[mi])], t["col"])          # what it was
+	if first:
+		var nf := _mol_count()
+		var perk: String = MOL_PERK[mi]
+		_cheer("%s FOUND  %d OF 6   +%s" % [String(t["name"]).to_upper(), nf, perk], t["col"], 1.6 if nf < 5 else 2.0)
+		if nf == 5:
+			_toast("ONE MORE!", Color(1.0, 0.85, 0.3))
+	else:
+		_toast("%s  topped up" % String(t["name"]), t["col"])
 	if _pill_n == 3:
 		_cheer("TRIPPING", Color(1.0, 0.3, 0.9), 1.2)
 
@@ -7788,14 +9276,13 @@ func _mol_hurt(mol: int) -> void:
 		if held.is_empty():
 			return
 		i = int(held[randi() % held.size()])
-	if _mdose[i] < 0.5 and _mbody[i] < 0.5:
+	if _mbody[i] < 0.5:
 		return
-	_mdose[i] = maxf(_mdose[i] - 1.0, 0.0)
-	_mbody[i] = maxf(_mbody[i] - 1.0, 0.0)
+	# A molecule that has been found is never lost to a hit: it dims, what is felt of it dips for a while and comes back (a hit is a setback in the trip, not in the collection).
+	_mbody[i] = maxf(_mbody[i] - 2.0, 0.0)
 	_mol_hurt_t = 1.0
 	_mol_hurt_i = i
-	_dose = maxf(_dose - 0.42, 0.0)
-	_toast("%s  %d/6" % [String(MolData.MOLS[MolData.ORDER[i]]["name"]), int(_mdose[i])], Color(1.0, 0.35, 0.3))
+	_toast("%s  dimmed" % String(MolData.MOLS[MolData.ORDER[i]]["name"]), Color(1.0, 0.35, 0.3))
 
 
 func _pill_tick(delta: float) -> void:
@@ -7827,9 +9314,12 @@ func _pill_tick(delta: float) -> void:
 		wk *= stage_post          # the full-screen look is the last piece to arrive (see ONE THING AT A TIME)
 		ma = Vector3(pow(ma.x, 1.15), pow(ma.y, 1.15), pow(ma.z, 1.15)) * wk          # each look grows steadily with its level: something to see from the first one, no sudden jump near the top
 		mb = Vector3(pow(mb.x, 1.15), pow(mb.y, 1.15), pow(mb.z, 1.15)) * wk
+		ma = ma.max(Vector3.ONE * fx_level() * wk)
+		mb = mb.max(Vector3.ONE * fx_level() * wk)
 		fxm.post.mat.set_shader_parameter("mA", ma)
 		fxm.post.mat.set_shader_parameter("mB", mb)
 		fxm.post.mat.set_shader_parameter("dmt", dm)
+		_buzz_tick(delta, fxm)
 	if _shaft_mat != null:
 		_shaft_mat.set_shader_parameter("dose", _mol_avg())
 	_stage_tick(delta)
@@ -8175,6 +9665,9 @@ var _tip_pivot: Node3D
 var _tip_yaw: float = 0.0
 var _tip_roll: float = 0.0
 var _tip_x: float = 0.0
+var _tip_pitch: float = 0.0
+var _tip_yr: float = 0.0
+var _tip_prev_wh: float = 0.0
 var _cam_look: Vector2 = Vector2(0.0, -1.0)
 var _hop_cam: float = 0.0
 var _view_msec: int = 0
@@ -8244,7 +9737,40 @@ func _fit_tip() -> void:
 	var half_v := deg_to_rad(cam.fov) * 0.5
 	if cam.keep_aspect == Camera3D.KEEP_WIDTH:
 		half_v = atan(tan(half_v) * vs.y / maxf(vs.x, 1.0))
-	_tip_pivot.position.y = clampf(-tan(half_v * 0.82), -1.15, -0.3)
+	_tip_pivot.position.y = clampf(-tan(half_v * 0.82), -1.15, -0.3) - _crest_lift * 0.95          # the camera is lifted at a crest, the board is not: the tip stays down on the snow (and so leaves the picture) instead of floating up with the eye
+
+
+## THE PATH IS NEVER HIDDEN. Where the hill falls away ahead the ground in front hides the trail beyond it. Every few frames the line from the eye to the trail 50 to 230 m ahead is
+## checked against the ground in between, and the eye is raised just enough to see over it (up to CREST_LIFT_MAX), quickly on the way up and slowly on the way back down.
+const CREST_LIFT_MAX := 2.0
+var _crest_lift: float = 0.0
+var _crest_want: float = 0.0
+var _crest_n: int = 0
+
+
+func _crest_lift_tick(delta: float, eye: Vector3, snap: bool) -> void:
+	_crest_n += 1
+	if snap or _crest_n % 3 == 0:
+		var need := 0.0
+		var ey0 := eye.y - _crest_lift
+		for d in [45.0, 70.0, 100.0, 130.0]:
+			var tz: float = spos.z - d
+			var tx := trail_x(tz)
+			var hp := terrain_h(tx, tz) + 0.4
+			var ez := eye.z
+			var steps := int(d / 12.0)
+			for si in range(1, steps):
+				var u := float(si) / float(steps)
+				if u > 0.75:
+					break          # (near the target the 1 / (1 - u) turns small bumps into metres of lift)
+				var gx := lerpf(eye.x, tx, u)
+				var gz := lerpf(ez, tz, u)
+				var gh := terrain_h(gx, gz) + 0.5
+				# the line must pass above gh: ey + (hp - ey) * u >= gh   ->   ey >= (gh - hp * u) / (1 - u)
+				need = maxf(need, (gh - hp * u) / (1.0 - u) - ey0)
+		_crest_want = clampf(need - 1.5, 0.0, CREST_LIFT_MAX)          # the first metre of a hidden path is not worth leaving the ground for
+	var k := 4.0 if _crest_want > _crest_lift else 1.2
+	_crest_lift = _crest_want if snap else lerpf(_crest_lift, _crest_want, 1.0 - exp(-k * delta))
 
 
 func _place_camera(delta: float, snap: bool = false) -> void:
@@ -8272,13 +9798,15 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	_cdir = _cam_look
 	var eye := Vector3(spos.x, spos.y + 1.72 + _hop_cam, spos.z) - Vector3(_cam_look.x, 0.0, _cam_look.y) * 0.25
 	eye.y = maxf(eye.y, terrain_h(eye.x, eye.z) + 1.2)
+	_crest_lift_tick(delta, eye, snap)
+	eye.y += _crest_lift
 	cam.global_position = eye
 	var ahead := spos + Vector3(_cam_look.x, 0.0, _cam_look.y) * 18.0
 	ahead.y = terrain_h(ahead.x, ahead.z) + 1.4 + _hop_cam * 0.5
 	# high in the air the spot on the ground 18 m ahead is almost straight down: the view tipped over until there was only snow (and no board). The look is held between a
 	# little above level and 24 degrees down, eased, so a flight looks out over the slope and down at where you will land.
 	var flat_d := Vector2(ahead.x - eye.x, ahead.z - eye.z).length()
-	var want_dy := clampf(ahead.y - eye.y, -flat_d * 0.2, flat_d * 0.1)
+	var want_dy := clampf(ahead.y - eye.y, -flat_d * (0.2 + 0.05 * _crest_lift), flat_d * 0.1)
 	_fp_dy = want_dy if snap else lerpf(_fp_dy, want_dy, 1.0 - exp(-6.0 * delta))
 	ahead.y = eye.y + _fp_dy
 	if (ahead - eye).length() > 0.5:
@@ -8328,6 +9856,16 @@ func _build_tip() -> void:
 	var stripe := BoxMesh.new()
 	stripe.size = Vector3(0.07, 0.1, 0.55)
 	_mi(_tip_pivot, stripe, _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(0.0, 0.03, -1.0))
+	# the rider, as little as can be said: the toes of the front boot on the board, a lace of the board's orange on each. They lean and pitch with the board, so the body is felt behind the view.
+	var boot := CapsuleMesh.new()
+	boot.radius = 0.1
+	boot.height = 0.44
+	var bmat := _flat_mat(Color(0.12, 0.13, 0.18))
+	for bx in [-0.19, 0.19]:
+		var bt := _mi(_tip_pivot, boot, bmat, Vector3(float(bx), 0.13, -0.78))
+		bt.rotation.x = PI * 0.5
+		var lace := _mi(_tip_pivot, BoxMesh.new(), _flat_mat(Color(1.0, 0.55, 0.15)), Vector3(float(bx), 0.235, -0.82))
+		(lace.mesh as BoxMesh).size = Vector3(0.12, 0.03, 0.16)
 	b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
@@ -8556,6 +10094,7 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	params["seed"] = int(c.get("seed", 424242))
 	_mol_rows = bool(c.get("journey", true)) and String(c.get("theme", "alpine")) == "alpine"          # All dressed: molecules come at their own steady pace (see _gen_toys)
 	_mol_next_z = -150.0
+	_mol_last_z = 0.0
 	_forest_jobs.clear()
 	_pacer = null
 	apply_params({"length": 0.0 if (bool(c.get("endless", false)) or _mol_rows) else km * 1000.0, "diff": float(c.get("diff", 1.0)), "zones": zones})
@@ -8615,11 +10154,18 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	_mdose.fill(0.0)
 	_mbody.fill(0.0)
 	_mol_seen = false
+	_mol_got = [false, false, false, false, false, false]
+	_mol_lvp.fill(0.0)
+	_mol_pop.fill(0.0)
 	_dmt_on = false
 	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("dose"):
 		_mdose.fill(3.0)          # ?dose: begin with half of every molecule taken (to look at the trip and the stems from the start)
 		_mbody.fill(3.0)
 		_mol_seen = true
+		if str(JavaScriptBridge.eval("window.location.search")).contains("dose=found"):
+			_mol_got = [true, true, true, true, true, true]
+		elif not str(JavaScriptBridge.eval("window.location.search")).contains("dose=none"):
+			_mol_got = [true, true, true, true, false, false]          # ?dose: four found, two to go (to look at the meter)
 	_drift_t = 110.0
 	_dress_rider()
 	if _rider != null:
@@ -8871,17 +10417,7 @@ func _face_tick(delta: float, alt: float) -> void:
 		_shake = maxf(_shake, 0.6)
 		Game.sfx(&"kaboom")
 		GazeProvider.pm.buzz([40, 30, 80])
-		var gift := ""
-		if _mol_rows:
-			var lo := 0
-			for mi2 in 6:
-				if _mdose[mi2] < _mdose[lo]:
-					lo = mi2
-			if _mdose[lo] < 6.0:
-				_mdose[lo] = minf(_mdose[lo] + 1.0, 6.0)
-				_dose += 0.42
-				_flick = 1.0
-				gift = "  +1 " + String(MolData.MOLS[MolData.ORDER[lo]]["name"])
+		var gift := _mol_gift()
 		_cheer(("SUPER FACE!" if was_super else "FACE!") + "  x2" + gift, Color(1.0, 0.9, 0.2), 2.2 if was_super else 1.7)
 		_trip_add(0.08)
 		if face_k > 1.2:
@@ -9819,6 +11355,10 @@ func _update_aim(delta: float) -> void:
 # Input, pause, report
 # --------------------------------------------------------------------------
 func _input(event: InputEvent) -> void:
+	if event is InputEventKey and (event as InputEventKey).pressed and not (event as InputEventKey).echo and (event as InputEventKey).keycode == KEY_F2:
+		_fx_toggle()          # the effects lab
+		get_viewport().set_input_as_handled()
+		return
 	if _dot_phase == 2 and not _dot_done and _dot_t > 1.0:
 		if (event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed) or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed) or (event is InputEventKey and (event as InputEventKey).pressed):
 			_check_dismiss()
@@ -10143,65 +11683,133 @@ func _draw_setup_guide(s: Vector2, k: float, delta_hint: float) -> void:
 
 
 ## The six, along the top: a ring for each in its colour. The dim arc is how much has been taken, the bright arc is how much is felt, the number is the level (out of 6). A crash flashes them red.
-var _mol_pop: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # each disc's pop when its level goes up (1 to 0)
-var _mol_lvp: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # the level it was last drawn at
+var _mol_pop: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # each slot's pop when its molecule is found (1 to 0)
+var _mol_lvp: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])          # 1 once the slot has been drawn as found
+var _mol_got: Array = [false, false, false, false, false, false]          # which of the six have been FOUND this run: once found, never lost (what is felt of it comes and goes)
+var _mol_hud_cache: Dictionary = {}
+const MOL_PERK := ["GLINTS", "POINTS", "BOOST", "RAMPS", "SLING", "SPEED"]          # what each one does (the same order as MolData.ORDER): more glints, more points, stronger boost pads, more ramps, stronger slingshots, faster
+const MOL_EL_HUD := {"N": Color(0.45, 0.6, 1.0), "O": Color(1.0, 0.4, 0.35), "S": Color(1.0, 0.92, 0.3), "Br": Color(0.85, 0.45, 0.25)}
 
 
+func _mol_count() -> int:
+	var n := 0
+	for g in _mol_got:
+		if bool(g):
+			n += 1
+	return n
+
+
+## The heavy atoms (no hydrogens) and bonds of one molecule, ready to turn and draw: points, elements, bonds, and the radius that fits it in a ball.
+func _mol_hud_get(id: String) -> Dictionary:
+	if _mol_hud_cache.has(id):
+		return _mol_hud_cache[id]
+	var md: Dictionary = MolData.MOLS[id]
+	var atoms: Array = md["atoms"]
+	var idx := {}
+	var pts := PackedVector3Array()
+	var els: Array = []
+	var ext := 1.0
+	for i in atoms.size():
+		var a: Array = atoms[i]
+		if String(a[0]) == "H":
+			continue
+		idx[i] = pts.size()
+		var p := Vector3(float(a[1]), float(a[2]), float(a[3]))
+		pts.append(p)
+		els.append(String(a[0]))
+		ext = maxf(ext, maxf(Vector2(p.x, p.z).length(), absf(p.y)))
+	var bonds: Array = []
+	for b in md["bonds"]:
+		if idx.has(int(b[0])) and idx.has(int(b[1])):
+			bonds.append(Vector2i(int(idx[int(b[0])]), int(idx[int(b[1])])))
+	var out := {"pts": pts, "els": els, "bonds": bonds, "ext": ext}
+	_mol_hud_cache[id] = out
+	return out
+
+
+## THE SIX, along the top. Each is a slot with its molecule turning in it and its name beneath, and under the name what it does. Not found yet: a dark slot with the molecule's outline
+## turning slowly. Found: it fills with its colour and the molecule turns brightly; found for good, though what is felt of it (the ring round it) comes and goes. At five of six it says
+## ONE MORE, and the missing slot pulses.
 func _draw_mol_bar(font: Font, k: float, s: Vector2, m: float) -> void:
-	if not _mol_seen:
+	if not (_mol_seen or _mol_rows):
 		return
-	# Big, bright and playful: a coloured disc for each molecule (dark and quiet at level 0, filled with its colour and glowing once held), the level in it, six little stars under it
-	# (one lit for each level), and a pop when a level goes up. The dim arc round it is how much has been taken, the bright arc how much is felt. Its own row, clear of the stats.
 	var dt := get_process_delta_time()
-	var gap := 82.0 * k
-	var r := 27.0 * k
+	var gap := 94.0 * k
+	var r := 30.0 * k
 	var x0 := s.x * 0.5 - gap * 2.5
-	var y := m + 40.0 * k
+	var y := m + 46.0 * k
+	var n_got := _mol_count()
+	var missing := -1
+	if n_got == 5:
+		for q in 6:
+			if not bool(_mol_got[q]):
+				missing = q
 	for i in 6:
 		var id: String = MolData.ORDER[i]
 		var col: Color = MolData.MOLS[id]["c"]
-		var lvl := int(floor(_mdose[i] + 0.001))
-		if lvl > int(_mol_lvp[i]):
+		var got := bool(_mol_got[i])
+		if got and _mol_lvp[i] < 0.5:
 			_mol_pop[i] = 1.0
-		_mol_lvp[i] = float(lvl)
-		_mol_pop[i] = maxf(_mol_pop[i] - dt * 1.6, 0.0)
+		_mol_lvp[i] = 1.0 if got else 0.0
+		_mol_pop[i] = maxf(_mol_pop[i] - dt * 1.4, 0.0)
 		var pop := _mol_pop[i]
-		var held := lvl > 0
-		var rr := r * (1.0 + 0.22 * sin(pop * PI))
+		var rr := r * (1.0 + 0.28 * sin(pop * PI))
 		var c := Vector2(x0 + gap * float(i), y)
 		var felt := _mbody[i] / 6.0
-		var lv := _mdose[i] / 6.0
-		if held:
-			_hud.draw_circle(c, rr * (1.5 + 0.3 * pop), Color(col.r, col.g, col.b, 0.10 + 0.18 * pop + 0.05 * sin(_age * 3.0 + float(i))))          # the glow
-		_hud.draw_circle(c, rr + 2.0 * k, Color(0.0, 0.0, 0.0, 0.55))
-		_hud.draw_circle(c, rr, Color(col.r * 0.55, col.g * 0.55, col.b * 0.55, 0.92) if held else Color(col.r * 0.18, col.g * 0.18, col.b * 0.18, 0.75))
-		if held:
-			_hud.draw_circle(c - Vector2(0.0, rr * 0.28), rr * 0.62, Color(col.r, col.g, col.b, 0.35))          # the shine on the top of it
-		if lv > 0.001:
-			Draw2D.arc(_hud, c, rr + 4.0 * k, -PI * 0.5, -PI * 0.5 + TAU * lv, 32, Color(col.r, col.g, col.b, 0.4), 5.0 * k)
+		var held := _mdose[i] / 6.0
+		if got:
+			_hud.draw_circle(c, rr * (1.55 + 0.35 * pop), Color(col.r, col.g, col.b, 0.10 + 0.20 * pop + 0.05 * sin(_age * 3.0 + float(i))))          # the glow
+		if i == missing:
+			var pulse := 0.5 + 0.5 * sin(_age * 7.0)
+			Draw2D.arc(_hud, c, rr + 7.0 * k, 0.0, TAU, 40, Color(1.0, 0.85, 0.3, 0.45 + 0.5 * pulse), 4.0 * k)
+		_hud.draw_circle(c, rr + 2.0 * k, Color(0.0, 0.0, 0.0, 0.6))
+		_hud.draw_circle(c, rr, Color(col.r * 0.45, col.g * 0.45, col.b * 0.45, 0.95) if got else Color(0.05, 0.06, 0.10, 0.8))
+		if held > 0.001:
+			Draw2D.arc(_hud, c, rr + 4.0 * k, -PI * 0.5, -PI * 0.5 + TAU * held, 32, Color(col.r, col.g, col.b, 0.4), 4.0 * k)
 		if felt > 0.001:
-			Draw2D.arc(_hud, c, rr + 4.0 * k, -PI * 0.5, -PI * 0.5 + TAU * felt, 32, col.lightened(0.25), 5.0 * k)
+			Draw2D.arc(_hud, c, rr + 4.0 * k, -PI * 0.5, -PI * 0.5 + TAU * felt, 32, col.lightened(0.25), 4.0 * k)
 		if _mol_hurt_t > 0.0 and i == _mol_hurt_i:
 			_hud.draw_circle(c, rr + 6.0 * k, Color(1.0, 0.2, 0.2, 0.6 * _mol_hurt_t))
-		var cnt := "%d" % lvl
-		var fs := int(26.0 * k * (1.0 + 0.3 * pop))
-		_text(font, c + Vector2(-_tw(font, cnt, fs) * 0.5, fs * 0.36), cnt, int(26.0 * (1.0 + 0.3 * pop)), Color(1, 1, 1, 1.0 if held else 0.4))
-		for j in 6:
-			var sc := c + Vector2((float(j) - 2.5) * 12.5 * k, rr + 17.0 * k)
-			var on := j < lvl
-			var sr := (6.2 + (2.0 * pop if j == lvl - 1 else 0.0)) * k
-			var pts := PackedVector2Array()
-			for q in 10:
-				var ang := -PI * 0.5 + TAU * float(q) / 10.0
-				var rad := sr if q % 2 == 0 else sr * 0.45
-				pts.append(sc + Vector2(cos(ang), sin(ang)) * rad)
-			Draw2D.poly(_hud, pts, Color(1.0, 0.9, 0.4, 0.98) if on else Color(col.r, col.g, col.b, 0.22))
+		# the molecule, turning
+		var md := _mol_hud_get(id)
+		var pts: PackedVector3Array = md["pts"]
+		var els: Array = md["els"]
+		var sc := rr * 0.82 / float(md["ext"])
+		var ang := _age * (1.0 if got else 0.45) + float(i) * 1.3
+		var ca := cos(ang)
+		var sa := sin(ang)
+		var sp := PackedVector2Array()
+		var dp := PackedFloat32Array()
+		for pi in pts.size():
+			var p: Vector3 = pts[pi]
+			var px := p.x * ca + p.z * sa
+			var pz := -p.x * sa + p.z * ca
+			sp.append(c + Vector2(px, -(p.y * 0.95 + pz * 0.28)) * sc)
+			dp.append(pz)
+		var lcol := col.lightened(0.35) if got else Color(col.r, col.g, col.b, 0.32)
+		lcol.a = 0.95 if got else 0.32
+		for bd in md["bonds"]:
+			var bv: Vector2i = bd
+			_hud.draw_line(sp[bv.x], sp[bv.y], lcol, (3.0 if got else 1.6) * k)
+		if got:
+			for pi in pts.size():
+				var el := String(els[pi])
+				var ac: Color = MOL_EL_HUD.get(el, col.lightened(0.55))
+				var ar := (3.8 if el == "C" else (5.0 if el == "S" or el == "Br" else 4.4)) * k * (1.0 + 0.15 * clampf(dp[pi] / float(md["ext"]), -1.0, 1.0))
+				_hud.draw_circle(sp[pi], ar, ac)
 		var nm := String(MolData.MOLS[id]["name"]).to_upper()
-		if nm == "MESCALINE":
-			nm = "MESC"
-		_text(font, c + Vector2(-_tw(font, nm, int(12.0 * k)) * 0.5, rr + 36.0 * k), nm, 12, Color(col.r, col.g, col.b, 1.0 if held else 0.6).lightened(0.2))
+		var nsz := 14
+		_text(font, c + Vector2(-_tw(font, nm, int(float(nsz) * k)) * 0.5, rr + 22.0 * k), nm, nsz, Color(col.r, col.g, col.b, 1.0 if got else 0.55).lightened(0.25))
+		_text(font, c + Vector2(-_tw(font, MOL_PERK[i], int(10.0 * k)) * 0.5, rr + 36.0 * k), MOL_PERK[i], 10, Color(1, 1, 1, 0.7 if got else 0.3))
+	var ty := y + r + 56.0 * k
 	if _dmt_on:
-		_text(font, Vector2(s.x * 0.5 - _tw(font, "ALL SIX", int(16.0 * k)) * 0.5, y + r + 60.0 * k), "ALL SIX", 16, Color(1.0, 0.85, 0.3, 0.7 + 0.3 * sin(_age * 6.0)))
+		_text(font, Vector2(s.x * 0.5 - _tw(font, "ALL SIX", int(18.0 * k)) * 0.5, ty), "ALL SIX", 18, Color(1.0, 0.85, 0.3, 0.7 + 0.3 * sin(_age * 6.0)))
+	elif n_got == 5:
+		var pa := 0.75 + 0.25 * sin(_age * 7.0)
+		_text(font, Vector2(s.x * 0.5 - _tw(font, "ONE MORE!", int(22.0 * k)) * 0.5, ty), "ONE MORE!", 22, Color(1.0, 0.85, 0.3, pa))
+	elif n_got > 0:
+		var ct := "%d OF 6" % n_got
+		_text(font, Vector2(s.x * 0.5 - _tw(font, ct, int(14.0 * k)) * 0.5, ty), ct, 14, Color(1, 1, 1, 0.55))
 
 
 var _diag: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("diag")          # ?diag: the tracking made visible (targets, the gaze point, the readings)
@@ -10450,6 +12058,7 @@ func _draw_hud_inner() -> void:
 		if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 			pt += "   CAM %.0f fps  %d ms" % [tf, int(GazeProvider.trk_lat_ms)]
 		pt += "   Q%d" % qt
+		pt += "   WHERE %d of %d m  %s/%s  %s  alt %.0f" % [int(-spos.z), int(absf(finish_z)), _player_region, _cur_zone, (_journey.world if _journey != null else "-"), spos.y - terrain_h(spos.x, spos.z)]          # where the rider is, so a stuck or empty place can be found
 		pt += "   SND %d %s" % [AudioHooks.played, DhMusic.dbg if DhMusic.dbg != "" else "-"]
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x

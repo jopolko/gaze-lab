@@ -11,7 +11,7 @@ const ZONE_LABELS := {"rush": "RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "ben
 var cfg: Dictionary = {
 	"v": 4, "theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
 	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
-	"psy": false, "journey": true, "trip": 1, "session": 10, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
+	"fullscreen": false, "psy": false, "journey": true, "trip": 1, "session": 10, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
 }
 
 var _defaults: Dictionary = cfg.duplicate(true)
@@ -265,7 +265,7 @@ func _build_tabs() -> void:
 	_root.add_child(_tabrow)
 	var grp := ButtonGroup.new()
 	for i in 5:
-		var b := _button(["WORLD", "COURSE", "SOUND", "YOU", "MAYHEM"][i], 22, _tabrow, true)
+		var b := _button(["WORLD", "COURSE", "SOUND", "CUSTOM", "MAYHEM"][i], 22, _tabrow, true)
 		b.button_group = grp
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.add_theme_stylebox_override("normal", _style(Color(1, 1, 1, 0.07), Color(0, 0, 0, 0), 14, 0))
@@ -318,6 +318,7 @@ const GUIDE_ROWS := [
 	[Color(0.95, 0.35, 1.0), "RAMP + SWIRL", "look its way: pulled in, thrown high"],
 	[Color(0.5, 1.0, 0.8), "IN THE AIR", "look where you want to land"],
 	[Color(0.45, 0.85, 1.0), "SLINGSHOT", "pass close: drawn in and flung on"],
+	[Color(1.0, 0.4, 0.9), "SPRING CHAIN", "spring, ring tube, rail, sling: a big payoff"],
 	[Color(1.0, 0.4, 0.75), "BUMPERS", "bounce off for points"],
 	[Color(1.0, 0.9, 0.5), "COLOUR GATES", "same colour again and again: a chain"],
 	[Color(1.0, 0.9, 0.2), "A FACE", "rare: copy it in the air, big prize"],
@@ -696,7 +697,7 @@ func _build_sound_card() -> void:
 
 
 func _build_experience_card() -> void:
-	var c := _card("YOU", "how you play")
+	var c := _card("CUSTOM", "how you play")
 	var ar := _slider(c, 0.0, 1.0, 0.05, "")
 	_assist_s = ar[0]
 	_assist_l = ar[1]
@@ -1266,7 +1267,7 @@ func _start(with_camera: bool) -> void:
 	get_tree().paused = false
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("if (window.__fsInit) window.__fsArm = 1;")          # (phones: the page asks again on the next tap if this request is refused)
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)          # always full screen, start to finish
 		JavaScriptBridge.eval("(function(){try{if(screen.orientation&&screen.orientation.lock){screen.orientation.lock('landscape').catch(function(){});}}catch(e){}})()")
 	Game.dh_started.emit(out)
 	if with_camera:

@@ -14,3 +14,8 @@ godot/tools/deploy.sh
 godot/tools/vps/
 music_web/*.ogg
 godot/tools/serve-tls.log
+
+# licensed music (non-commercial / no-derivatives: not for the public repo) and local snapshots
+godot/music_web/
+godot/tools/looks/
+godot/tools/face/tone_woman1.png
