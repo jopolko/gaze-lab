@@ -6781,6 +6781,36 @@ func _bend_tick() -> void:
 		_veg_live.set_shader_parameter("bend_k", k)
 
 
+## THE MOLECULE FLASH. Taking a molecule makes its own effect (the ones that live in the picture pass: mescaline warm waves, DOM a swell of light and contrast, 2C-B the colour split,
+## 2C-T-2 ripples, 2C-T-7 the pulse) surge through the whole picture for about a second, then drain back to whatever was there. It costs nothing to load: the pass and its
+## shaders are already built behind GET READY, and this only moves the same dials. If no look is on yet (the first molecules), the pass is switched on for the flash and off again.
+var _mflash: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+var _mflash_on: bool = false
+
+
+func _mflash_tick(delta: float, fxm: ThemeFX) -> void:
+	var mx := 0.0
+	for i in 6:
+		_mflash[i] = maxf(_mflash[i] - delta * 0.9, 0.0)
+		mx = maxf(mx, _mflash[i])
+	var pm = fxm.post
+	if mx > 0.02:
+		_mflash_on = true
+		if pm.layer != null:
+			pm.layer.visible = true
+		pm.mat.set_shader_parameter("mode", 1.0)
+		pm.mat.set_shader_parameter("onset", 1.0)
+		pm.mat.set_shader_parameter("amount", maxf(float(pm.amount), 1.0))
+		pm.mat.set_shader_parameter("breathe", maxf(float(pm.amount), 1.0))
+	elif _mflash_on:
+		_mflash_on = false
+		pm.mat.set_shader_parameter("mode", float(pm.mode))
+		pm.mat.set_shader_parameter("amount", float(pm.amount))
+		pm.mat.set_shader_parameter("breathe", float(pm.amount))
+		if pm.layer != null:
+			pm.layer.visible = int(pm.mode) > 0
+
+
 ## THE MOIRE KNOBS, played with the game. Cell size, turning speed, how far apart the two grids are, how strongly the shapes show and how much colour: each follows something.
 ##   turning speed: your speed, and a kick on every sharpening      cell size: bigger the higher you are (the ground opens out), tighter inside a tube
 ##   second-grid ratio: breathes with the buzz, wider apart the deeper in you are      depth and colour: the molecules held (the colour only comes with the molecules)
@@ -8797,6 +8827,7 @@ func _buzz_tick(delta: float, fxm: ThemeFX) -> void:
 	fxm.post.mat.set_shader_parameter("k_edge", fx("p_edge"))
 	fxm.post.mat.set_shader_parameter("k_cel", fx("p_cel"))
 	fxm.post.mat.set_shader_parameter("k_wash", fx("p_wash"))
+	_mflash_tick(delta, fxm)
 	_efc_tick(delta, fxm)
 	fxm.post.mat.set_shader_parameter("k_trace", fx("p_trace"))
 	fxm.post.mat.set_shader_parameter("k_punch", fx("p_punch"))
@@ -9221,6 +9252,8 @@ func _pill_eat(t: Dictionary) -> void:
 		_mdose[mi] = 6.0
 	else:
 		_mdose[mi] = minf(_mdose[mi] + 2.0, 6.0)
+	_mflash[mi] = 1.0          # its signature effect flashes through the picture for about a second
+	_sharpen(0.7)
 	_dose += 0.30 * (_mdose[mi] - old_dose)          # (all six together open the waves)
 	_mol_seen = true
 	_flick = 1.0          # but there is an instant glimmer
@@ -9335,6 +9368,8 @@ func _pill_tick(delta: float) -> void:
 		mb = Vector3(pow(mb.x, 1.15), pow(mb.y, 1.15), pow(mb.z, 1.15)) * wk
 		ma = ma.max(Vector3.ONE * fx_level() * wk)
 		mb = mb.max(Vector3.ONE * fx_level() * wk)
+		ma += Vector3(_mflash[0], _mflash[1], _mflash[2]) * 0.9          # a molecule just taken: ITS effect, for a moment, so the cause is seen
+		mb += Vector3(_mflash[3], _mflash[4], _mflash[5]) * 0.9
 		fxm.post.mat.set_shader_parameter("mA", ma)
 		fxm.post.mat.set_shader_parameter("mB", mb)
 		fxm.post.mat.set_shader_parameter("dmt", dm)
