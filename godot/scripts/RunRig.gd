@@ -6176,7 +6176,7 @@ const FX_KNOBS := [
 	["WORLD", "w_carve", "chromatic carve trail: colour dots left where you cut hard (All dressed)", 1.0, 2.0],
 	["PICTURE", "p_rewind", "rewind: a crash tears and splits the picture as the board is put back (All dressed)", 1.0, 2.0],
 	["PICTURE", "p_smear", "boost smear: the picture streaks out from the middle while boosting", 1.0, 2.0],
-	["PICTURE", "p_hueedge", "hue-cycling outlines in All dressed (rainbow ink at every edge)", 1.0, 2.0],
+	["PICTURE", "p_hueedge", "hue-cycling outlines in All dressed (rainbow ink at every edge: off by default, it cluttered the picture and costs a full-screen filter)", 0.0, 2.0],
 	["PICTURE", "p_edge", "cel outlines (ink lines at every edge)", 0.0, 1.5],
 	["PICTURE", "p_cel", "cel bands (flat steps of light: it can flatten the ground in bright scenes)", 0.0, 1.0],
 	["PICTURE", "p_chroma", "colour split", 1.0, 3.0],
