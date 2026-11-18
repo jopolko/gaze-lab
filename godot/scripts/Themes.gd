@@ -501,6 +501,8 @@ uniform float k_dmtr = 0.0;     // the rings when all six are held: 0 off
 uniform float face = 0.0;       // 0..1 a FACE emerges in the picture (rarely, for a few seconds): not drawn on it, but found in its light and shade
 uniform float k_wash = 0.0;     // a colour wash over the WHOLE picture that turns with the trip (the tie-dye): 0 off. It covered everything in a soft rainbow, so it is off
 uniform float k_edge = 0.0;      // CEL OUTLINES: ink lines where the picture changes (0 off)
+uniform float smear = 0.0;       // 0..1 BOOST SMEAR: the picture streaks outward from the middle while you are boosting (the middle stays clear to steer by)
+uniform float edge_hue = 0.0;    // 0..1 the outline ink cycles through the rainbow instead of staying dark
 uniform float k_cel = 0.0;       // CEL BANDS: light and shade in a few flat steps (0 off)
 uniform float k_chroma = 1.0;   // the lab: how much each part of the picture pass counts (1 = as designed)
 uniform float k_trace = 1.0;
@@ -628,6 +630,13 @@ void fragment() {
 		col *= 1.0 + fs.x * fk * 1.6;
 		col = mix(col, vec3(1.0, 0.35, 0.5) * (0.4 + lumf), fs.y * fk * 0.5);
 	}
+	if (smear > 0.002) {
+		vec3 acc = col;
+		for (int si = 1; si < 6; si++) {
+			acc += texture(screen_tex, uv - c * smear * 0.09 * (float(si) / 6.0)).rgb;
+		}
+		col = mix(col, acc / 6.0, clamp(smear * 0.9, 0.0, 0.85) * smoothstep(0.08, 0.4, r));
+	}
 	if (k_edge > 0.001) {          // outlines: a Sobel over the UNtouched picture (so the lines are as sharp as the geometry, not smeared by the other effects), drawn as dark ink
 		vec2 px = SCREEN_PIXEL_SIZE * 1.4;
 		vec3 t00 = texture(screen_tex, uv + px * vec2(-1.0, -1.0)).rgb;
@@ -642,7 +651,8 @@ void fragment() {
 		vec3 gyv = (t02 + 2.0 * t12 + t22) - (t00 + 2.0 * t10 + t20);
 		float eg = length(vec3(length(vec2(gxv.r, gyv.r)), length(vec2(gxv.g, gyv.g)), length(vec2(gxv.b, gyv.b))));
 		float line = smoothstep(0.30, 0.85, eg);
-		col = mix(col, vec3(0.02, 0.0, 0.09), clamp(line * k_edge, 0.0, 0.92));
+		vec3 ink = mix(vec3(0.02, 0.0, 0.09), hsv(fract(TIME * 0.12 + uv.x * 0.35 + uv.y * 0.2), 0.9, 1.0), edge_hue);
+		col = mix(col, ink, clamp(line * k_edge, 0.0, 0.92));
 	}
 	if (k_cel > 0.001) {          // bands: the light is stepped, so surfaces read as flat shapes with crisp edges between them
 		float lc = dot(col, vec3(0.299, 0.587, 0.114));

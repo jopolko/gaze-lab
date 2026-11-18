@@ -4708,6 +4708,7 @@ func _process(delta: float) -> void:
 		cam.rotation.x -= 0.12
 	_juice(delta)
 	_psy_tick(delta)
+	_trail_fx_tick(delta)
 	_trip_tick(delta)
 	_exc_tick(delta)
 	_dbg_t -= delta
@@ -6164,6 +6165,10 @@ const FX_KNOBS := [
 	["PICTURE", "p_face_auto", "...appears by itself, rarely", 1.0, 2.0],
 	["SKY", "p_god", "the whole sky is a face looking down (1 = shown now)", 0.0, 1.0],
 	["SKY", "p_god_auto", "...appears by itself, very rarely", 1.0, 2.0],
+	["WORLD", "w_echo", "astral echoes: faint coloured copies trail behind the board (All dressed)", 1.0, 2.0],
+	["WORLD", "w_carve", "chromatic carve trail: colour dots left where you cut hard (All dressed)", 1.0, 2.0],
+	["PICTURE", "p_smear", "boost smear: the picture streaks out from the middle while boosting", 1.0, 2.0],
+	["PICTURE", "p_hueedge", "hue-cycling outlines in All dressed (rainbow ink at every edge)", 1.0, 2.0],
 	["PICTURE", "p_edge", "cel outlines (ink lines at every edge)", 0.0, 1.5],
 	["PICTURE", "p_cel", "cel bands (flat steps of light: it can flatten the ground in bright scenes)", 0.0, 1.0],
 	["PICTURE", "p_chroma", "colour split", 1.0, 3.0],
@@ -9241,6 +9246,93 @@ func _sharpen(k: float = 1.0) -> void:
 	_sharp_next = maxf(_sharp_next, 14.0)          # never twice close together
 
 
+# --------------------------------------------------------------------------
+# ASTRAL ECHOES and CHROMATIC CARVE TRAILS (All dressed only). Four faint coloured copies of where the board was a moment ago hang behind it, each a little smaller and a little
+# further round the rainbow; and when it carves hard on the snow, a trail of colour dots is left on the ground that cycles hue and fades. Both are small additive shapes (36 in all,
+# hidden when unused), nothing in the picture pass, so they cost almost nothing.
+# --------------------------------------------------------------------------
+const ECHO_N := 4
+const CARVE_N := 28
+var _tf_echo: Array = []
+var _tf_dots: Array = []
+var _tf_dot_age: PackedFloat32Array = PackedFloat32Array()
+var _tf_dot_i: int = 0
+var _tf_hist: Array = []
+var _tf_t: float = 0.0
+var _tf_drop: float = 0.0
+var _tf_on: float = 0.0
+
+
+func _tf_mat(col: Color) -> StandardMaterial3D:
+	var m := (_fx_mat("add", Color.WHITE) as StandardMaterial3D).duplicate() as StandardMaterial3D
+	m.albedo_color = col
+	return m
+
+
+func _trail_fx_tick(delta: float) -> void:
+	if _journey == null or _finished or _paused or _warming:
+		return
+	var want := 1.0 if (fx("w_echo") > 0.01 and (maxf(_mol_avg(), fx_level()) > 0.08 or _boost_t > 0.0)) else 0.0
+	_tf_on = lerpf(_tf_on, want, 1.0 - exp(-2.5 * delta))
+	if _tf_echo.is_empty():
+		for i in ECHO_N:
+			var n := MeshInstance3D.new()
+			n.mesh = _sphere_mesh(0.55)
+			n.material_override = _tf_mat(Color(1, 1, 1, 0.0))
+			n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			n.visible = false
+			add_child(n)
+			_tf_echo.append(n)
+		for i in CARVE_N:
+			var d := MeshInstance3D.new()
+			d.mesh = _sphere_mesh(0.2)
+			d.material_override = _tf_mat(Color(1, 1, 1, 0.0))
+			d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			d.visible = false
+			add_child(d)
+			_tf_dots.append(d)
+		_tf_dot_age.resize(CARVE_N)
+		_tf_dot_age.fill(99.0)
+	_tf_t += delta
+	if _tf_t >= 0.12:
+		_tf_t = 0.0
+		_tf_hist.push_front(spos)
+		if _tf_hist.size() > 16:
+			_tf_hist.pop_back()
+	for i in ECHO_N:
+		var n := _tf_echo[i] as MeshInstance3D
+		var hi := (i + 1) * 3
+		var a := 0.30 * _tf_on * (1.0 - float(i) / float(ECHO_N))
+		if hi >= _tf_hist.size() or a < 0.01:
+			n.visible = false
+			continue
+		n.visible = true
+		var q: Vector3 = _tf_hist[hi]
+		_wset(n, q + Vector3(0.0, 0.9, 0.0))
+		n.scale = Vector3(0.8, 1.5, 0.8) * (1.0 - 0.14 * float(i))
+		((n.material_override) as StandardMaterial3D).albedo_color = Color.from_hsv(fposmod(_age * 0.15 + 0.13 * float(i), 1.0), 0.85, 1.0, a)
+	# carve trail: dots where the board cuts hard
+	_tf_drop -= delta
+	if _tf_drop <= 0.0 and grounded and absf(vel.x) > 7.0 and _tf_on > 0.2 and fx("w_carve") > 0.01:
+		_tf_drop = 0.05
+		var di := _tf_dot_i
+		_tf_dot_i = (_tf_dot_i + 1) % CARVE_N
+		_tf_dot_age[di] = 0.0
+		_wset(_tf_dots[di] as Node3D, Vector3(spos.x, terrain_h(spos.x, spos.z) + 0.2, spos.z + 0.6))
+	for di in CARVE_N:
+		var d := _tf_dots[di] as MeshInstance3D
+		_tf_dot_age[di] += delta
+		var ag := _tf_dot_age[di]
+		if ag > 1.4:
+			d.visible = false
+			continue
+		d.visible = true
+		((d.material_override) as StandardMaterial3D).albedo_color = Color.from_hsv(fposmod(_age * 0.3 + float(di) * 0.045, 1.0), 0.9, 1.0, 0.8 * (1.0 - ag / 1.4) * _tf_on)
+
+
+var _smear_k: float = 0.0
+
+
 func _buzz_tick(delta: float, fxm: ThemeFX) -> void:
 	_buzz_t += delta
 	var deep := clampf(maxf(_mol_avg(), fx_level()) / 3.0, 0.0, 1.0)
@@ -9257,7 +9349,11 @@ func _buzz_tick(delta: float, fxm: ThemeFX) -> void:
 	_tube_k = lerpf(_tube_k, tube_to, 1.0 - exp(-(7.0 if tube_to > _tube_k else 2.0) * delta))
 	fxm.post.mat.set_shader_parameter("tube", _tube_k * fx("p_tube"))
 	fxm.post.mat.set_shader_parameter("k_chroma", fx("p_chroma"))
-	fxm.post.mat.set_shader_parameter("k_edge", fx("p_edge"))
+	_smear_k = lerpf(_smear_k, 1.0 if _boost_t > 0.0 else 0.0, 1.0 - exp(-(9.0 if _boost_t > 0.0 else 3.0) * delta))
+	fxm.post.mat.set_shader_parameter("smear", _smear_k * fx("p_smear") * 0.6)
+	var hue_on := _journey != null and fx("p_hueedge") > 0.01          # (only in All dressed: the psychedelic world itself stays exactly as it was)
+	fxm.post.mat.set_shader_parameter("k_edge", maxf(fx("p_edge"), 0.45 * fx("p_hueedge") if hue_on else 0.0))
+	fxm.post.mat.set_shader_parameter("edge_hue", 1.0 if hue_on else 0.0)
 	fxm.post.mat.set_shader_parameter("k_cel", fx("p_cel"))
 	fxm.post.mat.set_shader_parameter("k_wash", fx("p_wash"))
 	_mflash_tick(delta, fxm)
