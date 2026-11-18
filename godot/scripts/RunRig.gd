@@ -1128,7 +1128,7 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 		var zi := -si
 		if zi > z0 or zi <= z0 - ROW_GAP or si < 230.0 or zi < finish_z + 110.0:
 			continue
-		var can_jump := _rng.randf() < (1.0 if (-zi - _jump_gap_z > 450.0 and jump_chance > 0.05) else jump_chance) and zi < z0 - (jump_len + 72.0) and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0          # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
+		var can_jump := _rng.randf() < (1.0 if (-zi - _jump_gap_z > 650.0 and jump_chance > 0.05) else jump_chance) and zi < z0 - (jump_len + 72.0) and zi > z0 - ROW_GAP + 6.0 and absf(zi - 14.0 - rz0) < 140.0          # a ramp is part of this stretch of ground, and what hangs over it must be in reach of this stretch's bookkeeping
 		var can_loot := absf(zi + 22.0 - rz0) < 140.0 and absf(zi - 10.0 - rz0) < 140.0
 		var kinds: Array = []
 		if _rng.randf() < 0.28:          # a rail is one choice among several now, not the default
@@ -1167,12 +1167,17 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 		var can_rock := absf(zi + 36.0 - rz0) < 140.0
 		match layout:
 			"centre":
-				var ck: String = "jump" if (can_jump and _rng.randf() < 0.35) else ("boost" if _rng.randf() < 0.5 else ("rail" if _rng.randf() < 0.22 or not can_loot else "loot"))
+				var ck: String = "jump" if (can_jump and _rng.randf() < 0.07) else ("boost" if _rng.randf() < 0.5 else ("rail" if _rng.randf() < 0.22 or not can_loot else "loot"))
 				_make_feat(row, feats, ck, zi, 0.0, choices_built)
 				if can_rock and ck != "jump":
 					_make_hazard(row, feats, "rock", zi, -9.0, 2, 1.2)
 					_make_hazard(row, feats, "rock", zi, 9.0, 2, 1.2)
 			"triple":
+				if String(kinds[1]) == "jump" and _rng.randf() < 0.9:
+					var swap_i := 0 if _rng.randf() < 0.5 else 2
+					var tmp_k: String = kinds[1]
+					kinds[1] = kinds[swap_i]
+					kinds[swap_i] = tmp_k
 				_make_feat(row, feats, String(kinds[0]), zi, -1.0, choices_built)
 				_make_feat(row, feats, String(kinds[1]), zi, 0.0, choices_built)
 				_make_feat(row, feats, String(kinds[2]), zi, 1.0, choices_built)
@@ -6142,6 +6147,7 @@ const FX_KNOBS := [
 	["GROUND", "g_glow", "light waves", 1.0, 3.0],
 	["ROAD", "r_edge", "edge line", 1.0, 3.0],
 	["ROAD", "r_apron", "dark band outside", 1.0, 2.0],
+	["WORLD", "w_caves", "caverns off the spring (1 = on)", 1.0, 1.0],
 	["WORLD", "w_backdrop", "distant backdrop: 0 mountains, 1 ridge-bands, 2 monoliths, 3 rings", 0.0, 3.0],
 	["WORLD", "w_bend", "horizon bend: the far world curls up (ground, far valley, plain trees; other objects do not bend yet)", 0.0, 3.0],
 	["TREES", "t_sway", "sway", 1.0, 3.0],
@@ -8279,8 +8285,12 @@ func _gen_toys(row: Dictionary, z0: float, taken: Array) -> void:
 				_boost_row(row, trail_x(cz) + fside * 7.0, cz, fside, _toy_g)
 				_toy_g += 1
 				_lk_next_z = cz - LK_GAP_M * _rng.randf_range(0.85, 1.2)
+			elif _cave_demo:
+				_make_cave(row, cz, fside if fside != 0.0 else (-1.0 if _rng.randf() < 0.5 else 1.0))
 			elif _rng.randf() < 0.22:
 				_make_launch(row, cz, fside if fside != 0.0 else (-1.0 if _rng.randf() < 0.5 else 1.0))
+			elif _rng.randf() < 0.28 and fx("w_caves") > 0.5:
+				_make_cave(row, cz, fside if fside != 0.0 else (-1.0 if _rng.randf() < 0.5 else 1.0))
 			else:
 				_make_link_chain(row, cz, fside, int(fl.get("depth", 0)))          # (it sets where the next one goes itself)
 			var alt := String(fl.get("alt", ""))
@@ -8534,6 +8544,7 @@ var _lk_depth: int = 0                  # chains taken one after another (each w
 var _lk_recent_t: float = 0.0
 var _lk_on: bool = not (OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("nochain"))
 var _lk_next_z: float = -260.0
+var _cave_demo: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("cavedemo")          # test: every spring is a cavern
 var _lk: Dictionary = {}                # the ride in progress through a tube
 var lk_done: int = 0
 
@@ -8555,6 +8566,25 @@ func _lk_tan(d: Dictionary, u: float) -> Vector3:
 	var tl: float = (d["cum"] as PackedFloat32Array)[(d["cum"] as PackedFloat32Array).size() - 1]
 	var e := 2.0 / maxf(tl, 1.0)
 	return (_lk_pt(d, minf(u + e, 1.0)) - _lk_pt(d, maxf(u - e, 0.0))).normalized()
+
+
+## The tube's frame (tangent, up) a fraction u of the way along it.
+func _lk_frame(d: Dictionary, u: float) -> Array:
+	var cum: PackedFloat32Array = d["cum"]
+	var ts: PackedVector3Array = d["ts"]
+	var us: PackedVector3Array = d["us"]
+	var sd := clampf(u, 0.0, 1.0) * cum[cum.size() - 1]
+	var i := 1
+	while i < cum.size() - 1 and cum[i] < sd:
+		i += 1
+	var seg := maxf(cum[i] - cum[i - 1], 0.0001)
+	var f := clampf((sd - cum[i - 1]) / seg, 0.0, 1.0)
+	return [ts[i - 1].lerp(ts[i], f).normalized(), us[i - 1].lerp(us[i], f).normalized()]
+
+
+var _lkc_t: Vector3 = Vector3(0.0, 0.0, -1.0)
+var _lkc_u: Vector3 = Vector3.UP
+var _lkc_blend: float = 0.0
 
 
 ## THE PATHS. Every tube is a base line from the spring to the rail's start with a SHAPE added on top of it, in the frame of that line (forward, up, across):
@@ -8605,6 +8635,25 @@ func _lk_prep(d: Dictionary) -> void:
 		cum.append(cum[i - 1] + pts[i].distance_to(pts[i - 1]))
 	d["cum"] = cum
 	d["len"] = cum[cum.size() - 1]
+	# the frame at every point: T along the path, U the rider's up. Across the path is horizontal and fixed, and U = across x T, so in a loop the rider's up swings right round with it
+	# (at the top it is upside down), and on the way up a vertical stretch it is still well defined. A spiral also rolls with its own turn.
+	var p0: Vector3 = d["p0"]
+	var p1: Vector3 = d["p1"]
+	var fw := Vector3(p1.x - p0.x, 0.0, p1.z - p0.z)
+	var across := Vector3(-fw.z, 0.0, fw.x).normalized() if fw.length() > 0.5 else Vector3.RIGHT
+	var ts := PackedVector3Array()
+	var us := PackedVector3Array()
+	var np := pts.size()
+	for i in np:
+		var tt := (pts[mini(i + 1, np - 1)] - pts[maxi(i - 1, 0)]).normalized()
+		var uu := across.cross(tt)
+		uu = uu.normalized() if uu.length() > 0.2 else Vector3.UP
+		if String(d.get("shape", "")) == "spiral":
+			uu = uu.rotated(tt, TAU * 1.75 * float(i) / float(np - 1) * 0.6)
+		ts.append(tt)
+		us.append(uu)
+	d["ts"] = ts
+	d["us"] = us
 
 
 ## The tube's rings (laid along the path every few metres, turned to face along it, alternating pink and cyan) and, if wanted, the ribbon of gold glints along it.
@@ -8615,7 +8664,7 @@ func _lk_dress(row: Dictionary, d: Dictionary, loot: bool, every: float) -> void
 		var u := float(i) / float(nring)
 		var pt := _lk_pt(d, u)
 		var tn := _lk_tan(d, u)
-		var col := Color(1.0, 0.3, 0.9, 0.9) if i % 2 == 0 else Color(0.3, 0.95, 1.0, 0.9)
+		var col := Color.from_hsv(fposmod(float(i) * 0.11 + float(d.get("hue", 0.0)), 1.0), 0.9, 1.0, 0.9)          # a rainbow runs along the tube
 		var nd := _mi(self, _air_ring_mesh(), _fx_mat("add", col), pt)
 		nd.global_transform = Transform3D((Basis.looking_at(tn, Vector3.UP) * Basis(Vector3.RIGHT, PI * 0.5)).scaled(Vector3.ONE * 0.66), Vector3.ZERO)
 		_place(nd, pt)
@@ -8734,6 +8783,132 @@ func _orb_tick(delta: float) -> void:
 		Game.sfx(&"coin")
 		if _orb_streak >= 3:
 			_toast("LOOK x%d" % _orb_streak, col)
+
+
+# --------------------------------------------------------------------------
+# THE CAVERN. A spring that fires the board into the mouth of a long winding tunnel: walls all round, close, and no distance at all, so the picture is made by the walls. They show
+# a SKY THAT IS NOT THERE: a spiral galaxy and three planets drawn as halftone dots, seen through the walls from inside the tunnel as if they were windows (it is worked out
+# from the direction you look, so it does not move with the tunnel: the tunnel turns round it), over a moire that crawls along the rock. The rings are a rainbow, the rays
+# from the tube pass are at full strength, and the camera rolls with the passage. It stands clear of the ground (the floor is its own), so nothing clips, and the board
+# comes out of the far end where the ground is again. The walls sit 7 to 8 m from the line, well clear of anything the rider can touch.
+# --------------------------------------------------------------------------
+const CAVE_SHADER := """shader_type spatial;
+render_mode unshaded, cull_disabled, shadows_disabled;
+varying vec2 uvv;
+void vertex() { uvv = UV; }
+float hh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+vec3 hsvc(float h) { return clamp(abs(fract(vec3(h) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); }
+void fragment() {
+	vec3 d = -normalize((INV_VIEW_MATRIX * vec4(VIEW, 0.0)).xyz);          // the way you are looking, in the world: the walls are windows onto it
+	float az = atan(d.x, -d.z);
+	float el = asin(clamp(d.y, -1.0, 1.0));
+	float cs = 0.045;
+	vec2 q = vec2(az, el);
+	vec2 cid = floor(q / cs);
+	vec2 f = fract(q / cs) - 0.5;
+	vec2 cc = (cid + 0.5) * cs;
+	vec3 dc = vec3(sin(cc.x) * cos(cc.y), sin(cc.y), -cos(cc.x) * cos(cc.y));
+	float ga = atan(dc.z, dc.x);
+	float gr = acos(clamp(dc.y, -1.0, 1.0));
+	float arms = 0.5 + 0.5 * sin(ga * 2.0 + gr * 10.0 - TIME * 0.25);
+	float bright = pow(arms, 2.0) * smoothstep(1.5, 0.2, gr) * 0.85;
+	for (int i = 0; i < 3; i++) {
+		vec3 pc = normalize(vec3(sin(float(i) * 2.1 + 1.0) * 0.9, 0.15 + 0.22 * float(i), -cos(float(i) * 2.1 + 1.0) * 0.9));
+		float ang = acos(clamp(dot(dc, pc), -1.0, 1.0));
+		float pr = 0.20 + 0.06 * float(i);
+		float x = ang / pr;
+		if (x < 1.0) {
+			vec3 pe = dc - pc * dot(dc, pc);
+			vec3 sn = pc * sqrt(max(1.0 - x * x, 0.0)) + (length(pe) > 1.0e-4 ? normalize(pe) : vec3(0.0)) * x;
+			float lam = clamp(0.25 + 0.9 * dot(sn, normalize(vec3(0.6, 0.7, 0.3))), 0.0, 1.0);
+			bright = max(bright, 0.2 + 0.8 * lam);
+		}
+	}
+	float rad = 0.07 + 0.41 * sqrt(clamp(bright, 0.0, 1.0));
+	float dd = length(f);
+	float aa = fwidth(dd) + 0.02;
+	float dotv = smoothstep(rad + aa, rad - aa, dd);
+	vec3 col = hsvc(fract(bright * 0.5 + hh(cid) * 0.15 + TIME * 0.04 + cc.x * 0.2));
+	float m1 = sin(uvv.x * 6.2832 * 18.0) * sin(uvv.y * 40.0);
+	float m2 = sin(uvv.x * 6.2832 * 18.7 + TIME * 0.8) * sin(uvv.y * 41.0 - TIME * 1.5);
+	float mm = smoothstep(-0.4, 0.4, m1 * m2);
+	vec3 wall = mix(vec3(0.03, 0.0, 0.10), hsvc(fract(mm * 0.4 + TIME * 0.05 + uvv.y * 0.04)) * 0.38, 0.65);
+	ALBEDO = wall + col * dotv * (0.55 + 0.85 * bright);
+}
+"""
+
+
+func _cave_mesh(d: Dictionary) -> ArrayMesh:
+	var pts: PackedVector3Array = d["pts"]
+	var ts: PackedVector3Array = d["ts"]
+	var us: PackedVector3Array = d["us"]
+	var n := pts.size()
+	var m := 28
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var len_m: float = d["len"]
+	for i in n:
+		var t := float(i) / float(n - 1)
+		var tt: Vector3 = ts[i]
+		var uu: Vector3 = us[i]
+		var rr := tt.cross(uu).normalized()
+		var cen: Vector3 = pts[i] + uu * 3.4
+		var rb := 7.6 * (0.5 + 0.5 * smoothstep(0.0, 0.08, t)) * (0.6 + 0.4 * smoothstep(1.0, 0.92, t))          # the mouth and the far end open out
+		for j in m + 1:
+			var ph := TAU * float(j) / float(m)
+			var rad := rb * (1.0 + 0.10 * sin(ph * 3.0 + t * 12.0) + 0.06 * sin(ph * 7.0 - t * 25.0))
+			verts.append(TrailCurve.w(cen + (rr * cos(ph) + uu * sin(ph)) * rad))
+			uvs.append(Vector2(float(j) / float(m), t * len_m / 10.0))
+	var idx := PackedInt32Array()
+	for i in n - 1:
+		for j in m:
+			var a := i * (m + 1) + j
+			idx.append_array(PackedInt32Array([a, a + 1, a + m + 1, a + 1, a + m + 2, a + m + 1]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+func _make_cave(row: Dictionary, cz: float, side: float) -> void:
+	var lim := W_HALF - 14.0
+	var x0 := clampf(trail_x(cz) + side * 7.0, -lim, lim)
+	var z1 := cz - 230.0
+	var x1 := clampf(trail_x(z1) - side * 4.0, -lim, lim)
+	var n := 64
+	var pts := PackedVector3Array()
+	for i in n + 1:
+		var t := float(i) / float(n)
+		var z := lerpf(cz - 2.2, z1, t)
+		var x := lerpf(x0, x1, t) + side * -16.0 * sin(t * PI * 1.5) * sin(t * PI)
+		x = clampf(x, -lim, lim)
+		var y := terrain_h(x, z) + 1.3 + 4.7 * smoothstep(0.0, 0.15, t) * smoothstep(1.0, 0.86, t)          # the line rises off the snow into the tunnel and comes back down to it
+		pts.append(Vector3(x, y, z))
+	var d := {"p0": pts[0], "p1": pts[n], "shape": "cave", "cave": true, "land": true, "pts": pts, "hue": _rng.randf()}
+	_lk_prep(d)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _cave_mesh(d)
+	var sh := Shader.new()
+	sh.code = CAVE_SHADER
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.extra_cull_margin = 400.0
+	add_child(mi)
+	(row["nodes"] as Array).append(mi)
+	_lk_dress(row, d, true, 3.2)
+	_make_pad(row, x0, cz, true, true)
+	((row["pads"] as Array).back() as Dictionary)["lk"] = d
+	_beacon(row, x0, cz - 2.0, Color(0.6, 0.3, 1.0))
+	(row["feats"] as Array).append({"kind": "toy", "kx": x0, "za": cz + 26.0, "zl": cz, "zb": cz - 8.0, "sd": side, "done": false, "want": 0.0, "away": 0.0, "g": _toy_g, "cd": true})
+	_toy_g += 1
+	_lk_follow = {}
+	_lk_next_z = z1 - 90.0
 
 
 ## THE LAUNCH (an open tube): a spring that shoots the board up into the sky with nothing to land on. Three CATCHERS hang ahead, left, middle and right, each a different prize,
@@ -8926,13 +9101,16 @@ func _lk_step(delta: float) -> void:
 		var ri := int(u * float(nr))
 		if ri > int(_lk.get("ri", 0)):
 			_lk["ri"] = ri
-			var rc := Color(1.0, 0.3, 0.9) if ri % 2 == 0 else Color(0.3, 0.95, 1.0)
+			var rc := Color.from_hsv(fposmod(float(ri) * 0.11 + float(d.get("hue", 0.0)), 1.0), 0.9, 1.0)
 			_psy_pulse(1, rc)          # every ring you pass through: a pulse of its colour through the picture
 			_burst(spos + Vector3(0, 0.4, 0), rc, 8, 7.0, 0.4, 0.5)
 			_sharpen(0.45)
 	_fov_punch = maxf(_fov_punch, 7.0)
+	var fr := _lk_frame(d, u)
+	_lkc_t = _lkc_t.lerp(fr[0], 1.0 - exp(-14.0 * delta)).normalized()
+	_lkc_u = _lkc_u.lerp(fr[1], 1.0 - exp(-10.0 * delta)).normalized()
 	var gh := terrain_h(pt.x, pt.z)
-	spos = Vector3(pt.x, maxf(pt.y, gh + 0.8), pt.z)
+	spos = Vector3(pt.x, maxf(pt.y, gh + 0.8) if not bool(d.get("cave", false)) else pt.y, pt.z)
 	vel = Vector2(tn.x, tn.z) * sp
 	vy = tn.y * sp
 	heading = atan2(tn.x, -tn.z)
@@ -8948,6 +9126,16 @@ func _lk_step(delta: float) -> void:
 func _lk_end(d: Dictionary) -> void:
 	if bool(d.get("open", false)):
 		_lk_open(d)
+		return
+	if bool(d.get("land", false)):
+		_lk = {}
+		grounded = false
+		_gain(int(1800.0 * groove))
+		_boost_t = maxf(_boost_t, 3.0)
+		_cheer("CAVERN!", Color(0.7, 0.4, 1.0), 2.0)
+		_sharpen(1.0)
+		lk_done += 1
+		_lk_recent_t = 10.0
 		return
 	var f: Dictionary = d["rail"]
 	_lk = {}
@@ -10107,8 +10295,16 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	var want_dy := clampf(ahead.y - eye.y, -flat_d * (0.2 + 0.05 * _crest_lift), flat_d * 0.1)
 	_fp_dy = want_dy if snap else lerpf(_fp_dy, want_dy, 1.0 - exp(-6.0 * delta))
 	ahead.y = eye.y + _fp_dy
+	var up_v := Vector3.UP
+	_lkc_blend = lerpf(_lkc_blend, 1.0 if not _lk.is_empty() else 0.0, 1.0 - exp(-(7.0 if not _lk.is_empty() else 3.0) * delta))
+	if _lkc_blend > 0.01:
+		# IN A TUBE the camera rides the tube: it looks along the path and its up is the rider's up, so a loop turns the whole picture over and a spiral rolls it. It blends in and out.
+		eye = eye.lerp(spos + _lkc_u * 1.7 - _lkc_t * 0.25, _lkc_blend)
+		cam.global_position = eye
+		ahead = ahead.lerp(spos + _lkc_t * 20.0, _lkc_blend)
+		up_v = Vector3.UP.lerp(_lkc_u, _lkc_blend).normalized()
 	if (ahead - eye).length() > 0.5:
-		cam.look_at(ahead, Vector3.UP)
+		cam.look_at(ahead, up_v)
 		if _back_dbg:
 			cam.rotate_object_local(Vector3.UP, PI)          # ?back: look behind (to check the ground back there)
 	cam.basis = cam.basis * Basis(Vector3(0, 0, 1), -steer * 0.10 - _trk_cam_roll) * Basis(Vector3(1, 0, 0), _trk_cam_pitch)
