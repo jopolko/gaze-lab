@@ -11,7 +11,7 @@ const ZONE_LABELS := {"rush": "RUSH", "flat": "MEADOW", "tunnel": "TUNNEL", "ben
 var cfg: Dictionary = {
 	"v": 4, "theme": "alpine", "preset": "classic", "diff": 1.0, "length_km": 4.2, "endless": false, "seed": 0,
 	"zones": {"rush": 1.0, "flat": 1.0, "tunnel": 1.0, "bend": 1.0, "air": 1.0, "forest": 1.0, "drop": 1.0},
-	"fullscreen": false, "psy": false, "journey": true, "trip": 1, "session": 10, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
+	"fullscreen": false, "ug": 50, "psy": false, "journey": true, "trip": 1, "session": 30, "mus": "auto", "mvol": 0.7, "svol": 0.9, "toon": true, "m_grav": 1.0, "m_rocks": 1.0, "m_ramps": 1.0, "m_pads": 1.0, "m_ice": false, "m_head": false, "m_bounce": false, "m_trike": false, "m_glints": 1.0, "m_faces": 1.0, "m_hat": 0, "faces": true, "cine": true, "phone": true, "haptics": true, "dynlight": true, "snow": true, "fluffy": false, "vehicle": false, "gps": false, "speed_first": false, "assist": 0.7, "intensity": 0.75, "mode": "score",
 }
 
 var _defaults: Dictionary = cfg.duplicate(true)
@@ -74,6 +74,7 @@ var _reset_arm: float = 0.0
 var _reset_b: Button
 var _trip_btns: Dictionary = {}
 var _sess_btns: Dictionary = {}
+var _ug_btns: Dictionary = {}
 var _mvol_s: HSlider
 var _svol_s: HSlider
 var _mvol_l: Label
@@ -551,6 +552,20 @@ func _build_theme_card() -> void:
 		_sync_widgets())
 	_toggles["journey"] = jb
 	_label("A night out in waves: a first taste, warmth, the rush, the peak, the comedown. Glowing molecules bring it on early. Picking a world yourself gives that world in full.", 15, Color(1, 1, 1, 0.55), c)
+	_label("DOSE, in game units (ug is a joke, not a real amount): how strong the waves go and how long the night is, set together. Fine-tune below if you want.", 15, Color(1, 1, 1, 0.55), c)
+	var uf := _flow(c)
+	var ug_g := ButtonGroup.new()
+	for uv in [[25, 15, 0, "25 ug  15 min"], [50, 30, 1, "50 ug  30 min"], [75, 60, 2, "75 ug  1 h"], [1000, 480, 2, "1000 ug  endless"]]:
+		var ub := _button(String(uv[3]), 17, uf, true)
+		ub.button_group = ug_g
+		ub.pressed.connect(func() -> void:
+			cfg["ug"] = int(uv[0])
+			cfg["session"] = int(uv[1])
+			cfg["trip"] = int(uv[2])
+			_sync_widgets()
+			_save())
+		_ug_btns[uv[0]] = ub
+		_boxes.append([ub, 190.0, 44.0])
 	var tf := _flow(c)
 	var tg := ButtonGroup.new()
 	for tv in [[0, "GENTLE"], [1, "NORMAL"], [2, "WILD"]]:
@@ -564,7 +579,7 @@ func _build_theme_card() -> void:
 	_label("HOW LONG A SESSION: the climb, the peak and the way down are stretched to fit. It goes round again, a little higher, if you play on.", 15, Color(1, 1, 1, 0.55), c)
 	var sf := _flow(c)
 	var sg := ButtonGroup.new()
-	for sv in [[10, "10 MIN"], [60, "1 H"], [120, "2 H"], [240, "4 H"], [480, "8 H"]]:
+	for sv in [[15, "15 MIN"], [30, "30 MIN"], [60, "1 H"], [120, "2 H"], [240, "4 H"], [480, "8 H"]]:
 		var sb := _button(String(sv[1]), 17, sf, true)
 		sb.button_group = sg
 		sb.pressed.connect(func() -> void:
@@ -941,6 +956,8 @@ func _sync_widgets() -> void:
 		(_trip_btns[tid] as Button).set_pressed_no_signal(int(tid) == int(cfg["trip"]))
 	for sid in _sess_btns:
 		(_sess_btns[sid] as Button).set_pressed_no_signal(int(sid) == int(cfg["session"]))
+	for uid in _ug_btns:
+		(_ug_btns[uid] as Button).set_pressed_no_signal(int(uid) == int(cfg["ug"]) and int(cfg["session"]) == [15, 30, 60, 480][[25, 50, 75, 1000].find(int(uid))])
 	_mvol_s.value = float(cfg["mvol"])
 	_svol_s.value = float(cfg["svol"])
 	for id in _mode_btns:
