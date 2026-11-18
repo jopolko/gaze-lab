@@ -711,7 +711,7 @@ const MAIN := """
           // Full detail only where it matters: the face model gets a SMALL copy of the face crop (it shrinks the face to ~256 px anyway), and the iris fit gets two
           // small full-resolution patches around the eyes. ?bigcrop goes back to one big full-resolution crop; ?mi=N sets the model copy's size (default 448).
           const eyes = (roi && !qs.has('bigcrop')) ? window.__gazeEyes : null;
-          const MI = parseInt(qs.get('mi')) || 448;
+          const MI = parseInt(qs.get('mi')) || 320;
           const mk = roi ? ((eyes && roi.w > MI) ? createImageBitmap(SRC, roi.x, roi.y, roi.w, roi.h, { resizeWidth: MI, resizeHeight: MI, resizeQuality: 'medium' }) : createImageBitmap(SRC, roi.x, roi.y, roi.w, roi.h)) : createImageBitmap(SRC);
           const pk = eyes ? Promise.all(eyes.map((e) => createImageBitmap(SRC, e.x, e.y, e.s, e.s))) : Promise.resolve(null);
           Promise.all([mk, pk]).then((res) => {
