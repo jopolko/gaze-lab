@@ -196,6 +196,19 @@ func _governor(delta: float) -> void:
 		_apply_tier()
 
 
+var _weak_gpu_v: int = -1
+
+
+## A laptop with an integrated graphics chip (Intel UHD / HD / Iris) has about a fifth of the pixel speed of a gaming card: it gets the same pixel budget as a phone, a little more.
+func _weak_gpu() -> bool:
+	if _weak_gpu_v < 0:
+		var g := ""
+		if OS.has_feature("web"):
+			g = str(JavaScriptBridge.eval("(window.__tl && window.__tl.env && window.__tl.env.gpu) || ''")).to_lower()
+		_weak_gpu_v = 1 if (g.contains("intel") and (g.contains("uhd") or g.contains("hd graphics") or g.contains("iris"))) else 0
+	return _weak_gpu_v == 1
+
+
 func _apply_tier() -> void:
 	if _snow != null:
 		var snow_ok := tier == 0 or (tier == 1 and not Game.touch_mode)          # desktop keeps the falling snow at the phone tier: it is cheap
@@ -222,7 +235,7 @@ func _apply_tier() -> void:
 	if vp != null:
 		# a big desktop window has several times the pixels of a phone: draw the 3D picture at about a million pixels at most (the HUD stays sharp)
 		var px := RScale.full_px()
-		var cap := clampf(sqrt((0.95e6 if Game.touch_mode else 2.1e6) / px), 0.5, 1.0) if OS.has_feature("web") else 1.0          # a phone: about a million pixels; a laptop: up to full HD
+		var cap := clampf(sqrt((0.95e6 if Game.touch_mode else (1.2e6 if _weak_gpu() else 2.1e6)) / px), 0.5, 1.0) if OS.has_feature("web") else 1.0          # a phone: about a million pixels; a laptop: up to full HD
 		var tier_s: float = [1.0, 1.0, 0.88, 0.76][tier] if Game.touch_mode else [1.0, 1.0, 0.92, 0.82][tier]          # (a laptop or desktop keeps much more of its picture: the whole canvas, HUD included, shrinks in the browser)
 		var floor_s := float(rig.call("fx", "x_sharp")) if rig.has_method("fx") else 0.0          # the lab's "sharpness floor": 0 = automatic
 		if floor_s > 0.4:
