@@ -6440,7 +6440,7 @@ varying vec3 lp;
 varying vec3 wpm;
 void vertex() {
 	lp = VERTEX;          // the mountain's OWN coordinates: the pattern is glued to the rock, so it never slides about as you move or turn
-	VERTEX.y += sin(TIME * 0.9 + VERTEX.x * 0.004 + VERTEX.z * 0.003) * br_k * 7.0;
+	// (no displacement here: the skin must lie exactly on the mountain)
 	wpm = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 void fragment() {
@@ -6462,7 +6462,7 @@ void fragment() {
 	float pf = 0.5 + 0.5 * sin(length(lp.xz) * 0.02 - TIME * 1.1) * sin(atan(lp.z, lp.x) * 9.0 + TIME * 0.3);
 	vec3 pc = 0.5 + 0.5 * cos(6.2831 * (vec3(pf * 0.5 + TIME * 0.05) + vec3(0.0, 0.33, 0.67)));
 	ALBEDO = mix(mix(hc, bc, band * 0.5), pc, clamp(pol_k * pf, 0.0, 1.0));          // painted over the rock, not added to it: added light vanishes on pale snow
-	ALPHA = clamp(mo_k * (0.30 + 0.45 * mm + 0.30 * band) + pol_k * pf * 0.6, 0.0, 0.88);          // (a floor under it: no face of the rock is left plain)
+	ALPHA = clamp(mo_k * (0.58 + 0.30 * mm + 0.20 * band) + pol_k * pf * 0.6, 0.0, 0.94);          // (a floor under it: no face of the rock is left plain)
 }
 """
 var _mtn_fx: MeshInstance3D = null
