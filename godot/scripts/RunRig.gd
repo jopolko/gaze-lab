@@ -6130,6 +6130,8 @@ func _stage_assets() -> void:
 const FX_KNOBS := [
 	["LAB", "x_level", "pretend this far in (molecules)", 0.0, 1.0],
 	["LAB", "x_pieces", "each molecule brings its own piece of the world (0 = the old order, by overall level)", 1.0, 1.0],
+	["LAB", "x_sharp", "sharpness floor: never draw below this fraction of the screen (0 = automatic; 1 = always full)", 0.0, 1.0],
+	["LAB", "x_clear", "moments of clarity in the deepest trip, then back in harder (0 = none)", 1.0, 2.0],
 	["LAB", "x_wander", "effects wander between elements (0 = fixed)", 0.6, 2.0],
 	["GROUND", "g_sq", "hard squares", 1.0, 2.0],
 	["GROUND", "g_shape", "interference shapes", 1.0, 3.0],
@@ -6140,6 +6142,7 @@ const FX_KNOBS := [
 	["GROUND", "g_glow", "light waves", 1.0, 3.0],
 	["ROAD", "r_edge", "edge line", 1.0, 3.0],
 	["ROAD", "r_apron", "dark band outside", 1.0, 2.0],
+	["WORLD", "w_backdrop", "distant backdrop: 0 mountains, 1 ridge-bands, 2 monoliths, 3 rings", 0.0, 3.0],
 	["WORLD", "w_bend", "horizon bend: the far world curls up (ground, far valley, plain trees; other objects do not bend yet)", 0.0, 3.0],
 	["TREES", "t_sway", "sway", 1.0, 3.0],
 	["TREES", "t_breathe", "breathing", 0.6, 3.0],
@@ -6160,7 +6163,9 @@ const FX_KNOBS := [
 	["PICTURE", "p_chroma", "colour split", 1.0, 3.0],
 	["PICTURE", "p_trace", "tracers", 1.0, 3.0],
 	["PICTURE", "p_punch", "colour punch", 1.0, 2.0],
-	["PICTURE", "p_bloom", "bloom + sharpen", 1.0, 3.0],
+	["PICTURE", "p_glow", "bloom: base strength (sparingly: 1 = how it was)", 0.35, 2.0],
+	["PICTURE", "p_bloom", "bloom: swell with the buzz and sharpening", 0.4, 3.0],
+	["PICTURE", "p_haze", "haze: how thick the far fog is (1 = how it was)", 0.55, 2.0],
 	["PICTURE", "p_tube", "tube rays", 1.0, 2.0],
 	["PICTURE", "p_warp", "warp waves + ripples (5 = the original)", 1.0, 5.0],
 	["PICTURE", "p_fold", "mirror fold (the mandala)", 0.0, 1.0],
@@ -6487,7 +6492,7 @@ func _wander_tick(delta: float, h: float) -> void:
 	var mtn_pol := clampf(maxf(fx("m_polar"), _wd_w(130.0, 1.0, 0.4, h) * 2.0 * mtn_gate), 0.0, 2.0)
 	_veg_live.set_shader_parameter("mo_k", tree_mo)
 	_veg_live.set_shader_parameter("mo_t", _wd_drift)
-	var on := (mtn_mo + mtn_br + mtn_pol) > 0.02 and _mtn != null and is_instance_valid(_mtn)
+	var on := (mtn_mo + mtn_br + mtn_pol) > 0.02 and _mtn != null and is_instance_valid(_mtn) and _bd_mode <= 0
 	if on and _mtn_fx == null:
 		var sh := Shader.new()
 		sh.code = MTNFX_SHADER
@@ -6664,7 +6669,7 @@ func _face_fx_tick() -> void:
 	if _face_sky != null:
 		_face_sky.visible = _god_k > 0.01 and cam != null
 		if _face_mtn != null:
-			_face_mtn.visible = _efc_k > 0.01 and cam != null
+			_face_mtn.visible = _efc_k > 0.01 and cam != null and _bd_mode <= 0
 		if on:
 			_face_sky.global_position = cam.global_position
 			for m in [_face_mat_a, _face_mat_b]:
@@ -6770,6 +6775,207 @@ func _efc_heading() -> float:
 	return atan2(fwd.x, -fwd.z)
 
 
+# --------------------------------------------------------------------------
+# THE DISTANT BACKDROP. The mountains are a ring that follows the board, so they never move against the road and give no depth. These replace them (the lab switch w_backdrop, 0 = the
+# mountains, still the default) with abstract things FIXED IN THE WORLD, so they stream past slowly and a far one moves slower than a near one: parallax, which is depth.
+#   1 ridge-bands: layers of flat-coloured wavy ridgelines on both sides, like cut paper     2 monoliths: tall pillars at every depth     3 rings: huge slow arches over the trail
+# Nothing stands in the middle of the trail, nothing is lower than the road, so the way is never hidden.
+# --------------------------------------------------------------------------
+const BD_SHADER := """shader_type spatial;
+render_mode unshaded, cull_disabled, shadows_disabled;
+uniform vec3 c_a = vec3(0.6, 0.2, 0.9);
+uniform vec3 c_b = vec3(0.1, 0.8, 1.0);
+uniform float style = 0.0;
+uniform float seed = 0.0;
+uniform float hgt = 1.0;
+varying vec3 lp;
+void vertex() {
+	if (style < 0.5) {
+		vec3 wp0 = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+		float n = sin(wp0.z * 0.006 + seed) * 0.5 + sin(wp0.z * 0.017 + seed * 2.3) * 0.3 + sin(wp0.z * 0.041 + seed * 4.1) * 0.2;
+		VERTEX.y *= 0.50 + 0.50 * (0.5 + 0.5 * n);          // the top edge is a wavy skyline
+	}
+	lp = VERTEX;
+}
+void fragment() {
+	float u = style < 0.5 ? lp.y / max(hgt, 0.001) : (style < 1.5 ? lp.y + 0.5 : lp.x * 0.5 + lp.z * 0.5);
+	float steps = style < 0.5 ? 6.0 : 9.0;
+	float band = floor(u * steps) / steps;
+	float s1 = sin((lp.x + lp.y * 1.3) * (style < 0.5 ? 0.09 : 9.0)) * sin((lp.z + lp.y) * (style < 0.5 ? 0.09 : 9.0));
+	float s2 = sin((lp.x + lp.y * 1.3) * (style < 0.5 ? 0.097 : 9.3) + TIME * 0.4) * sin((lp.z + lp.y) * (style < 0.5 ? 0.097 : 9.3));
+	float mm = smoothstep(-0.4, 0.4, s1 * s2);
+	vec3 base = mix(c_a, c_b, band);
+	vec3 hc = clamp(abs(fract(vec3(mm * 0.4 + band * 0.6 + seed * 0.1 + TIME * 0.03) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
+	ALBEDO = mix(base, hc, 0.40 * mm) * (0.75 + 0.35 * band);
+}
+"""
+var _bd_mode: int = -1
+var _bd_items: Array = []          # {n: MeshInstance3D, z: float, kind: int, ...}
+var _bd_root: Node3D = null
+
+
+func _bd_mat(ca: Color, cb: Color, style: float, seed: float, hgt: float) -> ShaderMaterial:
+	var sh := Shader.new()
+	sh.code = BD_SHADER
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("c_a", Vector3(ca.r, ca.g, ca.b))
+	m.set_shader_parameter("c_b", Vector3(cb.r, cb.g, cb.b))
+	m.set_shader_parameter("style", style)
+	m.set_shader_parameter("seed", seed)
+	m.set_shader_parameter("hgt", hgt)
+	return m
+
+
+func _bd_clear() -> void:
+	for it in _bd_items:
+		if is_instance_valid(it["n"]):
+			(it["n"] as Node).queue_free()
+	_bd_items.clear()
+
+
+func _bd_build(mode: int) -> void:
+	_bd_clear()
+	if mode == 0 or cam == null:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	if mode == 1:
+		var dists := [800.0, 1150.0, 1600.0, 2300.0]
+		var hs := [150.0, 240.0, 360.0, 520.0]
+		for li in 4:
+			var ca := Color.from_hsv(fposmod(0.80 + 0.07 * float(li), 1.0), 0.90, 0.55)
+			var cb := Color.from_hsv(fposmod(0.52 + 0.09 * float(li), 1.0), 0.95, 0.85)
+			var mat := _bd_mat(ca, cb, 0.0, float(li) * 1.7, hs[li])
+			var pm := PlaneMesh.new()
+			pm.orientation = PlaneMesh.FACE_Z
+			pm.size = Vector2(500.0, hs[li])
+			pm.center_offset = Vector3(0.0, hs[li] * 0.5, 0.0)
+			pm.subdivide_width = 24
+			pm.subdivide_depth = 6
+			for side in [-1.0, 1.0]:
+				for si in 6:
+					var n := MeshInstance3D.new()
+					n.mesh = pm
+					n.material_override = mat
+					n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					n.extra_cull_margin = 2000.0
+					add_child(n)
+					_bd_items.append({"n": n, "z": spos.z - 500.0 * float(si) + 500.0, "kind": 1, "d": float(dists[li]), "side": side, "span": 3000.0})
+	elif mode == 2:
+		for i in 40:
+			var mat := _bd_mat(Color.from_hsv(fposmod(0.72 + rng.randf() * 0.25, 1.0), 0.8, 0.8), Color.from_hsv(fposmod(0.45 + rng.randf() * 0.3, 1.0), 0.85, 1.0), 1.0, rng.randf() * 6.0, 1.0)
+			var bm := BoxMesh.new()
+			bm.size = Vector3(1.0, 1.0, 1.0)
+			var n := MeshInstance3D.new()
+			n.mesh = bm
+			n.material_override = mat
+			n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			n.extra_cull_margin = 2000.0
+			add_child(n)
+			_bd_items.append({"n": n, "z": spos.z - 2400.0 * rng.randf() + 400.0, "kind": 2, "x": 0.0, "h": 0.0, "w": 0.0, "side": 0.0, "fresh": true, "span": 2600.0})
+	elif mode == 3:
+		for i in 10:
+			var mat := _bd_mat(Color.from_hsv(fposmod(0.85 + rng.randf() * 0.2, 1.0), 0.8, 0.9), Color.from_hsv(fposmod(0.5 + rng.randf() * 0.2, 1.0), 0.9, 1.0), 2.0, rng.randf() * 6.0, 1.0)
+			var tm := TorusMesh.new()
+			tm.inner_radius = 0.93
+			tm.outer_radius = 1.0
+			tm.rings = 48
+			tm.ring_segments = 12
+			var n := MeshInstance3D.new()
+			n.mesh = tm
+			n.material_override = mat
+			n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			n.extra_cull_margin = 2000.0
+			add_child(n)
+			_bd_items.append({"n": n, "z": spos.z - 2400.0 * float(i) / 10.0 - 300.0, "kind": 3, "x": 0.0, "r": 0.0, "fresh": true, "span": 2400.0, "spin": rng.randf() * TAU})
+
+
+func _bd_tick(delta: float) -> void:
+	var mode := clampi(int(round(fx("w_backdrop"))), 0, 3)
+	if mode != _bd_mode:
+		_bd_mode = mode
+		_bd_build(mode)
+		if _mtn != null and is_instance_valid(_mtn):
+			_mtn.visible = mode == 0
+	if mode == 0:
+		return
+	for it in _bd_items:
+		var n: MeshInstance3D = it["n"]
+		if not is_instance_valid(n):
+			continue
+		var z: float = it["z"]
+		var kind: int = it["kind"]
+		if z > spos.z + 700.0 or bool(it.get("fresh", false)):
+			if not bool(it.get("fresh", false)):
+				z -= float(it["span"])
+			if z > spos.z - 100.0:
+				z = spos.z - 100.0 - randf() * 300.0
+			it["z"] = z
+			if kind == 2:
+				it["side"] = -1.0 if randf() < 0.5 else 1.0
+				it["x"] = float(it["side"]) * randf_range(260.0, 950.0)
+				it["h"] = randf_range(120.0, 460.0)
+				it["w"] = randf_range(25.0, 70.0)
+			elif kind == 3:
+				it["r"] = randf_range(90.0, 230.0)
+				it["x"] = randf_range(-1.0, 1.0) * 160.0
+			it["fresh"] = false
+		z = float(it["z"])
+		var base_y := _base_h(z)
+		var tx := trail_x(z)
+		if kind == 1:
+			var d: float = float(it["d"]) * float(it["side"])
+			n.global_transform = Transform3D(Basis(Vector3.UP, PI * 0.5 * float(it["side"]) * -1.0), Vector3.ZERO)
+			_place(n, Vector3(tx + d, base_y - 30.0, z))
+		elif kind == 2:
+			var hh: float = float(it["h"])
+			n.scale = Vector3(float(it["w"]), hh, float(it["w"]))
+			n.global_transform = Transform3D(Basis.from_scale(Vector3(float(it["w"]), hh, float(it["w"]))), Vector3.ZERO)
+			_place(n, Vector3(tx + float(it["x"]), base_y + hh * 0.5 - 30.0, z))
+		else:
+			var r: float = float(it["r"])
+			it["spin"] = float(it["spin"]) + delta * 0.15
+			n.global_transform = Transform3D(Basis(Vector3(1, 0, 0), PI * 0.5) * Basis.from_scale(Vector3(r, r, r)), Vector3.ZERO)
+			_place(n, Vector3(tx + float(it["x"]), base_y + r * 0.75, z))
+
+
+## A MOMENT OF CLARITY. Deep in the trip, every minute or so, the whole thing drops to almost nothing for a second or two (the world as plain as it was) and then comes back
+## harder than it left: a little over what it was, and a snap of sharpening. The contrast makes the trip stronger, the way a moment of clear thought does in the middle of one.
+var _clr_t: float = -1.0
+var _clr_next: float = 75.0
+var _clr_k: float = 1.0
+
+
+func _clarity_tick(delta: float) -> void:
+	var deep := maxf(_mol_avg(), fx_level())
+	var f := fx("x_clear")
+	if _clr_t < 0.0:
+		_clr_k = 1.0
+		if deep > 0.45 and f > 0.01:
+			_clr_next -= delta * f
+			if _clr_next <= 0.0:
+				_clr_t = 0.0
+				_clr_next = randf_range(50.0, 110.0)
+		return
+	var before := _clr_t
+	_clr_t += delta
+	var t := _clr_t
+	if t < 0.35:
+		_clr_k = lerpf(1.0, 0.10, t / 0.35)
+	elif t < 1.7:
+		_clr_k = 0.10
+	elif t < 2.4:
+		_clr_k = lerpf(0.10, 1.30, (t - 1.7) / 0.7)
+		if before < 1.7:
+			_sharpen(1.0)          # the snap back in
+	else:
+		_clr_k = lerpf(1.30, 1.0, smoothstep(2.4, 5.0, t))
+	if t > 5.0:
+		_clr_t = -1.0
+		_clr_k = 1.0
+
+
 ## HORIZON BEND, driven by the lab's knob and a little by speed (the faster you go the more the horizon curls). 0.00012 per m squared at knob 1: a slope 400 m away is lifted about 8 m.
 func _bend_tick() -> void:
 	var spd := clampf(vel.length() / 50.0, 0.0, 1.0)
@@ -6823,7 +7029,7 @@ var _hall: float = 0.0
 func _pk(i: int) -> float:
 	if fx("x_pieces") < 0.5:
 		return smoothstep(0.03, 0.30, _hall)          # the old way: everything by the overall level
-	return clampf(smoothstep(0.04, 0.45, _lv[i]) + _mflash[i] * 0.7, 0.0, 1.0)
+	return clampf((smoothstep(0.04, 0.45, _lv[i]) + _mflash[i] * 0.7) * _clr_k, 0.0, 1.3)
 
 
 ## THE MOIRE KNOBS, played with the game. Cell size, turning speed, how far apart the two grids are, how strongly the shapes show and how much colour: each follows something.
@@ -6904,7 +7110,9 @@ func _stage_tick(delta: float) -> void:
 		(_m_ground as ShaderMaterial).set_shader_parameter("path_half", TRAIL_HALF)
 		_moire_tick(delta, h)
 	_sky_dome_tick(h)
+	_clarity_tick(delta)
 	_bend_tick()
+	_bd_tick(delta)
 	_wander_tick(delta, h)
 	stage_post = smoothstep(0.22, 0.5, h)
 	if cam == null:
@@ -8855,12 +9063,28 @@ func _buzz_tick(delta: float, fxm: ThemeFX) -> void:
 	fxm.post.mat.set_shader_parameter("k_rings", fx("p_rings"))
 	fxm.post.mat.set_shader_parameter("k_dmtr", fx("p_dmtr"))
 	var env: Environment = _lvl.world_env.environment if _lvl != null and _lvl.world_env != null else null
-	if env != null and env.glow_enabled:
-		if _glow_base < 0.0:
-			_glow_base = env.glow_intensity
-			_bloom_base = env.glow_bloom
-		env.glow_intensity = _glow_base * (1.0 + (0.3 * buzz + 1.0 * _sharp) * fx("p_bloom"))
-		env.glow_bloom = _bloom_base + (0.12 * buzz + 0.3 * _sharp) * fx("p_bloom")
+	if env != null:
+		# BLOOM AND HAZE, SPARINGLY. Other code (the quality tiers, the world blends) sets these too: whatever they set is taken as the base, and what is written here is only
+		# remembered, so the two never fight.
+		if env.glow_enabled:
+			if absf(env.glow_intensity - _glow_set) > 0.0005:
+				_glow_base = env.glow_intensity
+				_bloom_base = env.glow_bloom
+			var gi := _glow_base * fx("p_glow") * (1.0 + (0.3 * buzz + 1.0 * _sharp) * fx("p_bloom"))
+			env.glow_intensity = gi
+			_glow_set = gi
+			env.glow_bloom = _bloom_base * fx("p_glow") + (0.12 * buzz + 0.3 * _sharp) * fx("p_bloom")
+		if env.fog_enabled:
+			if absf(env.fog_density - _fog_set) > 0.00001:
+				_fog_base = env.fog_density
+			var fd := _fog_base * fx("p_haze")
+			env.fog_density = fd
+			_fog_set = fd
+
+
+var _glow_set: float = -1.0
+var _fog_base: float = 0.0
+var _fog_set: float = -1.0
 
 
 func _lk_payoff() -> void:
@@ -9388,9 +9612,11 @@ func _pill_tick(delta: float) -> void:
 		mb = mb.max(Vector3.ONE * fx_level() * wk)
 		ma += Vector3(_mflash[0], _mflash[1], _mflash[2]) * 0.9          # a molecule just taken: ITS effect, for a moment, so the cause is seen
 		mb += Vector3(_mflash[3], _mflash[4], _mflash[5]) * 0.9
+		ma *= _clr_k          # a moment of clarity takes the picture pass down too
+		mb *= _clr_k
 		fxm.post.mat.set_shader_parameter("mA", ma)
 		fxm.post.mat.set_shader_parameter("mB", mb)
-		fxm.post.mat.set_shader_parameter("dmt", dm)
+		fxm.post.mat.set_shader_parameter("dmt", dm * _clr_k)
 		_buzz_tick(delta, fxm)
 	if _shaft_mat != null:
 		_shaft_mat.set_shader_parameter("dose", _mol_avg())
@@ -12130,7 +12356,8 @@ func _draw_hud_inner() -> void:
 		if GazeProvider.backend == GazeProvider.Backend.CAMERA:
 			pt += "   CAM %.0f fps  %d ms" % [tf, int(GazeProvider.trk_lat_ms)]
 		pt += "   Q%d" % qt
-		pt += "   WHERE %d of %d m  %s/%s  %s  alt %.0f" % [int(-spos.z), int(absf(finish_z)), _player_region, _cur_zone, (_journey.world if _journey != null else "-"), spos.y - terrain_h(spos.x, spos.z)]          # where the rider is, so a stuck or empty place can be found
+		pt += "   WHERE %d of %d m  %s/%s  %s  alt %.0f" % [int(-spos.z), int(absf(finish_z)), _player_region, _cur_zone, (_journey.world if _journey != null else "-"), spos.y - terrain_h(spos.x, spos.z)]
+		pt += "   rows %d chunks %d next %d queue %d" % [_rows.size(), _chunks.size(), _next_j, _chunk_jobs.size()]          # is the course being built under the rider?          # where the rider is, so a stuck or empty place can be found
 		pt += "   SND %d %s" % [AudioHooks.played, DhMusic.dbg if DhMusic.dbg != "" else "-"]
 		var pcol := Color(0.6, 1.0, 0.6) if gf >= 50 and (GazeProvider.backend != GazeProvider.Backend.CAMERA or tf >= 12.0) else (Color(1.0, 0.85, 0.3) if gf >= 35 else Color(1.0, 0.4, 0.35))
 		var pw := font.get_string_size(pt, HORIZONTAL_ALIGNMENT_LEFT, -1, int(18.0 * k)).x

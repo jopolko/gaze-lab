@@ -25,7 +25,7 @@ func _ready() -> void:
 	var dt := 1.0 / 60.0
 	GazeProvider.set_scripted(Vector2(0.5, 0.45))
 	var sides := [0.0, -0.8, 0.0, 0.8]
-	for step in 60 * 150:
+	for step in 60 * int(OS.get_environment("SECS") if OS.get_environment("SECS") != "" else "150"):
 		if step % 90 == 0:
 			rig.pick_override = sides[(step / 90) % 4]          # a look that moves: middle, left, middle, right
 		rig._physics_process(dt)
