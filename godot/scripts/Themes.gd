@@ -521,22 +521,23 @@ void fragment() {
 		float keep = mix(0.35, 1.0, smoothstep(0.05, 0.38, length(c * vec2(1.0, 1.25))));
 		float pl = pow(max(sin(TIME * 6.0), 0.0), 3.0);
 		wuv += c * (mA.x * 0.010 * keep * sin(TIME * 0.5 + r * 6.0));          // mescaline: slow warm waves
-		wuv += c * (mB.y * 0.018 * keep * sin(r * 34.0 - TIME * 3.0));          // 2C-T-2: ripples running out from the middle
+		wuv += c * (mB.y * 0.008 * keep * sin(r * 34.0 - TIME * 3.0));          // 2C-T-2: ripples running out from the middle
 		if (mB.x + dmt > 0.01) {          // 2C-E: the picture folds into mirrored segments
-			float kf = clamp(mB.x * 0.6 + dmt * 0.7, 0.0, 0.85) * keep;
+			// (only out toward the edges, and never most of the picture: folded all the way in, the ground stopped reading as ground and the feeling of speed went)
+			float kf = clamp(mB.x * 0.22 + dmt * 0.4, 0.0, 0.55) * smoothstep(0.24, 0.5, r);
 			float seg = 6.2831853 / (6.0 + 2.0 * dmt);
 			float an = atan(c.y, c.x);
 			float af = abs(mod(an, seg) - seg * 0.5);
 			wuv = mix(wuv, vec2(0.5) + vec2(cos(af), sin(af)) * r, kf);
 		}
-		wuv = vec2(0.5) + (wuv - vec2(0.5)) * (1.0 - 0.04 * mB.z * pl * keep + 0.05 * dmt * sin(TIME * 0.8) * keep);          // 2C-T-7: a pulse that pushes in
-		float ca = (0.003 + r * 0.012) * amount * (1.0 + trip * 3.0 + mA.z * 2.0 + dmt * 3.0);          // 2C-B: the colours split apart
+		wuv = vec2(0.5) + (wuv - vec2(0.5)) * (1.0 - 0.025 * mB.z * pl * keep + 0.025 * dmt * sin(TIME * 0.8) * keep);          // 2C-T-7: a pulse that pushes in
+		float ca = (0.003 + r * 0.012) * amount * (1.0 + trip * 1.4 + mA.z * 1.2 + dmt * 1.5);          // 2C-B: the colours split apart
 		col = vec3(texture(screen_tex, wuv + c * ca).r, texture(screen_tex, wuv).g, texture(screen_tex, wuv - c * ca).b);
 		vec3 old = texture(trail, uv).rgb;
 		vec3 diff = max(old - texture(cur, uv).rgb * 0.92 - 0.02, vec3(0.0));
-		float m = clamp(dot(diff, vec3(0.34)) * 3.2 * (1.0 + trip * 3.0) + trip * 0.10 * (0.5 + 0.5 * sin(r * 22.0 - TIME * 2.5)), 0.0, 1.0);
+		float m = clamp(dot(diff, vec3(0.34)) * 3.2 * (1.0 + trip * 1.0) * (0.4 + 0.6 * smoothstep(0.1, 0.45, r)) + trip * 0.06 * (0.5 + 0.5 * sin(r * 22.0 - TIME * 2.5)), 0.0, 1.0);
 		vec3 ghost = hsv(fract(TIME * 0.12 + r * 0.9 + m * 0.5), 0.95, 1.0) * m;
-		col += ghost * 0.7 * amount * use_trail;          // (added light washes a picture out: less of it, and the colour is pushed instead, below)
+		col += ghost * 0.45 * amount * use_trail;          // (added light washes a picture out: less of it, and the colour is pushed instead, below)
 		col = mix(col, col * hsv(fract(TIME * 0.05), 0.25, 1.1), 0.12 * amount);
 		col = mix(col, col * hsv(fract(TIME * 0.14 + r * 1.2), 0.7, 1.3), tw * 0.55);
 		col *= 1.0 + trip * 0.08;

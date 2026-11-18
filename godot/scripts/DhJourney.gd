@@ -11,12 +11,12 @@ const ORDER := ["psychedelic", "tunnel", "desert", "candy", "egypt", "matrix", "
 ## THE ARC: the run is a script, not a dice roll, shaped like a night out: a first taste, warmth, the rush, euphoria, the sharp peak, the deepest wave, then the afterglow and the
 ## comedown, and round again a little stronger. w world, s strength (0..1.2), calm the rest before it, on / peak / off the seconds of coming on, holding, going out.
 const ARC := [
-	{"w": "psychedelic", "s": 0.30, "calm": 40.0, "on": 16.0, "peak": 10.0, "off": 10.0},
-	{"w": "candy", "s": 0.45, "calm": 30.0, "on": 18.0, "peak": 22.0, "off": 10.0},
-	{"w": "tunnel", "s": 0.70, "calm": 26.0, "on": 20.0, "peak": 30.0, "off": 10.0},
-	{"w": "synthwave", "s": 0.85, "calm": 22.0, "on": 18.0, "peak": 38.0, "off": 10.0},
-	{"w": "matrix", "s": 1.00, "calm": 18.0, "on": 20.0, "peak": 34.0, "off": 12.0},
-	{"w": "psychedelic", "s": 1.20, "calm": 16.0, "on": 22.0, "peak": 55.0, "off": 16.0},
+	{"w": "psychedelic", "s": 0.36, "calm": 40.0, "on": 16.0, "peak": 10.0, "off": 10.0},
+	{"w": "candy", "s": 0.48, "calm": 30.0, "on": 18.0, "peak": 22.0, "off": 10.0},
+	{"w": "tunnel", "s": 0.60, "calm": 26.0, "on": 20.0, "peak": 30.0, "off": 10.0},
+	{"w": "synthwave", "s": 0.72, "calm": 22.0, "on": 18.0, "peak": 38.0, "off": 10.0},
+	{"w": "matrix", "s": 0.84, "calm": 18.0, "on": 20.0, "peak": 34.0, "off": 12.0},
+	{"w": "psychedelic", "s": 1.00, "calm": 16.0, "on": 22.0, "peak": 55.0, "off": 16.0},
 	{"w": "desert", "s": 0.60, "calm": 22.0, "on": 18.0, "peak": 30.0, "off": 14.0},
 	{"w": "egypt", "s": 0.40, "calm": 45.0, "on": 24.0, "peak": 40.0, "off": 20.0},
 ]
@@ -185,7 +185,7 @@ func wants_trip() -> bool:
 func trip_floor() -> float:
 	if phase == Phase.CALM or not wants_trip():
 		return 0.0
-	return pow(onset_k(), 1.5) * (0.25 + 0.6 * clampf((strength - 0.3) / 0.9, 0.0, 1.0)) * (0.7 + 0.3 * rig.excitement())          # a wave runs deeper while the run is going hard
+	return pow(onset_k(), 1.5) * (0.2 + 0.45 * clampf((strength - 0.3) / 0.9, 0.0, 1.0)) * (0.7 + 0.3 * rig.excitement())          # a wave runs deeper while the run is going hard
 
 
 func _frac(stage: String) -> float:

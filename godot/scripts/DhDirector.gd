@@ -197,6 +197,7 @@ func _play_track(key: String) -> void:
 ## opening until a track is chosen for it. One short loop of smoothed noise, made once.
 var _wind_p: AudioStreamPlayer = null
 var _wind_g: float = 0.0
+var _wind_on: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("wind")          # ?wind: off unless asked for (made noise, unheard by its author: not to be trusted on by default)
 
 
 func _wind_make() -> void:
@@ -242,6 +243,8 @@ func _wind_make() -> void:
 
 
 func _wind_mix(spd: float, air: bool, d: float) -> void:
+	if not _wind_on:
+		return
 	if _wind_p == null:
 		_wind_make()
 	var want := clampf((spd - 0.15) * 1.1, 0.0, 0.8) * (1.5 if air else 1.0)

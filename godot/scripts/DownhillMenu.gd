@@ -294,6 +294,140 @@ func _show_cards() -> void:
 		_tab_btns[i].set_pressed_no_signal(i == _tab and not _rep_on)
 
 
+
+# --------------------------------------------------------------------------
+# THE GUIDE: everything on the course on one page, a colour and a few words each. No scrolling: the columns and the type are sized to the screen. Tap anywhere to close.
+# --------------------------------------------------------------------------
+const GUIDE_ROWS := [
+	["h", "MOLECULES   look at one of the three · levels 0 to 6 · all six high is the PEAK"],
+	["mescaline", "MESCALINE", "more glints · the pulse"],
+	["dom", "DOM", "more points · lasts longer · piano"],
+	["2cb", "2C-B", "its own look · the synth"],
+	["2ce", "2C-E", "its own look · the acid line"],
+	["2ct2", "2C-T-2", "its own look · the guitar"],
+	["2ct7", "2C-T-7", "its own look · drums and bass"],
+	["h", "PICK UP   look at it, the board goes there"],
+	[Color(1.0, 0.55, 0.1), "CHEVRONS", "ride over: a kick of speed"],
+	[Color(1.0, 0.62, 0.15), "CRYSTAL", "a longer boost"],
+	[Color(0.3, 0.85, 1.0), "CAGE", "shield: takes one hit for you"],
+	[Color(0.95, 0.4, 1.0), "RINGS", "double points for a while"],
+	[Color(1.0, 0.45, 0.7), "CLUSTER", "a lump of points"],
+	[Color(1.0, 0.85, 0.35), "GOLD ATOMS", "points · scoop a rail's worth for a fling"],
+	["h", "RIDE   every different thing inside 7 seconds links a chain"],
+	[Color(0.35, 0.95, 1.0), "RAIL", "look at it: grind, sling off the end"],
+	[Color(0.95, 0.35, 1.0), "RAMP + SWIRL", "look its way: pulled in, thrown high"],
+	[Color(0.5, 1.0, 0.8), "IN THE AIR", "look where you want to land"],
+	[Color(0.45, 0.85, 1.0), "SLINGSHOT", "pass close: drawn in and flung on"],
+	[Color(1.0, 0.4, 0.75), "BUMPERS", "bounce off for points"],
+	[Color(1.0, 0.9, 0.5), "COLOUR GATES", "same colour again and again: a chain"],
+	[Color(1.0, 0.9, 0.2), "A FACE", "rare: copy it in the air, big prize"],
+	["h", "AVOID"],
+	[Color(1.0, 0.35, 0.3), "ROCKS · SNOWBALLS", "a coloured one costs a level of that molecule"],
+	[Color(0.6, 0.65, 0.75), "TREES", "off the trail: a crash, a level lost"],
+]
+var _guide: Control = null
+
+
+func _guide_toggle() -> void:
+	if _guide != null and is_instance_valid(_guide):
+		_guide.queue_free()
+		_guide = null
+		return
+	var vs := get_viewport_rect().size
+	var wide := vs.x > vs.y * 1.15
+	var cols := 3 if wide else 2
+	var items := 0
+	var heads := 0
+	for r: Array in GUIDE_ROWS:
+		if r[0] is String and String(r[0]) == "h":
+			heads += 1
+		else:
+			items += 1
+	var lines := heads * 1.25 + ceilf(float(items) / float(cols)) + 4.0          # rows of type the page needs (items share rows across the columns; headings take a whole row each)
+	var fs := int(clampf(vs.y * 0.86 / (lines * 1.75), 10.0, 22.0))
+	fs = mini(fs, int(vs.x / (float(cols) * 19.0)))
+	var back := Button.new()          # the whole page is the close button
+	back.flat = true
+	back.focus_mode = Control.FOCUS_NONE
+	back.set_anchors_preset(Control.PRESET_FULL_RECT)
+	back.z_index = 50
+	back.pressed.connect(_guide_toggle)
+	var bg := ColorRect.new()
+	bg.color = Color(0.03, 0.04, 0.09, 0.94)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	back.add_child(bg)
+	var mg := MarginContainer.new()
+	mg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right"]:
+		mg.add_theme_constant_override("margin_" + side, int(vs.x * 0.035))
+	for side in ["top", "bottom"]:
+		mg.add_theme_constant_override("margin_" + side, int(vs.y * 0.03))
+	back.add_child(mg)
+	var col := VBoxContainer.new()
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_theme_constant_override("separation", int(fs * 0.3))
+	mg.add_child(col)
+	var title := Label.new()
+	title.text = "WHAT IS WHAT"
+	title.add_theme_font_size_override("font_size", int(fs * 1.5))
+	title.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(title)
+	var grid: GridContainer = null
+	for r: Array in GUIDE_ROWS:
+		if r[0] is String and String(r[0]) == "h":
+			var hl := Label.new()
+			hl.text = String(r[1])
+			hl.add_theme_font_size_override("font_size", int(fs * 0.95))
+			hl.add_theme_color_override("font_color", _accent.lightened(0.35))
+			hl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			hl.clip_text = true
+			col.add_child(hl)
+			grid = GridContainer.new()
+			grid.columns = cols
+			grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			grid.add_theme_constant_override("h_separation", int(fs * 1.2))
+			grid.add_theme_constant_override("v_separation", int(fs * 0.25))
+			col.add_child(grid)
+			continue
+		var c: Color = r[0] if r[0] is Color else (MolData.MOLS[String(r[0])]["c"] as Color)
+		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_theme_constant_override("separation", int(fs * 0.5))
+		var dot := Panel.new()
+		dot.custom_minimum_size = Vector2(fs * 0.95, fs * 0.95)
+		dot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		dot.add_theme_stylebox_override("panel", _style(c, Color(1, 1, 1, 0.5), int(fs * 0.5), 1))
+		row.add_child(dot)
+		var nm := Label.new()
+		nm.text = String(r[1])
+		nm.add_theme_font_size_override("font_size", fs)
+		nm.add_theme_color_override("font_color", c.lightened(0.25))
+		nm.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(nm)
+		var how := Label.new()
+		how.text = String(r[2])
+		how.add_theme_font_size_override("font_size", int(fs * 0.86))
+		how.add_theme_color_override("font_color", Color(1, 1, 1, 0.72))
+		how.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		how.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		how.clip_text = true
+		row.add_child(how)
+		grid.add_child(row)
+	var foot := Label.new()
+	foot.text = "tap anywhere to close"
+	foot.add_theme_font_size_override("font_size", int(fs * 0.8))
+	foot.add_theme_color_override("font_color", Color(1, 1, 1, 0.45))
+	foot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(foot)
+	add_child(back)
+	_guide = back
+
+
 func _button(text: String, font: int, parent: Node, toggle: bool = false) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -393,6 +527,8 @@ func _build_header() -> void:
 		_save()
 		_status.text = "Everything is back to how it came.")
 	_reset_b = xb
+	var gb := _button("GUIDE", 16, h)
+	gb.pressed.connect(_guide_toggle)
 	var rb := _button("MORE", 16, h)
 	rb.pressed.connect(func() -> void:
 		_rep_on = not _rep_on
@@ -1129,6 +1265,7 @@ func _start(with_camera: bool) -> void:
 	visible = false
 	get_tree().paused = false
 	if OS.has_feature("web"):
+		JavaScriptBridge.eval("if (window.__fsInit) window.__fsArm = 1;")          # (phones: the page asks again on the next tap if this request is refused)
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 		JavaScriptBridge.eval("(function(){try{if(screen.orientation&&screen.orientation.lock){screen.orientation.lock('landscape').catch(function(){});}}catch(e){}})()")
 	Game.dh_started.emit(out)

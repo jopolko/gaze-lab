@@ -13,6 +13,10 @@ var _go: bool = false
 
 
 func _ready() -> void:
+	if OS.has_feature("web") and bool(JavaScriptBridge.eval("matchMedia('(pointer: coarse)').matches")):
+		# on a phone, full screen is asked for by the page itself inside the tap (some browsers, Opera for one, refuse a request that arrives a frame later from the game);
+		# it stays armed until it has worked once, and START arms it again
+		JavaScriptBridge.eval("(function(){ if (window.__fsInit) return; window.__fsInit = 1; window.__fsArm = 1;   function go(){ try { if (!window.__fsArm) return; var d = document, el = d.documentElement;       if (d.fullscreenElement || d.webkitFullscreenElement) { window.__fsArm = 0; return; }       var rq = el.requestFullscreen || el.webkitRequestFullscreen || el.webkitRequestFullScreen || el.mozRequestFullScreen;       if (!rq) return; var p = rq.call(el, { navigationUI: 'hide' });       var after = function(){ window.__fsArm = 0; try { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function(){}); } catch (e) {} };       if (p && p.then) p.then(after).catch(function(){}); else after(); } catch (e) {} }   ['pointerup', 'touchend', 'click', 'keyup'].forEach(function (ev) { window.addEventListener(ev, go, true); }); })()")
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP

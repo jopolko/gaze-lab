@@ -2,5 +2,5 @@
 
 [ext_resource type="Script" path="res://tests/ramp_probe.gd" id="1"]
 
-[node name="RampProbe" type="Node"]
+[node name="JourneyProbe" type="Node"]
 script = ExtResource("1")

@@ -81,6 +81,60 @@ func setup(p_player: PlayerController) -> void:
 # --------------------------------------------------------------------------
 ## One stretch of forest trail: the tree lines down both sides (solid: leave the trail and you hit them), forest behind them, and the slalom poles.
 ## Nothing is drawn further away than this: the haze has hidden it by then.
+var _forest_jobs: Array = []
+
+
+## A few metres of the back forest per frame, for the stretch that was built last; when a stretch's forest is whole it goes in as two batches (crowns and trunks).
+func _forest_tick() -> void:
+	if _forest_jobs.is_empty():
+		return
+	var j: Dictionary = _forest_jobs[0]
+	var row: Dictionary = j["row"]
+	var rng: RandomNumberGenerator = j["rng"]
+	var cones: Array[Transform3D] = j["cones"]
+	var trunks: Array[Transform3D] = j["trunks"]
+	var cc: PackedColorArray = j["cc"]
+	var tc: PackedColorArray = j["tc"]
+	var z: float = j["z"]
+	var z_end: float = j["z_end"]
+	var steps := 0
+	while z > z_end and steps < 5:
+		steps += 1
+		if -z > 26.0:
+			var cx := trail_x(z)
+			var half := TRAIL_HALF + 2.5 * sin(-z / 47.0 + _tr_p2)
+			for sd: float in [-1.0, 1.0]:
+				for deep in 3:
+					var fx: float = cx + sd * (half + 4.0 + rng.randf_range(0.0, 34.0))
+					var fz := z + rng.randf_range(-1.6, 1.6)
+					var s := rng.randf_range(1.0, 1.9)
+					var clear := true
+					for k in _kickers:          # nothing grows on a ramp or in the run up to it
+						if absf(fx - float(k["x"])) < float(k["w"]) * 0.5 + 6.0 and fz < float(k["z"]) + VX_REACH + 20.0 and fz > float(k["z"]) - float(k["len"]) - 14.0:
+							clear = false
+					if not clear:
+						continue
+					var h := terrain_h(fx, fz)
+					var sy := s * rng.randf_range(0.9, 1.35)
+					cones.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, sy, s)), Vector3(fx, h, fz)))
+					cc.append(Color.WHITE.darkened(rng.randf_range(0.0, 0.16)))
+					trunks.append(Transform3D(Basis.IDENTITY, Vector3(fx, h + 0.7, fz)))
+					tc.append(Color(0.34, 0.24, 0.18))
+		z -= 3.3
+	j["z"] = z
+	j["cc"] = cc
+	j["tc"] = tc
+	if z <= z_end:
+		_forest_jobs.pop_front()
+		if _rows.values().has(row):
+			_add_mm(row, _m_cone, cones, cc)
+			_add_mm(row, _m_trunk, trunks, tc)
+
+
+var prof_rows: bool = false
+var _prof_toys_ms: float = 0.0
+
+
 func _vis_range(n: Node, r: float) -> void:
 	if n is GeometryInstance3D:
 		(n as GeometryInstance3D).visibility_range_end = r
@@ -92,6 +146,7 @@ func _gen_trail(row: Dictionary, z0: float, cones: Array[Transform3D], cone_cols
 		rocks: Array[Transform3D], rock_cols: PackedColorArray, obs: PackedFloat32Array) -> void:
 	var z := z0
 	var z_end := maxf(z0 - ROW_GAP, finish_z + 6.0)
+	var pt0 := Time.get_ticks_usec()
 	while z > z_end:
 		var s := -z
 		if s > 26.0:
@@ -104,10 +159,13 @@ func _gen_trail(row: Dictionary, z0: float, cones: Array[Transform3D], cone_cols
 						_add_rock(rocks, rock_cols, obs, ex + float(sd) * 1.5, z + _rng.randf_range(-1.0, 1.0), _rng.randf_range(1.2, 2.0), Color(0.55, 0.58, 0.64), _rng.randf_range(0.9, 1.4))
 					else:
 						_add_tree(cones, cone_cols, trunks, trunk_cols, obs, ex, z + _rng.randf_range(-1.0, 1.0), _rng.randf_range(0.95, 1.5), true)
-				for deep in 3:                                                         # the forest behind the front row: seen, never hit
-					var fx: float = cx + float(sd) * (half + 4.0 + _rng.randf_range(0.0, 34.0))
-					_add_tree(cones, cone_cols, trunks, trunk_cols, PackedFloat32Array(), fx, z + _rng.randf_range(-1.6, 1.6), _rng.randf_range(1.0, 1.9), false)
 		z -= 3.3
+	# the forest behind the front row (seen, never hit) is three quarters of the trees: it is planted over the next few frames, not all in this one (see _forest_tick)
+	var frng := RandomNumberGenerator.new()
+	frng.seed = int(absf(z0) * 13.0) + int(params.get("seed", 1)) * 7919
+	var fc: Array[Transform3D] = []
+	var ft: Array[Transform3D] = []
+	_forest_jobs.append({"row": row, "z": z0, "z_end": z_end, "rng": frng, "cones": fc, "cc": PackedColorArray(), "trunks": ft, "tc": PackedColorArray()})
 	# slalom poles: one on the inside of every turn, at its tightest point
 	var poles: Array = []
 	var n0 := int(floor((-z0 / TRAIL_TURN_LEN + _tr_p1 - PI * 0.5) / PI))
@@ -122,9 +180,13 @@ func _gen_trail(row: Dictionary, z0: float, cones: Array[Transform3D], cone_cols
 		poles_total += 1
 		poles.append(pole)
 	row["poles"] = poles
+	var pt1 := Time.get_ticks_usec()
 	_gen_feats(row, z0)
+	var pt2 := Time.get_ticks_usec()
 	_clear_for_kickers(z0, cones, cone_cols, trunks, trunk_cols, rocks, rock_cols, obs)
 	_gen_guide(row, z0)
+	if prof_rows:
+		print("ROWPROF trees+poles %.1f ms, choices %.1f ms (of which toys %.1f), clearing %.1f ms, things in the stretch %d" % [float(pt1 - pt0) / 1000.0, float(pt2 - pt1) / 1000.0, _prof_toys_ms, float(Time.get_ticks_usec() - pt2) / 1000.0, (row["nodes"] as Array).size()])
 	# rails, poles, rocks, swirls: a few hundred separate things, each its own draw call on a phone. Nothing further than 300 m ahead needs drawing (the fog has hidden it by then) (a choice is only offered from 130 m)
 	for nd in (row["nodes"] as Array):
 		if is_instance_valid(nd):
@@ -1129,7 +1191,9 @@ func _gen_feats(row: Dictionary, z0: float) -> void:
 						mid_rocks = true
 				if not mid_rocks and not (kinds[0] == "jump" or kinds[1] == "jump") and _rng.randf() < 0.3:
 					_boost_row(row, trail_x(zi), zi - 4.0, 0.0, choices_built)          # the middle lane is never empty: a row of boosts down the middle
+	var ptt := Time.get_ticks_usec()
 	_gen_toys(row, z0, taken)
+	_prof_toys_ms = float(Time.get_ticks_usec() - ptt) / 1000.0
 
 
 var _sd_flip: float = 1.0
@@ -1557,6 +1621,12 @@ func _zoned() -> bool:
 	return GazeProvider.backend == GazeProvider.Backend.CAMERA and not kit.zones.is_empty() and kit.ready and not kit.lost
 
 
+## How far ahead a thing can be chosen. It was a fixed 130 m, which is five seconds at an easy pace and barely three flat out: now it is about four and a half seconds of
+## riding at whatever speed you are doing (never less than the old 130 m, never further than things are drawn), so going faster does not take the time to choose away.
+func offer_m() -> float:
+	return clampf(-vel.y * 4.5, 130.0, 245.0)
+
+
 func _trail_pick(delta: float, s_in: float) -> Dictionary:
 	var v := pick_override if pick_override != 0.0 else s_in
 	_lock_age += delta
@@ -1570,7 +1640,7 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 	for kk in _rows:
 		for f in (_rows[kk] as Dictionary).get("feats", []):
 			var ez0 := float(f["zl"]) if f.has("zl") else float(f["za"])          # where the thing is taken: the ramp's foot, the treat, the top of a rail
-			if f.has("hz") or f["done"] or spos.z - ez0 > 130.0 or spos.z < float(f["zb"]) + 6.0:
+			if f.has("hz") or f["done"] or spos.z - ez0 > offer_m() or spos.z < float(f["zb"]) + 6.0:
 				continue
 			# only what the board can still reach is offered: crossing over takes time, and a thing that will be gone by then is not a choice
 			if not is_same(f, _line_pick) and not is_same(f, _rail):
@@ -5023,7 +5093,13 @@ func _guard_path(delta: float, s_in: float) -> float:
 				if absf(_slide_v) > 0.5:
 					sliding = true
 					slide_steer = clampf(atan2(_slide_v, spd_t) / THETA_MAX, -0.5, 0.5)          # the board points the way it is actually going: no second controller pulling against the slide
-		if pkf.is_empty():
+		if _vx_lock_t > 0.0 and (_vx_lock_hard or pkf.is_empty() or String(pkf.get("kind", "")) == "jump"):
+			tx = _vx_lock_x          # in the swirl or on the ramp: the line is the ramp's
+			sliding = false
+			slide_steer = 0.0
+			_slide_v = 0.0
+			np = {}
+		elif pkf.is_empty():
 			_slide_v = 0.0
 		if not np.is_empty() and spos.z - float(np["z"]) < 32.0 and absf(s_in) < 0.6:
 			var pe := float(np["e"])                                   # close to a pole the line never drifts to its wrong side by itself: only a hard look takes you there
@@ -5410,6 +5486,7 @@ func _physics_process(delta: float) -> void:
 	_update_ramps(delta)
 	_vortex_drive(delta)
 	_glint_tick(delta)
+	_forest_tick()
 	_chain_tick(delta)
 	_update_balls(delta)
 	_update_tricks(delta, key, pk)
@@ -5839,14 +5916,35 @@ func _hold_mat(m: Material) -> void:
 		_held_kinds[key] = kept
 
 
+## Every molecule and every kit shape is built here, behind GET READY: each one is a few thousand vertices put together in script, and the first of each kind used to be built
+## the moment it came into the course (a stopped frame each, all through the first minute).
+func _kit_prebuild() -> void:
+	for id: String in MolData.ORDER:
+		_mol_mesh(id)
+	for c: Color in [Color(1.0, 0.62, 0.15), Color(1.0, 0.3, 0.6), BUFF_COL["boost"]]:
+		_kit_mesh("crystal", c)
+	_kit_mesh("cage", BUFF_COL["shield"])
+	_kit_mesh("cage", Color(0.45, 0.85, 1.0))
+	_kit_mesh("rings", BUFF_COL["mult"])
+	_kit_mesh("tetra", BUFF_COL["donut"])
+	_kit_mesh("atom", Color(1.0, 0.4, 0.75))
+	for c2: Color in GATE_COLS:
+		_kit_mesh("hex", c2)
+	for c3: Color in [Color(1.0, 0.82, 0.3), Color(1.0, 0.85, 0.35), Color(0.35, 0.95, 1.0), Color(1.0, 0.6, 0.15), Color(1.0, 0.95, 0.2)]:
+		_kit_mesh("ball", c3)
+	_shaft_material()
+	if _ring_pool.is_empty():
+		for i in 10:
+			_ring_pool.append(Mats.glow())
+
+
 func _warm_shaders() -> void:
 	if _warmed or cam == null:
 		return
 	_warmed = true
 	if not OS.has_feature("web"):
 		return                                             # only a browser builds shaders this slowly; tests and the desktop build go straight in
-	if not get_tree().node_added.is_connected(_hold_node):
-		get_tree().node_added.connect(_hold_node)
+	_kit_prebuild()
 	_warming = true
 	_warm_k = 0.0
 	Mats.keep_alive([_fx_mat("solid", Color.WHITE), _fx_mat("add", Color.WHITE), _fx_mat("halo", Color.WHITE), _fx_mat("ground", Color.WHITE), _fx_mat("spark", Color.WHITE)])
@@ -6485,6 +6583,9 @@ const VX_LAUNCH := 46.0                   # m/s the vortex brings you to by the 
 const VX_ACCEL := 34.0
 const VX_TRAIL := 37.0                   # m/s the trail swirl builds up to by the lip
 const VX_REACH := 90.0                   # m before the foot of the ramp where the swirl starts to take hold
+var _vx_lock_x: float = 0.0
+var _vx_lock_t: float = 0.0
+var _vx_lock_hard: bool = false
 var _vx_pull: float = 0.0                # 0..1: how far into the swirl you are (the camera widens with it)
 var _vx_blast: float = 0.0               # 1 at the lip, running down to 0
 var _land_off: float = 0.0               # m across the trail the eyes have chosen to land at
@@ -6551,6 +6652,7 @@ func _vortex_drive(delta: float) -> void:
 				vel = Vector2(0.0, -24.0)
 				break
 	_vx_spin += delta
+	_vx_lock_t = maxf(_vx_lock_t - delta, 0.0)
 	var vs := get_viewport().get_visible_rect().size
 	var cx := _aim_cx if _aim_cx >= 0.0 else _cursor_px.x
 	var active := false
@@ -6577,7 +6679,14 @@ func _vortex_drive(delta: float) -> void:
 			var half: float = float(k["w"]) * 0.5
 			var dxk := kx - spos.x
 			var picked: bool = not _line_pick.is_empty() and String(_line_pick["kind"]) == "jump" and absf(float(_line_pick.get("kx", 1.0e9)) - kx) < 0.5
-			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 4.0 and (absf(dxk) < half + 36.0 or (picked and absf(dxk) < half + 50.0)):          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
+			var side_look: bool = _eye_on and absf(eye_now()) > 0.22 and signf(eye_now()) == signf(kx - trail_x(kz)) and (_line_pick.is_empty() or picked)          # looking over to the ramp's side of the trail, and at nothing else
+			var on_it: bool = spos.z < kz + 4.0 and absf(dxk) < half + 1.5
+			# the swirl takes a board that is on the ramp or close beside it, and from much further out one whose rider is looking that way. A board in the middle of the trail
+			# whose rider is looking elsewhere is left alone: the ramp is a choice.
+			if grounded and spos.z < kz + VX_REACH + 14.0 and spos.z > lipz + 1.0 and (on_it or absf(dxk) < half + 9.0 or ((picked or side_look) and absf(dxk) < half + 50.0)):
+				_vx_lock_x = kx          # and while it has you, the board's own steering aims for the ramp too (it used to aim for the middle of the trail and win: you slid off the side)
+				_vx_lock_t = 0.2
+				_vx_lock_hard = on_it          # the mouth, and the whole side of the ramp: a board that comes at it from the side is taken in too
 				active = true
 				if not _vx_snd:
 					_vx_snd = true
@@ -6678,6 +6787,8 @@ func _update_ramps(delta: float) -> void:
 			_super_face = true
 			_cheer("SUPER AIR!", Color(1.0, 0.9, 0.2), 2.2)
 	if crossed:
+		# A FACE is a rare thing now: always off a super ramp, and off about one ordinary ramp in six. Most jumps are just the flight.
+		_face_ok = bool(crossed_k.get("super", false)) or _fx_rng.randf() < 0.16
 		vy += 1.5 * float(chain_lvl)                      # a longer chain launches harder
 		_chain_hit("ramp")
 		_mix_add("ramp")
@@ -6762,16 +6873,16 @@ func _make_pad(row: Dictionary, x: float, z: float, epic: bool, with_pool: bool 
 
 
 func _update_pads() -> void:
-	if _finished or not grounded:
+	if _finished or (not grounded and spos.y - terrain_h(spos.x, spos.z) > 2.5):          # a board skimming just over the snow still takes a pad (at speed it is off the ground half the time)
 		return
 	for k in _rows:
 		var r: Dictionary = _rows[k]
-		if absf(float(r["z"]) - spos.z) > 130.0:
+		if absf(float(r["z"]) - spos.z) > 230.0:          # (a stretch is 180 m long and its pads can be at the far end of it: at 130 m those were never looked at)
 			continue
 		for p in r["pads"]:
 			if p["used"]:
 				continue
-			if absf(float(p["z"]) - 2.2 - spos.z) < 3.4 and absf(float(p["x"]) - spos.x) < 3.2:
+			if absf(float(p["z"]) - 2.2 - spos.z) < 3.6 and absf(float(p["x"]) - spos.x) < 4.6:
 				p["used"] = true
 				if p.has("gem") and is_instance_valid(p["gem"]):
 					(p["gem"] as Node3D).visible = false
@@ -6780,9 +6891,10 @@ func _update_pads() -> void:
 				_boost_t = maxf(_boost_t, 1.8)
 				var fwd := Vector2(sin(heading), -cos(heading))
 				var sp0 := vel.length()
-				vel += fwd * 5.0 * _bm_pad
-				if vel.length() > maxf(SPEED_CAP, sp0):
-					vel = vel.normalized() * maxf(SPEED_CAP, sp0)
+				vel += fwd * 7.0 * _bm_pad
+				_vx_active_t = maxf(_vx_active_t, 1.4)          # the kick is always felt: for a moment the speed may run past its usual top
+				if vel.length() > maxf(SPEED_CAP, sp0) + 6.0:
+					vel = vel.normalized() * (maxf(SPEED_CAP, sp0) + 6.0)
 				_fov_punch = 7.0
 				_shake = maxf(_shake, 0.25)
 				_burst(spos + Vector3(0, 0.6, 0), Color(1.0, 0.6, 0.2), 40, 12.0, 0.6, 0.9, Vector3(0, 0.3, 1.0), 40.0, -3.0)
@@ -7593,8 +7705,8 @@ func _pill_tick(delta: float) -> void:
 			wk = 0.7 + 0.6 * _dir.wave_at(0.0)          # the effects breathe with the music's wave
 		var ma := Vector3(_mbody[0], _mbody[1], _mbody[2]) / 6.0
 		var mb := Vector3(_mbody[3], _mbody[4], _mbody[5]) / 6.0
-		ma = Vector3(pow(ma.x, 1.5), pow(ma.y, 1.5), pow(ma.z, 1.5)) * wk          # each look comes in gently and only at a high level does it take over
-		mb = Vector3(pow(mb.x, 1.5), pow(mb.y, 1.5), pow(mb.z, 1.5)) * wk
+		ma = Vector3(pow(ma.x, 1.15), pow(ma.y, 1.15), pow(ma.z, 1.15)) * wk          # each look grows steadily with its level: something to see from the first one, no sudden jump near the top
+		mb = Vector3(pow(mb.x, 1.15), pow(mb.y, 1.15), pow(mb.z, 1.15)) * wk
 		fxm.post.mat.set_shader_parameter("mA", ma)
 		fxm.post.mat.set_shader_parameter("mB", mb)
 		fxm.post.mat.set_shader_parameter("dmt", dm)
@@ -7613,6 +7725,21 @@ func _pill_tick(delta: float) -> void:
 			_dose += 0.7
 	# the glimmer: two sharp pulses in half a second. Subtle in size, strong in colour: a hint of what is coming
 	_pill_k = 0.5 * pow(maxf(sin((1.0 - _flick) * TAU * 1.5), 0.0), 1.4) if _flick > 0.0 else 0.0
+	# THE TOP OF A JUMP: on a flight with no face to pull, the world opens up for a moment at the highest point: one slow swell of the full look (no flashing), rings and
+	# sparks in the sky ahead. Nothing to do but watch and choose where to come down. Deeper the more is held.
+	var alt_now := spos.y - terrain_h(spos.x, spos.z)
+	if _in_air and _apex_vy > 0.0 and vy <= 0.0 and alt_now > 7.0 and not _face_ok and face_kind == "" and _apex_t <= 0.0:
+		_apex_t = 1.9
+		_apex_amp = 0.28 + 0.3 * clampf(_mol_avg() * 1.5, 0.0, 1.0)
+		for ri in 4:
+			_ring(spos + Vector3(_fx_rng.randf_range(-5.0, 5.0), 1.0 + 1.5 * float(ri), -8.0 - 7.0 * float(ri)), Color.from_hsv(fposmod(_age * 0.13 + 0.23 * float(ri), 1.0), 0.75, 1.0), 12.0 + 6.0 * float(ri), 0.9 + 0.2 * float(ri), true)
+		_burst(spos + Vector3(0.0, 2.0, -6.0), Color.from_hsv(fposmod(_age * 0.13, 1.0), 0.6, 1.0), 60, 14.0, 1.3, 1.0, Vector3(0, 1, 0), 180.0, -1.5)
+		_fov_punch = maxf(_fov_punch, 5.0)
+		Game.sfx(&"cue_good")
+	_apex_vy = vy
+	if _apex_t > 0.0:
+		_apex_t = maxf(_apex_t - delta, 0.0)
+		_pill_k = maxf(_pill_k, _apex_amp * sin(PI * (1.0 - _apex_t / 1.9)))
 	if _journey == null:
 		return
 	if _pill_k > 0.001 or _mol_avg() > 0.01:
@@ -8264,6 +8391,10 @@ const FACES := {
 const FACE_OPENERS := ["MAKE A FACE!", "QUICK, A FACE!", "THE CROWD WANTS A FACE!", "SURPRISE FACE TIME!", "FACE! NOW!", "THE CAMERAS ARE ON YOU!"]
 const FACE_WINDOW := 2.6
 
+var _apex_t: float = 0.0
+var _apex_amp: float = 0.0
+var _apex_vy: float = 0.0
+var _face_ok: bool = false          # this jump carries a face challenge
 var face_enabled: bool = true
 var face_kind: String = ""             # the face being asked for ("" = none)
 var face_t: float = 0.0                # seconds left to pull it
@@ -8290,6 +8421,7 @@ func apply_menu(c: Dictionary, level: MainLevel) -> void:
 	params["seed"] = int(c.get("seed", 424242))
 	_mol_rows = bool(c.get("journey", true)) and String(c.get("theme", "alpine")) == "alpine"          # All dressed: molecules come at their own steady pace (see _gen_toys)
 	_mol_next_z = -150.0
+	_forest_jobs.clear()
 	_pacer = null
 	apply_params({"length": 0.0 if (bool(c.get("endless", false)) or _mol_rows) else km * 1000.0, "diff": float(c.get("diff", 1.0)), "zones": zones})
 	face_enabled = bool(c.get("faces", true))
@@ -8584,7 +8716,7 @@ func _face_pick() -> String:
 func _face_tick(delta: float, alt: float) -> void:
 	var rd := delta / maxf(Engine.time_scale, 0.05)
 	if face_kind == "":
-		if _air_time >= _face_next and alt > 3.0 and not _air_moves.has("slam"):
+		if _face_ok and _air_time >= _face_next and alt > 3.0 and not _air_moves.has("slam"):
 			face_kind = _face_pick()
 			_face_last = face_kind
 			face_t = FACE_WINDOW
@@ -8605,15 +8737,40 @@ func _face_tick(delta: float, alt: float) -> void:
 		_add_move(id)
 		face_kind = ""
 		_face_next = _air_time + 1.6 / face_k
-		if _super_face:
-			_super_face = false
-			_gain(int(600.0 * groove))
-			_cheer("SUPER FACE!", Color(1.0, 0.9, 0.2), 1.8)
+		# pulled it: a proper moment. Light and sparks in three colours, rings, double points for a while, a push, and (in All dressed) a level of the molecule you hold least of.
+		var was_super := _super_face
+		_super_face = false
+		_face_ok = was_super          # one face a jump, two off a super ramp
+		_gain(int((600.0 if was_super else 300.0) * groove))
+		_mult_t = maxf(_mult_t, 12.0 if was_super else 8.0)
+		_boost_t = maxf(_boost_t, 2.0)
+		var fp := Vector3(spos.x, spos.y + 1.4, spos.z)
+		for fc: Color in [Color(1.0, 0.9, 0.2), Color(1.0, 0.35, 0.8), Color(0.3, 0.95, 1.0)]:
+			_burst(fp, fc, 60, 16.0, 1.1, 1.2, Vector3(0, 1, 0), 180.0, -4.0)
+		_ring(fp, Color(1.0, 0.9, 0.3), 16.0, 0.7, true)
+		_ring(fp, Color(1.0, 0.4, 0.85), 10.0, 0.5, false)
+		_flash = maxf(_flash, 0.4)
+		_shake = maxf(_shake, 0.6)
+		Game.sfx(&"kaboom")
+		GazeProvider.pm.buzz([40, 30, 80])
+		var gift := ""
+		if _mol_rows:
+			var lo := 0
+			for mi2 in 6:
+				if _mdose[mi2] < _mdose[lo]:
+					lo = mi2
+			if _mdose[lo] < 6.0:
+				_mdose[lo] = minf(_mdose[lo] + 1.0, 6.0)
+				_dose += 0.42
+				_flick = 1.0
+				gift = "  +1 " + String(MolData.MOLS[MolData.ORDER[lo]]["name"])
+		_cheer(("SUPER FACE!" if was_super else "FACE!") + "  x2" + gift, Color(1.0, 0.9, 0.2), 2.2 if was_super else 1.7)
 		_trip_add(0.08)
 		if face_k > 1.2:
 			_gain(int(250.0 * groove * face_k))
 		_burst(Vector3(spos.x, spos.y + 1.6, spos.z), Color(1.0, 0.85, 0.3), 50, 9.0, 1.0, 1.0)
 	elif face_t <= 0.0:
+		_face_ok = false
 		face_kind = ""
 		_face_next = _air_time + 1.8 / face_k
 		_trk_text = "...nothing?"
@@ -9914,7 +10071,7 @@ func _draw_track_dbg(font: Font, k: float, s: Vector2, m: float) -> void:
 			if f.has("hz") or f["done"]:
 				continue
 			var fz := float(f["zl"]) if f.has("zl") else float(f["za"])
-			if spos.z - fz > 130.0 or spos.z < fz - 260.0:
+			if spos.z - fz > offer_m() or spos.z < fz - 260.0:
 				continue
 			var fx := _feat_x(f, clampf(spos.z, float(f["zb"]), float(f["za"])))
 			var wp := Vector3(fx, terrain_h(fx, fz) + 1.5, fz)
@@ -10010,7 +10167,7 @@ func _draw_hud_inner() -> void:
 			for ff in (_rows[fk] as Dictionary).get("feats", []):
 				var fzl := float(ff.get("zl", ff["za"]))
 				var fdz := spos.z - fzl
-				if ff["done"] or fdz > 130.0 or fdz < 4.0:
+				if ff["done"] or fdz > offer_m() or fdz < 4.0:
 					continue
 				var fx0 := _feat_x(ff, fzl)
 				var fw := Vector3(fx0, terrain_h(fx0, fzl) + 6.0, fzl)

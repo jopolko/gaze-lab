@@ -20,6 +20,7 @@ func _ready() -> void:
 	rig.set_process(false)
 	rig.trail = true
 	rig.bend = OS.get_environment("BEND") != ""
+	rig.prof_rows = OS.get_environment("PROF") != ""
 	var sess := int(OS.get_environment("SESSION")) if OS.get_environment("SESSION") != "" else 10
 	var trip := int(OS.get_environment("TRIP")) if OS.get_environment("TRIP") != "" else 1
 	rig.apply_menu({"journey": true, "seed": 7, "theme": "alpine", "mus": "off", "session": sess, "trip": trip, "endless": OS.get_environment("FINITE") == ""}, level)
@@ -43,6 +44,10 @@ func _ready() -> void:
 	var in_wave := 0.0
 	var strong := 0.0
 	var ring_n := 0
+	var pad_seen := {}
+	var pad_n := 0
+	var pad_bad := 0
+	var step_ms: Array = []
 	var feat_seen := {}
 	var feat_n := {}
 	var feat_seq: Array = []
@@ -52,8 +57,19 @@ func _ready() -> void:
 	for i in int(mins * 60.0 / dt):
 		var tm := float(i) * dt
 		GazeProvider.set_scripted(Vector2(0.5, 0.45))
+		var t0 := Time.get_ticks_usec()
+		var rows0: int = rig._rows.size()
+		var rk0: Array = rig._rows.keys()
 		rig._physics_process(dt)
 		rig._process(dt)
+		var ms := float(Time.get_ticks_usec() - t0) / 1000.0
+		step_ms.append(ms)
+		if ms > 6.0 and OS.get_environment("PROF") != "":
+			var newrow := false
+			for rkk in rig._rows.keys():
+				if not rk0.has(rkk):
+					newrow = true
+			print("ARC  slow step %.1f ms at %.1f s  (a new stretch was built: %s)" % [ms, tm, str(newrow)])
 		for rk in rig._rows:
 			var cand: Array = []
 			for t in (rig._rows[rk] as Dictionary).get("toys", []):
@@ -120,10 +136,30 @@ func _ready() -> void:
 						var nm := String(ff["kind"]) + " " + lane
 						feat_n[nm] = int(feat_n.get(nm, 0)) + 1
 						feat_seq.append([float(ff.get("zl", ff.get("za", 0.0))), String(ff["kind"]).substr(0, 2) + lane])
+		if i % 30 == 0:
+			for rk4 in rig._rows:
+				for pd in (rig._rows[rk4] as Dictionary).get("pads", []):
+					if pad_seen.has(float(pd["z"])) or not is_instance_valid(pd["gem"]) or float(pd["z"]) > rig.spos.z - 40.0:
+						continue
+					pad_seen[float(pd["z"])] = true
+					var want_y := rig.terrain_h(float(pd["x"]), float(pd["z"]) - 2.2) + 1.35
+					var got_y := (pd["gem"] as Node3D).global_position.y
+					pad_n += 1
+					if absf(got_y - want_y) > 0.6:
+						pad_bad += 1
+						var neark := ""
+						for kq in rig._kickers:
+							if absf(float(kq["z"]) - float(pd["z"])) < 120.0:
+								neark = " (a ramp at %.0f m along, %.0f m across from it)" % [float(kq["z"]) - float(pd["z"]), float(kq["x"]) - float(pd["x"])]
+						if pad_bad <= 6:
+							print("ARC PAD OFF THE GROUND by %+.1f m at z %.0f%s" % [got_y - want_y, float(pd["z"]), neark])
 		if rig._finished:
 			print("ARC finished early at %.1f min" % (tm / 60.0))
 			break
 	print("ARC SUMMARY first wave at %.1f min, %.0f%% of the time inside a wave, %.0f%% in a strong one, waves done %d, rows met %d, taken %d" % [first_wave / 60.0, in_wave / (mins * 60.0) * 100.0, strong / (mins * 60.0) * 100.0, j.wave, rows_met, eaten])
+	step_ms.sort()
+	print("ARC STEP TIME (this machine, native): median %.2f ms, 99th %.2f ms, worst %.1f ms, steps over 6 ms: %d of %d" % [step_ms[step_ms.size() / 2], step_ms[int(step_ms.size() * 0.99)], step_ms[-1], step_ms.filter(func(x): return x > 6.0).size(), step_ms.size()])
+	print("ARC PADS checked %d, off the ground: %d" % [pad_n, pad_bad])
 	var ks := feat_n.keys()
 	ks.sort()
 	var line := ""

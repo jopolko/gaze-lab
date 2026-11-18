@@ -1,5 +1,9 @@
 extends Node
-## Trail ramp: ride the first jump from 80 m up the slope, centred, and report the flight. Sweeps rise / length / power / blast.
+## Ramps and boost pads, measured. For the first few ramps on the trail the board is set down 80 m before the foot, OFF metres to the side of the ramp's line (default 0, then 8, then 16),
+## and left alone (eyes straight ahead): does the swirl take it, does it stay on, does it leave the lip, how high and how long does it fly. Then the same for a boost pad: speed before
+## and after. BEND=1 for the winding trail.
+
+
 func _ready() -> void:
 	Prog.save_enabled = false
 	Prog.reset()
@@ -16,67 +20,119 @@ func _ready() -> void:
 	rig.set_physics_process(false)
 	rig.set_process(false)
 	rig.trail = true
-	rig._restart()
+	rig.bend = OS.get_environment("BEND") != ""
+	rig.apply_menu({"journey": true, "seed": 7, "theme": "alpine", "mus": "off", "session": 10, "trip": 1}, level)
+	await get_tree().process_frame
 	var dt := 1.0 / 60.0
-	var k: Dictionary = {}
-	for i in 60 * 120:
-		GazeProvider.set_scripted(Vector2(0.5, 0.45))
+	GazeProvider.set_scripted(Vector2(0.5, 0.45))
+	# ride until a few ramps exist
+	var tested := 0
+	var done_z := {}
+	var offs := [0.0, 8.0, -8.0, 16.0, 0.0, 12.0]
+	var guard := 0
+	while tested < offs.size() and guard < 60 * 240:
+		guard += 1
 		rig._physics_process(dt)
-		for kk in rig._kickers:
-			if kk.get("trail", false) and float(kk["z"]) < rig.spos.z - 120.0:
-				k = kk
+		rig._process(dt)
+		var target: Dictionary = {}
+		for k in rig._kickers:
+			if k.get("trail", false) and not done_z.has(float(k["z"])) and float(k["z"]) < rig.spos.z - 90.0 and float(k["z"]) > rig.spos.z - 400.0:
+				target = k
 				break
-		if not k.is_empty():
-			break
-	print("kicker z %.0f x %.1f len %.0f rise %.1f pow %.1f" % [k["z"], k["x"], k["len"], k["rise"], k["pw"]])
-	var configs := [[34.0, 8.5, 2.0, 3.0], [34.0, 11.0, 2.0, 3.0], [34.0, 14.0, 2.0, 3.0], [40.0, 14.0, 2.0, 3.0], [40.0, 16.0, 2.2, 4.0], [36.0, 12.0, 1.7, 4.0]]
-	if OS.get_environment("CFG") != "":
-		var p := OS.get_environment("CFG").split(",")
-		configs = [[float(p[0]), float(p[1]), float(p[2]), float(p[3])]]
-	for cfg in configs:
-		k["len"] = cfg[0]
-		k["rise"] = cfg[1]
-		k["pw"] = cfg[2]
-		rig.jump_blast = cfg[3]
-		var kx: float = k["x"]
-		var kz: float = k["z"]
-		var lipz: float = kz - float(k["len"])
-		rig.spos = Vector3(kx, rig.terrain_h(kx, kz + 80.0), kz + 80.0)
-		rig._gh_prev = rig.spos.y
-		rig.vel = Vector2(0.0, -24.0)
-		rig.vy = -24.0 * 0.3
-		rig.heading = 0.0
-		rig.hurt_t = 0.0
+		if target.is_empty():
+			continue
+		done_z[float(target["z"])] = true
+		var kx := float(target["x"])
+		var kz := float(target["z"])
+		var klen := float(target["len"])
+		var off: float = offs[tested]
+		tested += 1
+		var sx := kx + off
+		var mode := "eyes ahead"
+		GazeProvider.set_scripted(Vector2(0.5, 0.45))
+		if tested > 3:
+			sx = rig.trail_x(kz + 80.0)          # from the middle of the trail, looking over at the ramp's side (or, for the last one, away from it)
+			var sgn := signf(kx - rig.trail_x(kz)) * (-1.0 if tested == 6 else 1.0)
+			GazeProvider.set_scripted(Vector2(0.5 + 0.3 * sgn, 0.45))
+			mode = "from the middle, looking " + ("AWAY from it" if tested == 6 else "at its side")
+			off = sx - kx
+		rig.spos = Vector3(sx, rig.terrain_h(sx, kz + 80.0), kz + 80.0)
+		rig.vel = Vector2(0.0, -26.0)
 		rig.grounded = true
-		rig._finished = false
-		rig._line_pick = {}
-		var c0 := rig.crashes
-		var air_t := 0.0
-		var peak := 0.0
-		var vmax := 0.0
-		var vlip := 0.0
-		var was_air := false
-		var d0 := 0.0
-		var d1 := 0.0
-		var pks := {}
-		for i in 60 * 14:
-			GazeProvider.set_scripted(Vector2(0.5, 0.45))
-			if rig.spos.z > lipz:
-				rig.spos.x = kx
-				rig.vel.x = 0.0
+		rig._gh_prev = rig.spos.y
+		var pulled := false
+		var on_ramp := 0.0
+		var left_lip := false
+		var air := 0.0
+		var hmax := 0.0
+		var min_dx := 999.0
+		var dx_at_foot := 999.0
+		var dx_at_lip := 999.0
+		var v_lip := 0.0
+		var fell_side := false
+		for i in 60 * 9:
 			rig._physics_process(dt)
-			vmax = maxf(vmax, rig.vel.length())
-			if not was_air and not rig.grounded and rig.spos.z < lipz + 8.0:
-				was_air = true
-				d0 = rig.spos.z
-				vlip = rig.vel.length()
-			if was_air:
-				if not rig.grounded:
-					air_t += dt
-					peak = maxf(peak, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z))
-				else:
-					d1 = rig.spos.z
-					break
-		print("len %.0f rise %.0f pow %.1f blast %.0f: speed at lip %.0f m/s (max %.0f), air %.2f s, peak %.1f m, flew %.0f m, off-centre %.1f m, crashes %d" % [cfg[0], cfg[1], cfg[2], cfg[3], vlip, vmax, air_t, peak, d0 - d1, rig.spos.x - kx, rig.crashes - c0])
-		rig.hurt_t = 0.0
+			rig._process(dt)
+			var dx := absf(rig.spos.x - kx)
+			if rig._vx_pull > 0.05:
+				pulled = true
+			if rig.spos.z < kz and rig.spos.z > kz - klen:
+				if dx_at_foot > 900.0:
+					dx_at_foot = dx
+				min_dx = minf(min_dx, dx)
+				if rig.grounded and dx < float(target["w"]) * 0.5:
+					on_ramp += dt
+				if dx > float(target["w"]) * 0.5 + 1.0:
+					fell_side = true
+			if rig.spos.z < kz - klen and dx_at_lip > 900.0:
+				dx_at_lip = dx
+				v_lip = -rig.vel.y
+			if rig.spos.z < kz - klen + 2.0 and not rig.grounded:
+				left_lip = true
+				air += dt
+				hmax = maxf(hmax, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z))
+			if rig.spos.z < kz - klen - 160.0:
+				break
+		print("RAMP (" + mode + ") start %+5.1f m to the side: swirl took hold %s | off line at the foot %.1f m, at the lip %.1f m (ramp half-width %.1f) | on the ramp %.2f s | went off the side %s | flew %s, %.2f s, %.1f m high, %.0f km/h at the lip" % [
+			off, str(pulled), dx_at_foot, dx_at_lip, float(target["w"]) * 0.5, on_ramp, str(fell_side), str(left_lip and air > 0.4), air, hmax, v_lip * 3.6])
+	# ---- boost pads
+	var pt := 0
+	guard = 0
+	var seen := {}
+	while pt < 4 and guard < 60 * 240:
+		guard += 1
+		rig._physics_process(dt)
+		rig._process(dt)
+		for rk in rig._rows:
+			for p in (rig._rows[rk] as Dictionary).get("pads", []):
+				var pz := float(p["z"])
+				if pt >= 4 or seen.has(pz) or bool(p["used"]) or pz > rig.spos.z - 60.0 or pz < rig.spos.z - 300.0:
+					continue
+				seen[pz] = true
+				pt += 1
+				var px := float(p["x"])
+				var v0: float = [18.0, 28.0, 36.0, 42.0][pt - 1]
+				rig.spos = Vector3(px, rig.terrain_h(px, pz + 25.0), pz + 25.0)
+				rig.vel = Vector2(0.0, -v0)
+				rig.grounded = true
+				rig._gh_prev = rig.spos.y
+				var hit0 := rig.pads_hit
+				print("PAD   is %.0f m from its stretch's own z (the pad code skips stretches more than 130 m away)" % absf(float((rig._rows[rk] as Dictionary)["z"]) - pz))
+				GazeProvider.set_scripted(Vector2(0.5 + clampf((px - rig.trail_x(pz)) / 7.0, -1.0, 1.0) * 0.3, 0.45))          # looking at the pad's lane
+				var v_before := 0.0
+				var v_after := 0.0
+				var v_peak := 0.0
+				var miss_x := 0.0
+				for i in 150:
+					rig._physics_process(dt)
+					rig._process(dt)
+					if absf(rig.spos.z - (pz - 2.2)) < 1.0 and OS.get_environment("PADDBG") != "":
+						print("PAD     at the pad: grounded %s, x off %.1f, height over snow %.2f" % [str(rig.grounded), rig.spos.x - px, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z)])
+					if rig.spos.z > pz + 2.0:
+						v_before = rig.vel.length()
+						miss_x = rig.spos.x - px
+					if rig.pads_hit > hit0:
+						v_peak = maxf(v_peak, rig.vel.length())
+				v_after = rig.vel.length()
+				print("PAD arriving at %.0f km/h, %.1f m off its middle: taken %s | just before %.0f km/h, peak after %.0f km/h, 2 s later %.0f km/h (cap %.0f km/h)" % [v0 * 3.6, miss_x, str(rig.pads_hit > hit0), v_before * 3.6, v_peak * 3.6, v_after * 3.6, rig.SPEED_CAP * 3.6])
 	get_tree().quit()
