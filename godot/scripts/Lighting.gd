@@ -229,7 +229,7 @@ func _apply_tier() -> void:
 			tier_s = maxf(tier_s, floor_s)
 		RScale.set_scale(vp, minf(tier_s, cap if floor_s <= 0.4 else maxf(cap, floor_s)))
 	# draw distance for trees and rocks: the cheapest big saving there is
-	rig.veg_range = [0.0, 340.0, 280.0, 230.0][tier]          # (the fog hides the far end, so things fade into the haze instead of popping up)
+	rig.veg_range = [0.0, 300.0, 240.0, 190.0][tier] if Game.touch_mode else [0.0, 340.0, 280.0, 230.0][tier]          # (the fog hides the far end, so things fade into the haze instead of popping up)
 	for n in rig.get_children():
 		if n is MultiMeshInstance3D:
 			(n as MultiMeshInstance3D).visibility_range_end = rig.veg_range

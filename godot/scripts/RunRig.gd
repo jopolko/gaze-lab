@@ -12282,9 +12282,10 @@ func _draw_mol_bar(font: Font, k: float, s: Vector2, m: float) -> void:
 			dp.append(pz)
 		var lcol := col.lightened(0.35) if got else Color(col.r, col.g, col.b, 0.32)
 		lcol.a = 0.95 if got else 0.32
-		for bd in md["bonds"]:
-			var bv: Vector2i = bd
-			_hud.draw_line(sp[bv.x], sp[bv.y], lcol, (3.0 if got else 1.6) * k)
+		if got or not (Game.touch_mode or Engine.get_frames_per_second() < 40.0):          # (an outline of a molecule not found yet is the first thing to go when frames are short)
+			for bd in md["bonds"]:
+				var bv: Vector2i = bd
+				_hud.draw_line(sp[bv.x], sp[bv.y], lcol, (3.0 if got else 1.6) * k)
 		if got:
 			for pi in pts.size():
 				var el := String(els[pi])
