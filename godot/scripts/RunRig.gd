@@ -5940,7 +5940,7 @@ void fragment() {
 	float cur = smoothstep(0.15, 1.0, band);
 	vec3 c = 0.5 + 0.5 * cos(6.2831 * (u.x * 0.8 + u.y * 0.4 + TIME * 0.07 + vec3(0.0, 0.33, 0.67)));
 	ALBEDO = c;
-	ALPHA = cur * 0.5 * edge * k;          # bands of colour only (the rings that used to be here sat in the middle of the view like a target: cheap)
+	ALPHA = cur * 0.5 * edge * k;          // bands of colour only (the rings that used to be here sat in the middle of the view like a target: cheap)
 }
 """
 const VEG_LIVE_SHADER := """shader_type spatial;

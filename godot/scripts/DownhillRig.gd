@@ -1846,7 +1846,7 @@ void fragment() {
 	float big = vn(wp.xz * 0.11);
 	float drift = vn(vec2(wp.x * 0.5, wp.z * 0.09));
 	float fine = 0.5;
-	if (near > 0.01 && detail > 0.5) fine = vn(wp.xz * 3.5) * near + vn(wp.xz * 15.0) * 0.5 * near;          # (only where it can be seen: it is two noise lookups a pixel)
+	if (near > 0.01 && detail > 0.5) fine = vn(wp.xz * 3.5) * near + vn(wp.xz * 15.0) * 0.5 * near;          // (only where it can be seen: it is two noise lookups a pixel)
 	vec3 base = COLOR.rgb;
 	vec3 shade = base * vec3(0.84, 0.89, 0.99);
 	float patch = smoothstep(0.12, 0.45, big * 0.65 + drift * 0.45);

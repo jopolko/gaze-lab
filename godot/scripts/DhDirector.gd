@@ -158,6 +158,7 @@ func _fetch(key: String, file: String, loop: bool) -> void:
 func _mk_player() -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.bus = &"Master"
+	p.playback_type = AudioServer.PLAYBACK_TYPE_STREAM          # music is streamed: as a browser "sample" a long track could not be paused or looped (the browser refused to copy it, and it fell silent)
 	p.volume_db = -80.0
 	add_child(p)
 	return p
