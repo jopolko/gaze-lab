@@ -87,6 +87,8 @@ func _ready() -> void:
 			if rig.spos.z < kz - klen and dx_at_lip > 900.0:
 				dx_at_lip = dx
 				v_lip = -rig.vel.y
+			if OS.get_environment("FLY") != "" and rig.spos.z < kz - klen + 6.0 and i % 15 == 0 and (not rig.grounded or rig.spos.z > kz - klen - 4.0):
+				print("   fly t=%.2f  vy %.1f  alt %.1f  y %.1f  fwd %.0f m/s  grounded %s  gravity %.1f  boost %.1f" % [float(i) * dt, rig.vy, rig.spos.y - rig.terrain_h(rig.spos.x, rig.spos.z), rig.spos.y, -rig.vel.y, str(rig.grounded), rig.G, rig._boost_t])
 			if rig.spos.z < kz - klen + 2.0 and not rig.grounded:
 				left_lip = true
 				air += dt

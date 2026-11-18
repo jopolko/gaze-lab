@@ -30,6 +30,9 @@ func _ready() -> void:
 		print("ARC no journey")
 		get_tree().quit()
 		return
+	if OS.get_environment("DOSE") != "":
+		rig._mdose.fill(float(OS.get_environment("DOSE")))
+		rig._mbody.fill(float(OS.get_environment("DOSE")))
 	var eat := float(OS.get_environment("EAT")) if OS.get_environment("EAT") != "" else 0.7
 	var hit := float(OS.get_environment("HIT")) if OS.get_environment("HIT") != "" else 1.0
 	var mins := int(OS.get_environment("MINS")) if OS.get_environment("MINS") != "" else 10
@@ -48,6 +51,8 @@ func _ready() -> void:
 	var pad_n := 0
 	var pad_bad := 0
 	var step_ms: Array = []
+	var phys_us := 0
+	var proc_us := 0
 	var feat_seen := {}
 	var feat_n := {}
 	var feat_seq: Array = []
@@ -61,7 +66,10 @@ func _ready() -> void:
 		var rows0: int = rig._rows.size()
 		var rk0: Array = rig._rows.keys()
 		rig._physics_process(dt)
+		var tmid := Time.get_ticks_usec()
 		rig._process(dt)
+		phys_us += tmid - t0
+		proc_us += Time.get_ticks_usec() - tmid
 		var ms := float(Time.get_ticks_usec() - t0) / 1000.0
 		step_ms.append(ms)
 		if ms > 6.0 and OS.get_environment("PROF") != "":
@@ -157,6 +165,7 @@ func _ready() -> void:
 			print("ARC finished early at %.1f min" % (tm / 60.0))
 			break
 	print("ARC SUMMARY first wave at %.1f min, %.0f%% of the time inside a wave, %.0f%% in a strong one, waves done %d, rows met %d, taken %d" % [first_wave / 60.0, in_wave / (mins * 60.0) * 100.0, strong / (mins * 60.0) * 100.0, j.wave, rows_met, eaten])
+	print("ARC SPLIT per step: physics %.2f ms, process (HUD, camera, effects) %.2f ms" % [float(phys_us) / 1000.0 / float(step_ms.size()), float(proc_us) / 1000.0 / float(step_ms.size())])
 	step_ms.sort()
 	print("ARC STEP TIME (this machine, native): median %.2f ms, 99th %.2f ms, worst %.1f ms, steps over 6 ms: %d of %d" % [step_ms[step_ms.size() / 2], step_ms[int(step_ms.size() * 0.99)], step_ms[-1], step_ms.filter(func(x): return x > 6.0).size(), step_ms.size()])
 	print("ARC PADS checked %d, off the ground: %d" % [pad_n, pad_bad])

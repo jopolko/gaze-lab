@@ -70,30 +70,27 @@ shader_type spatial;
 render_mode cull_disabled, unshaded;
 //HSV
 varying vec3 wp;
-uniform float speed = 0.0;      // 0..1: the faster you go, the harder the stripes race
+uniform float speed = 0.0;
+uniform vec2 gcen = vec2(0.0);   // where the board is: the second grid turns about it
 void vertex() { wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
-	// liquid marble: a coordinate field folded and warped by itself, so the bands flow, split and rejoin as you ride downhill
-	vec2 p = wp.xz * 0.045 + vec2(0.0, TIME * 0.05);
-	float a = 0.0;
-	for (int i = 0; i < 5; i++) {
-		float fi = float(i);
-		p += 0.9 * vec2(sin(p.y * 1.6 + TIME * 0.31 + fi * 1.3), cos(p.x * 1.4 - TIME * 0.27 + fi * 2.1));
-		a += sin(p.x * 1.2 + p.y * 0.9 + fi * 1.7);
-	}
-	float hue = fract(a * 0.15 + TIME * 0.035);
-	float band = 1.0 - smoothstep(0.0, 0.16, abs(sin(a * 2.2)));           // thin glowing contour lines
-	float soft = 0.5 + 0.5 * sin(a * 1.1 + TIME * 0.4);
-	vec3 col = hsv(hue, 1.0, 0.14 + 0.30 * soft) + hsv(fract(hue + 0.5), 0.9, 0.6) * band;
-	// SPEED STRIPES: thin bands across the slope every 9 m, each its own colour, and a second finer set in between: what passes under you every fraction of a second is
-	// what the eyes read as speed. They sit faintly at a crawl and burn at full speed.
-	float s1 = wp.z * 0.11;
-	float l1 = 1.0 - smoothstep(0.0, 0.07 + 0.05 * speed, abs(fract(s1) - 0.5) * 2.0 - 0.86);
-	float s2 = wp.z * 0.44 + wp.x * 0.02;
-	float l2 = 1.0 - smoothstep(0.0, 0.06, abs(fract(s2) - 0.5) * 2.0 - 0.9);
-	float amt = 0.12 + 0.88 * speed;
-	col += hsv(fract(floor(s1) * 0.13 + TIME * 0.05), 0.85, 1.0) * l1 * amt * 0.9;
-	col += hsv(fract(floor(s2) * 0.07 + 0.5), 0.7, 1.0) * l2 * amt * 0.35 * speed;
+	// MOIRE INTERFERENCE GRID (the owner's demo, laid on the ground). Two grids of squares multiplied together: the first is fixed to the ground, three metres a square, so
+	// it rushes by underfoot and measures the speed; the second is 3.7% finer and turns slowly about the board. Where they fall in and out of step, big slow shapes appear
+	// and move by themselves. Colour comes from how far in step they are. No lines across the way: only squares and the slow shapes.
+	float dist = length(VERTEX);
+	float sc = 1.0 / 6.0;
+	vec2 g1 = wp.xz * sc;
+	float grid1 = sin(g1.x * 6.283) * sin(g1.y * 6.283);
+	float t = TIME * 0.15 * 0.3;
+	float ca = cos(t), sa = sin(t);
+	vec2 rp = wp.xz - gcen;
+	vec2 g2 = vec2(rp.x * ca - rp.y * sa, rp.x * sa + rp.y * ca) * sc * 1.037;
+	float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
+	float far = 1.0 - smoothstep(70.0, 190.0, dist);          // (in the distance the squares are finer than a pixel: there the pattern eases to its average instead of shimmering)
+	float amp = mix(0.5, grid1 * grid2 * 0.5 + 0.5, far);
+	float sq = mix(0.5, smoothstep(-0.06, 0.06, grid1), far);          // the squares themselves, crisp, light and dark like a board
+	vec3 col = hsv(fract(amp * 0.5 + TIME * 0.03), 0.9, pow(amp, 0.65)) * (0.42 + 0.58 * sq);
+	col *= 0.75 + 0.25 * speed;
 	ALBEDO = col * col;                                          // authored in screen colours: square it into the linear space the renderer wants
 }
 """

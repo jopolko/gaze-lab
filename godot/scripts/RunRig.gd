@@ -1784,14 +1784,17 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 			continue
 		if is_same(fd, tgt) if zoned else (look_side == float(fd["sd"])):
 			# a look at the side is a decision; a look at the middle is also where resting eyes go, so taking the middle thing needs a longer, steadier look
-			fd["want"] = minf(float(fd["want"]) + delta * (0.35 if (zoned and is_same(fd, fm)) else 1.0), 0.5)
+			fd["want"] = minf(float(fd["want"]) + delta * (0.35 / clampf(30.0 / maxf(-vel.y, 1.0), 0.6, 1.0) if (zoned and is_same(fd, fm)) else 1.0), 0.5)
 		else:
 			fd["want"] = maxf(float(fd["want"]) - delta * (3.0 if look_side != 0.0 else 0.6), 0.0)
 		# LOCK ON. The first look settles on a thing after a fifth of a second. Once something is locked it holds, however the eyes wander: another thing takes the lock only
 		# after a steady look at it (0.35 s), and not in the last half second before the board reaches the one it is going for.
-		var need_w := 0.11          # a look settles on a thing after a ninth of a second
+		# AT SPEED everything about choosing is quicker in proportion (30 m/s is the pace these times were set at; flat out they are 0.6 of that): a look settles sooner, a
+		# change of mind is allowed sooner, and the turn to the new thing starts faster. The time you have to choose is the same number of looks, not fewer.
+		var qk := clampf(30.0 / maxf(-vel.y, 1.0), 0.6, 1.0)
+		var need_w := 0.11 * qk          # a look settles on a thing after a ninth of a second
 		if not _line_pick.is_empty() and zoned:
-			need_w = 0.14 if _lock_age >= COMMIT_S else 0.35          # just locked: committed for half a second, a change of mind in that window needs a longer, steadier look
+			need_w = (0.14 if _lock_age >= COMMIT_S * qk else 0.35) * qk          # just locked: committed for half a second, a change of mind in that window needs a longer, steadier look
 			var lez := float(_line_pick["zl"]) if _line_pick.has("zl") else float(_line_pick["za"])
 			if (spos.z - lez) / maxf(-vel.y, MIN_SPEED) < 0.25 and spos.z > float(_line_pick["zb"]):
 				need_w = 9.0
@@ -1803,7 +1806,7 @@ func _trail_pick(delta: float, s_in: float) -> Dictionary:
 		if float(fd["want"]) > need_w and not is_same(_line_pick, fd):
 			_dec(int(fd.get("g", -1)), [snappedf(_age, 0.01), "LOCK", String(fd["kind"]), int(float(fd["sd"])), snappedf(float(fd["want"]), 0.01), need_w, "switch" if not _line_pick.is_empty() else "first", snappedf(_eye_zn(), 0.01)])
 			if not _line_pick.is_empty():
-				_switch_slow = 0.8                                  # a change of mind: the turn to the new one is slow at first
+				_switch_slow = 0.8 * qk                             # a change of mind: the turn to the new one is slow at first
 			_lock_age = 0.0
 			_line_pick = fd
 			var ez_l := float(fd["zl"]) if fd.has("zl") else float(fd["zb"]) + 8.0
@@ -3956,7 +3959,7 @@ func _air_rings_tick() -> void:
 				_air_chain += 1
 				if is_instance_valid(e["n"]):
 					(e["n"] as Node3D).visible = false
-				vy = minf(vy + 4.0 + 0.6 * float(_air_chain), 26.0)
+				vy = minf(vy + 2.0, 7.0)          # a ring holds you up a little (it used to throw you up again, up to 26 m/s: that, not the ramp, was the five-second flight)
 				vel.y -= 2.0
 				_boost_t = maxf(_boost_t, 1.0)
 				_vx_active_t = 0.5
@@ -5470,7 +5473,7 @@ func _physics_process(delta: float) -> void:
 			spos.y = gh
 			vy = minf(vg, jump_launch) if trail else vg
 	else:
-		vy -= G * delta
+		vy -= G * delta * (AIR_G_K if trail else 1.0)          # (the hill falls away under a flight at twelve metres a second: at plain gravity every jump took four seconds to come down)
 		spos.y += vy * delta
 		if spos.y <= gh:
 			_land(maxf(gvy - vy, 0.0), gh, gvy)
@@ -5935,11 +5938,9 @@ void fragment() {
 	float edge = smoothstep(0.0, 0.18, u.x) * smoothstep(1.0, 0.82, u.x) * smoothstep(0.0, 0.25, u.y) * smoothstep(1.0, 0.45, u.y);
 	float band = sin(u.x * 9.0 + sin(u.y * 5.0 + TIME * 0.6) * 1.5 + TIME * 0.4);
 	float cur = smoothstep(0.15, 1.0, band);
-	float rr = length((u - vec2(0.5, 0.42)) * vec2(2.4, 1.0));
-	float ring = (1.0 - smoothstep(0.0, 0.05, abs(fract(rr * 3.0 - TIME * 0.22) - 0.5))) * smoothstep(0.85, 0.15, rr);
 	vec3 c = 0.5 + 0.5 * cos(6.2831 * (u.x * 0.8 + u.y * 0.4 + TIME * 0.07 + vec3(0.0, 0.33, 0.67)));
 	ALBEDO = c;
-	ALPHA = (cur * 0.55 + ring * 0.6) * edge * k;
+	ALPHA = cur * 0.5 * edge * k;          # bands of colour only (the rings that used to be here sat in the middle of the view like a target: cheap)
 }
 """
 const VEG_LIVE_SHADER := """shader_type spatial;
@@ -5964,6 +5965,7 @@ void fragment() {
 var _sky_fx: MeshInstance3D = null
 var _sky_mat: ShaderMaterial = null
 var _sky_flash: float = 0.0
+var sky_ok: bool = true
 var stage_post: float = 0.0          # 0..1: how far the full-screen look is let in (the last thing to arrive)
 
 
@@ -5988,14 +5990,18 @@ func _stage_tick(delta: float) -> void:
 	var h := _mol_avg()
 	_sky_flash = maxf(_sky_flash - delta / 1.3, 0.0)
 	var breath := 0.85 + 0.15 * sin(_age * 0.9)
-	var sky_k := clampf(maxf(_sky_flash * _sky_flash * 0.9, (0.3 * smoothstep(0.0, 0.08, h) + 0.5 * smoothstep(0.08, 0.5, h)) * breath), 0.0, 1.0)
+	var sky_k := clampf(maxf(_sky_flash * _sky_flash * 0.9, (0.3 * smoothstep(0.0, 0.08, h) - 0.12 * smoothstep(0.25, 0.6, h)) * breath), 0.0, 1.0)          # the sky is the first hint: once the rest has come on it steps back, so the picture does not go pale
 	_veg_live.set_shader_parameter("wob", smoothstep(0.03, 0.32, h) * (1.0 + 0.5 * smoothstep(0.5, 0.9, h)))
 	if _m_ground is ShaderMaterial:
 		(_m_ground as ShaderMaterial).set_shader_parameter("gglow", smoothstep(0.05, 0.25, h))
 		(_m_ground as ShaderMaterial).set_shader_parameter("grid", smoothstep(0.08, 0.34, h))
+		var wpos := TrailCurve.w(spos)
+		(_m_ground as ShaderMaterial).set_shader_parameter("gcen", Vector2(wpos.x, wpos.z))
 	stage_post = smoothstep(0.22, 0.5, h)
 	if cam == null:
 		return
+	if not sky_ok:
+		sky_k = 0.0
 	if sky_k > 0.004 and (_sky_fx == null or not is_instance_valid(_sky_fx)):
 		var q := QuadMesh.new()
 		q.size = Vector2(1500.0, 520.0)
@@ -6822,7 +6828,7 @@ func _vortex_drive(delta: float) -> void:
 			rm.ring_segments = 6
 			_land_ring = _mi(self, rm, _fx_mat("add", Color(0.5, 1.0, 0.8, 0.9)), Vector3.ZERO)
 		var hh := maxf(spos.y - terrain_h(spos.x, spos.z), 0.0)
-		var tl := (vy + sqrt(maxf(vy * vy + 2.0 * G * hh, 0.0))) / G
+		var tl := (vy + sqrt(maxf(vy * vy + 2.0 * G * AIR_G_K * hh, 0.0))) / (G * AIR_G_K)
 		var lz := spos.z + vel.y * tl
 		var lx := trail_x(lz) + _land_off
 		_land_ring.position = Vector3(lx, terrain_h(lx, lz) + 0.25, lz)
@@ -6880,7 +6886,7 @@ func _update_ramps(delta: float) -> void:
 		if _music != null:
 			_music.bump(0.45)
 		if crossed_k.get("super", false):
-			vy += 9.0                                            # the super ramp: a lot more height, and a face to pull straight away, worth double
+			vy += 5.0                                            # the super ramp: a lot more height, and a face to pull straight away, worth double
 			_boost_t = maxf(_boost_t, 2.4)
 			_face_next = 0.0
 			_super_face = true
@@ -8334,9 +8340,10 @@ const KICK_LEN := 26.0
 const KICK_W := 18.0
 var jump_len: float = 42.0              # the ramps on the forest trail: a curved kicker, flat at its foot and steepest at the lip, with a swirl that pulls you in and blasts you off
 const JUMP_W := 14.0
-var jump_rise: float = 24.0
+var jump_rise: float = 12.0
 var jump_curl: float = 0.45             # how much of the ramp is the steep curl at the end
-var jump_launch: float = 21.0           # m/s straight up at the lip, however steep the wall: the flight is long and roomy, never a rocket
+const AIR_G_K := 2.1                    # how much harder gravity pulls in the air on the trail: flights of two to two and a half seconds
+var jump_launch: float = 11.0           # m/s straight up at the lip, however steep the wall: the flight is long and roomy, never a rocket
 var jump_pow: float = 2.0               # the profile: height = rise * (distance up the ramp)^pow
 var jump_blast: float = 2.0             # m/s of extra lift the swirl gives at the lip
 var kickers_built: int = 0

@@ -298,11 +298,13 @@ func update(delta: float, st: Dictionary) -> void:
 		_down = false
 	elif _peak > 0.2 and avg < _peak * 0.4:
 		_down = true
-	if _age > _stem_after:
+	if _age > minf(_stem_after, 2.0 if _stem_after < 30.0 else _stem_after):
 		for n in STEMS:
 			_fetch("stem_" + n, "stem_" + n + ".ogg", true)          # the stems come down in the background once the run is going
 	# ------------------------------------------------ what should be playing
 	var want_mode := "stems" if (_deep and not _nostem) else ("track" if (trip or _down or not OPENING.is_empty()) else "none")
+	if want_mode == "none" and not _nostem:
+		want_mode = "stems"          # before the first molecule: the stems' ambience alone (every other part is at nothing until its molecule is held)
 	var want_band := "down" if _down else _band_for(exc)
 	if not trip and not _down and not OPENING.is_empty():
 		want_band = "opening"
@@ -311,8 +313,8 @@ func update(delta: float, st: Dictionary) -> void:
 		if not _cache.has("stem_" + n):
 			stems_ready = false
 	if want_mode == "stems" and not stems_ready:
-		want_mode = "track"
-		want_band = "sunny"          # the stems are still on their way: keep what is playing
+		want_mode = "track" if (trip or _down) else "none"          # the stems are still on their way: the funk if the run has already begun to turn, otherwise quiet
+		want_band = "sunny"
 	if want_mode == "stems":
 		if mode != "stems":
 			_start_stems()

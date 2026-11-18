@@ -1829,6 +1829,9 @@ shader_type spatial;
 render_mode cull_disabled;
 uniform float grid = 0.0;        // 0..1: squares in the snow, fixed to the ground, so they rush by underfoot (the best measure of speed there is) and pulse in travelling bands
 uniform float gglow = 0.0;       // 0..1: slow waves of light running out along the ground from the board
+uniform vec2 gcen = vec2(0.0);   // where the board is: the second grid of the moire turns about it
+uniform float detail = 1.0;      // 0 on the low quality levels: no fine grain in the snow
+vec3 hsv2rgb(vec3 c) { vec3 p = abs(fract(c.xxx + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0); return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y); }
 varying vec3 wp;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p) {
@@ -1842,7 +1845,8 @@ void fragment() {
 	float near = 1.0 - smoothstep(30.0, 120.0, length(VERTEX));
 	float big = vn(wp.xz * 0.11);
 	float drift = vn(vec2(wp.x * 0.5, wp.z * 0.09));
-	float fine = vn(wp.xz * 3.5) * near + vn(wp.xz * 15.0) * 0.5 * near;
+	float fine = 0.5;
+	if (near > 0.01 && detail > 0.5) fine = vn(wp.xz * 3.5) * near + vn(wp.xz * 15.0) * 0.5 * near;          # (only where it can be seen: it is two noise lookups a pixel)
 	vec3 base = COLOR.rgb;
 	vec3 shade = base * vec3(0.84, 0.89, 0.99);
 	float patch = smoothstep(0.12, 0.45, big * 0.65 + drift * 0.45);
@@ -1860,18 +1864,12 @@ void fragment() {
 		EMISSION += vec3(0.35, 0.75, 1.0) * gglow * run * run * 0.16 * (1.0 - smoothstep(40.0, 150.0, dist));
 	}
 	if (grid > 0.001) {
-		vec2 q = wp.xz / 4.0;          // four-metre squares
-		vec2 id = floor(q);
-		vec2 f = fract(q);
-		float lw = 0.035 + dist * 0.0016;          // the lines thicken with distance so they do not shimmer
-		float line = 1.0 - smoothstep(0.0, lw, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
-		float chk = mod(id.x + id.y, 2.0);
-		float band = 0.5 + 0.5 * sin(id.y * 0.55 + id.x * 0.3 + TIME * 2.2);          // bands of light travelling over the squares (a third of a cycle a second: slow)
-		vec3 hue = 0.5 + 0.5 * cos(6.2831 * (h21(id) * 0.3 + id.y * 0.02 + TIME * 0.05 + vec3(0.0, 0.33, 0.67)));
-		float a = grid * (1.0 - smoothstep(70.0, 200.0, dist));
-		ALBEDO = mix(ALBEDO, ALBEDO * mix(vec3(0.74), vec3(1.0), chk * 0.55 + 0.45 * band), a * 0.85);
-		EMISSION += hue * line * a * 0.8;
-		EMISSION += hue * chk * band * band * a * grid * 0.2;
+		// SQUARES in the snow, fixed to the ground, three metres a side, light and dark like a board: they rush by underfoot and measure the speed. Shade only, no lines
+		// and no colour: nothing here may hide the way ahead. (The moire lives in the psychedelic world's ground: see Themes.GROUND_PSY.)
+		vec2 g1 = wp.xz / 6.0;
+		float sq = smoothstep(-0.06, 0.06, sin(g1.x * 6.283) * sin(g1.y * 6.283));
+		float a = grid * (1.0 - smoothstep(60.0, 170.0, dist));
+		ALBEDO *= mix(1.0, mix(0.8, 1.04, sq), a);
 	}
 }
 """

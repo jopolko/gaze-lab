@@ -211,6 +211,9 @@ func _apply_tier() -> void:
 			fx.post.mat.set_shader_parameter("onset", maxf(rig._pill_k, 0.0 if rig._journey.phase == DhJourney.Phase.CALM and rig._journey.hint() < 0.001 else rig._journey.onset_k()))
 	if "shafts_ok" in rig:
 		rig.shafts_ok = tier < 2
+		rig.sky_ok = tier < 3
+		if rig._m_ground is ShaderMaterial:
+			(rig._m_ground as ShaderMaterial).set_shader_parameter("detail", 1.0 if tier < 2 else 0.0)
 	var env: Environment = level.world_env.environment
 	if tier >= 2:
 		env.glow_enabled = false
@@ -220,7 +223,7 @@ func _apply_tier() -> void:
 		# a big desktop window has several times the pixels of a phone: draw the 3D picture at about a million pixels at most (the HUD stays sharp)
 		var px := RScale.full_px()
 		var cap := clampf(sqrt((0.95e6 if Game.touch_mode else 2.1e6) / px), 0.5, 1.0) if OS.has_feature("web") else 1.0          # a phone: about a million pixels; a laptop: up to full HD
-		RScale.set_scale(vp, minf([1.0, 1.0, 0.8, 0.65][tier], cap))
+		RScale.set_scale(vp, minf([1.0, 1.0, 0.8, 0.58][tier], cap))
 	# draw distance for trees and rocks: the cheapest big saving there is
 	rig.veg_range = [0.0, 340.0, 280.0, 230.0][tier]          # (the fog hides the far end, so things fade into the haze instead of popping up)
 	for n in rig.get_children():
