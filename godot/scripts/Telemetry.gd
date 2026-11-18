@@ -103,6 +103,27 @@ func _pct(a: PackedFloat32Array, q: float) -> float:
 	return b[mini(int(float(b.size() - 1) * q), b.size() - 1)]
 
 
+var _gaze_gap: int = 0          # the least time (ms) between frames sent to the face model
+
+## ADAPTIVE TRACKER: when the game itself is slow the tracker is asked for fewer frames (the camera and model share the phone with the picture), and it is let go again when
+## the game has room. The steering is slower with a long gap, so it is only used when the picture would otherwise stutter. Hysteresis: it tightens fast and loosens slowly.
+func _adapt_tracker(fps: float) -> void:
+	if not OS.has_feature("web"):
+		return
+	var want := _gaze_gap
+	if fps < 20.0:
+		want = 140
+	elif fps < 26.0:
+		want = maxi(want, 100)
+	elif fps < 32.0:
+		want = maxi(want, 60) if want == 0 else want
+	elif fps > 42.0:
+		want = maxi(want - 30, 0)
+	if want != _gaze_gap:
+		_gaze_gap = want
+		JavaScriptBridge.eval("window.__gazeGap=%d" % want)
+
+
 func _tick(dt: float) -> void:
 	var P := GazeProvider
 	if (rig == null or not is_instance_valid(rig)) and _rig_wait != null and is_instance_valid(_rig_wait):
@@ -118,6 +139,9 @@ func _tick(dt: float) -> void:
 	r["ft95"] = snappedf(f95, 0.1)
 	r["ftmax"] = snappedf(fmax, 0.1)
 	r["cpu"] = snappedf(cpu_ms, 0.1)
+	r["gp"] = snappedf(P.proc_ms, 0.01)          # the gaze provider's own time on the game thread, ms
+	r["gap"] = _gaze_gap
+	_adapt_tracker(fps)
 	r["draws"] = int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
 	r["prims"] = int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 	r["mem"] = int(Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)

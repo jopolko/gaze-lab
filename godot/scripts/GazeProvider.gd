@@ -664,7 +664,16 @@ func _input(event: InputEvent) -> void:
 						brows_raised.emit()
 
 
+var proc_ms: float = 0.0          # how long the gaze provider's own per-frame work takes (smoothed, ms): logged, so the cost of tracking on the game thread is known
+
+
 func _process(delta: float) -> void:
+	var t0 := Time.get_ticks_usec()
+	_process_body(delta)
+	proc_ms = lerpf(proc_ms, float(Time.get_ticks_usec() - t0) / 1000.0, 0.05)
+
+
+func _process_body(delta: float) -> void:
 	kit.idle(_now(), delta)
 	# the mouse pointer is only ever hidden (captured) while a first-person level is being played; any menu, pause, other level or level exit shows it again
 	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:

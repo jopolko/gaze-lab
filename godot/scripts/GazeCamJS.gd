@@ -647,7 +647,7 @@ const MAIN := """
           }
         }
       }, 400);
-      let last = -1, errShown = false, inflight = 0, busyAt = 0;
+      let last = -1, errShown = false, inflight = 0, busyAt = 0, lastSent = 0;
       const dlgDet = []; let dlgN = 0;
       const DEPTH = 2;        // frames in the pipeline at once: one in the model worker, one being turned into a packet
       if (workerOk) {
@@ -703,6 +703,8 @@ const MAIN := """
           if (inflight > 0 && now - busyAt > 3000) inflight = 0;         // a lost frame must not stall the tracker
           if (v.readyState >= 2 && v.currentTime !== last) { window.__gazeStats.cf++; if (inflight >= DEPTH) window.__gazeStats.drop++; }   // camera frames seen / dropped because the pipeline was full
           if (inflight >= DEPTH || v.readyState < 2 || v.currentTime === last) return;
+          if (now - lastSent < (window.__gazeGap || 0)) return;         // the game asks for fewer frames when it is struggling (see Telemetry): the tracker must not starve the picture
+          lastSent = now;
           last = v.currentTime; inflight++; busyAt = now;
           const SRC = srcFrame();
           const roi = qs.has('noroi') ? null : window.__gazeRoi;       // a crop around the face, from the previous packet (null: whole frame)
