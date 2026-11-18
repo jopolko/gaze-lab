@@ -844,6 +844,11 @@ func _poll_camera(rd: float) -> void:
 var poll_ms: float = 0.0               # what reading the tracker costs the game, per frame (ms)
 
 
+var _js_win: JavaScriptObject = null
+var _seq_last: int = -1
+var _poll_n: int = 0
+
+
 func _poll_camera_inner(rd: float) -> void:
 	_cam_poll = 0.008      # about every game frame: a 30 fps camera must not lose up to 30 ms to our own polling
 	_stats_poll -= rd
@@ -863,12 +868,28 @@ func _poll_camera_inner(rd: float) -> void:
 			trk_det_ms = float(sp[5])
 			trk_delegate = str(sp[6])
 			trk_video = "%dx%d @%d" % [int(sp[7]), int(sp[8]), int(float(sp[9]))]
+	# MINIMAL READS: the tracker makes about 10 to 30 packets a second and the game runs at 30 to 60 frames: the packet (and the status) is only asked for when a counter says there is
+	# a new one, instead of two string evaluations, a JSON stringify and a JSON parse every frame. If the counter cannot be read, everything is read every frame as it was.
+	_poll_n += 1
+	var changed := true
+	if _js_win == null:
+		_js_win = JavaScriptBridge.get_interface("window")
+	if _js_win != null:
+		var sv: Variant = _js_win.get("__gazeSeq")
+		if sv != null:
+			var seq := int(sv)
+			changed = seq != _seq_last
+			_seq_last = seq
+	if not changed and _poll_n % 20 != 0:
+		return
 	var st: Variant = JavaScriptBridge.eval("window.__gazeStatus || ''")
 	camera_status = str(st)
 	if camera_status.begins_with("error") and not _cam_failed:
 		_cam_failed = true
 		Game.banner("Camera unavailable: using touch / mouse as your eyes", Color(1.0, 0.7, 0.3), 3.5)
 		set_backend(Backend.TOUCH if Game.touch_mode else Backend.MOUSE)
+		return
+	if not changed:
 		return
 	var js: Variant = JavaScriptBridge.eval("window.__gaze ? JSON.stringify(window.__gaze) : ''")
 	var txt := str(js)

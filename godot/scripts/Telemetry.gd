@@ -73,12 +73,37 @@ func _post(rec: Dictionary) -> void:
 	if not _live:
 		return
 	rec["t"] = snappedf(float(Time.get_ticks_msec()) / 1000.0, 0.1)
-	JavaScriptBridge.eval("window.__tl&&window.__tl.push(" + JSON.stringify(rec) + ")")
+	_buf.append(JSON.stringify(rec))          # kept in memory: nothing is handed to the page while the game is being played
+	if String(rec.get("kind", "")) == "sum" or _buf.size() >= 400:
+		flush_now()
+
+
+var _buf: PackedStringArray = PackedStringArray()
+var _was_paused: bool = false
+var _last_flush_ms: int = 0
+
+
+## Hand what has been kept to the page's own sender (one call, not one per record). At a pause, the end of a level, losing focus, or a big buffer (400 records).
+func flush_now() -> void:
+	if _buf.is_empty():
+		return
+	JavaScriptBridge.eval("(function(a){var q=window.__tl;if(!q)return;for(var i=0;i<a.length;i++)q.push(a[i]);})([" + ",".join(_buf) + "])")
+	_buf = PackedStringArray()
+	_last_flush_ms = Time.get_ticks_msec()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		flush_now()
 
 
 func _process(delta: float) -> void:
 	if not _live:
 		return
+	var pz := get_tree().paused or (rig != null and is_instance_valid(rig) and bool(rig.get("_paused")))
+	if pz and not _was_paused:
+		flush_now()          # the game has just been paused: a good moment, nothing is moving
+	_was_paused = pz
 	_ft.append(delta * 1000.0 / maxf(Engine.time_scale, 0.05))
 	_acc += delta
 	_tr_acc += delta

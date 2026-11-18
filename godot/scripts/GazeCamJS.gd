@@ -662,7 +662,7 @@ const MAIN := """
             window.__gazeEyes = m.eyes || null; S0.pa = m.eyes ? 1 : 0;
           }
           else if (m.type === 'pkt') {
-            inflight = Math.max(0, inflight - 1); window.__gaze = m.pkt; const S = window.__gazeStats; S.pk++; drawPts(m.pts);
+            inflight = Math.max(0, inflight - 1); window.__gaze = m.pkt; window.__gazeSeq = (window.__gazeSeq | 0) + 1; const S = window.__gazeStats; S.pk++; drawPts(m.pts);
             // chip trial: model time with a face in view, after a short warm-up
             if (m.pkt && m.pkt.conf > 0 && m.pkt.nx !== undefined && typeof m.det === 'number' && m.det > 0 && !qs.has('cpu') && !qs.has('gpu')) {
               const r = dlgRec();
@@ -733,7 +733,7 @@ const MAIN := """
             const r = lm.detectForVideo(v, tm0);
             const out = buildPacket(r, v, v.videoWidth, v.videoHeight);
             const S = window.__gazeStats; const il = performance.now() - tm0;
-            window.__gaze = out.pkt; S.pk++; S.cf++; S.lat = S.inf = (S.inf === undefined ? il : S.inf * 0.9 + il * 0.1); drawPts(out.pts);
+            window.__gaze = out.pkt; window.__gazeSeq = (window.__gazeSeq | 0) + 1; S.pk++; S.cf++; S.lat = S.inf = (S.inf === undefined ? il : S.inf * 0.9 + il * 0.1); drawPts(out.pts);
           }
         } catch (e) {
           if (!errShown) { errShown = true; window.__gazeStatus = 'error: tracking frame failed: ' + ((e && e.message) || e); }
