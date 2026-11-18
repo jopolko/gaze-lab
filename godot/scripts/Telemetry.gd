@@ -8,7 +8,7 @@ extends Node
 ## Records (kind): env (once), tick (every second), incident (a problem that lasted 2 s or more, when it started and again when it ended), gate (every barrier), sum (running totals),
 ## sensor (camera track ended / muted), feltbad (the player pressed THAT FELT BAD: the last 40 seconds ride along).
 
-const TICK := 1.0
+const TICK := 10.0          # one summary every ten seconds (it was every second: the report itself cost a frame or two each time on a phone)
 const LIGHT_EVERY := 8.0
 const MIN_FLAG_S := 2.0
 
@@ -73,12 +73,22 @@ func _post(rec: Dictionary) -> void:
 	if not _live:
 		return
 	rec["t"] = snappedf(float(Time.get_ticks_msec()) / 1000.0, 0.1)
+	if String(rec.get("kind", "")) == "tick" and not _trace:
+		var slim := {}
+		for k in KEEP_TICK:
+			if rec.has(k):
+				slim[k] = rec[k]
+		rec = slim
 	_buf.append(JSON.stringify(rec))          # kept in memory: nothing is handed to the page while the game is being played
 	if String(rec.get("kind", "")) == "sum" or _buf.size() >= 400:
 		flush_now()
 
 
 var _buf: PackedStringArray = PackedStringArray()
+## THE MINIMUM TO KEEP: what is needed to find and fix performance, and nothing about the face. ?trace in the address brings the whole record (gaze, head, light, calibration) back
+## for debugging the tracking itself.
+var _trace: bool = OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.search")).contains("trace")
+const KEEP_TICK := ["kind", "t", "who", "sid", "device", "app", "fps", "ft50", "ft95", "ftmax", "cpu", "gp", "gap", "pf", "draws", "prims", "rs", "trk", "lat", "model", "dlg", "z", "reg", "spd", "paused", "warm", "js", "flags", "cam", "win", "port", "tel", "tier"]
 var _was_paused: bool = false
 var _last_flush_ms: int = 0
 
@@ -107,7 +117,7 @@ func _process(delta: float) -> void:
 	_ft.append(delta * 1000.0 / maxf(Engine.time_scale, 0.05))
 	_acc += delta
 	_tr_acc += delta
-	if _tr_acc >= 0.2:                               # five times a second: each stage of the gaze, so a bad cursor can be traced to the stage that broke
+	if _tr_acc >= 0.2 and _trace:                               # five times a second: each stage of the gaze, so a bad cursor can be traced to the stage that broke
 		_tr_acc = 0.0
 		var P := GazeProvider
 		if P.backend == P.Backend.CAMERA and _tr.size() < 8:
@@ -117,7 +127,7 @@ func _process(delta: float) -> void:
 		var t0 := Time.get_ticks_usec()
 		_tick(_acc)
 		_tel_ms = float(Time.get_ticks_usec() - t0) / 1000.0          # what the diagnostics themselves cost, so it can be checked in the data
-		_tick_mul = 4.0 if _tel_ms > 15.0 else 1.0          # on a slow phone one tick cost about 30 ms, a hitch every second: report a quarter as often (the data inside is the same, just summed over longer)
+		_tick_mul = 2.0 if _tel_ms > 15.0 else 1.0          # on a slow phone one tick cost about 30 ms, a hitch every second: report a quarter as often (the data inside is the same, just summed over longer)
 		_acc = 0.0
 		_ft = PackedFloat32Array()
 
