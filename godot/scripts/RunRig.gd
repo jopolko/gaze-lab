@@ -6129,6 +6129,7 @@ func _stage_assets() -> void:
 # --------------------------------------------------------------------------
 const FX_KNOBS := [
 	["LAB", "x_level", "pretend this far in (molecules)", 0.0, 1.0],
+	["LAB", "x_pieces", "each molecule brings its own piece of the world (0 = the old order, by overall level)", 1.0, 1.0],
 	["LAB", "x_wander", "effects wander between elements (0 = fixed)", 0.6, 2.0],
 	["GROUND", "g_sq", "hard squares", 1.0, 2.0],
 	["GROUND", "g_shape", "interference shapes", 1.0, 3.0],
@@ -6395,8 +6396,8 @@ var _sky_dome_mat: ShaderMaterial = null
 func _sky_dome_tick(h: float) -> void:
 	if not _fx_started:
 		_fx_start()
-	var pol := fx("s_polar") * smoothstep(0.02, 0.3, h)
-	var tun := fx("s_tunnel") * smoothstep(0.02, 0.3, h)
+	var pol := fx("s_polar") * _pk(1)          # DOM
+	var tun := fx("s_tunnel") * _pk(5)          # 2C-T-7
 	var on := (pol + tun) > 0.01 and cam != null and sky_ok
 	if on and _sky_dome == null:
 		var sh := Shader.new()
@@ -6479,11 +6480,11 @@ func _wd_w(period: float, phase: float, gate: float, h: float) -> float:
 func _wander_tick(delta: float, h: float) -> void:
 	_wd_t += delta
 	_wd_drift += Vector2(cos(_wd_t * 0.05), sin(_wd_t * 0.037)) * 0.6 * delta
-	var tree_mo := clampf(maxf(fx("t_moire"), _wd_w(70.0, 0.0, 0.2, h) * 2.0), 0.0, 2.0)
-	var mtn_gate := smoothstep(0.04, 0.22, h)          # on from the first molecules
-	var mtn_mo := clampf(maxf(fx("m_moire") * mtn_gate, _wd_w(110.0, 2.1, 0.35, h) * 2.0), 0.0, 2.0)
-	var mtn_br := clampf(maxf(fx("m_breathe") * mtn_gate, _wd_w(90.0, 4.0, 0.3, h) * 3.0), 0.0, 3.0)
-	var mtn_pol := clampf(maxf(fx("m_polar"), _wd_w(130.0, 1.0, 0.4, h) * 2.0), 0.0, 2.0)
+	var tree_mo := clampf(maxf(fx("t_moire"), _wd_w(70.0, 0.0, 0.2, h) * 2.0) * _pk(2), 0.0, 2.0)          # 2C-B: colour on the trees
+	var mtn_gate := _pk(3)          # 2C-E: the mountains
+	var mtn_mo := clampf(maxf(fx("m_moire") * mtn_gate, _wd_w(110.0, 2.1, 0.35, h) * 2.0 * mtn_gate), 0.0, 2.0)
+	var mtn_br := clampf(maxf(fx("m_breathe") * mtn_gate, _wd_w(90.0, 4.0, 0.3, h) * 3.0 * mtn_gate), 0.0, 3.0)
+	var mtn_pol := clampf(maxf(fx("m_polar"), _wd_w(130.0, 1.0, 0.4, h) * 2.0 * mtn_gate), 0.0, 2.0)
 	_veg_live.set_shader_parameter("mo_k", tree_mo)
 	_veg_live.set_shader_parameter("mo_t", _wd_drift)
 	var on := (mtn_mo + mtn_br + mtn_pol) > 0.02 and _mtn != null and is_instance_valid(_mtn)
@@ -6811,6 +6812,20 @@ func _mflash_tick(delta: float, fxm: ThemeFX) -> void:
 			pm.layer.visible = int(pm.mode) > 0
 
 
+## EACH MOLECULE OWNS A PIECE OF THE WORLD. How far each piece has come is that molecule's own felt level (0..1), not the six together, so taking a molecule makes ITS piece appear
+## (and flash, via _mflash) and a missing one leaves its piece plain:
+##   0 mescaline: the ground (light waves, the shapes in the snow)    1 DOM: the sky (bands, the overhead polar field)    2 2C-B: colour (the moire's colour, colour on the trees)
+##   3 2C-E: the mountains (moire skin, breathing, the portrait)       4 2C-T-2: ripples (flowing grid, bullseye, third grid)  5 2C-T-7: pulse (trees breathe and sway, the sky tunnel)
+var _lv: PackedFloat32Array = PackedFloat32Array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+var _hall: float = 0.0
+
+
+func _pk(i: int) -> float:
+	if fx("x_pieces") < 0.5:
+		return smoothstep(0.03, 0.30, _hall)          # the old way: everything by the overall level
+	return clampf(smoothstep(0.04, 0.45, _lv[i]) + _mflash[i] * 0.7, 0.0, 1.0)
+
+
 ## THE MOIRE KNOBS, played with the game. Cell size, turning speed, how far apart the two grids are, how strongly the shapes show and how much colour: each follows something.
 ##   turning speed: your speed, and a kick on every sharpening      cell size: bigger the higher you are (the ground opens out), tighter inside a tube
 ##   second-grid ratio: breathes with the buzz, wider apart the deeper in you are      depth and colour: the molecules held (the colour only comes with the molecules)
@@ -6836,12 +6851,12 @@ func _moire_tick(delta: float, h: float) -> void:
 	var k := 1.0 - exp(-3.0 * delta)
 	_mo_asp = lerpf(_mo_asp, 0.045 + 0.20 * spd + 0.5 * _sharp + 0.25 * tube, k)
 	_mo_cell = lerpf(_mo_cell, 6.0 * (1.0 + 1.2 * alt) * (1.0 - 0.4 * tube) * (1.0 - 0.3 * _sharp), k)
-	_mo_ratio = lerpf(_mo_ratio, 1.037 + 0.02 * sin(_buzz_t * 0.4) * smoothstep(0.1, 0.5, h) + 0.03 * smoothstep(0.3, 0.9, h), k)
-	_mo_depth = lerpf(_mo_depth, (0.12 + 0.30 * smoothstep(0.1, 0.6, h) + 0.25 * _sharp) * fx("g_shape"), k)
-	_mo_sat = lerpf(_mo_sat, clampf((smoothstep(0.1, 0.55, h) * 0.9 + 0.5 * _sharp + 0.4 * tube) * fx("g_col"), 0.0, 1.0), k)
-	_mo_tri = lerpf(_mo_tri, (smoothstep(0.35, 0.8, h) * 0.9 + 0.5 * _sharp) * fx("g_tri"), k)          # three grids once deep in
+	_mo_ratio = lerpf(_mo_ratio, 1.037 + 0.02 * sin(_buzz_t * 0.4) * _pk(0) + 0.03 * _pk(0), k)
+	_mo_depth = lerpf(_mo_depth, (0.12 + 0.30 * _pk(0) + 0.25 * _sharp) * fx("g_shape"), k)
+	_mo_sat = lerpf(_mo_sat, clampf((_pk(2) * 0.9 + 0.5 * _sharp * _pk(2) + 0.4 * tube * _pk(2)) * fx("g_col"), 0.0, 1.0), k)
+	_mo_tri = lerpf(_mo_tri, (_pk(4) * 0.9 + 0.5 * _sharp * _pk(4)) * fx("g_tri"), k)          # three grids once deep in
 	_mo_rad = lerpf(_mo_rad, clampf((0.9 * _sharp + 0.7 * tube + (0.5 if not _rail.is_empty() else 0.0)) * fx("g_rad"), 0.0, 1.0), k)          # a bullseye on every sharpening, in a tube and on a rail
-	_mo_warp = lerpf(_mo_warp, (0.5 + 0.5 * sin(_buzz_t * 0.55)) * smoothstep(0.1, 0.5, h) * fx("g_warp"), k)          # flowing with the buzz waves
+	_mo_warp = lerpf(_mo_warp, (0.5 + 0.5 * sin(_buzz_t * 0.55)) * _pk(4) * fx("g_warp"), k)          # flowing with the buzz waves
 	_mo_ang += _mo_asp * delta * 0.3          # (the direction the shapes slide in wanders; how fast they slide is the turning speed)
 	_mo_drift += Vector2(cos(_mo_ang), sin(_mo_ang)) * (0.10 + 0.9 * _mo_asp) * delta
 	if _mo_rad > 0.05 and _mo_rad_prev <= 0.05:
@@ -6872,13 +6887,16 @@ func _stage_tick(delta: float) -> void:
 		return
 	_stage_assets()
 	var h := maxf(_mol_avg(), fx_level())          # (the lab can pretend to be that far in)
+	_hall = h
+	for li in 6:
+		_lv[li] = maxf(_mbody[li] / 6.0, fx_level())
 	_sky_flash = maxf(_sky_flash - delta / 1.3, 0.0)
 	var breath := 0.85 + 0.15 * sin(_age * 0.9)
-	var sky_k := clampf(maxf(_sky_flash * _sky_flash * 0.9, (0.3 * smoothstep(0.0, 0.08, h) - 0.12 * smoothstep(0.25, 0.6, h)) * breath), 0.0, 1.0)          # the sky is the first hint: once the rest has come on it steps back, so the picture does not go pale
-	_veg_live.set_shader_parameter("wob", smoothstep(0.03, 0.32, h) * (1.0 + 0.5 * smoothstep(0.5, 0.9, h)) * fx("t_sway"))
-	_veg_live.set_shader_parameter("breathe", smoothstep(0.1, 0.5, h) * fx("t_breathe"))
+	var sky_k := clampf(maxf(_sky_flash * _sky_flash * 0.9, 0.30 * _pk(1) * breath), 0.0, 1.0)          # the sky is the first hint: once the rest has come on it steps back, so the picture does not go pale
+	_veg_live.set_shader_parameter("wob", _pk(5) * (1.0 + 0.5 * _pk(5)) * fx("t_sway"))
+	_veg_live.set_shader_parameter("breathe", _pk(5) * fx("t_breathe"))
 	if _m_ground is ShaderMaterial:
-		(_m_ground as ShaderMaterial).set_shader_parameter("gglow", smoothstep(0.05, 0.25, h) * fx("g_glow"))
+		(_m_ground as ShaderMaterial).set_shader_parameter("gglow", _pk(0) * fx("g_glow"))
 		(_m_ground as ShaderMaterial).set_shader_parameter("grid", smoothstep(0.08, 0.34, h))
 		var wpos := TrailCurve.w(spos)
 		(_m_ground as ShaderMaterial).set_shader_parameter("gcen", Vector2(wpos.x, wpos.z))
