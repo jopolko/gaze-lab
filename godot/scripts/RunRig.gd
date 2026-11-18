@@ -2182,6 +2182,10 @@ func terrain_h(x: float, z: float) -> float:
 	if _zone_by_j.get(int(floor(-z / ROW_GAP)), "") == "melt":
 		var fz := fposmod(-z, ROW_GAP)
 		h += Realms.melt_h(x, z, smoothstep(0.0, 12.0, fz) * smoothstep(0.0, 12.0, ROW_GAP - fz))          # the ground rolls like liquid, easing in and out at the edges of the stretch
+	var mgj: float = _mogul_by_j.get(int(floor(-z / ROW_GAP)), 0.0)
+	if mgj > 0.0:
+		var mfz := fposmod(-z, ROW_GAP)
+		h += mgj * sin(z * 0.55) * (0.65 + 0.35 * cos(x * 0.1)) * smoothstep(0.0, 14.0, mfz) * smoothstep(0.0, 14.0, ROW_GAP - mfz)
 	for k in _kickers:
 		var kz: float = k["z"]
 		if z > kz + 1.0 or z < kz - float(k["len"]) - 1.0:
@@ -2234,6 +2238,7 @@ func _gen_segment(j: int) -> void:
 	var zp: Dictionary = ZONES[zone]
 	_cur_zone = zone
 	_zone_by_j[j] = zone
+	_mogul_by_j[j] = 0.2 * clampf((groove - 1.75) / 1.0, 0.0, 1.0) * fx("w_moguls") if _journey != null else 0.0          # FLOW-STATE MOGULS: a stretch built while you are in flow gets a gentle rhythm of bumps (fixed when the stretch is made, so the picture and the board agree)
 	_gen_z0 = z0
 	_gen_lip = not Realms.has_roof(String(_zone_by_j.get(j - 1, "")))          # a cave has a low mouth, unless the stretch before it was one too
 	_rp.clear()
@@ -2931,6 +2936,7 @@ func _build_corridor(row: Dictionary, zone: String, halfw: float, prev_rz: float
 # Realms (Realms.gd): what is built there and what the rule is. Props go into buckets while a stretch is generated, then one multimesh per kind.
 # --------------------------------------------------------------------------
 var _zone_by_j: Dictionary = {}
+var _mogul_by_j: Dictionary = {}
 var _rp: Dictionary = {}
 var _row_eyes: Array = []
 var _eye_count: int = 0
@@ -6165,8 +6171,10 @@ const FX_KNOBS := [
 	["PICTURE", "p_face_auto", "...appears by itself, rarely", 1.0, 2.0],
 	["SKY", "p_god", "the whole sky is a face looking down (1 = shown now)", 0.0, 1.0],
 	["SKY", "p_god_auto", "...appears by itself, very rarely", 1.0, 2.0],
+	["WORLD", "w_moguls", "flow-state moguls: stretches built while you are in flow get gentle rhythmic bumps (All dressed)", 1.0, 2.0],
 	["WORLD", "w_echo", "astral echoes: faint coloured copies trail behind the board (All dressed)", 1.0, 2.0],
 	["WORLD", "w_carve", "chromatic carve trail: colour dots left where you cut hard (All dressed)", 1.0, 2.0],
+	["PICTURE", "p_rewind", "rewind: a crash tears and splits the picture as the board is put back (All dressed)", 1.0, 2.0],
 	["PICTURE", "p_smear", "boost smear: the picture streaks out from the middle while boosting", 1.0, 2.0],
 	["PICTURE", "p_hueedge", "hue-cycling outlines in All dressed (rainbow ink at every edge)", 1.0, 2.0],
 	["PICTURE", "p_edge", "cel outlines (ink lines at every edge)", 0.0, 1.5],
@@ -9351,6 +9359,7 @@ func _buzz_tick(delta: float, fxm: ThemeFX) -> void:
 	fxm.post.mat.set_shader_parameter("k_chroma", fx("p_chroma"))
 	_smear_k = lerpf(_smear_k, 1.0 if _boost_t > 0.0 else 0.0, 1.0 - exp(-(9.0 if _boost_t > 0.0 else 3.0) * delta))
 	fxm.post.mat.set_shader_parameter("smear", _smear_k * fx("p_smear") * 0.6)
+	fxm.post.mat.set_shader_parameter("rewind", clampf(hurt_t / 1.1, 0.0, 1.0) * fx("p_rewind") if _journey != null else 0.0)
 	var hue_on := _journey != null and fx("p_hueedge") > 0.01          # (only in All dressed: the psychedelic world itself stays exactly as it was)
 	fxm.post.mat.set_shader_parameter("k_edge", maxf(fx("p_edge"), 0.45 * fx("p_hueedge") if hue_on else 0.0))
 	fxm.post.mat.set_shader_parameter("edge_hue", 1.0 if hue_on else 0.0)

@@ -501,6 +501,7 @@ uniform float k_dmtr = 0.0;     // the rings when all six are held: 0 off
 uniform float face = 0.0;       // 0..1 a FACE emerges in the picture (rarely, for a few seconds): not drawn on it, but found in its light and shade
 uniform float k_wash = 0.0;     // a colour wash over the WHOLE picture that turns with the trip (the tie-dye): 0 off. It covered everything in a soft rainbow, so it is off
 uniform float k_edge = 0.0;      // CEL OUTLINES: ink lines where the picture changes (0 off)
+uniform float rewind = 0.0;      // 0..1 a crash: the picture tears sideways and splits its colours while the board is put back, like tape run backwards
 uniform float smear = 0.0;       // 0..1 BOOST SMEAR: the picture streaks outward from the middle while you are boosting (the middle stays clear to steer by)
 uniform float edge_hue = 0.0;    // 0..1 the outline ink cycles through the rainbow instead of staying dark
 uniform float k_cel = 0.0;       // CEL BANDS: light and shade in a few flat steps (0 off)
@@ -629,6 +630,13 @@ void fragment() {
 		float fk = face * (0.6 + 0.4 * smoothstep(0.1, 0.6, lumf)) * (1.0 - smoothstep(0.55, 0.75, uv.y));
 		col *= 1.0 + fs.x * fk * 1.6;
 		col = mix(col, vec3(1.0, 0.35, 0.5) * (0.4 + lumf), fs.y * fk * 0.5);
+	}
+	if (rewind > 0.01) {
+		float rt = sin(uv.y * 70.0 + TIME * 45.0) * 0.012 * rewind;
+		vec2 ru = uv + vec2(rt, 0.0);
+		float rs2 = rewind * 0.03;
+		col = vec3(texture(screen_tex, ru + c * rs2).r, texture(screen_tex, ru).g, texture(screen_tex, ru - c * rs2).b);
+		col = mix(col, vec3(dot(col, vec3(0.333))), rewind * 0.35);
 	}
 	if (smear > 0.002) {
 		vec3 acc = col;
