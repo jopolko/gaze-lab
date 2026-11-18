@@ -123,7 +123,7 @@ func _ready() -> void:
 	_build_tabs()
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO          # the page scrolls if it is taller than the room: START below it must never be pushed off the screen          # no scrolling anywhere: every page is made to fit the screen
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED          # NEVER scroll a menu (the user's hard rule): the page is scaled and trimmed to fit          # no scrolling anywhere: every page is made to fit the screen
 	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_root.add_child(_scroll)
 	_grid = GridContainer.new()
@@ -1177,7 +1177,7 @@ func _process(_delta: float) -> void:
 			_fit_h += 1
 			_fit = maxf(0.4, _fit * (vs.y * 0.55 / fixed))
 			_apply_unit(true)
-	if _fit_n < 9 and _root != null and _margin.visible:
+	if _fit_n < 24 and _root != null and _margin.visible:
 		# everything must be on the page without scrolling: if it is taller than the screen, shrink it all a little and look again
 		var need := _grid.get_combined_minimum_size().y
 		for ch in _root.get_children():
@@ -1192,7 +1192,7 @@ func _process(_delta: float) -> void:
 				_apply_unit(true)
 			elif _fit > 0.45:
 				_fit_n += 1                                   # no scrolling: the whole page, the footer included, is scaled until it fits the height
-				_fit = maxf(0.45, _fit * vs.y / need * 0.97)
+				_fit = maxf(0.28, _fit * vs.y / need * 0.97)
 				_apply_unit(true)
 	if visible and GazeProvider.camera_status != "" and _status != null:
 		_status.text = GazeProvider.camera_status
