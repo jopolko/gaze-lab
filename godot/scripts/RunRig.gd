@@ -10819,7 +10819,7 @@ func _pause_rect() -> Rect2:
 		return Rect2(-9000.0, -9000.0, 1.0, 1.0)          # on a computer there is no button: the screen is the game (Esc or P pauses)
 	var vs := get_viewport().get_visible_rect().size
 	var k := _hud_scale()
-	return Rect2(vs.x - 66.0 * k, 10.0 * k, 54.0 * k, 44.0 * k)          # on a phone a small pause button sits in the top corner (touch only)
+	return Rect2(vs.x - maxf(150.0 * k, vs.x * 0.16), 0.0, maxf(150.0 * k, vs.x * 0.16), maxf(110.0 * k, vs.y * 0.22))          # on a phone a small pause button sits in the top corner (touch only)
 
 
 ## The sandbox looks: a hat, and a tricycle under the rider.
