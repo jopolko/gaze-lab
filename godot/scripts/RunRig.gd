@@ -8109,6 +8109,9 @@ func _fit_fov() -> void:
 
 ## The tip of the board sits low in the picture, at a fixed angle below the middle. On a long thin phone screen the view is fixed across the width, so the picture is much
 ## shorter than it is wide and that angle fell off the bottom of the screen: the board is raised to stay inside whatever the picture shows.
+var _fp_dy: float = 0.0
+
+
 func _fit_tip() -> void:
 	if _tip_pivot == null or cam == null:
 		return
@@ -8147,6 +8150,12 @@ func _place_camera(delta: float, snap: bool = false) -> void:
 	cam.global_position = eye
 	var ahead := spos + Vector3(_cam_look.x, 0.0, _cam_look.y) * 18.0
 	ahead.y = terrain_h(ahead.x, ahead.z) + 1.4 + _hop_cam * 0.5
+	# high in the air the spot on the ground 18 m ahead is almost straight down: the view tipped over until there was only snow (and no board). The look is held between a
+	# little above level and 24 degrees down, eased, so a flight looks out over the slope and down at where you will land.
+	var flat_d := Vector2(ahead.x - eye.x, ahead.z - eye.z).length()
+	var want_dy := clampf(ahead.y - eye.y, -flat_d * 0.45, flat_d * 0.12)
+	_fp_dy = want_dy if snap else lerpf(_fp_dy, want_dy, 1.0 - exp(-6.0 * delta))
+	ahead.y = eye.y + _fp_dy
 	if (ahead - eye).length() > 0.5:
 		cam.look_at(ahead, Vector3.UP)
 		if _back_dbg:
@@ -8781,7 +8790,7 @@ func _face_tick(delta: float, alt: float) -> void:
 func _cine_apply(delta: float) -> void:
 	var rd := delta / maxf(Engine.time_scale, 0.05)
 	var alt := spos.y - terrain_h(spos.x, spos.z)
-	var want := cine_enabled and _in_air and hurt_t <= 0.0 and not _finished and (_air_peak >= 7.0 and alt > 5.0 and (_air_time > 0.5)) and not (vy < 0.0 and alt < 7.0)
+	var want := cine_enabled and not view_fp and _in_air and hurt_t <= 0.0          # (not in the board's-eye view: there is no rider to swing round and look at, only sky) and not _finished and (_air_peak >= 7.0 and alt > 5.0 and (_air_time > 0.5)) and not (vy < 0.0 and alt < 7.0)
 	if want and not _cine_on:
 		cines += 1
 		_cine_side = 1.0 if _fx_rng.randf() < 0.5 else -1.0
