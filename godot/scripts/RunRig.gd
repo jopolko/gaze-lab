@@ -776,7 +776,8 @@ func _seg_box(row: Dictionary, a: Vector3, b: Vector3, thick: Vector2, mat: Mate
 func _build_rail(row: Dictionary, f: Dictionary) -> void:
 	var col := Color(0.35, 0.95, 1.0)
 	var mat := _fx_mat("solid", col, 1.8)
-	var pmat := _fx_mat("solid", Color(0.3, 0.36, 0.5), 0.5)
+	var pmat := _fx_mat("solid", Color(0.86, 0.88, 0.95), 0.5)
+	var ball := _kit_mesh("ball", col)
 	if _rail_post == null:
 		_rail_post = CylinderMesh.new()
 		_rail_post.top_radius = 0.09
@@ -794,6 +795,10 @@ func _build_rail(row: Dictionary, f: Dictionary) -> void:
 			_seg_box(row, prev, pt, Vector2(0.36, 0.2), mat)
 			if i % 2 == 0 or i == n:
 				(row["nodes"] as Array).append(_mi(self, _rail_post, pmat, Vector3(pt.x, pt.y - RAIL_H * 0.5, z)))
+		if i % 2 == 0 or i == n:
+			var jb := _mi(self, ball, _mol_material(), pt)          # the rail reads as a chain of atoms: one at every joint, a bigger one at each end
+			jb.scale = Vector3.ONE * (0.55 if (i == 0 or i == n) else 0.34)
+			(row["nodes"] as Array).append(jb)
 		prev = pt
 	# a spiral of glints round the rail: ride it and you scoop the lot
 	var gpts: Array = []
@@ -956,6 +961,8 @@ func _make_feat(row: Dictionary, feats: Array, kind: String, zi: float, sd: floa
 			var pn := _mi(self, pole, _fx_mat("solid", lc, 1.4), Vector3(px, terrain_h(px, lipz + 1.0) + 1.7, lipz + 1.0))
 			(row["nodes"] as Array).append(pn)
 			_mi(pn, _quad(1.5), _fx_mat("halo", Color(lc.r, lc.g, lc.b, 0.9)), Vector3(0.0, 1.5, 0.0))
+			var pb := _mi(pn, _kit_mesh("ball", lc), _mol_material(), Vector3(0.0, 1.75, 0.0))
+			pb.scale = Vector3.ONE * 0.36
 		var lead: Array = [Vector2(trail_x(kz + 12.0) + sd * FEAT_OFF * 0.8, kz + 12.0), Vector2(kx, kz - 2.0)]
 		_spawn_buff(row, "boost" if mode == "race" else _pick_buff(true), trail_x(lipz - 11.0) + sd * FEAT_OFF, lipz - 11.0, lead, "air", 2.2)
 		var apts: Array = []
@@ -3802,13 +3809,13 @@ func _glint_line(row: Dictionary, pts: Array, rad: float) -> void:
 	_gl_assets()
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = _gl_mesh
+	mm.mesh = _kit_mesh("ball", Color(1.0, 0.85, 0.35))          # glints are tiny gold atoms, lit and glossy: the same kit as everything else
 	mm.instance_count = pts.size()
 	for i in pts.size():
-		mm.set_instance_transform(i, TrailCurve.xf(Transform3D(Basis(), pts[i])))
+		mm.set_instance_transform(i, TrailCurve.xf(Transform3D(Basis.from_scale(Vector3.ONE * 0.24), pts[i])))
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
-	inst.material_override = _gl_mat
+	inst.material_override = _mol_material()
 	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	inst.extra_cull_margin = 30.0
 	add_child(inst)
@@ -3950,7 +3957,8 @@ func _glint_spill() -> void:
 	glints -= n
 	_gl_assets()
 	for i in n:
-		var node := _mi(self, _gl_mesh, _gl_mat, spos)
+		var node := _mi(self, _kit_mesh("ball", Color(1.0, 0.85, 0.35)), _mol_material(), spos)
+		node.scale = Vector3.ONE * 0.26
 		_gl_spill.append({"n": node, "p": spos + Vector3(0.0, 1.0, 0.0), "v": Vector3(_rng.randf_range(-7.0, 7.0), _rng.randf_range(7.0, 14.0), -_rng.randf_range(5.0, 16.0)), "t": 0.0})
 	_toast("-%d glints!" % n, Color(1.0, 0.8, 0.3))
 
@@ -3958,8 +3966,9 @@ func _glint_spill() -> void:
 func _spawn_orb(row: Dictionary, x: float, z: float, t: String) -> Node3D:
 	_buff_assets("orb")
 	var n := MeshInstance3D.new()
-	n.mesh = _buff_mesh["orb"]
-	n.material_override = _buff_mat["orb"]
+	n.mesh = _kit_mesh("ball", Color(1.0, 0.82, 0.3))          # a small gold atom, lit like everything else (it was a flat yellow blob)
+	n.material_override = _mol_material()
+	n.scale = Vector3.ONE * 0.42
 	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(n)
 	_place(n, Vector3(x, terrain_h(x, z) + 1.3, z))
@@ -4608,7 +4617,7 @@ func _take_buff(b: Dictionary) -> void:
 			vel += fwd * (6.0 + 1.5 * float(chain_lvl))
 			if vel.length() > maxf(SPEED_CAP, sp0):
 				vel = vel.normalized() * maxf(SPEED_CAP, sp0)
-			_toast("BURGER BOOST!", BUFF_COL["boost"])
+			_toast("CRYSTAL BOOST!", BUFF_COL["boost"])
 			Game.sfx(&"buff_boost")
 		"shield":
 			shield = 1
@@ -4622,7 +4631,7 @@ func _take_buff(b: Dictionary) -> void:
 		"donut":
 			shown = "+%d" % (220 * (2 if _mult_t > 0.0 else 1))
 			_gain(160)
-			_toast("DONUT!", BUFF_COL["donut"])
+			_toast("CLUSTER!", BUFF_COL["donut"])
 			Game.sfx(&"loot")
 	_chain_hit(t)
 	_buff_pop(b, shown)
@@ -6176,7 +6185,7 @@ func _restart() -> void:
 # A food you drive past without eating it bounces away like rubber, once, and waits for a second try; miss that and it pops.
 # Opening wide a moment early counts (0.5 s), because the tracker is a little late.
 # --------------------------------------------------------------------------
-const FOOD_NAME := {"boost": "BURGER", "shield": "ICE CREAM", "mult": "CANDY", "donut": "DONUT"}
+const FOOD_NAME := {"boost": "CRYSTAL", "shield": "CAGE", "mult": "RINGS", "donut": "CLUSTER"}          # the pickups are kit shapes now, not food
 var wide_override: bool = false
 var squint_override: bool = false
 var eat_enabled: bool = false              # false (the default): every pickup is taken by touching it. true: you must open your eyes wide to eat (experimental, needs a reliable tracker)
@@ -6820,6 +6829,7 @@ func _lane_turn() -> float:
 
 # LIGHT SHAFTS: tall soft beams of sun slanting down between the trees beside the trail, two or three to a stretch. Plain and warm on the plain run; as the molecules come on they
 # take on moving bands of colour and brighten, so the light itself goes strange. One shared material and one draw per stretch; nothing is lit by them.
+var shafts_ok: bool = true          # the quality governor switches them off on the two lowest levels (big see-through sheets are what a slow phone can least afford)
 var _shaft_mat: ShaderMaterial = null
 var _shaft_mesh: QuadMesh = null
 const SHAFT_SHADER := """shader_type spatial;
@@ -6848,7 +6858,7 @@ func _shaft_material() -> ShaderMaterial:
 
 
 func _gen_shafts(row: Dictionary, z0: float) -> void:
-	if not trail or not _cfg_dyn:
+	if not trail or not _cfg_dyn or not shafts_ok:
 		return
 	_shaft_material()
 	var xf: Array[Transform3D] = []
@@ -7168,6 +7178,8 @@ func _kit_mesh(kind: String, col: Color) -> ArrayMesh:
 					pts.append([v2 - Vector3(0.42, 0, 0), 0.19, col if r == 0 else pale])
 				for i in 6:
 					bonds.append([r * 6 + i, r * 6 + (i + 1) % 6])
+		"ball":
+			pts.append([Vector3.ZERO, 1.0, col])
 		"tetra":
 			pts.append([Vector3.ZERO, 0.24, pale])
 			for v3: Vector3 in [Vector3(1, 1, 1), Vector3(1, -1, -1), Vector3(-1, 1, -1), Vector3(-1, -1, 1)]:
@@ -7395,6 +7407,10 @@ func _mol_material() -> StandardMaterial3D:
 		_mol_mat.roughness = 0.45
 		_mol_mat.emission_enabled = true
 		_mol_mat.emission = Color(0.22, 0.22, 0.26)
+		_mol_mat.rim_enabled = true          # a bright edge where the light grazes: the atoms read as round and glossy against the snow, at any size
+		_mol_mat.rim = 0.55
+		_mol_mat.rim_tint = 0.35
+		_mol_mat.metallic_specular = 0.7
 	return _mol_mat
 
 
@@ -7645,7 +7661,9 @@ func _make_spring(row: Dictionary, toys: Array, z: float, side: float) -> void:
 	core.height = 2.0
 	core.radial_segments = 14
 	core.rings = 7
-	_mi(holder, core, _fx_mat("add", Color(0.75, 0.95, 1.0, 0.95)), Vector3(0.0, 3.0, 0.0))
+	_mi(holder, core, _fx_mat("add", Color(0.75, 0.95, 1.0, 0.95)), Vector3(0.0, 3.0, 0.0)).scale = Vector3.ONE * 0.6
+	var cg := _mi(holder, _kit_mesh("cage", Color(0.45, 0.85, 1.0)), _mol_material(), Vector3(0.0, 3.0, 0.0))
+	cg.scale = Vector3.ONE * 1.25
 	_mi(holder, _quad(7.0), _fx_mat("halo", Color(0.45, 0.85, 1.0, 0.5)), Vector3(0.0, 3.0, 0.0))
 	var rings: Array = []
 	var specs := [[2.0, 2.3, Color(0.55, 0.9, 1.0, 0.8), 0.5, 0.9], [3.1, 3.35, Color(1.0, 0.85, 0.45, 0.75), 1.2, -0.7], [4.3, 4.5, Color(0.6, 0.8, 1.0, 0.6), 2.1, 0.5]]

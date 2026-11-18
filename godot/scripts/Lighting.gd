@@ -209,6 +209,8 @@ func _apply_tier() -> void:
 		fx.post.set_look(want if tier < 3 else 0, fx.post.amount)
 		if fx.post.mat != null and rig._journey != null and want == 1:
 			fx.post.mat.set_shader_parameter("onset", maxf(rig._pill_k, 0.0 if rig._journey.phase == DhJourney.Phase.CALM and rig._journey.hint() < 0.001 else rig._journey.onset_k()))
+	if "shafts_ok" in rig:
+		rig.shafts_ok = tier < 2
 	var env: Environment = level.world_env.environment
 	if tier >= 2:
 		env.glow_enabled = false

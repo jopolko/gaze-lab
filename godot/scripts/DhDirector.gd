@@ -211,9 +211,9 @@ func _wind_make() -> void:
 	var hp := 0.0
 	for i in n:
 		var w := rng.randf_range(-1.0, 1.0)
-		lp1 += (w - lp1) * 0.09          # two gentle low-passes: a soft rush with no hiss
-		lp2 += (lp1 - lp2) * 0.09
-		hp += (lp2 - hp) * 0.004          # and the rumble taken out from underneath
+		lp1 += (w - lp1) * 0.2          # two gentle low-passes: a soft rush with no hiss
+		lp2 += (lp1 - lp2) * 0.2
+		hp += (lp2 - hp) * 0.03          # and the rumble taken out from underneath
 		var slow := 0.75 + 0.25 * sin(TAU * float(i) / float(n) * 3.0)          # it breathes, three times a loop (whole cycles, so the loop joins)
 		a[i] = (lp2 - hp) * slow
 	var c := sr / 2          # half a second of the end blended into the start
