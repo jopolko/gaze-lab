@@ -32,6 +32,7 @@ var _gates: int = 0
 var _hits: int = 0
 var _live: bool = false
 var _tel_ms: float = 0.0
+var _tick_mul: float = 1.0
 var _tr: Array = []
 var _tr_acc: float = 0.0
 
@@ -87,10 +88,11 @@ func _process(delta: float) -> void:
 		if P.backend == P.Backend.CAMERA and _tr.size() < 8:
 			# iris inside the eye (x, y), geometry gaze before offsets (x, y), after the median (x, y), final cursor (x, y), head yaw, head pitch, learned offset (x, y), iris radius px, eyes-only ok
 			_tr.append([snappedf(P.eih.x, 0.01), snappedf(P.eih.y, 0.01), snappedf(P._geo_raw.x, 0.01), snappedf(P._geo_raw.y, 0.01), snappedf(P._last_g.x, 0.01), snappedf(P._last_g.y, 0.01), snappedf(P.gaze.x, 0.01), snappedf(P.gaze.y, 0.01), snappedf(P.head_rpy.x, 0.01), snappedf(P.head_rpy.y, 0.01), snappedf(P.bias.bias.x, 0.01), snappedf(P.bias.bias.y, 0.01), snappedf(P.limb_rad, 0.1), 1 if P.eih_ok else 0, 1 if P.bias.saturated else 0])
-	if _acc >= TICK:
+	if _acc >= TICK * _tick_mul:
 		var t0 := Time.get_ticks_usec()
 		_tick(_acc)
 		_tel_ms = float(Time.get_ticks_usec() - t0) / 1000.0          # what the diagnostics themselves cost, so it can be checked in the data
+		_tick_mul = 4.0 if _tel_ms > 15.0 else 1.0          # on a slow phone one tick cost about 30 ms, a hitch every second: report a quarter as often (the data inside is the same, just summed over longer)
 		_acc = 0.0
 		_ft = PackedFloat32Array()
 
