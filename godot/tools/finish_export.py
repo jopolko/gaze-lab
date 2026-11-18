@@ -113,6 +113,11 @@ open(p("index.service.worker.js"), "w", encoding="utf-8").write(sw)
 hp = p("index.html")
 ht = open(hp, encoding="utf-8").read()
 ht2 = ht.replace("Gaze Lab: Downhill", "Downhill")
+# the page is sized to what can actually be seen: in an in-app browser tab (a link opened from a chat or mail app) the tab's own bar stays on the screen, the window's stated
+# height did not allow for it, and the bottom of the menu (START) was off the screen
+VV = "<script>(function(){if(!window.visualViewport)return;try{Object.defineProperty(window,'innerHeight',{get:function(){return Math.round(window.visualViewport.height)},configurable:true});Object.defineProperty(window,'innerWidth',{get:function(){return Math.round(window.visualViewport.width)},configurable:true});}catch(e){}})();</script>"
+if "visualViewport.height)}" not in ht2:
+    ht2 = ht2.replace("<head>", "<head>" + VV, 1)
 if ht2 != ht:
     open(hp, "w", encoding="utf-8").write(ht2)
 # the music files are not in the game's download: they sit beside it and are fetched when wanted (see DhDirector)

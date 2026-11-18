@@ -1503,7 +1503,7 @@ func _trip_tick(delta: float) -> void:
 		trip = maxf(trip - (0.018 + 0.02 * trip) * delta, 0.0)          # it fades slowly, a little faster the further gone you are
 		if _journey != null:
 			trip = maxf(trip, _journey.trip_floor())          # a wave holds the picture at least this far gone
-		trip = maxf(trip, pow(_mol_avg(), 1.8) * 0.9)          # and so do the molecules: slowly at first, hard only near the top
+		trip = maxf(trip, pow(_mol_avg(), 1.8) * 0.8 * stage_post)          # and so do the molecules: slowly at first, hard only near the top
 	var tier := 0 if trip < 0.25 else (1 if trip < 0.55 else (2 if trip < 0.85 else 3))
 	if tier > _trip_tier and _trip_force < 0.0:
 		_cheer(["", "things get colourful...", "WHOA", "FULL TRIP!!"][tier], Color.from_hsv(0.8 - 0.2 * float(tier), 0.8, 1.0), 0.8 + 0.4 * float(tier))
@@ -5918,7 +5918,103 @@ func _hold_mat(m: Material) -> void:
 
 ## Every molecule and every kit shape is built here, behind GET READY: each one is a few thousand vertices put together in script, and the first of each kind used to be built
 ## the moment it came into the course (a stopped frame each, all through the first minute).
+# --------------------------------------------------------------------------
+# ONE THING AT A TIME. Coming up is not everything at once: each part of the world goes strange by itself, in this order, as more is held (h = the six together, 0..1):
+#   the sky        from the first molecule: bands and rings of colour far up, a flash of them with every pickup. Nothing else changes yet.
+#   the trees      from h 0.03: they begin to sway, a little at first
+#   the light      from h 0.05: slow waves of light run out along the snow from the board
+#   the ground     from h 0.08: squares in the snow, rushing by underfoot, pulsing in bands
+#   the picture    from h 0.22: only now does the full-screen look begin (each molecule's own), and the waves of other worlds come after that
+# Each is its own small piece (a sheet in the sky, the trees' own material, the ground's own shader), so each can be turned by itself.
+# --------------------------------------------------------------------------
+const SKY_SHADER := """shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
+uniform float k = 0.0;
+void fragment() {
+	vec2 u = UV;
+	float edge = smoothstep(0.0, 0.18, u.x) * smoothstep(1.0, 0.82, u.x) * smoothstep(0.0, 0.25, u.y) * smoothstep(1.0, 0.45, u.y);
+	float band = sin(u.x * 9.0 + sin(u.y * 5.0 + TIME * 0.6) * 1.5 + TIME * 0.4);
+	float cur = smoothstep(0.15, 1.0, band);
+	float rr = length((u - vec2(0.5, 0.42)) * vec2(2.4, 1.0));
+	float ring = (1.0 - smoothstep(0.0, 0.05, abs(fract(rr * 3.0 - TIME * 0.22) - 0.5))) * smoothstep(0.85, 0.15, rr);
+	vec3 c = 0.5 + 0.5 * cos(6.2831 * (u.x * 0.8 + u.y * 0.4 + TIME * 0.07 + vec3(0.0, 0.33, 0.67)));
+	ALBEDO = c;
+	ALPHA = (cur * 0.55 + ring * 0.6) * edge * k;
+}
+"""
+const VEG_LIVE_SHADER := """shader_type spatial;
+render_mode cull_disabled;
+uniform float wob = 0.0;
+void vertex() {
+	if (wob > 0.001) {
+		vec3 o = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+		float ph = o.x * 0.21 + o.z * 0.17;
+		float hgt = max(VERTEX.y, 0.0);
+		VERTEX.x += sin(TIME * 1.7 + ph) * wob * 0.2 * hgt;
+		VERTEX.z += cos(TIME * 1.3 + ph * 1.3) * wob * 0.14 * hgt;
+		VERTEX.y *= 1.0 + sin(TIME * 2.1 + ph) * wob * 0.07;
+	}
+}
+void fragment() {
+	ALBEDO = COLOR.rgb;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+"""
+var _sky_fx: MeshInstance3D = null
+var _sky_mat: ShaderMaterial = null
+var _sky_flash: float = 0.0
+var stage_post: float = 0.0          # 0..1: how far the full-screen look is let in (the last thing to arrive)
+
+
+func _stage_assets() -> void:
+	if _veg_live == null:
+		var vs := Shader.new()
+		vs.code = VEG_LIVE_SHADER
+		_veg_live = ShaderMaterial.new()
+		_veg_live.shader = vs
+	if _sky_mat == null:
+		var ss := Shader.new()
+		ss.code = SKY_SHADER
+		_sky_mat = ShaderMaterial.new()
+		_sky_mat.shader = ss
+
+
+## Every frame: how far each piece has come, from what is held.
+func _stage_tick(delta: float) -> void:
+	if _journey == null:
+		return
+	_stage_assets()
+	var h := _mol_avg()
+	_sky_flash = maxf(_sky_flash - delta / 1.3, 0.0)
+	var breath := 0.85 + 0.15 * sin(_age * 0.9)
+	var sky_k := clampf(maxf(_sky_flash * _sky_flash * 0.9, (0.3 * smoothstep(0.0, 0.08, h) + 0.5 * smoothstep(0.08, 0.5, h)) * breath), 0.0, 1.0)
+	_veg_live.set_shader_parameter("wob", smoothstep(0.03, 0.32, h) * (1.0 + 0.5 * smoothstep(0.5, 0.9, h)))
+	if _m_ground is ShaderMaterial:
+		(_m_ground as ShaderMaterial).set_shader_parameter("gglow", smoothstep(0.05, 0.25, h))
+		(_m_ground as ShaderMaterial).set_shader_parameter("grid", smoothstep(0.08, 0.34, h))
+	stage_post = smoothstep(0.22, 0.5, h)
+	if cam == null:
+		return
+	if sky_k > 0.004 and (_sky_fx == null or not is_instance_valid(_sky_fx)):
+		var q := QuadMesh.new()
+		q.size = Vector2(1500.0, 520.0)
+		_sky_fx = _mi(self, q, _sky_mat, Vector3.ZERO)
+		_sky_fx.extra_cull_margin = 2000.0
+	if _sky_fx != null and is_instance_valid(_sky_fx):
+		_sky_fx.visible = sky_k > 0.004
+		if _sky_fx.visible:
+			_sky_mat.set_shader_parameter("k", sky_k)
+			# a sheet far out in front of the view and well up: behind the mountains and the trees, so it is only ever in the sky
+			var f := -cam.global_transform.basis.z
+			f.y = 0.0
+			f = f.normalized() if f.length() > 0.01 else Vector3(0, 0, -1)
+			var pos := cam.global_position + f * 620.0 + Vector3(0.0, 250.0, 0.0)
+			_sky_fx.global_transform = Transform3D(Basis.looking_at(-f, Vector3.UP), pos)
+
+
 func _kit_prebuild() -> void:
+	_stage_assets()
 	for id: String in MolData.ORDER:
 		_mol_mesh(id)
 	for c: Color in [Color(1.0, 0.62, 0.15), Color(1.0, 0.3, 0.6), BUFF_COL["boost"]]:
@@ -5969,6 +6065,9 @@ func _warm_shaders() -> void:
 	mats.append(_food_mat(Color(1.0, 0.5, 0.2), 1.2))
 	mats.append(_mol_material())                             # the molecules and everything built like them (pads, pickups, bumpers, gates)
 	mats.append(_shaft_material())                           # the light shafts
+	_stage_assets()
+	mats.append(_veg_live)
+	mats.append(_sky_mat)
 	if _veg_theme != null:
 		mats.append(_veg_theme)                           # the theme's trees and rocks: built here, not the first time one comes into a lamp's reach
 	var box := BoxMesh.new()
@@ -7181,7 +7280,7 @@ func journey_post(world: String, onset: float, want_trip: bool, strength: float)
 		return
 	var mav := _mol_avg()
 	if mav > 0.01:          # what is felt of the six holds the pass on, deeper the more of them and the higher
-		onset = maxf(onset, clampf(mav * 1.3, 0.0, 1.0))
+		onset = maxf(onset, clampf(mav * 1.3, 0.0, 1.0) * stage_post)
 		want_trip = true
 		strength = maxf(strength, 0.5 + 0.7 * mav)
 	var light := onset < 0.3          # a hint or a flicker needs no tracers: no second render of the world, nothing to build, so it can come and go instantly
@@ -7705,6 +7804,7 @@ func _pill_tick(delta: float) -> void:
 			wk = 0.7 + 0.6 * _dir.wave_at(0.0)          # the effects breathe with the music's wave
 		var ma := Vector3(_mbody[0], _mbody[1], _mbody[2]) / 6.0
 		var mb := Vector3(_mbody[3], _mbody[4], _mbody[5]) / 6.0
+		wk *= stage_post          # the full-screen look is the last piece to arrive (see ONE THING AT A TIME)
 		ma = Vector3(pow(ma.x, 1.15), pow(ma.y, 1.15), pow(ma.z, 1.15)) * wk          # each look grows steadily with its level: something to see from the first one, no sudden jump near the top
 		mb = Vector3(pow(mb.x, 1.15), pow(mb.y, 1.15), pow(mb.z, 1.15)) * wk
 		fxm.post.mat.set_shader_parameter("mA", ma)
@@ -7712,6 +7812,7 @@ func _pill_tick(delta: float) -> void:
 		fxm.post.mat.set_shader_parameter("dmt", dm)
 	if _shaft_mat != null:
 		_shaft_mat.set_shader_parameter("dose", _mol_avg())
+	_stage_tick(delta)
 	_pill_gap = maxf(_pill_gap - delta, 0.0)
 	_flick = maxf(_flick - delta * 2.0, 0.0)          # half a second
 	_dose = maxf(_dose - 0.006 * wear * delta, 0.0)
@@ -7725,6 +7826,9 @@ func _pill_tick(delta: float) -> void:
 			_dose += 0.7
 	# the glimmer: two sharp pulses in half a second. Subtle in size, strong in colour: a hint of what is coming
 	_pill_k = 0.5 * pow(maxf(sin((1.0 - _flick) * TAU * 1.5), 0.0), 1.4) if _flick > 0.0 else 0.0
+	if _flick > 0.9:
+		_sky_flash = 1.0          # every pickup lights the sky
+	_pill_k *= 0.12 + 0.88 * stage_post          # early on the pickup's flash is in the sky, hardly on the whole picture
 	# THE TOP OF A JUMP: on a flight with no face to pull, the world opens up for a moment at the highest point: one slow swell of the full look (no flashing), rings and
 	# sparks in the sky ahead. Nothing to do but watch and choose where to come down. Deeper the more is held.
 	var alt_now := spos.y - terrain_h(spos.x, spos.z)
@@ -7739,7 +7843,8 @@ func _pill_tick(delta: float) -> void:
 	_apex_vy = vy
 	if _apex_t > 0.0:
 		_apex_t = maxf(_apex_t - delta, 0.0)
-		_pill_k = maxf(_pill_k, _apex_amp * sin(PI * (1.0 - _apex_t / 1.9)))
+		_pill_k = maxf(_pill_k, _apex_amp * (0.3 + 0.7 * stage_post) * sin(PI * (1.0 - _apex_t / 1.9)))
+		_sky_flash = maxf(_sky_flash, sin(PI * (1.0 - _apex_t / 1.9)))
 	if _journey == null:
 		return
 	if _pill_k > 0.001 or _mol_avg() > 0.01:

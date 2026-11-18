@@ -246,6 +246,7 @@ var _m_bar: BoxMesh
 var veg_range: float = 0.0               # 0 = trees and rocks are drawn as far as you can see; the speed governor shortens it
 var _veg_theme: Material                  # a theme's finish for trees and rocks (null = the plain vertex-colour one)
 var _m_veg: StandardMaterial3D
+var _veg_live: ShaderMaterial = null          # the plain trees and rocks, able to sway (RunRig sets it for All dressed)
 var _m_ground: Material
 var _kind_mat: Dictionary = {}
 
@@ -602,7 +603,7 @@ func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedCo
 		mm.set_instance_color(i, cols[i])
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
-	inst.material_override = mat if mat != null else (_veg_theme if _veg_theme != null else _m_veg)
+	inst.material_override = mat if mat != null else (_veg_theme if _veg_theme != null else (_veg_live if _veg_live != null else _m_veg))
 	inst.extra_cull_margin = 40.0
 	if veg_range > 0.0:
 		inst.visibility_range_end = veg_range
@@ -1826,6 +1827,8 @@ func _animate_doors(delta: float) -> void:
 const GROUND_SHADER := """
 shader_type spatial;
 render_mode cull_disabled;
+uniform float grid = 0.0;        // 0..1: squares in the snow, fixed to the ground, so they rush by underfoot (the best measure of speed there is) and pulse in travelling bands
+uniform float gglow = 0.0;       // 0..1: slow waves of light running out along the ground from the board
 varying vec3 wp;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p) {
@@ -1851,6 +1854,25 @@ void fragment() {
 	float tw = h21(floor(wp.xz * 26.0));
 	float sp = step(0.9985, tw) * near * (0.55 + 0.45 * sin(TIME * 3.0 + tw * 60.0));
 	EMISSION = vec3(sp) * 0.8;
+	float dist = length(VERTEX);
+	if (gglow > 0.001) {
+		float run = 0.5 + 0.5 * sin(TIME * 1.6 - dist * 0.09);
+		EMISSION += vec3(0.35, 0.75, 1.0) * gglow * run * run * 0.16 * (1.0 - smoothstep(40.0, 150.0, dist));
+	}
+	if (grid > 0.001) {
+		vec2 q = wp.xz / 4.0;          // four-metre squares
+		vec2 id = floor(q);
+		vec2 f = fract(q);
+		float lw = 0.035 + dist * 0.0016;          // the lines thicken with distance so they do not shimmer
+		float line = 1.0 - smoothstep(0.0, lw, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+		float chk = mod(id.x + id.y, 2.0);
+		float band = 0.5 + 0.5 * sin(id.y * 0.55 + id.x * 0.3 + TIME * 2.2);          // bands of light travelling over the squares (a third of a cycle a second: slow)
+		vec3 hue = 0.5 + 0.5 * cos(6.2831 * (h21(id) * 0.3 + id.y * 0.02 + TIME * 0.05 + vec3(0.0, 0.33, 0.67)));
+		float a = grid * (1.0 - smoothstep(70.0, 200.0, dist));
+		ALBEDO = mix(ALBEDO, ALBEDO * mix(vec3(0.74), vec3(1.0), chk * 0.55 + 0.45 * band), a * 0.85);
+		EMISSION += hue * line * a * 0.8;
+		EMISSION += hue * chk * band * band * a * grid * 0.2;
+	}
 }
 """
 

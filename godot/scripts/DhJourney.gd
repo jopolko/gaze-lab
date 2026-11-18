@@ -26,7 +26,7 @@ const LV_LEN := [0.7, 1.0, 1.3]
 const LV_CALM := [1.3, 1.0, 0.75]
 
 ## How much has to be felt (RunRig._body: pills taken, slowly taking effect, plus a little from the passing of time) for each wave to start, and how it scales with the trip level.
-const THR := [0.9, 2.0, 3.6, 5.4, 7.4, 9.6, 4.5, 1.5]          # (0.42 a level: the peak wave wants about 23 of the 36 levels held)
+const THR := [2.6, 3.8, 5.0, 6.2, 7.6, 9.6, 4.5, 1.5]          # the first wave of another world waits until the pieces (sky, trees, ground) have had their turn          # (0.42 a level: the peak wave wants about 23 of the 36 levels held)
 const LV_THR := [1.3, 1.0, 0.75]
 
 ## How each world changes the ride. spd top speed, haz rocks, pads boost pads, jumps ramps, glint glint rain, bump how hard the cupcakes bounce you, spring how high a spring
