@@ -47,6 +47,7 @@ var _int_row: Control
 var _status: Label
 var _reports_l: Label
 var _cam_btn: Button
+var _helps: Array = []          # the long explanations: shown where there is room (a computer), left out on a short phone screen
 var _mode_btns: Dictionary = {}
 var _u: float = 1.0
 var _cols: int = -1
@@ -124,8 +125,15 @@ func _ready() -> void:
 	_scroll = ScrollContainer.new()
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED          # NEVER scroll a menu (the user's hard rule): the page is scaled and trimmed to fit          # no scrolling anywhere: every page is made to fit the screen
-	_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_root.add_child(_scroll)
+	# The page sits in a plain frame whose own size is whatever is left over: however tall the page is, it can never push the buttons below it off the screen (no scrolling: the
+	# page is scaled and trimmed to fit instead)
+	var frame := Control.new()
+	frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	frame.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	frame.clip_contents = true
+	_root.add_child(frame)
+	frame.add_child(_scroll)
+	_scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_grid = GridContainer.new()
 	_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(_grid)
@@ -551,8 +559,8 @@ func _build_theme_card() -> void:
 			_bg.choose_theme("alpine")
 		_sync_widgets())
 	_toggles["journey"] = jb
-	_label("A night out in waves: a first taste, warmth, the rush, the peak, the comedown. Glowing molecules bring it on early. Picking a world yourself gives that world in full.", 15, Color(1, 1, 1, 0.55), c)
-	_label("DOSE, in game units (ug is a joke, not a real amount): how strong the waves go and how long the night is, set together. Fine-tune below if you want.", 15, Color(1, 1, 1, 0.55), c)
+	_helps.append(_label("A night out in waves: a first taste, warmth, the rush, the peak, the comedown. Glowing molecules bring it on early. Picking a world yourself gives that world in full.", 15, Color(1, 1, 1, 0.55), c))
+	_helps.append(_label("DOSE, in game units (ug is a joke, not a real amount): how strong the waves go and how long the night is, set together. Fine-tune below if you want.", 15, Color(1, 1, 1, 0.55), c))
 	var uf := _flow(c)
 	var ug_g := ButtonGroup.new()
 	for uv in [[25, 15, 0, "25 ug  15 min"], [50, 30, 1, "50 ug  30 min"], [75, 60, 2, "75 ug  1 h"], [1000, 480, 2, "1000 ug  endless"]]:
@@ -576,7 +584,7 @@ func _build_theme_card() -> void:
 			_save())
 		_trip_btns[tv[0]] = tb
 		_boxes.append([tb, 120.0, 44.0])
-	_label("HOW LONG A SESSION: the climb, the peak and the way down are stretched to fit. It goes round again, a little higher, if you play on.", 15, Color(1, 1, 1, 0.55), c)
+	_helps.append(_label("HOW LONG A SESSION: the climb, the peak and the way down are stretched to fit. It goes round again, a little higher, if you play on.", 15, Color(1, 1, 1, 0.55), c))
 	var sf := _flow(c)
 	var sg := ButtonGroup.new()
 	for sv in [[15, "15 MIN"], [30, "30 MIN"], [60, "1 H"], [120, "2 H"], [240, "4 H"], [480, "8 H"]]:
@@ -1227,6 +1235,8 @@ func _apply_unit(force: bool) -> void:
 	var hk := 0.58 if compact else 1.0
 	_sub.visible = not compact
 	_note.visible = not compact
+	for hl in _helps:
+		(hl as Control).visible = not compact
 	_lvl_l.visible = not compact
 	_lvl_bar.visible = not compact
 	var cols := 1 if tabs else 4
