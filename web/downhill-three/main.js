@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795100776';
+import { EyeModel } from './eyemodel.js?v=1795100922';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -295,6 +295,9 @@ function molGeo(id) {
 const molMeshes = DR ? MOL_ORDER.map((id) => new THREE.InstancedMesh(molGeo(id), new THREE.MeshBasicMaterial({ vertexColors: true }), N_RING * 3)) : [];
 const MOLC = MOL_ORDER.map((id) => MOLS[id].c);
 const MOL = { got: [false, false, false, false, false, false], dose: new Float32Array(6), body: new Float32Array(6), flash: new Float32Array(6), n: 0, since: 3, nextGap: 0, hurtT: 0 };
+// THE PERKS: how much of each molecule is FELT (0 to 1) is how strong its perk is. mescaline GLINTS (more orbs), DOM POINTS (every score is worth more), 2C-B BOOST (stronger, longer boosts), 2C-E RAMPS (more of them, and higher),
+// 2C-T-2 SLING (a ring throws you forward), 2C-T-7 SPEED (a faster pace all round).
+const perk = (i) => (DR ? Math.min(1, MOL.body[i] / 6) : 0);
 const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh, ...molMeshes];
 wallMesh.count = Q.has('head') ? N_RING * 2 : 0;          // (eye mode: no walls, the middle is open. Head mode uses two wall pieces per row for CARVE GATES)
 for (const mm of allMeshes) { mm.frustumCulled = false; scene.add(mm); }
@@ -308,7 +311,7 @@ const rows = [];
 function mkThing(avoid, noRamp) {
   for (let tries = 0; tries < 30; tries++) {
     const k = Math.random();
-    const type = k < 0.26 ? 0 : k < 0.46 ? 1 : k < 0.90 || noRamp ? 2 : 3;          // (more pickups and rings, fewer ramps)
+    const t0 = 0.26 + 0.10 * perk(0), t1 = t0 + 0.20, t2 = 0.90 - 0.10 * perk(3), type = k < t0 ? 0 : k < t1 ? 1 : k < t2 || noRamp ? 2 : 3;          // (more pickups and rings, fewer ramps)
     const pick = Math.floor(Math.random() * 4);
     if (avoid.some((a) => a && a.type === type && (type !== 2 || a.pick === pick))) continue;
     const q = Math.random(); return { type, pick, orbs: [0, 1, 2, 3, 4, 5].map(() => true), done: false, hy: Q.has('head') && type <= 2 ? (q < 0.22 ? 9.5 : q < 0.36 ? 0.9 : 2.6) : 0 };          // (head mode: some are high, some low, the rest at board height)
@@ -384,7 +387,7 @@ function molRow(r) {
 function molEat(mi) {
   const first = !MOL.got[mi], old = MOL.dose[mi];
   if (first) { MOL.got[mi] = true; MOL.dose[mi] = 6; MOL.n++; } else MOL.dose[mi] = Math.min(6, MOL.dose[mi] + 2);
-  MOL.flash[mi] = 1; G.got++; G.combo += 2; G.best = Math.max(G.best, G.combo); award(Math.round(120 * (first ? 3 : 1) * (1 + 0.25 * MOL.body[1] / 6)));
+  MOL.flash[mi] = 1; G.got++; G.combo += 2; G.best = Math.max(G.best, G.combo); award(Math.round(120 * (first ? 3 : 1)));
   const hex = '#' + MOLC[mi].map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
   bannerEl.style.color = hex; setTimeout(() => { bannerEl.style.color = '#fff'; }, 1700);
   bannerShow(first ? MOLS[MOL_ORDER[mi]].name.toUpperCase() + ' FOUND ' + MOL.n + ' OF 6   +' + MOL_PERK[mi] : MOLS[MOL_ORDER[mi]].name + ' topped up', true);
@@ -978,7 +981,7 @@ function bannerShow(txt, small) {
   bannerEl.textContent = txt; bannerEl.style.fontSize = small ? 'clamp(18px,5vw,44px)' : ''; bannerEl.style.opacity = '1';
   clearTimeout(bannerTimer); bannerTimer = setTimeout(() => { bannerEl.style.opacity = '0'; }, 1800);
 }
-const award = (n) => { G.score += Math.round(n * (ST.mult > 0 ? 2 : 1)); };
+const award = (n) => { G.score += Math.round(n * (ST.mult > 0 ? 2 : 1) * (1 + 0.5 * perk(1))); };
 function link(kind) {          // Godot: every DIFFERENT thing inside 7 s links a chain
   if (ST.chainT > 0 && kind !== ST.lastKind) { ST.chain++; if (ST.chain >= 2) { award(40 * ST.chain); bannerShow('CHAIN x' + ST.chain, true); beep(520 + ST.chain * 90, 0.2, 0.08); } } else if (ST.chainT <= 0) ST.chain = 1;
   ST.lastKind = kind; ST.chainT = 7;
@@ -1033,7 +1036,7 @@ function stepRows(dt) {
         m4.compose(v3.set(lx, ((o.hy || 2.6) + 1.9) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(si, m4); ringMesh.setColorAt(si, themeCol(t * 0.1 + i * 0.13, colr));
         m4.compose(v3.set(lx, (0.25) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(1, 0.9 * (0.6 + 0.4 * Math.sin(t * 6)), 0.1));
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.9, 0.2));
-        if (crossing(r.z)) { o.done = true; if (mine) { G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); } }
+        if (crossing(r.z)) { o.done = true; if (mine) { speed += 6 + 16 * perk(4); G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); } }
       } else if (o.type === 2) {
         const pk = PICKS[o.pick], c = pk.col, a = t * 1.7 + i;
         q4.setFromEuler(eul.set(a * 0.6, a, 0));
@@ -1045,7 +1048,7 @@ function stepRows(dt) {
           o.done = true;
           if (mine) {
             G.got++; link(2 + o.pick); G.combo += 2; G.best = Math.max(G.best, G.combo);
-            if (o.pick === 0) { ST.boost = 3; speed += 12; flash(1, 0.55, 0.1, 0.5); beep(520, 0.3, 0.1); bannerShow('BOOST', true); }
+            if (o.pick === 0) { ST.boost = 3 + 2.5 * perk(2); speed += 12 + 12 * perk(2); flash(1, 0.55, 0.1, 0.5); beep(520, 0.3, 0.1); bannerShow('BOOST', true); }
             else if (o.pick === 1) { ST.shield = 1; flash(0.3, 0.85, 1, 0.5); beep(700, 0.3, 0.1); bannerShow('SHIELD', true); }
             else if (o.pick === 2) { ST.mult = 12; flash(0.95, 0.4, 1, 0.5); beep(880, 0.3, 0.1); bannerShow('DOUBLE POINTS', true); }
             else { award(150); flash(1, 0.85, 0.35, 0.5); beep(990, 0.3, 0.1); }
@@ -1054,7 +1057,7 @@ function stepRows(dt) {
       } else if (o.type === 3) {
         m4.compose(v3.set(lx, (1.7) + TY(r.z, lx), r.z), qRamp, s3.setScalar(1)); rampMesh.setMatrixAt(si, m4); rampMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
-        if (crossing(r.z - 8)) { o.done = true; if (mine) { ST.vy = 10 + speed * 0.18; ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); } }
+        if (crossing(r.z - 8)) { o.done = true; if (mine) { ST.vy = 10 + speed * 0.18 + 7 * perk(3); ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); } }
       } else if (o.type === 5) {          // a MOLECULE: turning, bobbing, in its own colour under a tall beam of the same colour
         const c = MOLC[o.mol], sp = t * 0.9 + i + sd * 2;
         q4.setFromEuler(eul.set(0.35 * Math.sin(sp * 0.7), sp, 0.25 * Math.sin(sp * 0.5)));
@@ -1190,7 +1193,7 @@ function molHudDraw(tm) {
     g.lineWidth = 1.6; g.strokeStyle = got ? 'rgba(220,225,240,.9)' : rgb(1, 0.3);
     for (const b of m.bonds) { if (H.map[b[0]] === undefined || H.map[b[1]] === undefined) continue; const p0 = P(b[0]), p1 = P(b[1]); g.beginPath(); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.stroke(); }
     for (const k of H.idx) { const p = P(k), el = m.atoms[k][0], ec = el === 'C' ? c : MOL_EL_COL[el]; g.fillStyle = got ? 'rgb(' + Math.round(ec[0] * 255) + ',' + Math.round(ec[1] * 255) + ',' + Math.round(ec[2] * 255) + ')' : rgb(1, 0.3); g.beginPath(); g.arc(p[0], p[1], 2.6 + p[2] * 0.0, 0, 6.2832); g.fill(); }
-    g.font = '11px ui-monospace,Consolas,monospace'; g.fillStyle = got ? '#fff' : 'rgba(255,255,255,.4)'; g.fillText(m.name, cx, 78); g.font = '9px ui-monospace,Consolas,monospace'; g.fillStyle = got ? rgb(1, 1) : 'rgba(255,255,255,.3)'; g.fillText(got ? MOL_PERK[i] : '?', cx, 90);
+    g.font = '11px ui-monospace,Consolas,monospace'; g.fillStyle = got ? '#fff' : 'rgba(255,255,255,.4)'; g.fillText(m.name, cx, 78); g.font = '9px ui-monospace,Consolas,monospace'; g.fillStyle = got ? rgb(1, 1) : 'rgba(255,255,255,.3)'; g.fillText(got ? MOL_PERK[i] + ' ' + Math.round(100 * Math.min(1, MOL.body[i] / 6)) + '%' : '?', cx, 90);
   }
 }
 // THE LOOP
@@ -1224,9 +1227,9 @@ function frame(now) {
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt); if (DR) molTick(dt);
   if (HEAD.on) {          // HEAD mode: the speed is the PLAYER'S. The base pace still climbs with progress (28 up to 80), a lean forward adds up to half as much again, pulling back takes off up to half, boost and the slope still count
-    const base = Math.min(80, 28 + tPlay * 0.45), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0);
+    const base = Math.min(80, 28 + tPlay * 0.45) * (1 + 0.15 * perk(5)), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0);
     speed += Math.max(-38 * dt, Math.min((tgt > speed ? (ST.boost > 0 ? 40 : 24) : 38) * dt, tgt - speed));
-  } else speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
+  } else speed = Math.min(Math.min(64, 28 + tPlay * 0.4) * (1 + 0.15 * perk(5)) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
   if (playing && ctrlReady()) chaseUpdate(dt);
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
