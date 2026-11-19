@@ -491,8 +491,40 @@ function calUpdate(dt) {
     calT += dt; if (calT > 1.6) { calState = 3; calEl.style.display = 'none'; }
   }
 }
+// THE GAUGE (G toggles it): a strip chart of the last 8 s of the eye reading, so what the zone detector sees can be watched. Up = a look LEFT, down = RIGHT. The reading is in units of one side's size
+// (the same number that decides the zone), so the lines are the same on both sides: the middle at 0, the enter lines at +-Z_IN (a look past them counts), the leave lines at +-Z_OUT, and +-1 a full look.
+// Dots are coloured by the zone read at that moment, and the right-hand column shows the LOCKED lane. The text under it: the raw reading, where the centre is, and the size of each side.
+const gCan = document.createElement('canvas'); gCan.width = 360; gCan.height = 120;
+gCan.style.cssText = 'position:fixed;left:auto;right:8px;top:58px;width:min(300px,46vw);height:auto;background:#000a;border:1px solid #fff4;border-radius:4px;z-index:5;pointer-events:none';
+const gTxt = document.createElement('div');
+gTxt.style.cssText = 'position:fixed;right:8px;top:calc(58px + min(300px,46vw) * 0.334 + 4px);width:min(300px,46vw);color:#cff;font:11px ui-monospace,Consolas,monospace;text-align:right;text-shadow:0 0 3px #000;z-index:5;pointer-events:none;white-space:pre';
+let gaugeOn = !Q.has('nogauge'); const gH = [];
+function gaugeUpdate() {
+  gCan.style.display = gTxt.style.display = gaugeOn && eyeMode && started ? 'block' : 'none';
+  if (!gaugeOn || !eyeMode || !started) return;
+  if (!gCan.parentNode) { document.body.appendChild(gCan); document.body.appendChild(gTxt); }
+  const now = performance.now() / 1000;
+  gH.push([now, KIT.zones ? KIT.zn : 0, KIT.zone, LOCK.lane]); while (gH.length && now - gH[0][0] > 8) gH.shift();
+  const c = gCan.getContext('2d'), w = gCan.width, h = gCan.height, mid = h / 2, k = (h / 2) / 1.5, plotW = w - 26;
+  c.clearRect(0, 0, w, h);
+  const ln = (v, col, dash) => { c.strokeStyle = col; c.setLineDash(dash || []); c.beginPath(); c.moveTo(0, mid + v * k); c.lineTo(plotW, mid + v * k); c.stroke(); };
+  ln(0, '#fff5'); ln(KIT.Z_IN, '#0f98', [4, 3]); ln(-KIT.Z_IN, '#0f98', [4, 3]); ln(KIT.Z_OUT, '#ff08', [2, 3]); ln(-KIT.Z_OUT, '#ff08', [2, 3]); ln(1, '#fff3'); ln(-1, '#fff3');
+  c.setLineDash([]); c.fillStyle = '#fffa'; c.font = '10px monospace'; c.fillText('LEFT', 3, 11); c.fillText('RIGHT', 3, h - 4);
+  const col = { '-1': '#4af', '0': '#fff', '1': '#fa4' };
+  c.lineWidth = 1.5;
+  for (let i = 1; i < gH.length; i++) {
+    const x0 = plotW * (1 - (now - gH[i - 1][0]) / 8), x1 = plotW * (1 - (now - gH[i][0]) / 8);
+    c.strokeStyle = col[gH[i][2]]; c.beginPath(); c.moveTo(x0, mid + clampf(gH[i - 1][1], -1.5, 1.5) * k); c.lineTo(x1, mid + clampf(gH[i][1], -1.5, 1.5) * k); c.stroke();
+  }
+  c.lineWidth = 1;
+  const ly = mid + LOCK.lane * -0.9 * k;          // the locked lane, drawn at the same height as a full look that way
+  c.fillStyle = '#0f8'; c.fillRect(plotW + 6, ly - 5, 14, 10);
+  const z = KIT.zones;
+  gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\nsides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
+}
+addEventListener('keydown', (e) => { if (e.key === 'g' || e.key === 'G') gaugeOn = !gaugeOn; });
 function updateLane(dt) {
-  calUpdate(dt);
+  calUpdate(dt); gaugeUpdate();
   if (!KIT.zones) {          // the first 40 readings are still coming in: the board stays in the middle, but the dot already follows the eyes (against the middle seen so far, at the starting size)
     lane = 0; steerTarget = 0;
     if (KIT.lastHx !== null && KIT.zauto.length) {
