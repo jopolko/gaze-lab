@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795100414';
+import { EyeModel } from './eyemodel.js?v=1795100776';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -308,7 +308,7 @@ const rows = [];
 function mkThing(avoid, noRamp) {
   for (let tries = 0; tries < 30; tries++) {
     const k = Math.random();
-    const type = k < 0.30 ? 0 : k < 0.52 ? 1 : k < 0.84 || noRamp ? 2 : 3;
+    const type = k < 0.26 ? 0 : k < 0.46 ? 1 : k < 0.90 || noRamp ? 2 : 3;          // (more pickups and rings, fewer ramps)
     const pick = Math.floor(Math.random() * 4);
     if (avoid.some((a) => a && a.type === type && (type !== 2 || a.pick === pick))) continue;
     const q = Math.random(); return { type, pick, orbs: [0, 1, 2, 3, 4, 5].map(() => true), done: false, hy: Q.has('head') && type <= 2 ? (q < 0.22 ? 9.5 : q < 0.36 ? 0.9 : 2.6) : 0 };          // (head mode: some are high, some low, the rest at board height)
@@ -361,10 +361,10 @@ function chaseUpdate(dt) {
 function gateRow(r) {
   if (SLM.left <= 0) {
     if (SLM.brk > 0) { SLM.brk--; return false; }
-    if (Math.random() > 0.45) return false;
-    SLM.left = 5 + Math.floor(Math.random() * 3); SLM.c = 0; SLM.dir = Math.random() < 0.5 ? -1 : 1;
+    if (Math.random() > 0.07) return false;          // (a gate run is the occasional challenge now, not the default: about one stretch in twenty rows)
+    SLM.left = 3 + Math.floor(Math.random() * 2); SLM.c = 0; SLM.dir = Math.random() < 0.5 ? -1 : 1;
   }
-  SLM.left--; if (SLM.left <= 0) SLM.brk = 2 + Math.floor(Math.random() * 2);
+  SLM.left--; if (SLM.left <= 0) SLM.brk = 10 + Math.floor(Math.random() * 8);
   SLM.c += SLM.dir * (8 + Math.random() * 8); if (Math.abs(SLM.c) > 18) { SLM.dir = -Math.sign(SLM.c); SLM.c = Math.max(-24, Math.min(24, SLM.c)); }
   r.s = [null, null, null]; r.gap = { c: SLM.c, w: Math.max(9, 22 - (tPlay - 12) * 0.09), orbs: [true, true, true, true, true, true] };
   return true;
@@ -419,10 +419,10 @@ function setRow(r, z) {
   r.gap = null; r.gapDone = false; r.mines = null; r.mfStart = false; r.mfAnn = false; r.mDone = false;
   if (Q.has('head') && tPlay > 12 && ((Q.has('mines') && mineRow(r)) || gateRow(r))) return;          // (minefields and the chase are only an example of what the speed control could support: off unless ?mines)
   const calm = tPlay < 20;          // the first 20 seconds: no hazards
-  const hzK = calm ? 0 : Math.min(0.7, 0.25 + tPlay * 0.002);          // how often something nasty is put in
+  const hzK = calm ? 0 : Math.min(0.5, 0.2 + tPlay * 0.0015);          // how often something nasty is put in
   const roll = Math.random(), flip = Math.random() < 0.5 ? 1 : -1;
   let L = null, M = null, R = null;
-  if (roll < 0.22 && !calm) {          // centre: one good thing straight ahead, rocks either side
+  if (roll < 0.07 && !calm) {          // centre: one good thing straight ahead, rocks either side
     M = mkThing([], true); L = mkRocks(); R = mkRocks();
   } else if (roll < 0.58) {          // triple: three different things
     const a = mkThing([], false), b = mkThing([a], false), c = mkThing([a, b], false);
@@ -431,7 +431,7 @@ function setRow(r, z) {
   } else {          // pair (and flank: no separate rocks between here, the middle gets a rock slalom instead)
     const a = mkThing([], false), b = mkThing([a], false);
     if (flip > 0) { L = a; R = b; } else { L = b; R = a; }
-    if (L.type !== 3 && R.type !== 3 && Math.random() < hzK * 0.5) M = mkRocks();
+    if (L.type !== 3 && R.type !== 3 && Math.random() < hzK * 0.2) M = mkRocks();
     else if (Math.random() < 0.3) M = mkThing([L, R], true);          // the middle lane is rarely empty
   }
   r.s = [L, M, R];
@@ -1213,7 +1213,12 @@ function frame(now) {
     const xT = steerTarget * LANE_W, a = Math.max(-HEAD.amax, Math.min(HEAD.amax, HEAD.w * HEAD.w * (xT - camX) - 2 * HEAD.z * HEAD.w * HEAD.vx));
     HEAD.vx = Math.max(-HEAD.vmax, Math.min(HEAD.vmax, HEAD.vx + a * dt)); HEAD.acc = a;
     HEAD.vv += (HEAD.vw * HEAD.vw * (HEAD.vt - HEAD.vy) - 2 * HEAD.vzt * HEAD.vw * HEAD.vv) * dt; HEAD.vy += HEAD.vv * dt;          // the height of the reach follows the nod through its own damped spring
-    camX = Math.max(-LANE_W * 1.6, Math.min(LANE_W * 1.6, camX + HEAD.vx * dt)); steer = camX / LANE_W;
+    camX += HEAD.vx * dt; const EDGE = LANE_W * 1.6;
+    if (Math.abs(camX) > EDGE) {          // the EDGE of the slope: the board is stopped and thrown back, which costs speed (a hard hit) or just a scrape (a light one)
+      const hard = Math.abs(HEAD.vx) > 14; camX = Math.sign(camX) * EDGE; HEAD.vx = -HEAD.vx * 0.3;
+      if (hard && ST.y < 3 && (HEAD.edgeT || 0) < t - 0.6) { HEAD.edgeT = t; speed *= 0.88; flash(0.9, 0.9, 1, 0.25); beep(180, 0.15, 0.1); if (ST.shield <= 0) G.combo = Math.max(0, G.combo - 2); }
+    }
+    steer = camX / LANE_W;
     if (playing && ctrlReady()) speed = Math.max(14, speed - Math.abs(a) * dt * HEAD.carve);
   } else steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
