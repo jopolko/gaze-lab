@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795102981';
+import { EyeModel } from './eyemodel.js?v=1795103598';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -78,16 +78,19 @@ function eyeAuto(t) {
   try { localStorage.setItem('spike_eye', want); } catch (e) { /* no storage */ }
 }
 const RS = Math.min(1, Math.max(0.3, parseFloat(Q.get('rs') || '1')));
-// MUSIC: the funk tracks of the Godot game, played in turn (the server maps /music/ to godot/music_web). M mutes. ?nomusic turns it off.
-const TRACKS = ['funk_it', 'quirky_funk', 'funk_express'];
-let song = null, songI = 0, musicOn = !Q.has('nomusic');
-function startMusic() {
-  if (!musicOn || song) return;
-  song = new Audio('../music/' + TRACKS[songI] + '.ogg'); song.volume = 0.55;
-  song.onended = () => { songI = (songI + 1) % TRACKS.length; song.src = '../music/' + TRACKS[songI] + '.ogg'; song.play().catch(() => {}); };
-  song.play().catch(() => {});
+// MUSIC (music.js, loaded the first time the game starts): the Alien Warfare stems on one sample-accurate clock. M mutes. ?nomusic turns it off. Each molecule owns a stem; speed and lean bring the drums and bass up and
+// open the filter; the beat clock drives visual pulses; sound effects are notes in key on the next sixteenth.
+let musicOn = !Q.has('nomusic'), MUS = null, musLoading = false;
+const STEM_OF = ['piano', 'synth', 'guitar', 'acid', 'fx', 'pulse'];          // mescaline, DOM, 2C-B, 2C-E, 2C-T-2, 2C-T-7
+async function startMusic() {
+  if (!musicOn || MUS || musLoading) return; musLoading = true;
+  try {
+    const { Music } = await import('./music.js'); const m = new Music('../music/'); await m.ctx.resume(); await Promise.all([m.load('ambience'), m.load('pulse')]); m.start(); MUS = m;
+    setTimeout(() => { m.load('drums'); m.load('bass'); }, 4000); setTimeout(() => { for (const n of ['piano', 'synth', 'guitar', 'acid', 'fx']) m.load(n); }, 20000);
+  } catch (e) { MUS = null; }
 }
-function toggleMusic() { musicOn = !musicOn; if (song) { if (musicOn) song.play().catch(() => {}); else song.pause(); } else startMusic(); }
+function toggleMusic() { musicOn = !musicOn; if (MUS) MUS.setVolume(musicOn ? 0.8 : 0); else startMusic(); }
+const BEAT = { v: 0, i: 0 };
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false });
 renderer.setPixelRatio(1);
@@ -145,14 +148,14 @@ const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0
 const TERRAIN = !Q.has('flat');
 const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  uniforms: { uBeat: { value: 0 }, uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
   vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer, uOpen; float HO(vec2 p){ return 0.03*p.y + 0.3*(14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.)); } vec2 HG(vec2 p){ return vec2(0.3*(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41.), .03 + 0.3*(14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.)); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
     varying vec3 nrm;
     uniform float uT;
-    uniform float uMode, uLine, uDmtG; uniform vec3 uLA, uLB;
+    uniform float uMode, uLine, uDmtG, uBeat; uniform vec3 uLA, uLB;
     uniform vec3 uCam, uC1, uC2, uHor;
     vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
     float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -218,7 +221,7 @@ const groundMat = new THREE.ShaderMaterial({
       col += uC2 * (1.0 - smoothstep(.0, .25, abs(abs(wp.x) - 38.))) * .9;          // the edge of the slope
       float fade = smoothstep(110., 400., dist);
       float shade = 0.38 + 0.68 * max(dot(normalize(nrm), normalize(vec3(-0.35, 0.7, 0.6))), 0.);          // light from behind and above: rises face the player and glow, drops fall away darker, so the ground reads as ROUND
-      col *= shade;
+      col *= shade * (1. + uBeat * .14);          // the ground breathes on the beat
       gl_FragColor = vec4(mix(col, uHor * (uLine > .5 ? .22 : 1.), fade), 1.0);
     }`,
 });
@@ -263,7 +266,7 @@ scene.add(sky);
 const N_PYL = 160, N_RING = 10, SPAN = 520, LANE_W = 22, ROW_GAP = SPAN / N_RING;          // wide lanes: the choices must be far apart ON THE SCREEN (at 70 m ahead, lanes 8 m apart sit within about 4 degrees of each other, too close for the eyes to tell apart)
 // THE LOOK (Themes.gd's): solid, soft-lit shapes, not lines. A tree is three stacked cones, dark at the skirt and pale at the tip, in the world's colours; the mountains are tall faceted peaks round the horizon. Both wear a MOIRE SKIN
 // (two stripe fields that fall in and out of step, coloured by how far in step they are) that comes up with the molecules (2C-E, the mountains' piece), and the peaks always wear a little of it.
-const SKIN = { uT: { value: 0 }, uHor: { value: TH.hor }, uCam: { value: new THREE.Vector3() } };
+const SKIN = { uBeat: { value: 0 }, uT: { value: 0 }, uHor: { value: TH.hor }, uCam: { value: new THREE.Vector3() } };
 const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint;
   void main(){ vec4 p = vec4(position, 1.); vec3 n = normal;
   #ifdef USE_INSTANCING
@@ -276,10 +279,10 @@ const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3
     vTint = vec3(1.);
   #endif
   gl_Position = projectionMatrix * viewMatrix * w; }`;
-const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar; uniform vec3 uHor, uCam;
+const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar, uBeat; uniform vec3 uHor, uCam;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
-    vec3 n = normalize(vN); float lit = .55 + .6 * max(dot(n, normalize(vec3(-.35, .7, .6))), 0.);
+    vec3 n = normalize(vN); float lit = (.55 + .6 * max(dot(n, normalize(vec3(-.35, .7, .6))), 0.)) * (1. + uBeat * .22);
     vec3 base = mix(vTint * .30, vTint * 1.05 + .12, vS) * lit;
     float a = sin(dot(vW.xz, vec2(.9, .35)) * 2.6 + vW.y * 3.1), b = sin(dot(vW.xz, vec2(.9, -.3)) * 2.72 + vW.y * 3.0 + uT * .25), m = a * b * .5 + .5;
     vec3 mo = mix(hsv(fract(m * .55 + uT * .04 + vW.y * .004 + vS * .15)), vec3(1.), .28) * (.4 + .6 * m) * lit * 1.1;
@@ -287,7 +290,7 @@ const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varyi
     float d = length(vW - uCam); col = mix(col, uHor, smoothstep(uFar * .35, uFar, d) * .85);
     gl_FragColor = vec4(col, 1.);
   }`;
-const mkSkin = (far) => new THREE.ShaderMaterial({ uniforms: { uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
+const mkSkin = (far) => new THREE.ShaderMaterial({ uniforms: { uBeat: SKIN.uBeat, uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
 function shadeGeo(g, y0, y1) { const a = g.attributes.position, c = []; for (let i = 0; i < a.count; i++) { const k = Math.max(0, Math.min(1, (a.getY(i) - y0) / (y1 - y0))); c.push(k, k, k); } g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); return g; }
 function pineGeo() {          // three stacked cones, base at -3.5 and tip at +3.5 (the old single cone's size), each tier dark at its skirt and pale at its tip
   const parts = [[2.5, 3.6, -3.5], [1.9, 3.2, -1.6], [1.3, 2.8, 0.4]], pos = [], nor = [], col = [];
@@ -308,6 +311,7 @@ function updatePeaks() {          // a ring of peaks that follows the rider (so 
   peakMesh.instanceMatrix.needsUpdate = true; if (peakMesh.instanceColor) peakMesh.instanceColor.needsUpdate = true;
 }
 function skinTick() {
+  SKIN.uBeat.value = BEAT.v; groundMat.uniforms.uBeat.value = BEAT.v; compMat.material.uniforms.uBeat.value = BEAT.v;
   SKIN.uT.value = t; SKIN.uCam.value.copy(camera.position);
   const lvAll = DR ? (MOL.lv[0] + MOL.lv[1] + MOL.lv[2] + MOL.lv[3] + MOL.lv[4] + MOL.lv[5]) / 6 : 0;
   treeMat.uniforms.uMo.value = DR ? Math.min(0.95, MOL.lv[3] * 1.2 + molDmt() * 0.4 + lvAll * 0.4) : 0;
@@ -542,7 +546,7 @@ const feedMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
   void main(){ vec3 c = texture2D(uScene, vUv).rgb; vec3 p = texture2D(uPrev, vUv + (vUv-.5)*.004).rgb; gl_FragColor = vec4(max(c*.55, p*uK), 1.); }`,
   { uScene: { value: null }, uPrev: { value: null }, uK: { value: 0.86 } });
 const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2D uScene; uniform sampler2D uTrail; uniform float uTrace; uniform float uSplit;
-  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun; uniform vec3 uTunC;
+  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun, uBeat; uniform vec3 uTunC;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec2 c = vUv - .5; float r = length(c);
@@ -553,11 +557,12 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     wuv += c * (uMB.y * .0015 * keep * sin(r * 34. - uTime * 3.));          // 2C-T-2: ripples running out from the middle
     float kf = clamp(uMB.x * .22 + uDmt * .4, 0., .55) * smoothstep(.24, .5, r);
     if (kf > .001) { float seg = 6.2831853 / (6. + 2. * uDmt), an = atan(c.y, c.x), af = abs(mod(an, seg) - seg * .5); wuv = mix(wuv, vec2(.5) + vec2(cos(af), sin(af)) * r, kf); }          // 2C-E: the picture folds into mirrored segments toward the edges
-    wuv = vec2(.5) + (wuv - vec2(.5)) * (1. - .006 * uMB.z * pl * keep + .006 * uDmt * sin(uTime * .8) * keep);          // 2C-T-7: a pulse that pushes in
+    wuv = vec2(.5) + (wuv - vec2(.5)) * (1. - .006 * uMB.z * pl * keep + .006 * uDmt * sin(uTime * .8) * keep - .005 * uBeat);          // 2C-T-7: a pulse that pushes in
     float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6);          // 2C-B: the colours split apart
     vec3 col = vec3(texture2D(uScene, wuv + c*ca).r, texture2D(uScene, wuv).g, texture2D(uScene, wuv - c*ca).b);
     col += texture2D(uTrail, vUv).rgb * .8 * uTrace * (1. - clamp(dot(col, vec3(.35,.5,.15)) * 1.2, 0., .9));
     col += uFlash.rgb * uFlash.a * (0.08 + r * 0.45);
+    col *= 1. + uBeat * .06;
     col = mix(col, col * vec3(1.15, .95, .78), uMA.x * .5);          // mescaline: warm
     col *= 1. + uMA.y * .12 * sin(uTime * .35);          // DOM: a slow deep swell of light ...
     col = max((col - .5) * (1. + .3 * uMA.y) + .5, vec3(0.));          // ... and deeper darks
@@ -576,7 +581,7 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     }
     float mxc = max(max(col.r, col.g), col.b); if (mxc > .75) col *= (.75 + .25 * (1. - exp(-(mxc - .75) * 2.5))) / mxc;          // soft shoulder: light added by the effects is folded back, so bright areas keep their colour
     gl_FragColor = vec4(col, 1.);
-  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
+  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uBeat: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
 const feedScene = new THREE.Scene();
 feedScene.add(feedMat);
 const compScene = new THREE.Scene();
@@ -747,7 +752,7 @@ if (eyeMode) {
 function setPause(on) {
   if (!started || on === paused) return;
   paused = on; playing = !on;
-  if (song && musicOn) { if (on) song.pause(); else song.play().catch(() => {}); }
+  if (MUS) { if (on) MUS.ctx.suspend(); else MUS.ctx.resume(); }
   if (on) say('PAUSED', '', 'RESUME', () => setPause(false)); else say('', '');
 }
 addEventListener('pointerdown', () => { if (paused) setPause(false); });
@@ -1019,6 +1024,7 @@ const G = { score: 0, combo: 0, best: 0, flash: 0, fr: 0, fg: 0, fb: 0, hit: 0, 
 function flash(r, g, b, k) { G.fr = r; G.fg = g; G.fb = b; G.flash = k; }
 let actx = null;
 function beep(f, d, g) {
+  if (MUS && MUS.started) { try { MUS.tone(f, d, g, f >= 250); } catch (e) { /* */ } return; }
   try {
     actx = actx || new (window.AudioContext || window.webkitAudioContext)();
     const o = actx.createOscillator(), v = actx.createGain();
@@ -1443,7 +1449,7 @@ function hubTrailDraw() {
   });
   hubTrail.count = n; hubTrail.instanceMatrix.needsUpdate = true; if (hubTrail.instanceColor) hubTrail.instanceColor.needsUpdate = true;
 }
-function hubGo(P) { TR.on = true; TR.t = 0; TR.kind = 'in'; TR.p = P; TR.dur = 1.5; bannerShow(P.name, true); beep(330, 0.4, 0.1); setTimeout(() => beep(660, 0.5, 0.1), 140); setTimeout(() => beep(990, 0.6, 0.1), 300); }
+function hubGo(P) { if (MUS) MUS.whoosh(1.5, true); TR.on = true; TR.t = 0; TR.kind = 'in'; TR.p = P; TR.dur = 1.5; bannerShow(P.name, true); beep(330, 0.4, 0.1); setTimeout(() => beep(660, 0.5, 0.1), 140); setTimeout(() => beep(990, 0.6, 0.1), 300); }
 function hubAuto(dt) {          // the dive: the board is taken straight down the tunnel, faster and faster
   const P = TR.p, want = Math.atan2(P.x - OW.x, -(P.z - 20 - OW.z)), d = Math.atan2(Math.sin(want - OW.th), Math.cos(want - OW.th)); OW.th += d * Math.min(1, dt * 5); OW.om = 0;
   const sp = 36 + 90 * (TR.t / TR.dur), fx = Math.sin(OW.th), fz = -Math.cos(OW.th); OW.vx = fx * sp; OW.vz = fz * sp; OW.x += OW.vx * dt; OW.z += OW.vz * dt; speed = sp; zPrev = zPos; zPos = OW.z; camX = OW.x;
@@ -1469,7 +1475,7 @@ function finishRun() {
   if (RUN.done) return; RUN.done = true; const tm = tPlay, sc = G.score, b = HUBBEST[RUN.id], nb = !b || tm < b.t;
   HUBBEST[RUN.id] = { t: b ? Math.min(b.t, tm) : tm, s: Math.max(b ? b.s : 0, sc) }; try { localStorage.setItem('hub_best', JSON.stringify(HUBBEST)); } catch (e) { /* */ }
   bannerShow('FINISH  ' + fmtT(tm) + '   ' + sc + (nb ? '   NEW BEST' : ''), true); flash(1, 0.9, 0.3, 0.6); beep(660, 0.3, 0.1); setTimeout(() => beep(880, 0.3, 0.1), 120); setTimeout(() => beep(1320, 0.5, 0.1), 260);
-  setTimeout(() => { TR.on = true; TR.t = 0; TR.kind = 'out'; TR.dur = 1.3; }, 2600);
+  setTimeout(() => { if (MUS) MUS.whoosh(1.3, false); TR.on = true; TR.t = 0; TR.kind = 'out'; TR.dur = 1.3; }, 2600);
 }
 function exitRun() {
   inHub = true; RUN.active = false; groundMat.uniforms.uOpen.value = 1; groundMat.uniforms.uTer.value = 0; hubGroup.visible = true; hubTrail.visible = true;
@@ -1478,6 +1484,15 @@ function exitRun() {
   PORTALS.forEach(signDraw); setHelp(HELP_HUB);
 }
 if (OPEN) { OW.rampY = 0; worldLocked = true; setHelp(HELP_HUB); }
+function musicTick(dt) {
+  if (!MUS || !MUS.started) { BEAT.v *= 0.9; return; }
+  const run = !inHub, spd = Math.min(1, speed / 80), lean = Math.max(0, HEAD.u || 0), dive = TR.on ? TR.tun : 0, inten = run ? Math.min(1, 0.35 + 0.55 * spd + 0.2 * lean) : 0.15 + 0.3 * spd, dm = DR ? molDmt() : 0;
+  MUS.level('ambience', (run ? 0.5 : 0.95) * (1 - 0.3 * dm)); MUS.level('drums', run ? 0.35 + 0.6 * inten : dive * 0.8); MUS.level('bass', run ? 0.3 + 0.6 * inten : dive * 0.7);
+  MUS.level('pulse', 0.28 + 0.3 * inten + (DR ? 0.5 * Math.min(1, MOL.body[5] / 6) : 0));
+  for (let i = 0; i < 5; i++) { const sn = STEM_OF[i]; if (DR && MOL.got[i]) { MUS.load(sn); MUS.level(sn, (0.35 + 0.65 * Math.min(1, MOL.body[i] / 6)) * (run ? 1 : 0.8)); } else MUS.level(sn, 0); }
+  MUS.cutoff(run ? 5000 + 13000 * inten + 4000 * dm : 2600 + 2500 * spd + dive * 12000 + 8000 * dm, 0.3);
+  const bp = MUS.beatPos(), ph = bp - Math.floor(bp), acc = (Math.floor(bp) % 4 === 0) ? 1 : 0.72; BEAT.v = Math.exp(-ph * 5.5) * acc * (0.25 + 0.75 * inten); BEAT.i = Math.floor(bp);
+}
 // THE SIX, along the top: each slot a molecule turning in it (an outline until it is found), a ring round it for how much of it is felt, its name and what it does beneath.
 const molHud = DR ? document.createElement('canvas') : null;
 if (molHud) { molHud.width = 6 * 76; molHud.height = 96; molHud.style.cssText = 'position:fixed;left:50%;top:50px;margin-left:' + (-3 * 76) + 'px;width:' + 6 * 76 + 'px;height:96px;z-index:6;pointer-events:none'; document.body.appendChild(molHud); }
@@ -1509,6 +1524,7 @@ function frame(now) {
   if (eyeMode && started) { readTracker(now); updateLane(dt); }
   telTick(now, dt);
   logSample(now);
+  musicTick(dt);
   if (molHud && now - (molHud._t || 0) > 90) { molHud._t = now; molHudDraw(now / 1000); }
   if (inHub) openFrame(dt); else {
   if (HEAD.on) {          // SNOWBOARD PHYSICS: the head says where to go, the board does not jump there. A damped spring pulls it toward the target with a limited sideways acceleration and speed, so it eases into a turn, carries it
@@ -1603,4 +1619,4 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : 0, true);
 requestAnimationFrame(frame);
-window.__dh = { TR, RUN, PORTALS, enterRun, exitRun, finishRun, inHubF: () => inHub, OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
+window.__dh = { musGet: () => MUS, BEAT, TR, RUN, PORTALS, enterRun, exitRun, finishRun, inHubF: () => inHub, OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
