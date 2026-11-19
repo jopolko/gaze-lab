@@ -8,9 +8,13 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
+import { EyeModel } from './eyemodel.js';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
+// THE EYE MODEL (eyemodel.js): a three-state filter over both eyes together that floats with drift and remembers what it learned on this device. ?nomodel goes back to the threshold detector.
+let EM = null;
+if (!Q.has('nomodel')) { let pr = null; try { pr = JSON.parse(localStorage.getItem('spike_em') || 'null'); } catch (e) { /* */ } EM = new EyeModel(pr); }
 // WHICH EYE (glasses and lenses can distort one eye). The two eyes' readings are kept apart for the last ~25 s and each is judged at the moments BOTH eyes agree you looked left or right: the 15% of readings
 // where the two-eye average is furthest left, the 15% furthest right, against the middle 40%. An eye's score is its WEAKER side (how far it moves for a look that way) over its jitter, so an eye that barely
 // responds on one side, or is noisy, scores low. In play the looks are small and the eyes can not be told apart, so it only switches on strong evidence (a clear 1.5x win and a real spread of looks), and the
@@ -18,7 +22,7 @@ const EYE_PICK = Q.get('eye') || '';
 let eyeSaved = ''; try { eyeSaved = localStorage.getItem('spike_eye') || ''; } catch (e) { /* no storage */ }
 if (EYE_PICK === 'auto') { try { localStorage.removeItem('spike_eye'); } catch (e) { /* */ } eyeSaved = ''; }
 if (EYE_PICK === 'a' || EYE_PICK === 'b') { try { localStorage.setItem('spike_eye', EYE_PICK.toUpperCase()); } catch (e) { /* */ } }
-const EYE = { sel: EYE_PICK === 'a' ? 'A' : EYE_PICK === 'b' ? 'B' : (eyeSaved === 'A' || eyeSaved === 'B') ? eyeSaved : 'avg', bufA: [], bufB: [], t: 0, sA: 0, sB: 0, spread: 0, auto: EYE_PICK !== 'a' && EYE_PICK !== 'b', switches: 0 };
+const EYE = { sel: EYE_PICK === 'a' ? 'A' : EYE_PICK === 'b' ? 'B' : (eyeSaved === 'A' || eyeSaved === 'B') ? eyeSaved : 'avg', bufA: [], bufB: [], t: 0, sA: 0, sB: 0, spread: 0, auto: EYE_PICK !== 'a' && EYE_PICK !== 'b' && !EM, switches: 0 };
 function eyeScores(A, B) {
   const n = Math.min(A.length, B.length); if (n < 100) return null;
   const a = A.slice(-n), b = B.slice(-n), avg = a.map((x, i) => (x + b[i]) / 2), idx = avg.map((v, i) => i).sort((i, j) => avg[i] - avg[j]);
@@ -441,6 +445,11 @@ if (eyeMode) {
         if (Number.isFinite(ha) && Number.isFinite(hb)) { EYE.bufA.push(ha); EYE.bufB.push(hb); if (EYE.bufA.length > 400) { EYE.bufA.shift(); EYE.bufB.shift(); } eyeAuto(t); }
         const pick = EYE.sel === 'A' && Number.isFinite(ha) ? ha : EYE.sel === 'B' && Number.isFinite(hb) ? hb : hx;
         KIT.add(pick, 0, 0, t);
+        if (EM && Number.isFinite(ha) && Number.isFinite(hb)) {          // the model decides the zone once the middle is learned (KIT still runs, for the setup bar, blinks and the logs)
+          EM.step([ha, hb]);
+          if (EM.ready && KIT.zones) { if (KIT.zone !== EM.zone) KIT.zone_t = t; KIT.zone = EM.zone; KIT.zn = EM.zn; }
+          if (EM.n % 150 === 0) { try { localStorage.setItem('spike_em', JSON.stringify(EM.save())); } catch (e) { /* */ } }
+        }
       };          // (the tracker already holds readings through blinks, so the blink inputs are zero here)
       await tracker.start((st) => { $('mp').textContent = st; window.__gazeStatus = st === 'ready' ? 'camera on' : st; }, Q.get('fakecam'));
       window.__gazeStatus = 'camera on';
@@ -557,7 +566,7 @@ function gaugeUpdate() {
   const ly = mid + LOCK.lane * -0.9 * k;          // the locked lane, drawn at the same height as a full look that way
   c.fillStyle = '#0f8'; c.fillRect(plotW + 6, ly - 5, 14, 10);
   const z = KIT.zones;
-  gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  A ' + (Number.isFinite(KIT.ha) ? KIT.ha.toFixed(4) : '-') + ' B ' + (Number.isFinite(KIT.hb) ? KIT.hb.toFixed(4) : '-') + '  yaw ' + (KIT.yaw || 0).toFixed(0) + '°  EYE ' + EYE.sel + ' (' + EYE.sA.toFixed(1) + ' / ' + EYE.sB.toFixed(1) + ' spread ' + EYE.spread.toFixed(2) + ')' + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\nsides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
+  gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  A ' + (Number.isFinite(KIT.ha) ? KIT.ha.toFixed(4) : '-') + ' B ' + (Number.isFinite(KIT.hb) ? KIT.hb.toFixed(4) : '-') + '  yaw ' + (KIT.yaw || 0).toFixed(0) + '°  EYE ' + EYE.sel + ' (' + EYE.sA.toFixed(1) + ' / ' + EYE.sB.toFixed(1) + ' spread ' + EYE.spread.toFixed(2) + ')' + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\n' + (EM ? 'MODEL  L ' + EM.post[0].toFixed(2) + '  M ' + EM.post[1].toFixed(2) + '  R ' + EM.post[2].toFixed(2) + '   ' : '') + 'sides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
 }
 addEventListener('keydown', (e) => { if (e.key === 'g' || e.key === 'G') gaugeOn = !gaugeOn; });
 // LOOK TARGETS (RunRig._draw_cards, which Godot showed out at the sides because things far away sit close to the middle of the screen, where looking at them barely moves the eyes). Three big round
