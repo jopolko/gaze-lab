@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795097085';
+import { EyeModel } from './eyemodel.js?v=1795098532';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -696,7 +696,7 @@ function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.pa
 // HEAD STEERING TEST (?head): no eyes, no zones, no lanes chosen for you. The board goes where the HEAD points: a short two-step set-up (turn the head left, then right, 3 s each) learns which of yaw, roll and
 // the face's sideways position moves most, and by how much, for THIS person on THIS device; the board then follows a smooth number between -1 (head fully left) and +1 (fully right), exactly as far as the head has turned.
 // Live tuning (tune.json "HEAD": gain, dead, flip, tau, rc to re-centre on the current pose, redo to repeat the set-up).
-const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.1, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.5 };
+const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.15, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.0, w: 5, z: 0.9, amax: 110, vmax: 42, vx: 0, carve: 0.02 };          // w / z: the board's spring (how quickly it turns toward where the head points) and damping; amax / vmax: the most the board can accelerate and slide sideways (units per s); carve: speed lost to hard turns
 if (HEAD.on) { TUNE.steerK = 40; TUNE.camK = 22; }          // the board follows the head almost at once (the eye game slides slowly on purpose)
 const headF = () => [KIT.yaw || 0, KIT.roll || 0, (KIT.fx || 0) * 100];
 const HN = [8, 5, 3.5];          // typical head movement in play: yaw degrees, roll degrees, face sideways position
@@ -734,7 +734,7 @@ function headAuto(dt, now, f) {
   const dv = (sv - HEAD.vs) / Math.max(dt, 0.001); HEAD.vel += (dv - HEAD.vel) * 0.3; HEAD.vs = sv;          // one-euro: the faster the head moves the less it is smoothed
   const fc = HEAD.fc + HEAD.beta * Math.abs(HEAD.vel), a = 1 / (1 + 1 / (2 * Math.PI * fc * Math.max(dt, 0.001)));
   HEAD.s += (sv - HEAD.s) * a;
-  const xs = Math.max(-1.3, Math.min(1.3, HEAD.s + HEAD.vel * HEAD.lead)); steerTarget = Math.max(-1, Math.min(1, Math.sign(xs) * Math.pow(Math.abs(xs), HEAD.pw) * HEAD.gain)); lane = Math.round(steerTarget);          // (a power curve: small head movements do little, so the middle is wide and sticky; the sides still reach the full lane)
+  const xs = Math.max(-1.3, Math.min(1.3, HEAD.s + HEAD.vel * HEAD.lead)); steerTarget = Math.max(-1.5, Math.min(1.5, Math.sign(xs) * Math.pow(Math.abs(xs), HEAD.pw) * HEAD.gain)); lane = Math.round(steerTarget);          // (a power curve: small head movements do little, so the middle is wide and sticky; the sides still reach the full lane)
   KIT.zn = steerTarget; KIT.zone = lane; LOCK.lane = lane;
   const gd = $('gdot'); gd.style.left = ((steerTarget * 0.45 + 0.5) * innerWidth) + 'px'; gd.style.top = (innerHeight * 0.5) + 'px';
 }
@@ -891,7 +891,7 @@ function stepRows(dt) {
       } else {
         for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), (2.4) + TY(r.z, lx + (n ? 4.5 : -4.5)), r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
-        if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 3.6 || Math.abs(camX - lx + 4.5) < 3.6) : mine) && ST.y < 3) crash('ROCK'); }
+        if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 6.5 || Math.abs(camX - lx + 4.5) < 6.5) : mine) && ST.y < 3) crash('ROCK'); }
       }
     }
   }
@@ -989,16 +989,22 @@ function frame(now) {
   if (eyeMode && started) { readTracker(now); updateLane(dt); }
   telTick(now, dt);
   logSample(now);
-  steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
+  if (HEAD.on) {          // SNOWBOARD PHYSICS: the head says where to go, the board does not jump there. A damped spring pulls it toward the target with a limited sideways acceleration and speed, so it eases into a turn, carries it
+    // through and settles (a correction is an arc, not a snap), and a hard turn costs a little speed.
+    const xT = steerTarget * LANE_W, a = Math.max(-HEAD.amax, Math.min(HEAD.amax, HEAD.w * HEAD.w * (xT - camX) - 2 * HEAD.z * HEAD.w * HEAD.vx));
+    HEAD.vx = Math.max(-HEAD.vmax, Math.min(HEAD.vmax, HEAD.vx + a * dt)); HEAD.acc = a;
+    camX = Math.max(-LANE_W * 1.6, Math.min(LANE_W * 1.6, camX + HEAD.vx * dt)); steer = camX / LANE_W;
+    if (playing && ctrlReady()) speed = Math.max(14, speed - Math.abs(a) * dt * HEAD.carve);
+  } else steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt);
   speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
-  camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
+  if (!HEAD.on) camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
   camera.position.set(camX, 3.2 + ST.y + TY(zPos, camX), zPos);
   camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
-  camera.rotation.set(-0.08 - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), -steer * 0.08, -steer * 0.12, 'YXZ');          // the view tips down a falling slope and up a rise
+  camera.rotation.set(-0.08 - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), HEAD.on ? -HEAD.vx * 0.0035 : -steer * 0.08, HEAD.on ? -HEAD.vx * 0.0065 - (HEAD.acc || 0) * 0.0006 : -steer * 0.12, 'YXZ');          // (the board leans into a turn by how fast it is sliding and how hard it is accelerating)          // the view tips down a falling slope and up a rise
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t;
