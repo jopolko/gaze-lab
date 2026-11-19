@@ -14,7 +14,7 @@ THREE.Material.prototype.onBeforeCompile = function (shader) {
   if (!(this.isMeshBasicMaterial || this.isLineBasicMaterial)) return;
   shader.uniforms.uBend = BEND; shader.vertexShader = 'uniform vec2 uBend;\n' + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  { float dzb = max(-mvPosition.z, 0.); mvPosition.xy += uBend * dzb * dzb; gl_Position = projectionMatrix * mvPosition; }');
 };
-import { EyeModel } from './eyemodel.js?v=1795106550';
+import { EyeModel } from './eyemodel.js?v=1795106921';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -96,7 +96,7 @@ async function startMusic() {
   } catch (e) { MUS = null; }
 }
 function toggleMusic() { musicOn = !musicOn; if (MUS) MUS.setVolume(musicOn ? 0.8 : 0); else startMusic(); }
-const BEAT = { v: 0, i: 0 };
+const BEAT = { v: 0, i: 0 }, TRIP = { v: 0 };          // TRIP: how far the trip has come (0..1): time itself brings it on (Godot's _drift_t: a run with no pills still comes on, late), and the molecules push it faster
 const canvas = document.getElementById('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', alpha: false });
 renderer.setPixelRatio(1);
@@ -146,16 +146,30 @@ let MOLRB = 0;          // 2C-B's level: the colour on the things (they cycle th
 const themeCol = (phase, out) => (TH.rainbow > 0.5 || MOLRB > 0.25 ? out.copy(hue(phase)) : out.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(phase * 6.2832)));
 
 // THE GROUND: one plane that follows the rider; the pattern is computed from world position, so it is fixed to the ground as you speed by. One shader, eight looks (uMode).
-// TERRAIN: rounded rollers of different pitch. The grade (how steeply it falls as you travel s metres) is 0.10 + three slow waves of different lengths, so it runs from a slight rise (-0.06) through gentle benches to a
-// 0.26 (about 15 degrees) drop, always smooth; the height is its exact integral, so the ground mesh (vertex shader), the camera, every object and the speed all agree on the same hill.
-const terrD = (s) => 0.10 * s - 11.9 * (Math.cos(s / 170 + 1) - Math.cos(1)) - 3.05 * (Math.cos(s / 61 + 2) - Math.cos(2)) - 15.32 * (Math.cos(s / 383) - 1);
-const TY = (z, x = 0) => (TERRAIN ? -terrD(-z) + 0.0009 * x * x + 1.2 * Math.sin(x * 0.03 - z * 0.011) : 0);          // the ground height at world (x, z): the long rollers down the slope, a shallow bowl across it (the sides rise) and a slow lateral swell, so it is rolling ground and not a bent plane
-const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0.05 * Math.sin(s / 61 + 2) + 0.04 * Math.sin(s / 383); };          // the grade there
+// THE HILL, from Godot (DownhillRig.terrain_h and RunRig._base_h / _trail_h): the slope is 0.34 (19 degrees) times a GRADE that comes in stages (180 m each): a slow start, then long MILD stretches (0.42 to 0.58 of that),
+// a build-up, and STEEP drops (1.3 up to 2.15 times: 24 to 36 degrees), each cycle steeper than the last, every change of slope eased in over 110 m so a crest never kinks. On top: gentle swells, a flat corridor 116 m wide whose SIDES CLIMB
+// into walls (0.0085 per metre squared beyond 58 m), and the trail: a slow weave of the middle, rollers along it and forest floor that rises where the trees stand. The ground shader samples the same table, so mesh, camera, objects agree.
+const SLOPE0 = 0.34, STAGE_LEN = 180, EASE_M = 110, DSTEP = 2, DN = 3200, STAGE_CYCLE = [0, 0, 0, 0.5, 1, 1], TP = [1.3, 4.1, 2.2];
+const stageSlope = (j) => { const prog = Math.min(1, Math.max(0, j * STAGE_LEN / 4200)); if (j < 2) return SLOPE0 * 0.4; const k = STAGE_CYCLE[(j - 2) % 6], mild = 0.42 + 0.16 * prog, steep = 1.3 + 0.85 * prog; return SLOPE0 * (mild + (steep - mild) * k + 0.04 * Math.sin(j * 2.7)); };
+const DROP = new Float32Array(DN + 2); { let d = 0; for (let i = 1; i < DN + 2; i++) { const sm = i * DSTEP, j = Math.floor(sm / STAGE_LEN), dd = sm - j * STAGE_LEN; let sl = stageSlope(j); if (j > 0 && dd < EASE_M) { const t = dd / EASE_M, e = t * t * (3 - 2 * t), sp = stageSlope(j - 1); sl = sp + (sl - sp) * e; } d += sl * DSTEP; DROP[i] = d; } }
+const dropTex = new THREE.DataTexture(DROP, DN + 2, 1, THREE.RedFormat, THREE.FloatType); dropTex.minFilter = dropTex.magFilter = THREE.NearestFilter; dropTex.needsUpdate = true;
+const dropAt = (sm) => { if (sm <= 0) return sm * SLOPE0 * 0.4; const x = Math.min(sm / DSTEP, DN), i = Math.floor(x), f = x - i; return DROP[i] * (1 - f) + DROP[i + 1] * f + Math.max(0, sm - DN * DSTEP) * stageSlope(Math.floor(sm / STAGE_LEN)); };
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const trailXs = (sm) => sstep(50, 170, sm) * (4 * Math.sin(sm / 30 + TP[0]) + 8 * Math.sin(sm / 170 + TP[1]));
+function terrH(x, z) {
+  const sm = Math.max(-z, 0); let h = -dropAt(-z);
+  h += 0.35 * (0.9 * Math.sin(z * 0.031 + 1.3) * Math.cos(x * 0.045) + 0.5 * Math.sin(z * 0.011 - x * 0.02)) + 0.21 * Math.sin(z * 0.045 + x * 0.025 + 0.7) * Math.sin(x * 0.03 - z * 0.02);
+  const ax = Math.abs(x) - 58; if (ax > 0) h += 0.0085 * ax * ax;
+  const k = sstep(50, 170, sm), off = x - trailXs(sm); h += k * 1.7 * Math.sin(sm / 26 + TP[2]); const side = Math.abs(off) - 22; if (side > 0) h += Math.min(0.02 * side * side, 5);
+  return h;
+}
+const TY = (z, x = 0) => (TERRAIN ? terrH(x, z) : 0);          // the ground height at world (x, z) (z runs to negative as you travel)
+const GR = (z) => { const sm = -z; return (dropAt(sm + 1) - dropAt(sm - 1)) / 2; };          // the grade there: metres of drop per metre travelled
 const TERRAIN = !Q.has('flat');
 const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uBend: BEND, uHA: { value: OPEN && !Q.has('board') ? 0.6 : 0.3 }, uBeat: { value: 0 }, uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
-  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform vec2 uBend; uniform float uTer, uOpen, uHA; float HO(vec2 p){ return 0.03*p.y + uHA*(14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.)); } vec2 HG(vec2 p){ return vec2(uHA*(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41.), .03 + uHA*(14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.)); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; vec4 vp = viewMatrix * w; float dzb = max(-vp.z, 0.); vp.xy += uBend * dzb * dzb; gl_Position = projectionMatrix * vp; }',
+  uniforms: { uDrop: { value: dropTex }, uBend: BEND, uHA: { value: OPEN && !Q.has('board') ? 0.6 : 0.3 }, uBeat: { value: 0 }, uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform vec2 uBend; uniform float uTer, uOpen, uHA; float HO(vec2 p){ return 0.03*p.y + uHA*(14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.)); } vec2 HG(vec2 p){ return vec2(uHA*(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41.), .03 + uHA*(14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.)); } uniform sampler2D uDrop; float dropG(float sm){ if (sm <= 0.) return sm * .136; float x = min(sm / 2., 3199.), i0 = floor(x), f = x - i0; return mix(texture2D(uDrop, vec2((i0 + .5) / 3202., .5)).r, texture2D(uDrop, vec2((i0 + 1.5) / 3202., .5)).r, f); } float sst(float a, float b, float x){ float t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); } float HT(vec2 p){ float z = p.y, sm = max(-z, 0.), h = -dropG(-z); h += .35 * (.9 * sin(z * .031 + 1.3) * cos(p.x * .045) + .5 * sin(z * .011 - p.x * .02)) + .21 * sin(z * .045 + p.x * .025 + .7) * sin(p.x * .03 - z * .02); float ax = abs(p.x) - 58.; if (ax > 0.) h += .0085 * ax * ax; float k = sst(50., 170., sm), off = p.x - k * (4. * sin(sm / 30. + 1.3) + 8. * sin(sm / 170. + 4.1)); h += k * 1.7 * sin(sm / 26. + 2.2); float side = abs(off) - 22.; if (side > 0.) h += min(.02 * side * side, 5.); return h; } void main(){ vec4 w = modelMatrix * vec4(position,1.0); if (uTer > .5) { w.y += HT(w.xz); vec2 e = vec2(1.5, 0.); nrm = normalize(vec3(HT(w.xz - e.xy) - HT(w.xz + e.xy), 3., HT(w.xz - e.yx) - HT(w.xz + e.yx))); } else nrm = vec3(0., 1., 0.); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; vec4 vp = viewMatrix * w; float dzb = max(-vp.z, 0.); vp.xy += uBend * dzb * dzb; gl_Position = projectionMatrix * vp; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
@@ -325,7 +339,8 @@ function updatePeaks() {          // a ring of peaks that follows the rider (so 
   peakMesh.instanceMatrix.needsUpdate = true; if (peakMesh.instanceColor) peakMesh.instanceColor.needsUpdate = true;
 }
 function skinTick() {
-  if (inHub) BEND.value.set(0, 0); else { const sp = Math.min(1, speed / 60), k = 0.55 + 0.45 * sp; BEND.value.set(k * 0.0009 * (Math.sin(tPlay * 0.045) + 0.5 * Math.sin(tPlay * 0.11 + 1.3)), -k * (0.00045 + 0.00025 * Math.sin(tPlay * 0.07 + 0.5))); }
+  { const lvA = DR ? (MOL.lv[0] + MOL.lv[1] + MOL.lv[2] + MOL.lv[3] + MOL.lv[4] + MOL.lv[5]) / 6 : 0; TRIP.v = Math.min(1, Math.max(sstep(6, 120, tPlay) * 0.85, lvA * 1.3)); compMat.material.uniforms.uTrip.value = TRIP.v; }
+  if (inHub) BEND.value.set(0, 0); else { const sp = Math.min(1, speed / 60), k = 0.55 + 0.45 * sp; BEND.value.set(k * 0.0006 * (Math.sin(tPlay * 0.045) + 0.5 * Math.sin(tPlay * 0.11 + 1.3)), -k * 0.0002); }
   { const psy = Math.abs(TH.mode - 1) < 0.5 ? 1 : 0; SKIN.uPsy.value = psy; compMat.material.uniforms.uPsy.value = psy; skyMat.uniforms.uMode.value = TH.mode; }
   SKIN.uBeat.value = BEAT.v; groundMat.uniforms.uBeat.value = BEAT.v; compMat.material.uniforms.uBeat.value = BEAT.v;
   SKIN.uT.value = t; SKIN.uCam.value.copy(camera.position);
@@ -435,6 +450,24 @@ function chaseUpdate(dt) {
   }
   const danger = CH.on ? Math.max(0, 1 - CH.gap / 60) : 0;
   chBar.style.display = CH.on ? 'block' : 'none'; chFill.style.width = Math.max(0, CH.gap) + '%'; chVig.style.opacity = (danger * 0.85).toFixed(2);
+}
+// THE SNOWBALL (RunRig, the hazard of the steep stretches): now and then, as a steep drop begins, a giant ball starts rolling down the slope BEHIND you. It follows where you go but turns slowly, and it is faster the steeper it is.
+// If you are slower than it, it closes (the bar); when it reaches you, you must be to one side of it (more than about 8 m) or it takes you, and a level of a molecule you hold with it. Dodge it and it rolls on past, ahead of you, for points.
+const SB = { on: false, gap: 0, x: 0, cool: 15, passed: false, mol: 0 };
+const sbMesh = new THREE.Mesh(new THREE.SphereGeometry(7, 22, 16), new THREE.MeshBasicMaterial({ color: 0xffffff })); sbMesh.visible = false; scene.add(sbMesh);
+function sbUpdate(dt) {
+  if (!(RUN.active || Q.has('snowball')) || RUN.done) { sbMesh.visible = false; return; }
+  SB.cool -= dt;
+  if (!SB.on && SB.cool <= 0 && tPlay > 22 && GR(zPos) > 0.2) { SB.on = true; SB.gap = 85; SB.x = camX; SB.passed = false; SB.mol = Math.floor(Math.random() * 6); bannerShow('SNOWBALL BEHIND YOU', true); if (MUS) MUS.boom(); }
+  if (SB.on) {
+    const bs = 38 + 55 * GR(zPos); SB.gap -= (bs - speed) * dt; SB.x += (camX - SB.x) * (1 - Math.exp(-dt * 0.9));
+    if (!SB.passed && SB.gap <= 0) { SB.passed = true; if (Math.abs(camX - SB.x) < 8.5 && ST.y < 3) crash('SNOWBALL', SB.mol); else { bannerShow('DODGED!', true); award(200); G.combo += 2; flash(1, 1, 1, 0.3); } }
+    if (SB.passed && SB.gap < -170) { SB.on = false; SB.cool = 30; }
+    const bz = zPos + SB.gap; sbMesh.position.set(SB.x, TY(bz, SB.x) + 7, bz); sbMesh.rotation.x = -t * 3; sbMesh.visible = SB.gap < 120 && SB.gap < 0 || SB.gap < 30;
+    sbMesh.material.color.setHSL(TH.mode === 1 ? (t * 0.1) % 1 : 0.58, TH.mode === 1 ? 0.9 : 0.12, 0.85);
+    if (!SB.passed) { chBar.style.display = 'block'; chBar.style.borderColor = '#fff'; chFill.style.background = '#9cf'; chFill.style.width = Math.max(0, Math.min(100, SB.gap / 85 * 100)) + '%'; chVig.style.opacity = (Math.max(0, 1 - SB.gap / 45) * 0.7).toFixed(2); }
+    else if (!CH.on) { chBar.style.display = 'none'; chVig.style.opacity = '0'; }
+  } else sbMesh.visible = false;
 }
 function gateRow(r) {
   if (SLM.left <= 0) {
@@ -562,7 +595,7 @@ const feedMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
   void main(){ vec3 c = texture2D(uScene, vUv).rgb; vec3 p = texture2D(uPrev, vUv + (vUv-.5)*.004).rgb; gl_FragColor = vec4(max(c*.55, p*uK), 1.); }`,
   { uScene: { value: null }, uPrev: { value: null }, uK: { value: 0.86 } });
 const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2D uScene; uniform sampler2D uTrail; uniform float uTrace; uniform float uSplit;
-  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun, uBeat, uPsy; uniform vec3 uTunC;
+  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun, uBeat, uPsy, uTrip; uniform vec3 uTunC;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec2 c = vUv - .5; float r = length(c);
@@ -574,13 +607,13 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     float kf = clamp(uMB.x * .22 + uDmt * .4, 0., .55) * smoothstep(.24, .5, r);
     if (kf > .001) { float seg = 6.2831853 / (6. + 2. * uDmt), an = atan(c.y, c.x), af = abs(mod(an, seg) - seg * .5); wuv = mix(wuv, vec2(.5) + vec2(cos(af), sin(af)) * r, kf); }          // 2C-E: the picture folds into mirrored segments toward the edges
     wuv = vec2(.5) + (wuv - vec2(.5)) * (1. - .006 * uMB.z * pl * keep + .006 * uDmt * sin(uTime * .8) * keep - .005 * uBeat);          // 2C-T-7: a pulse that pushes in
-    wuv += c * (.0013 * uPsy * sin(uTime * .7 + r * 9.));          // the psychedelic world breathes
-    float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6 + uPsy * 2.4);          // 2C-B: the colours split apart (and always, wide, in the psychedelic world)
+    wuv += c * (.0013 * uPsy * (.3 + uTrip) * sin(uTime * .7 + r * 9.));          // the psychedelic world breathes
+    float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6 + uPsy * (.7 + 2.2 * uTrip));          // 2C-B: the colours split apart (and always, wide, in the psychedelic world)
     vec3 col = vec3(texture2D(uScene, wuv + c*ca).r, texture2D(uScene, wuv).g, texture2D(uScene, wuv - c*ca).b);
     if (uPsy > .5) {          // PSYCHEDELIC (Themes.gd's pass): where the picture was a moment ago and is not now, a ghost whose hue turns with time and distance from the middle
       vec3 old = texture2D(uTrail, vUv).rgb, diff = max(old - texture2D(uScene, vUv).rgb * .92 - .02, vec3(0.));
       float m = clamp(dot(diff, vec3(.34)) * 3.2 * (.4 + .6 * smoothstep(.1, .45, r)), 0., 1.);
-      col += hsv(fract(uTime * .12 + r * .9 + m * .5)) * m * .6 * uTrace + max(old - .3, vec3(0.)) * .55;          // (and a bloom: the bright parts of the trail glow)
+      col += hsv(fract(uTime * .12 + r * .9 + m * .5)) * m * (.3 + .6 * uTrip) * uTrace + max(old - .3, vec3(0.)) * (.2 + .45 * uTrip);          // (and a bloom: the bright parts of the trail glow)
       col = mix(col, col * hsv(fract(uTime * .05)) * 1.1, .12); col *= 1. - .45 * smoothstep(.45, .95, r);
     } else col += texture2D(uTrail, vUv).rgb * .8 * uTrace * (1. - clamp(dot(col, vec3(.35,.5,.15)) * 1.2, 0., .9));
     col += uFlash.rgb * uFlash.a * (0.08 + r * 0.45);
@@ -603,7 +636,7 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     }
     float mxc = max(max(col.r, col.g), col.b); if (mxc > .75) col *= (.75 + .25 * (1. - exp(-(mxc - .75) * 2.5))) / mxc;          // soft shoulder: light added by the effects is folded back, so bright areas keep their colour
     gl_FragColor = vec4(col, 1.);
-  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uBeat: { value: 0 }, uPsy: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
+  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uBeat: { value: 0 }, uPsy: { value: 0 }, uTrip: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
 const feedScene = new THREE.Scene();
 feedScene.add(feedMat);
 const compScene = new THREE.Scene();
@@ -1744,10 +1777,10 @@ function frame(now) {
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && !worldLocked && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt); if (DR) molTick(dt);
   if (HEAD.on) {          // HEAD mode: the speed is the PLAYER'S. The base pace still climbs with progress (28 up to 80), a lean forward adds up to half as much again, pulling back takes off up to half, boost and the slope still count
-    const base = Math.min(80, 28 + tPlay * 0.45) * (1 + 0.15 * perk(5)), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0);
+    const base = Math.min(80, 28 + tPlay * 0.45) * (1 + 0.15 * perk(5)), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 24 : 0);
     speed += Math.max(-38 * dt, Math.min((tgt > speed ? (ST.boost > 0 ? 40 : 24) : 38) * dt, tgt - speed));
-  } else speed = Math.min(Math.min(64, 28 + tPlay * 0.4) * (1 + 0.15 * perk(5)) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
-  if (playing && ctrlReady()) chaseUpdate(dt);
+  } else speed = Math.min(Math.min(64, 28 + tPlay * 0.4) * (1 + 0.15 * perk(5)) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 24 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
+  if (playing && ctrlReady()) { chaseUpdate(dt); sbUpdate(dt); }
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
   if (RUN.active && !RUN.done && -zPos > RUN.len) finishRun();
@@ -1755,7 +1788,7 @@ function frame(now) {
   if (!HEAD.on) camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
   camera.position.set(camX, 3.2 + ST.y + TY(zPos, camX) + (HEAD.on ? HEAD.vy * 1.6 : 0), zPos);
   camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0) + TR.tun * 35;
-  camera.rotation.set(-0.08 + (HEAD.on ? HEAD.vy * 0.12 : 0) - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), HEAD.on ? -HEAD.vx * 0.0035 : -steer * 0.08, HEAD.on ? -HEAD.vx * 0.0065 - (HEAD.acc || 0) * 0.0006 : -steer * 0.12, 'YXZ');          // (the board leans into a turn by how fast it is sliding and how hard it is accelerating)          // the view tips down a falling slope and up a rise
+  camera.rotation.set(-0.08 + (HEAD.on ? HEAD.vy * 0.12 : 0) - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.7 : 0), HEAD.on ? -HEAD.vx * 0.0035 : -steer * 0.08, HEAD.on ? -HEAD.vx * 0.0065 - (HEAD.acc || 0) * 0.0006 : -steer * 0.12, 'YXZ');          // (the board leans into a turn by how fast it is sliding and how hard it is accelerating)          // the view tips down a falling slope and up a rise
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t;
@@ -1820,4 +1853,6 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : (OPEN ? HUBWORLD : 0), true);
 requestAnimationFrame(frame);
-window.__dh = { BUG, DRIVE, explode, buggyStep, groundAt, OPT, musGet: () => MUS, BEAT, TR, RUN, PORTALS, enterRun, exitRun, finishRun, inHubF: () => inHub, OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
+const BUILD = (new URL(import.meta.url).searchParams.get('v') || 'dev');
+{ const be = document.createElement('div'); be.textContent = 'build ' + BUILD; be.style.cssText = 'position:fixed;right:6px;top:4px;z-index:9;font:10px ui-monospace,Consolas,monospace;color:rgba(255,255,255,.45);pointer-events:none'; document.body.appendChild(be); }          // (which version is running, top right)
+window.__dh = { SB, BUG, DRIVE, explode, buggyStep, groundAt, OPT, musGet: () => MUS, BEAT, TR, RUN, PORTALS, enterRun, exitRun, finishRun, inHubF: () => inHub, OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
