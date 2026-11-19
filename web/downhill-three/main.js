@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795102181';
+import { EyeModel } from './eyemodel.js?v=1795102393';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open');          // ?open: THE OPEN WORLD. No lanes, no rows: an endless hilly world made as you go; the head turns the board (carving), a lean in or out is the speed, a nod reaches up or down
@@ -160,14 +160,11 @@ const groundMat = new THREE.ShaderMaterial({
       float dist = length(wp.xz - uCam.xz);
       vec3 col;
       float m = uMode;
-      if (m < 0.5) {                                                    // ALPINE: snow, a faint blue checker, long blue shadows of the lane lines
-        float chk = step(0., sin(wp.x*.5236)*sin(wp.z*.5236));
-        col = mix(vec3(.58,.68,.86), vec3(.72,.80,.94), chk);
-        col -= vec3(.10,.06,.0) * gline(wp.xz/12., 1.0);
+      if (m < 0.5) {                                                    // ALPINE: plain natural snow (the light and shade of the slope is all there is)
+        col = vec3(.78, .86, .97) - .03 * h21(floor(wp.xz * .6));
       } else if (m < 1.5) {                                             // PSYCHEDELIC (GROUND_PSY): two grids of SQUARES, the second 3.7% finer and turning about the rider; where they fall in and out of step big slow shapes appear
         vec2 g1 = wp.xz / 6.0; float grid1 = sin(g1.x * 6.283) * sin(g1.y * 6.283);
-        float tt = uT * .045, ca = cos(tt), sa = sin(tt); vec2 rp = wp.xz - uCam.xz;
-        vec2 g2 = vec2(rp.x * ca - rp.y * sa, rp.x * sa + rp.y * ca) * 1.037 / 6.0; float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
+        vec2 g2 = wp.xz * 1.037 / 6.0; float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
         float far = 1.0 - smoothstep(130., 340., dist), amp = mix(.5, grid1 * grid2 * .5 + .5, far), sq = mix(.5, smoothstep(-.06, .06, grid1), far);
         col = mix(vec3(1.), hsv(fract(amp * .5 + uT * .03)), .9) * (.25 + .75 * pow(amp, .65)) * (.62 + .38 * sq);
       } else if (m < 2.5) {                                             // TUNNEL ROAD: chevrons racing at you
@@ -208,14 +205,13 @@ const groundMat = new THREE.ShaderMaterial({
       }
       float lvAll = (uLA.x + uLA.y + uLA.z + uLB.x + uLB.y + uLB.z) / 6.;
       col *= 1. + uLA.x * .45 * sin(wp.z * .07 - uT * 1.6 + sin(wp.x * .05) * 2.);          // mescaline: slow light waves across the ground
-      col += hsv(fract(dist * .004 - uT * .2)) * uLB.y * .5 * pow(.5 + .5 * sin(dist * .35 - uT * 3.), 3.);          // 2C-T-2: ripples running out from the rider
       float moW = 0.;
       if ((lvAll > .03 || uDmtG > .01) && abs(uMode - 1.) > .5) {          // every molecule turns the ground a little more into the moire of squares (two grids falling in and out of step)
         float ang = .035 + .02 * sin(uT * .1); vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * wp.xz;
         vec3 mo = hsv(fract(dist * .004 - uT * .05 + wp.z * .002)) * (gline(wp.xz / 6., 1.2) * .9 + gline(q / 5.8 + vec2(uT * .05, 0.), 1.2) * .56);
         moW = clamp(smoothstep(.04, .5, lvAll) * .8 + uDmtG * .3, 0., .9); col = mix(col, mo, moW);
       }
-      if (uLine > .5) { float hh = wp.y * .3; float cont = smoothstep(.5 - fwidth(hh) * 1.2, .5, abs(fract(hh) - .5)); vec3 la = col * .07 + uC2 * gline(wp.xz / 12., 1.0) * .85 + uC1 * cont * .75; col = mix(la, col, moW); }          // (line art, until the molecules turn the ground into the moire)
+      if (uLine > .5) { float hh = wp.y * .3; float cont = smoothstep(.5 - fwidth(hh) * 1.2, .5, abs(fract(hh) - .5)); vec3 la = col * .07 + uC2 * gline(wp.xz / 12., 1.0) * .85 ; col = mix(la, col, moW); }          // (line art, until the molecules turn the ground into the moire)
       col += uC2 * (1.0 - smoothstep(.0, .25, abs(abs(wp.x) - 38.))) * .9;          // the edge of the slope
       float fade = smoothstep(110., 400., dist);
       float shade = 0.38 + 0.68 * max(dot(normalize(nrm), normalize(vec3(-0.35, 0.7, 0.6))), 0.);          // light from behind and above: rises face the player and glow, drops fall away darker, so the ground reads as ROUND
