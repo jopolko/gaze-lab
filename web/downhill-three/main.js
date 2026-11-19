@@ -9,9 +9,10 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795100922';
+import { EyeModel } from './eyemodel.js?v=1795101400';
 
 const Q = new URLSearchParams(location.search);
+const OPEN = Q.has('open');          // ?open: THE OPEN WORLD. No lanes, no rows: an endless hilly world made as you go; the head turns the board (carving), a lean in or out is the speed, a nod reaches up or down
 const EYE_PICK = Q.get('eye') || '';
 // THE EYE MODEL (eyemodel.js): a three-state filter over both eyes together that floats with drift and remembers what it learned on this device. ?nomodel goes back to the threshold detector.
 // LIVE TUNING: tune.json beside the log (web/spike/tune.json) is read every 2 s and applied to the running game, so settings can be changed while it is being played. {"v":N,"EM":{"DECIDE":0.8,...},"LOCK":{"qk":0.7,"midhold":0.28},"KIT":{...},"recentre":true}
@@ -143,8 +144,8 @@ const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0
 const TERRAIN = !Q.has('flat');
 const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
-  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer; float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+  uniforms: { uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer, uOpen; float HO(vec2 p){ return 0.07*p.y + 14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.); } vec2 HG(vec2 p){ return vec2(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41., .07 + 14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
@@ -222,7 +223,7 @@ const groundMat = new THREE.ShaderMaterial({
       gl_FragColor = vec4(mix(col, uHor * (uLine > .5 ? .22 : 1.), fade), 1.0);
     }`,
 });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000, 40, 100), groundMat);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000, OPEN ? 100 : 40, 100), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.frustumCulled = false;
 scene.add(ground);
@@ -275,7 +276,7 @@ const mineMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1.7, 0), n
 // ALL DRESSED (?dressed): the Godot journey's SIX MOLECULES. Each is a real ball-and-stick molecule (carbon in its own colour, hydrogen white, oxygen red, nitrogen blue, sulphur yellow, bromine brown) found once a run;
 // a found molecule is DOSED (it wears off slowly), and what is FELT follows the dose slowly. Each one owns a piece of the full-screen look (mescaline warm waves, DOM a swell of light, 2C-B colour, 2C-E a fold,
 // 2C-T-2 ripples, 2C-T-7 a pulse) and all six together make the peak. A hazard belongs to one molecule and takes a level of it and no other.
-const DR = Q.has('dressed');
+const DR = Q.has('dressed') || OPEN;
 const MOL_EL_COL = { H: [0.95, 0.95, 1.0], O: [1.0, 0.22, 0.2], N: [0.25, 0.42, 1.0], S: [1.0, 0.9, 0.2], Br: [0.70, 0.25, 0.15] }, MOL_EL_R = { H: 0.36, C: 0.62, O: 0.60, N: 0.62, S: 0.82, Br: 0.92 };
 const MOL_PERK = ['GLINTS', 'POINTS', 'BOOST', 'RAMPS', 'SLING', 'SPEED'], MOL_SC = 1.25;
 function molGeo(id) {
@@ -679,7 +680,7 @@ if (eyeMode) {
     }
   });
 } else {
-  addEventListener('pointermove', (e) => { steerTarget = Math.max(-1, Math.min(1, Math.round((e.clientX / innerWidth - 0.5) * 3))); lane = steerTarget; });
+  addEventListener('pointermove', (e) => { steerTarget = OPEN ? Math.max(-1.2, Math.min(1.2, (e.clientX / innerWidth - 0.5) * 2.6)) : Math.max(-1, Math.min(1, Math.round((e.clientX / innerWidth - 0.5) * 3))); lane = steerTarget; if (OPEN) HEAD.vt = Math.max(-1, Math.min(1, (0.5 - e.clientY / innerHeight) * 2)); });
   beginPlay();
 }
 function setPause(on) {
@@ -1179,6 +1180,136 @@ async function tunePoll() {
 }
 setInterval(tunePoll, 2000);
 
+
+// ======================================================================================================================================================================================================
+// THE OPEN WORLD (?open). The ground is a height field made of waves of different sizes plus a tilt toward -z (so there is always a downhill), the same function in the ground shader and here. The world is a grid of
+// 90 m cells; each cell's contents (trees, orb strings, rings, pickups, ramps, rocks, molecules) are made from a hash of the cell's position, so any cell can be (re)made at any time and the world has no end. Only the cells
+// round the rider are drawn (instanced, with the same wireframe look) and checked for hits.
+// THE BOARD: the head TURNS it (the turn is slower the faster you go), the velocity swings toward where it points (carving: a slip costs a little speed), gravity pulls down the slope, drag slows it and a lean forward makes the
+// drag less while pulling back makes it more, and a gentle push along the heading keeps momentum rising with progress.
+// ======================================================================================================================================================================================================
+if (OPEN) { const hp = document.getElementById('help'); if (hp) hp.textContent = 'OPEN WORLD. Turn your head to carve, lean in for speed and back to slow, nod to reach up or down. Beams mark buffs; molecules turn the world. Esc pauses  N next world  M music  ?mouse to play with the mouse'; }
+const OW = { x: 0, z: 0, th: 0, vx: 0, vz: -24, om: 0, seed: 7, cells: new Map(), taken: new Set(), bump: 0, nTree: 0 };
+const HOf = (x, z) => 0.07 * z + 14 * Math.sin(x / 190 + 1.3) * Math.sin(z / 210 + 0.4) + 7 * Math.sin(x / 83 + z / 117 + 2) + 3.2 * Math.sin(x / 37 - z / 53 + 1) + 1.6 * Math.sin(z / 23 + x / 41);
+const HOg = (x, z) => [14 * Math.cos(x / 190 + 1.3) / 190 * Math.sin(z / 210 + 0.4) + 7 * Math.cos(x / 83 + z / 117 + 2) / 83 + 3.2 * Math.cos(x / 37 - z / 53 + 1) / 37 + 1.6 * Math.cos(z / 23 + x / 41) / 41,
+  0.07 + 14 * Math.sin(x / 190 + 1.3) * Math.cos(z / 210 + 0.4) / 210 + 7 * Math.cos(x / 83 + z / 117 + 2) / 117 - 3.2 * Math.cos(x / 37 - z / 53 + 1) / 53 + 1.6 * Math.cos(z / 23 + x / 41) / 23];
+const CELL = 90, RADC = 6, OPEN_G = 45;
+const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let q = Math.imul(a ^ a >>> 15, 1 | a); q = q + Math.imul(q ^ q >>> 7, 61 | q) ^ q; return ((q ^ q >>> 14) >>> 0) / 4294967296; };
+let oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam;
+if (OPEN) {
+  for (const mm of [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh]) mm.count = 0;
+  oTree = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 7, 5, 1, false), pylMat, 1500);
+  oOrb = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: LINE }), 900);
+  oRing = new THREE.InstancedMesh(new THREE.TorusGeometry(9, 0.18, 3, 28), new THREE.MeshBasicMaterial({ color: 0xffffff }), 120);
+  oPick = new THREE.InstancedMesh(new THREE.OctahedronGeometry(2.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), 200);
+  oPickW = new THREE.InstancedMesh(new THREE.OctahedronGeometry(3.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), 200);
+  oRamp = new THREE.InstancedMesh(new THREE.BoxGeometry(14, 0.7, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: LINE }), 80);
+  oRock = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: LINE }), 120);
+  oBeam = new THREE.InstancedMesh(new THREE.BoxGeometry(1.2, 90, 1.2), new THREE.MeshBasicMaterial({ color: 0xffffff }), 360);
+  for (const mm of [oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam]) { mm.frustumCulled = false; mm.count = 0; scene.add(mm); allMeshes.push(mm); }
+  for (const mm of molMeshes) mm.count = 0;
+}
+function cellItems(cx, cz) {
+  const key = cx + ',' + cz; let c = OW.cells.get(key); if (c) return c;
+  const rnd = mulberry((cx * 73856093) ^ (cz * 19349663) ^ (OW.seed * 83492791)); c = [];
+  const x0 = cx * CELL, z0 = cz * CELL, P = () => [x0 + rnd() * CELL, z0 + rnd() * CELL], far = Math.hypot(x0 + CELL / 2, z0 + CELL / 2) > 70;
+  const forest = 0.5 + 0.5 * Math.sin(cx * 0.29 + 1) * Math.sin(cz * 0.23 + 2), nt = Math.floor(forest * forest * 10 * rnd());
+  for (let i = 0; i < nt; i++) { const [x, z] = P(); if (far || Math.hypot(x, z) > 30) c.push({ k: 'tree', x, z, s: 1.2 + rnd() * 2 }); }
+  if (far) {
+    const nb = rnd() < 0.75 ? 1 + (rnd() < 0.4 ? 1 : 0) : 0;
+    for (let i = 0; i < nb; i++) {
+      const r = rnd(), [x, z] = P(), q = rnd(), hy = q < 0.22 ? 9.5 : q < 0.36 ? 0.9 : 2.6, a = rnd() * 6.2832;
+      if (r < 0.30) c.push({ k: 'orb', x, z, hy, a });
+      else if (r < 0.45) c.push({ k: 'ring', x, z, hy, a });
+      else if (r < 0.80) c.push({ k: 'pick', x, z, hy, pick: Math.floor(rnd() * 4) });
+      else if (r < 0.90) c.push({ k: 'ramp', x, z, a });
+      else c.push({ k: 'rock', x, z, mol: Math.floor(rnd() * 6) });
+    }
+    if (rnd() < 0.045 || (cx === 0 && cz === -2)) {          // a molecule: one not yet found keeps turning up (and there is always one near the start)
+      const [x, z] = P(), w = MOL_ORDER.map((_, i) => (MOL.got[i] ? 0.5 : 4)); let tot = 0, mi = 0; w.forEach((v) => { tot += v; }); let qq = rnd() * tot; for (let i = 0; i < 6; i++) { qq -= w[i]; mi = i; if (qq <= 0) break; }
+      c.push({ k: 'mol', x, z, mol: mi });
+    }
+  }
+  c.forEach((it, i) => { it.id = key + ':' + i; });
+  OW.cells.set(key, c);
+  if (OW.cells.size > 1100) { const cx0 = Math.floor(OW.x / CELL), cz0 = Math.floor(OW.z / CELL); for (const k of OW.cells.keys()) { const [a, b] = k.split(',').map(Number); if (Math.abs(a - cx0) > RADC + 3 || Math.abs(b - cz0) > RADC + 3) OW.cells.delete(k); } }
+  return c;
+}
+const oKick = (d) => { const sp = Math.hypot(OW.vx, OW.vz) || 1, k = (sp + d) / sp; OW.vx *= k; OW.vz *= k; };
+function openPhysics(dt) {
+  const sIn = Math.max(-1.2, Math.min(1.2, steerTarget)), sp0 = Math.hypot(OW.vx, OW.vz);
+  const om = sIn * 1.5 / (1 + sp0 / 55); OW.om += (om - OW.om) * (1 - Math.exp(-dt / 0.14)); OW.th += OW.om * dt;
+  const fx = Math.sin(OW.th), fz = -Math.cos(OW.th), g = HOg(OW.x, OW.z);
+  OW.vx -= g[0] * OPEN_G * dt; OW.vz -= g[1] * OPEN_G * dt;
+  const u = HEAD.u || 0, d1 = 0.045 * (u >= 0 ? 1 - 0.8 * u : 1 + 2.2 * -u), sp = Math.hypot(OW.vx, OW.vz), drag = d1 + 0.0011 * sp; OW.vx -= OW.vx * drag * dt; OW.vz -= OW.vz * drag * dt;
+  const kk = 1 - Math.exp(-4 * dt), sp1 = Math.hypot(OW.vx, OW.vz), dot = (OW.vx * fx + OW.vz * fz) / Math.max(sp1, 0.01), slip = Math.sqrt(Math.max(0, 1 - dot * dot)), keep = sp1 * (1 - 0.35 * slip * kk);
+  OW.vx += (fx * keep - OW.vx) * kk; OW.vz += (fz * keep - OW.vz) * kk;
+  const base = Math.min(80, 24 + tPlay * 0.4) * (1 + 0.15 * perk(5)) * (1 + (u >= 0 ? 0.35 : 0.5) * u) + (ST.boost > 0 ? 22 : 0), sp2 = Math.hypot(OW.vx, OW.vz);
+  if (sp2 < base) { const a = 9 * dt * Math.min(1, (base - sp2) / 20); OW.vx += fx * a; OW.vz += fz * a; }
+  const sp3 = Math.hypot(OW.vx, OW.vz); if (sp3 > 115) { OW.vx *= 115 / sp3; OW.vz *= 115 / sp3; }
+  OW.x += OW.vx * dt; OW.z += OW.vz * dt; speed = Math.hypot(OW.vx, OW.vz); zPrev = zPos; zPos = OW.z; camX = OW.x;
+  HEAD.vv += (HEAD.vw * HEAD.vw * (HEAD.vt - HEAD.vy) - 2 * HEAD.vzt * HEAD.vw * HEAD.vv) * dt; HEAD.vy += HEAD.vv * dt;
+}
+function openCollect() {
+  const cx0 = Math.floor(OW.x / CELL), cz0 = Math.floor(OW.z / CELL), reachY = 2.6 + ST.y + (HEAD.vy >= 0 ? 8 * HEAD.vy : 3 * HEAD.vy), nowS = t;
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) for (const it of cellItems(cx0 + dx, cz0 + dz)) {
+    if (OW.taken.has(it.id) || (it.cool && it.cool > nowS)) continue;
+    const rx = it.x - OW.x, rz = it.z - OW.z, d = Math.hypot(rx, rz);
+    if (it.k === 'tree') { if (d < 2.6 + it.s * 0.9 && ST.y < 2.5 && OW.bump < nowS) { OW.bump = nowS + 0.5; const k = 0.55; OW.vx *= k; OW.vz *= k; OW.x -= rx / (d || 1) * 1.5; OW.z -= rz / (d || 1) * 1.5; flash(0.8, 0.6, 0.3, 0.2); beep(140, 0.12, 0.1); G.combo = Math.max(0, G.combo - 1); } continue; }
+    if (it.k === 'orb') { for (let k = 0; k < 6; k++) { const id = it.id + ':' + k; if (OW.taken.has(id)) continue; const ox = it.x + Math.sin(it.a) * k * 5.5, oz = it.z - Math.cos(it.a) * k * 5.5; if (Math.hypot(ox - OW.x, oz - OW.z) < 5 && Math.abs(it.hy - reachY) < 2.6) { OW.taken.add(id); G.combo++; G.best = Math.max(G.best, G.combo); award(10 * (1 + Math.floor(G.combo / 8))); G.got++; flash(0, 1, 0.8, 0.28); beep(440 + Math.min(G.combo, 14) * 40, 0.12, 0.08); } } continue; }
+    if (it.k === 'ring') { if (d < 8 && Math.abs(it.hy + 1.9 - reachY) < 5.5) { OW.taken.add(it.id); oKick(6 + 16 * perk(4)); G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); } continue; }
+    if (it.k === 'pick') {
+      if (d < 6.5 && Math.abs(it.hy + 0.4 - reachY) < 4.2) {
+        OW.taken.add(it.id); G.got++; link(2 + it.pick); G.combo += 2; G.best = Math.max(G.best, G.combo);
+        if (it.pick === 0) { ST.boost = 3 + 2.5 * perk(2); oKick(12 + 12 * perk(2)); flash(1, 0.55, 0.1, 0.5); beep(520, 0.3, 0.1); bannerShow('BOOST', true); }
+        else if (it.pick === 1) { ST.shield = 1; flash(0.3, 0.85, 1, 0.5); beep(700, 0.3, 0.1); bannerShow('SHIELD', true); }
+        else if (it.pick === 2) { ST.mult = 12; flash(0.95, 0.4, 1, 0.5); beep(880, 0.3, 0.1); bannerShow('DOUBLE POINTS', true); }
+        else { award(150); flash(1, 0.85, 0.35, 0.5); beep(990, 0.3, 0.1); }
+      } continue;
+    }
+    if (it.k === 'ramp') { if (d < 7.5 && sp0Ok() && ST.y < 0.5) { it.cool = nowS + 1.5; ST.vy = 10 + speed * 0.18 + 7 * perk(3); ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); } continue; }
+    if (it.k === 'rock') { if (d < 5.6 && ST.y < 3) { it.cool = nowS + 2; OW.taken.add(it.id); crash('ROCK', it.mol); OW.vx *= 0.7; OW.vz *= 0.7; } continue; }
+    if (it.k === 'mol') { if (d < 8) { OW.taken.add(it.id); molEat(it.mol); } continue; }
+  }
+}
+const sp0Ok = () => speed > 10;
+function openObjects() {
+  const px = OW.x, pz = OW.z, cx0 = Math.floor(px / CELL), cz0 = Math.floor(pz / CELL), fx = Math.sin(OW.th), fz = -Math.cos(OW.th), R2 = 520 * 520, RT2 = 400 * 400, BR2 = 420 * 420;
+  let nt = 0, no = 0, nr = 0, np = 0, nrp = 0, nrk = 0, nb = 0; const nm = [0, 0, 0, 0, 0, 0], br = 1 + 0.4 * MOL.lv[5], sw0 = 2.2 * MOL.lv[5];
+  const beam = (x, z, c) => { if (nb < 360) { m4.compose(v3.set(x, 45 + HOf(x, z), z), q4.identity(), s3.setScalar(1)); oBeam.setMatrixAt(nb, m4); oBeam.setColorAt(nb, colr.setRGB(c[0], c[1], c[2])); nb++; } };
+  for (let dz = -RADC; dz <= RADC; dz++) for (let dx = -RADC; dx <= RADC; dx++) for (const it of cellItems(cx0 + dx, cz0 + dz)) {
+    const rx = it.x - px, rz = it.z - pz, d2 = rx * rx + rz * rz; if (d2 > R2) continue; if (rx * fx + rz * fz < -30 && d2 > 1500) continue;
+    if (it.k === 'tree') {
+      if (d2 > RT2 || nt >= 1500) continue; const brr = 1 + 0.4 * MOL.lv[5] * Math.sin(t * 5 + it.z * 0.04), sw = sw0 * Math.sin(t * 2 + it.z * 0.02);
+      m4.compose(v3.set(it.x + sw, 3.5 * it.s * brr + HOf(it.x, it.z), it.z), q4.identity(), s3.set(it.s * (2 - brr), it.s * brr, it.s * (2 - brr))); oTree.setMatrixAt(nt, m4); oTree.setColorAt(nt, themeCol(t * 0.05 + it.z * 0.003, colr)); nt++; continue;
+    }
+    if (OW.taken.has(it.id)) continue;
+    if (it.k === 'orb') { for (let k = 0; k < 6 && no < 900; k++) { if (OW.taken.has(it.id + ':' + k)) continue; const ox = it.x + Math.sin(it.a) * k * 5.5, oz = it.z - Math.cos(it.a) * k * 5.5; m4.compose(v3.set(ox, it.hy + HOf(ox, oz), oz), q4.identity(), s3.setScalar(1)); oOrb.setMatrixAt(no, m4); oOrb.setColorAt(no, themeCol(t * 0.3 + k * 0.06 + it.x * 0.01, colr)); no++; } if (d2 < BR2) beam(it.x, it.z, [0.2, 1, 0.5]); }
+    else if (it.k === 'ring' && nr < 120) { q4.setFromEuler(eul.set(0, it.a, 0)); m4.compose(v3.set(it.x, it.hy + 1.9 + 2.6 + HOf(it.x, it.z), it.z), q4, s3.setScalar(0.8)); oRing.setMatrixAt(nr, m4); oRing.setColorAt(nr, themeCol(t * 0.1 + it.x * 0.013, colr)); nr++; if (d2 < BR2) beam(it.x, it.z, [1, 0.9, 0.2]); }
+    else if (it.k === 'pick' && np < 200) { const c = PICKS[it.pick].col, a = t * 1.7 + it.x; q4.setFromEuler(eul.set(a * 0.6, a, 0)); const y = it.hy + 0.4 + Math.sin(t * 3 + it.x) * 0.5 + HOf(it.x, it.z); m4.compose(v3.set(it.x, y, it.z), q4, s3.setScalar(1)); oPick.setMatrixAt(np, m4); oPick.setColorAt(np, colr.setRGB(c[0], c[1], c[2])); oPickW.setMatrixAt(np, m4); oPickW.setColorAt(np, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8)); np++; if (d2 < BR2) beam(it.x, it.z, c); }
+    else if (it.k === 'ramp' && nrp < 80) { const gg = HOg(it.x, it.z); q4.setFromEuler(eul.set(Math.atan(-(gg[0] * Math.sin(it.a) + gg[1] * -Math.cos(it.a))) * 0 - 0.28, it.a, 0, 'YXZ')); m4.compose(v3.set(it.x, 1.7 + HOf(it.x, it.z), it.z), q4, s3.setScalar(1)); oRamp.setMatrixAt(nrp, m4); oRamp.setColorAt(nrp, colr.setRGB(0.95, 0.35, 1)); nrp++; if (d2 < BR2) beam(it.x, it.z, [0.95, 0.35, 1]); }
+    else if (it.k === 'rock' && nrk < 120) { const c = MOLC[it.mol]; m4.compose(v3.set(it.x, 2.4 + HOf(it.x, it.z), it.z), q4.identity(), s3.set(1.6, 1.3, 1.6)); oRock.setMatrixAt(nrk, m4); oRock.setColorAt(nrk, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.75 + 0.25 * Math.sin(t * 5))); nrk++; if (d2 < BR2) beam(it.x, it.z, c); }
+    else if (it.k === 'mol' && nm[it.mol] < 14) { const c = MOLC[it.mol], sp = t * 0.9 + it.x * 0.1; q4.setFromEuler(eul.set(0.35 * Math.sin(sp * 0.7), sp, 0.25 * Math.sin(sp * 0.5))); m4.compose(v3.set(it.x, 4.2 + Math.sin(t * 2.4 + it.x) * 0.5 + HOf(it.x, it.z), it.z), q4, s3.setScalar(1.6)); molMeshes[it.mol].setMatrixAt(nm[it.mol]++, m4); beam(it.x, it.z, c); }
+  }
+  oTree.count = nt; oOrb.count = no; oRing.count = nr; oPick.count = np; oPickW.count = np; oRamp.count = nrp; oRock.count = nrk; oBeam.count = nb; for (let i = 0; i < 6; i++) molMeshes[i].count = nm[i];
+  for (const mm of [oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam, ...molMeshes]) { mm.instanceMatrix.needsUpdate = true; if (mm.instanceColor) mm.instanceColor.needsUpdate = true; }
+}
+function openFrame(dt) {
+  if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
+  ST.boost = Math.max(0, ST.boost - dt); ST.mult = Math.max(0, ST.mult - dt); ST.chainT = Math.max(0, ST.chainT - dt);
+  worldBlend(dt); molTick(dt);
+  if (playing && ctrlReady()) { openPhysics(dt); openCollect(); }
+  const gh = HOf(OW.x, OW.z), fx = Math.sin(OW.th), fz = -Math.cos(OW.th), g = HOg(OW.x, OW.z), slopeF = g[0] * fx + g[1] * fz;
+  camera.position.set(OW.x, gh + 3.2 + ST.y + HEAD.vy * 1.6, OW.z);
+  camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
+  camera.rotation.set(-0.08 + HEAD.vy * 0.12 + Math.atan(slopeF) * 0.55, -OW.th, -OW.om * 0.22, 'YXZ');
+  camera.aspect = W / H; camera.updateProjectionMatrix();
+  groundMat.uniforms.uT.value = t; skyMat.uniforms.uT.value = t; sky.position.copy(camera.position);
+  groundMat.uniforms.uLA.value.set(MOL.lv[0], MOL.lv[1], MOL.lv[2]); groundMat.uniforms.uLB.value.set(MOL.lv[3], MOL.lv[4], MOL.lv[5]); groundMat.uniforms.uDmtG.value = molDmt(); skyMat.uniforms.uDom.value = MOL.lv[1]; skyMat.uniforms.uPul.value = MOL.lv[5];
+  groundMat.uniforms.uCam.value.copy(camera.position); ground.position.set(Math.round(OW.x / 10) * 10, 0, Math.round(OW.z / 10) * 10);
+  for (const mm of allMeshes) mm.visible = flags.objects;
+  if (flags.objects) openObjects();
+}
 // THE SIX, along the top: each slot a molecule turning in it (an outline until it is found), a ring round it for how much of it is felt, its name and what it does beneath.
 const molHud = DR ? document.createElement('canvas') : null;
 if (molHud) { molHud.width = 6 * 76; molHud.height = 96; molHud.style.cssText = 'position:fixed;left:50%;top:50px;margin-left:' + (-3 * 76) + 'px;width:' + 6 * 76 + 'px;height:96px;z-index:6;pointer-events:none'; document.body.appendChild(molHud); }
@@ -1211,6 +1342,7 @@ function frame(now) {
   telTick(now, dt);
   logSample(now);
   if (molHud && now - (molHud._t || 0) > 90) { molHud._t = now; molHudDraw(now / 1000); }
+  if (OPEN) openFrame(dt); else {
   if (HEAD.on) {          // SNOWBOARD PHYSICS: the head says where to go, the board does not jump there. A damped spring pulls it toward the target with a limited sideways acceleration and speed, so it eases into a turn, carries it
     // through and settles (a correction is an arc, not a snap), and a hard turn costs a little speed.
     const xT = steerTarget * LANE_W, a = Math.max(-HEAD.amax, Math.min(HEAD.amax, HEAD.w * HEAD.w * (xT - camX) - 2 * HEAD.z * HEAD.w * HEAD.vx));
@@ -1258,6 +1390,7 @@ function frame(now) {
     if (pylMesh.instanceColor) pylMesh.instanceColor.needsUpdate = true;
     stepRows(dt);
   }
+  }
   if (flags.tracers || flags.split) {
     renderer.setRenderTarget(sceneRT);
     renderer.render(scene, camera);
@@ -1300,4 +1433,4 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : 0, true);
 requestAnimationFrame(frame);
-window.__dh = { MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
+window.__dh = { OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
