@@ -859,6 +859,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) telSe
 
 // EYES VERSUS BOARD: ten samples a second go to the spike server (web/spike/logs/*.jsonl) so a run can be compared afterwards: the iris reading, the zone, the locked lane, where the board
 // is, and the nearest gate ahead (which lane is open, how far). cols: t, hx, zn, zone, lockLane, camX, nextOpenLane, dist, speed, held, lockWants(L,M,R)
+const LOCAL = /^(localhost|127\.|10\.|192\.168\.|\[?::1)/.test(location.hostname);          // local dev server (logs to web/spike) or the VPS (logs through log.php, tunes from tune.json beside the game folders)
 const LOG = { buf: [], last: 0, sid: Math.random().toString(16).slice(2, 8) };
 function logSample(now) {
   if (!started || !playing || !eyeMode || now - LOG.last < 100 || KIT.lastHx === null) return;          // (not while paused: a paused run logged the same gate hundreds of times)
@@ -872,12 +873,12 @@ function flushLog() {
   if (!LOG.buf.length) return;
   const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
-  try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
+  try { fetch(LOCAL ? '/spike/log' : '../log.php', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
 addEventListener('pagehide', flushLog);
 async function tunePoll() {
   try {
-    const r = await fetch('../spike/tune.json?_=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return;
+    const r = await fetch((LOCAL ? '../spike/tune.json' : '../tune.json') + '?_=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return;
     const j = await r.json(); if (j.v === TUNE.v) return; TUNE.v = j.v;
     if (j.EM && EM) for (const k in j.EM) if (typeof EM[k] === 'number' && typeof j.EM[k] === 'number') EM[k] = j.EM[k];
     if (j.LOCK) for (const k in j.LOCK) if (typeof j.LOCK[k] === 'number') TUNE[k] = j.LOCK[k];
