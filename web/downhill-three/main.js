@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795103598';
+import { EyeModel } from './eyemodel.js?v=1795104077';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -1449,7 +1449,7 @@ function hubTrailDraw() {
   });
   hubTrail.count = n; hubTrail.instanceMatrix.needsUpdate = true; if (hubTrail.instanceColor) hubTrail.instanceColor.needsUpdate = true;
 }
-function hubGo(P) { if (MUS) MUS.whoosh(1.5, true); TR.on = true; TR.t = 0; TR.kind = 'in'; TR.p = P; TR.dur = 1.5; bannerShow(P.name, true); beep(330, 0.4, 0.1); setTimeout(() => beep(660, 0.5, 0.1), 140); setTimeout(() => beep(990, 0.6, 0.1), 300); }
+function hubGo(P) { try { localStorage.setItem('hub_last', P.id); HUBLAST = P.id; } catch (e) { /* */ } if (MUS) MUS.whoosh(1.5, true); TR.on = true; TR.t = 0; TR.kind = 'in'; TR.p = P; TR.dur = 1.5; bannerShow(P.name, true); beep(330, 0.4, 0.1); setTimeout(() => beep(660, 0.5, 0.1), 140); setTimeout(() => beep(990, 0.6, 0.1), 300); }
 function hubAuto(dt) {          // the dive: the board is taken straight down the tunnel, faster and faster
   const P = TR.p, want = Math.atan2(P.x - OW.x, -(P.z - 20 - OW.z)), d = Math.atan2(Math.sin(want - OW.th), Math.cos(want - OW.th)); OW.th += d * Math.min(1, dt * 5); OW.om = 0;
   const sp = 36 + 90 * (TR.t / TR.dur), fx = Math.sin(OW.th), fz = -Math.cos(OW.th); OW.vx = fx * sp; OW.vz = fz * sp; OW.x += OW.vx * dt; OW.z += OW.vz * dt; speed = sp; zPrev = zPos; zPos = OW.z; camX = OW.x;
@@ -1461,10 +1461,25 @@ function trTick(dt) {
   else if (TR.kind === 'out') { TR.tun = k * k; if (TR.t >= TR.dur) { exitRun(); TR.kind = 'fade'; TR.t = 0; TR.dur = 1.2; } }
   else { TR.tun = 1 - k; if (TR.t >= TR.dur) { TR.on = false; TR.tun = 0; } }
 }
+// QUICK START: nobody on a bus should have to drive around a menu. A strip of buttons along the bottom of the hub (tap or click one) dives straight into that world; the one you rode last is first, marked CONTINUE.
+// ?go=psychedelic (or alpine, tunnel, desert) skips the hub entirely: the run starts as soon as the game does.
+const quick = document.createElement('div'); quick.style.cssText = 'position:fixed;left:0;right:0;bottom:6px;display:none;gap:8px;justify-content:center;flex-wrap:wrap;z-index:8;padding:0 8px;pointer-events:none';
+document.body.appendChild(quick);
+let HUBLAST = ''; try { HUBLAST = localStorage.getItem('hub_last') || ''; } catch (e) { HUBLAST = ''; }
+function quickBuild() {
+  quick.innerHTML = ''; const order = PORTALS.slice().sort((a, b) => (b.id === HUBLAST) - (a.id === HUBLAST));
+  for (const P of order) {
+    const b = document.createElement('button'), c = P.col.map((x) => Math.round(x * 255)).join(','), cont = P.id === HUBLAST;
+    b.textContent = (cont ? 'CONTINUE: ' : 'GO: ') + P.name; b.style.cssText = 'pointer-events:auto;cursor:pointer;font:700 clamp(11px,2.8vw,15px) ui-monospace,Consolas,monospace;letter-spacing:.08em;color:rgb(' + c + ');background:rgba(8,6,24,.72);border:2px solid rgb(' + c + ');border-radius:20px;padding:9px 14px;' + (cont ? 'box-shadow:0 0 16px rgb(' + c + ');' : '');
+    b.addEventListener('click', (e) => { e.stopPropagation(); if (inHub && !TR.on && started) hubGo(P); }); quick.appendChild(b);
+  }
+}
+quickBuild();
+function quickShow(on) { quick.style.display = on ? 'flex' : 'none'; }
 function setHelp(txt) { const hp = document.getElementById('help'); if (hp) hp.textContent = txt; }
 const HELP_HUB = 'THE HUB. Turn your head to carve, lean in for speed and back to slow, nod to reach up or down. Ride up a ramp and through a gateway to start that world\'s run. Molecules you find come with you.', HELP_RUN = 'RUN: reach the finish line. Steer with your head, lean for speed, nod for high and low. Molecules change the world.';
 function enterRun(P) {
-  inHub = false; RUN.active = true; RUN.done = false; RUN.theme = P.theme; RUN.id = P.id; groundMat.uniforms.uOpen.value = 0; groundMat.uniforms.uTer.value = Q.has('flat') ? 0 : 1; hubGroup.visible = false; hubTrail.visible = false;
+  quickShow(false); inHub = false; RUN.active = true; RUN.done = false; RUN.theme = P.theme; RUN.id = P.id; groundMat.uniforms.uOpen.value = 0; groundMat.uniforms.uTer.value = Q.has('flat') ? 0 : 1; hubGroup.visible = false; hubTrail.visible = false;
   for (const mm of OPENM) mm.count = 0; OLDM.forEach((m, i) => { m.count = OLDC[i]; }); molMeshes.forEach((m, i) => { m.count = MOLC0[i]; });
   worldLocked = true; setWorld(P.theme, true);
   zPos = 0; zPrev = 0; camX = 0; speed = 28; tPlay = 0; steer = 0; steerTarget = 0; lane = 0; HEAD.vx = 0; HEAD.s = 0; HEAD.vv = 0; HEAD.acc = 0; Object.assign(ST, { boost: 0, shield: 0, mult: 0, y: 0, vy: 0, air: 0, chainT: 0, chain: 0 });
@@ -1481,9 +1496,9 @@ function exitRun() {
   inHub = true; RUN.active = false; groundMat.uniforms.uOpen.value = 1; groundMat.uniforms.uTer.value = 0; hubGroup.visible = true; hubTrail.visible = true;
   OLDM.forEach((m) => { m.count = 0; }); molMeshes.forEach((m) => { m.count = 0; }); worldLocked = true; setWorld(0, true);
   OW.x = 0; OW.z = 0; OW.th = 0; OW.vx = 0; OW.vz = -24; OW.om = 0; OW.rampY = 0; zPos = 0; zPrev = 0; speed = 24; HEAD.vx = 0; HEAD.s = 0; Object.assign(ST, { boost: 0, y: 0, vy: 0, air: 0 });
-  PORTALS.forEach(signDraw); setHelp(HELP_HUB);
+  PORTALS.forEach(signDraw); setHelp(HELP_HUB); quickBuild(); quickShow(true);
 }
-if (OPEN) { OW.rampY = 0; worldLocked = true; setHelp(HELP_HUB); }
+if (OPEN) { OW.rampY = 0; worldLocked = true; setHelp(HELP_HUB); quickShow(true); const go = Q.get('go'); if (go) { const P = PORTALS.find((q) => q.id === go); if (P) { const iv = setInterval(() => { if (started && playing && inHub && !TR.on) { clearInterval(iv); hubGo(P); } }, 200); } } }
 function musicTick(dt) {
   if (!MUS || !MUS.started) { BEAT.v *= 0.9; return; }
   const run = !inHub, spd = Math.min(1, speed / 80), lean = Math.max(0, HEAD.u || 0), dive = TR.on ? TR.tun : 0, inten = run ? Math.min(1, 0.35 + 0.55 * spd + 0.2 * lean) : 0.15 + 0.3 * spd, dm = DR ? molDmt() : 0;
