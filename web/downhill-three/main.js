@@ -418,8 +418,8 @@ function lockStep(zone, dt) {
   }
   LOCK.age += dt;
   const need = (LOCK.age >= 0.8 * qk ? 0.16 : 0.45) * qk;          // (Godot: committed 0.5 s, then 0.14 / 0.35. Stickier here: the lane still changed 10 to 18 times in 10 s, about twice what the gates ask for)
-  // a side lane is held until the eyes clearly go somewhere else: returning to the MIDDLE needs a long steady look there (about 1.3 s), because following a target that moves inward as it nears reads as 'middle' for a moment
-  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > (l === 0 && LOCK.lane !== 0 ? 0.45 : need)) { LOCK.lane = l; LOCK.age = 0; break; }
+  // a side lane is held until the eyes clearly go somewhere else: returning to the MIDDLE needs a steady look there (about 0.8 s), because following a target that moves inward as it nears reads as 'middle' for a moment
+  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > (l === 0 && LOCK.lane !== 0 ? 0.28 : need)) { LOCK.lane = l; LOCK.age = 0; break; }
   return LOCK.lane;
 }
 function nextGate() {          // the open lane of the nearest gate still ahead (within 220 m), or null
