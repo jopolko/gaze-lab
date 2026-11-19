@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795105742';
+import { EyeModel } from './eyemodel.js?v=1795106204';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -243,7 +243,7 @@ const skyMat = new THREE.ShaderMaterial({
       if (uMode > .5 && uMode < 1.5) {          // PSYCHEDELIC: slow bands of colour that drift, a dark magenta below
         float az = atan(dir.x, -dir.z), band = .5 + .5 * sin(az * 2. + dir.y * 5. + sin(dir.y * 3. + uT * .15) * 1.2 + uT * .05);
         vec3 pc = (.5 + .5 * cos(6.28318 * (dir.y * .5 + az * .08 + uT * .02 + vec3(0., .33, .67)))) * (.05 + .20 * band * smoothstep(0., .6, dir.y)) + vec3(.02, 0., .06);
-        col = mix(vec3(.10, .01, .16), pc * 1.7, smoothstep(-.1, .3, dir.y));
+        col = mix(vec3(.12, .01, .2), pc * 3.4 + vec3(.25, .0, .35) * smoothstep(.5, .0, dir.y), smoothstep(-.1, .25, dir.y)); col += (.5 + .5 * cos(6.28318 * (uT * .03 + az * .5 + vec3(0., .33, .67)))) * .22 * smoothstep(.5, .1, abs(dir.y - .12));          // (bands, a magenta glow up from the horizon and a slow rainbow along it)
       }
       vec3 sd = normalize(vec3(0., .16, -1.));
       float d = distance(dir, sd);
@@ -1281,6 +1281,7 @@ const HOg = (x, z) => [HA * (14 * Math.cos(x / 190 + 1.3) / 190 * Math.sin(z / 2
   0.03 + HA * (14 * Math.sin(x / 190 + 1.3) * Math.cos(z / 210 + 0.4) / 210 + 7 * Math.cos(x / 83 + z / 117 + 2) / 117 - 3.2 * Math.cos(x / 37 - z / 53 + 1) / 53 + 1.6 * Math.cos(z / 23 + x / 41) / 23)];
 const CELL = 90, RADC = 6, OPEN_G = 150;          // (gravity is stronger to match the gentler hills)
 const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let q = Math.imul(a ^ a >>> 15, 1 | a); q = q + Math.imul(q ^ q >>> 7, 61 | q) ^ q; return ((q ^ q >>> 14) >>> 0) / 4294967296; };
+const OLD_SAVED = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh].map((m) => m.count), MOL_SAVED = molMeshes.map((m) => m.count);          // (what each track layer should draw again when a run starts: the hub zeroes them)
 let oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam, oBarrel, oBomb, oBump, oTramp, oDeb, oBlast;
 if (OPEN) {
   for (const mm of [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh]) mm.count = 0;
@@ -1468,7 +1469,7 @@ for (const P of PORTALS) {
   hubGroup.add(grp);
 }
 const hubTrail = new THREE.InstancedMesh(new THREE.SphereGeometry(1.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), PORTALS.length * 36); hubTrail.frustumCulled = false; scene.add(hubTrail);
-const OLDM = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh], OLDC = OLDM.map((m) => m.count), MOLC0 = molMeshes.map((m) => m.count);
+const OLDM = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh], OLDC = OLD_SAVED, MOLC0 = MOL_SAVED;
 const OPENM = [oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam, oBarrel, oBomb, oBump, oTramp, oDeb, oBlast].filter(Boolean);
 function hubTick(dt) {          // the glowing trails to each gateway, the signs bobbing, the ramp lifting you, and the gateway itself
   let ramp = 0, trig = null;
