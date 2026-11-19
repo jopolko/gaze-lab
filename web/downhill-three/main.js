@@ -8,7 +8,8 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795099450';
+import { MOLS, MOL_ORDER } from './molecules.js';
+import { EyeModel } from './eyemodel.js?v=1795099860';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -256,7 +257,30 @@ const rampMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 6, 0.7, 
 const rockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 6);
 if (LINE) for (const mm of [ringMesh, orbMesh, beamMesh, padMesh, rampMesh, rockMesh]) mm.material.wireframe = true;
 const mineMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1.7, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), N_RING * 14);          // MINES: small spiked wire bodies, a field of them with one meandering corridor
-const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh];
+// ALL DRESSED (?dressed): the Godot journey's SIX MOLECULES. Each is a real ball-and-stick molecule (carbon in its own colour, hydrogen white, oxygen red, nitrogen blue, sulphur yellow, bromine brown) found once a run;
+// a found molecule is DOSED (it wears off slowly), and what is FELT follows the dose slowly. Each one owns a piece of the full-screen look (mescaline warm waves, DOM a swell of light, 2C-B colour, 2C-E a fold,
+// 2C-T-2 ripples, 2C-T-7 a pulse) and all six together make the peak. A hazard belongs to one molecule and takes a level of it and no other.
+const DR = Q.has('dressed');
+const MOL_EL_COL = { H: [0.95, 0.95, 1.0], O: [1.0, 0.22, 0.2], N: [0.25, 0.42, 1.0], S: [1.0, 0.9, 0.2], Br: [0.70, 0.25, 0.15] }, MOL_EL_R = { H: 0.36, C: 0.62, O: 0.60, N: 0.62, S: 0.82, Br: 0.92 };
+const MOL_PERK = ['GLINTS', 'POINTS', 'BOOST', 'RAMPS', 'SLING', 'SPEED'], MOL_SC = 1.25;
+function molGeo(id) {
+  const md = MOLS[id], pos = [], col = [], ballG = new THREE.SphereGeometry(1, 8, 5).toNonIndexed(), rodG = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true).toNonIndexed();
+  const tv = new THREE.Vector3(), put = (g, mtx, c) => { const a = g.attributes.position; for (let i = 0; i < a.count; i++) { tv.set(a.getX(i), a.getY(i), a.getZ(i)).applyMatrix4(mtx); pos.push(tv.x, tv.y, tv.z); col.push(c[0], c[1], c[2]); } };
+  const pts = md.atoms.map((a) => new THREE.Vector3(a[1], a[2], a[3]).multiplyScalar(MOL_SC));
+  md.atoms.forEach((a, i) => { const c = a[0] === 'C' ? md.c : MOL_EL_COL[a[0]]; put(ballG, new THREE.Matrix4().compose(pts[i], new THREE.Quaternion(), new THREE.Vector3().setScalar(MOL_EL_R[a[0]] * MOL_SC)), c); });
+  for (const b of md.bonds) {
+    const p0 = pts[b[0]], p1 = pts[b[1]], d = new THREE.Vector3().subVectors(p1, p0), len = d.length(), up = d.clone().divideScalar(len), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up);
+    const offs = b[2] === 2 ? [new THREE.Vector3().crossVectors(up, new THREE.Vector3(0, 0, 1)).normalize().multiplyScalar(0.15 * MOL_SC), null] : [new THREE.Vector3()];
+    if (b[2] === 2) offs[1] = offs[0].clone().negate();
+    const br = (b[2] === 2 ? 0.10 : 0.17) * MOL_SC;
+    for (const o of offs) put(rodG, new THREE.Matrix4().compose(new THREE.Vector3().addVectors(p0, p1).multiplyScalar(0.5).add(o), q, new THREE.Vector3(br, len, br)), [0.86, 0.88, 0.95]);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g;
+}
+const molMeshes = DR ? MOL_ORDER.map((id) => new THREE.InstancedMesh(molGeo(id), new THREE.MeshBasicMaterial({ vertexColors: true }), N_RING * 3)) : [];
+const MOLC = MOL_ORDER.map((id) => MOLS[id].c);
+const MOL = { got: [false, false, false, false, false, false], dose: new Float32Array(6), body: new Float32Array(6), flash: new Float32Array(6), n: 0, since: 3, nextGap: 0, hurtT: 0 };
+const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh, ...molMeshes];
 wallMesh.count = Q.has('head') ? N_RING * 2 : 0;          // (eye mode: no walls, the middle is open. Head mode uses two wall pieces per row for CARVE GATES)
 for (const mm of allMeshes) { mm.frustumCulled = false; scene.add(mm); }
 const PICKS = [          // kind: what it does (Godot: CRYSTAL a longer boost, CAGE a shield, RINGS double points, CLUSTER a lump of points)
@@ -276,7 +300,7 @@ function mkThing(avoid, noRamp) {
   }
   return { type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false };
 }
-const mkRocks = () => ({ type: 4, pick: 0, orbs: [], done: false });
+const mkRocks = () => ({ type: 4, pick: 0, orbs: [], done: false, mol: Math.floor(Math.random() * 6) });          // (a rock belongs to one molecule: its colour, and the one it dims)
 // GUIDED ROWS (the calibration that is part of the game): for the first 3 rows exactly ONE lane holds a prize and the matching card says LOOK HERE, in a shuffled left / middle / right order. The true lane
 // of the look is then known, so the model learns from it directly (EyeModel.supervise) and the log holds true-target / model-guess pairs. ?noguide skips it.
 const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse') && !Q.has('head'), visible: Q.has('guide') || !CAL_DONE, max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], bSize: 0, bTried: 0, bHits: 0, pending: 0, warm: 0, rn: 0, every: Q.has('targets') ? parseInt(Q.get('targets'), 10) || 0 : 3, tuneups: 0, lastTune: -999, first: false };
@@ -330,6 +354,37 @@ function gateRow(r) {
   r.s = [null, null, null]; r.gap = { c: SLM.c, w: Math.max(9, 22 - (tPlay - 12) * 0.09), orbs: [true, true, true, true, true, true] };
   return true;
 }
+const molGap = () => Q.has('molgap') ? parseFloat(Q.get('molgap')) || 250 : (MOL.n >= 6 ? 1100 : 700);          // metres between molecule rows (Godot paces six finds over a whole session; here 700 m, ?molgap=250 to find them fast)
+function molRow(r) {
+  if (!DR || tPlay < 5) return false;
+  MOL.since += ROW_GAP; if (MOL.since < MOL.nextGap) return false;
+  MOL.since = 0; MOL.nextGap = molGap() * (0.85 + Math.random() * 0.3);
+  const w = MOL_ORDER.map((_, i) => (MOL.got[i] ? (MOL.dose[i] >= 5.5 ? 0.2 : 0.7) : 4)), picked = [];          // one not yet found keeps turning up
+  while (picked.length < 3) { let tot = 0; w.forEach((x, i) => { if (!picked.includes(i)) tot += x; }); let q = Math.random() * tot, k = 0; for (let i = 0; i < 6; i++) { if (picked.includes(i)) continue; q -= w[i]; k = i; if (q <= 0) break; } picked.push(k); }
+  picked.sort(() => Math.random() - 0.5);
+  r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0]; r.gap = null; r.mines = null;
+  r.s = picked.map((mi) => ({ type: 5, mol: mi, pick: 0, orbs: [], done: false }));
+  return true;
+}
+function molEat(mi) {
+  const first = !MOL.got[mi], old = MOL.dose[mi];
+  if (first) { MOL.got[mi] = true; MOL.dose[mi] = 6; MOL.n++; } else MOL.dose[mi] = Math.min(6, MOL.dose[mi] + 2);
+  MOL.flash[mi] = 1; G.got++; G.combo += 2; G.best = Math.max(G.best, G.combo); award(Math.round(120 * (first ? 3 : 1) * (1 + 0.25 * MOL.body[1] / 6)));
+  const hex = '#' + MOLC[mi].map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+  bannerEl.style.color = hex; setTimeout(() => { bannerEl.style.color = '#fff'; }, 1700);
+  bannerShow(first ? MOLS[MOL_ORDER[mi]].name.toUpperCase() + ' FOUND ' + MOL.n + ' OF 6   +' + MOL_PERK[mi] : MOLS[MOL_ORDER[mi]].name + ' topped up', true);
+  flash(MOLC[mi][0], MOLC[mi][1], MOLC[mi][2], 0.5); const f = [262, 330, 392, 494, 587, 740][mi]; beep(f, 0.3, 0.1); setTimeout(() => beep(f * 1.5, 0.35, 0.08), 90);
+}
+function molHurt(mi) {          // a hazard costs a level of ITS OWN molecule and no other; one you do not hold costs nothing
+  if (mi < 0 || MOL.body[mi] < 0.5) return;
+  MOL.body[mi] = Math.max(MOL.body[mi] - 2, 0); MOL.hurtT = 1; bannerShow(MOLS[MOL_ORDER[mi]].name + ' dimmed', true);
+}
+function molTick(dt) {
+  const wear = 1;
+  for (let i = 0; i < 6; i++) { MOL.dose[i] = Math.max(MOL.dose[i] - (i === 1 ? 0.004 : 0.008) * wear * dt, 0); const rate = MOL.dose[i] > MOL.body[i] ? 25 : 8; MOL.body[i] += (MOL.dose[i] - MOL.body[i]) * (1 - Math.exp(-dt / rate)); MOL.flash[i] = Math.max(MOL.flash[i] - dt * 1.1, 0); }
+  MOL.hurtT = Math.max(MOL.hurtT - dt * 1.5, 0);
+}
+const molDmt = () => { let mn = 6; for (let i = 0; i < 6; i++) mn = Math.min(mn, MOL.body[i]); return Math.max(0, Math.min(1, (mn / 6 - 0.52) / 0.23)); };
 function setRow(r, z) {
   r.z = z; r.passed = false; r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0];
   const orbs = () => ({ type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false });
@@ -342,8 +397,9 @@ function setRow(r, z) {
     else { r.lw = 0.6; r.s = [orbs(), orbs(), orbs()]; r.s[g + 1] = { type: 2, pick: Math.floor(Math.random() * 4), orbs: [], done: false }; }          // hidden: three normal lanes, one clearly better (a pickup against orbs)
     return;
   }
+  if (DR && molRow(r)) return;
   r.gap = null; r.gapDone = false; r.mines = null; r.mfStart = false; r.mfAnn = false; r.mDone = false;
-  if (Q.has('head') && tPlay > 12 && (mineRow(r) || gateRow(r))) return;
+  if (Q.has('head') && tPlay > 12 && ((Q.has('mines') && mineRow(r)) || gateRow(r))) return;          // (minefields and the chase are only an example of what the speed control could support: off unless ?mines)
   const calm = tPlay < 20;          // the first 20 seconds: no hazards
   const hzK = calm ? 0 : Math.min(0.7, 0.25 + tPlay * 0.002);          // how often something nasty is put in
   const roll = Math.random(), flip = Math.random() < 0.5 ? 1 : -1;
@@ -409,15 +465,35 @@ const feedMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
   void main(){ vec3 c = texture2D(uScene, vUv).rgb; vec3 p = texture2D(uPrev, vUv + (vUv-.5)*.004).rgb; gl_FragColor = vec4(max(c*.55, p*uK), 1.); }`,
   { uScene: { value: null }, uPrev: { value: null }, uK: { value: 0.86 } });
 const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2D uScene; uniform sampler2D uTrail; uniform float uTrace; uniform float uSplit;
-  uniform vec4 uFlash;
+  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime;
+  vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec2 c = vUv - .5; float r = length(c);
-    float ca = uSplit * (.002 + r * .01);
-    vec3 col = vec3(texture2D(uScene, vUv + c*ca).r, texture2D(uScene, vUv).g, texture2D(uScene, vUv - c*ca).b);
+    // THE SIX (Themes.gd's picture pass, one piece each; everything is eased down in the middle and round the board so it stays playable)
+    float keep = mix(.35, 1., smoothstep(.05, .38, length(c * vec2(1., 1.25)))), pl = pow(max(sin(uTime * 6.), 0.), 3.);
+    vec2 wuv = vUv;
+    wuv += c * (uMA.x * .002 * keep * sin(uTime * .5 + r * 6.));          // mescaline: slow warm waves
+    wuv += c * (uMB.y * .0015 * keep * sin(r * 34. - uTime * 3.));          // 2C-T-2: ripples running out from the middle
+    float kf = clamp(uMB.x * .22 + uDmt * .4, 0., .55) * smoothstep(.24, .5, r);
+    if (kf > .001) { float seg = 6.2831853 / (6. + 2. * uDmt), an = atan(c.y, c.x), af = abs(mod(an, seg) - seg * .5); wuv = mix(wuv, vec2(.5) + vec2(cos(af), sin(af)) * r, kf); }          // 2C-E: the picture folds into mirrored segments toward the edges
+    wuv = vec2(.5) + (wuv - vec2(.5)) * (1. - .006 * uMB.z * pl * keep + .006 * uDmt * sin(uTime * .8) * keep);          // 2C-T-7: a pulse that pushes in
+    float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6);          // 2C-B: the colours split apart
+    vec3 col = vec3(texture2D(uScene, wuv + c*ca).r, texture2D(uScene, wuv).g, texture2D(uScene, wuv - c*ca).b);
     col += texture2D(uTrail, vUv).rgb * .8 * uTrace * (1. - clamp(dot(col, vec3(.35,.5,.15)) * 1.2, 0., .9));
     col += uFlash.rgb * uFlash.a * (0.08 + r * 0.45);
+    col = mix(col, col * vec3(1.15, .95, .78), uMA.x * .5);          // mescaline: warm
+    col *= 1. + uMA.y * .12 * sin(uTime * .35);          // DOM: a slow deep swell of light ...
+    col = max((col - .5) * (1. + .3 * uMA.y) + .5, vec3(0.));          // ... and deeper darks
+    col *= 1. + uMB.z * .30 * pl * keep;          // 2C-T-7: the pulse is bright too
+    float lm = dot(col, vec3(.299, .587, .114));
+    col = mix(vec3(lm), col, 1. + .8 * uMA.z + .5 * uDmt);          // 2C-B: vivid
+    if (uDmt > .001) {          // all six: the colours cycle through everything and rings run outward
+      col = mix(col, col * hsv(fract(uTime * .2 + r * 2.)) * 1.4, uDmt * .4 * keep);
+      col += hsv(fract(r * 8. - uTime * .6)) * .18 * uDmt * (.5 + .5 * sin(r * 40. - uTime * 4.)) * keep;
+    }
+    float mxc = max(max(col.r, col.g), col.b); if (mxc > .75) col *= (.75 + .25 * (1. - exp(-(mxc - .75) * 2.5))) / mxc;          // soft shoulder: light added by the effects is folded back, so bright areas keep their colour
     gl_FragColor = vec4(col, 1.);
-  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() } });
+  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 } });
 const feedScene = new THREE.Scene();
 feedScene.add(feedMat);
 const compScene = new THREE.Scene();
@@ -889,8 +965,9 @@ function link(kind) {          // Godot: every DIFFERENT thing inside 7 s links 
   if (ST.chainT > 0 && kind !== ST.lastKind) { ST.chain++; if (ST.chain >= 2) { award(40 * ST.chain); bannerShow('CHAIN x' + ST.chain, true); beep(520 + ST.chain * 90, 0.2, 0.08); } } else if (ST.chainT <= 0) ST.chain = 1;
   ST.lastKind = kind; ST.chainT = 7;
 }
-function crash(why) {
+function crash(why, mol) {
   if (ST.shield > 0) { ST.shield = 0; flash(0.3, 0.85, 1, 0.6); beep(300, 0.2, 0.12); bannerShow('SHIELD GONE', true); return; }
+  if (DR && mol !== undefined) molHurt(mol);
   G.combo = 0; G.hit++; speed *= 0.45; ST.chain = 0; flash(1, 0.05, 0.1, 0.8); beep(110, 0.35, 0.18); bannerShow(why, true);
 }
 function stepAir(dt) {
@@ -923,7 +1000,7 @@ function stepRows(dt) {
       const reachY = 2.6 + ST.y + (HEAD.vy >= 0 ? 8 * HEAD.vy : 3 * HEAD.vy), near = HEAD.on ? Math.abs(camX - lx) < 7.5 : laneNow === lane;          // HEAD mode: where the head reaches up and down matters too
       const mine = near && (!HEAD.on || !o || o.type > 2 || Math.abs((o.type === 1 ? (o.hy || 2.6) + 1.9 : (o.hy || 2.6) + 0.4) - reachY) < (o.type === 1 ? 5.5 : 4.2));          // (head steering: the board is anywhere, so a thing is taken when it is within reach and a rock only when the board is on one)
       for (let k = 0; k < 6; k++) hz(orbMesh, i * 18 + sd * 6 + k);
-      hz(ringMesh, si); hz(beamMesh, si); hz(padMesh, si); hz(pickMesh, si); hz(pickWire, si); hz(rampMesh, si); hz(rockMesh, i * 6 + sd * 2); hz(rockMesh, i * 6 + sd * 2 + 1);
+      hz(ringMesh, si); hz(beamMesh, si); hz(padMesh, si); hz(pickMesh, si); hz(pickWire, si); hz(rampMesh, si); hz(rockMesh, i * 6 + sd * 2); hz(rockMesh, i * 6 + sd * 2 + 1); for (const mm of molMeshes) hz(mm, si);
       if (!o) continue;
       if (o.type === 0) {
         for (let k = 0; k < 6; k++) {
@@ -960,10 +1037,17 @@ function stepRows(dt) {
         m4.compose(v3.set(lx, (1.7) + TY(r.z, lx), r.z), qRamp, s3.setScalar(1)); rampMesh.setMatrixAt(si, m4); rampMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
         if (crossing(r.z - 8)) { o.done = true; if (mine) { ST.vy = 10 + speed * 0.18; ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); } }
+      } else if (o.type === 5) {          // a MOLECULE: turning, bobbing, in its own colour under a tall beam of the same colour
+        const c = MOLC[o.mol], sp = t * 0.9 + i + sd * 2;
+        q4.setFromEuler(eul.set(0.35 * Math.sin(sp * 0.7), sp, 0.25 * Math.sin(sp * 0.5)));
+        m4.compose(v3.set(lx, 3.8 + Math.sin(t * 2.4 + i + sd) * 0.5 + TY(r.z, lx), r.z), q4, s3.setScalar(1.35)); molMeshes[o.mol].setMatrixAt(si, m4);
+        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
+        m4.compose(v3.set(lx, 0.25 + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(c[0] * 0.5, c[1] * 0.5, c[2] * 0.5));
+        if (crossing(r.z)) { o.done = true; if (mine) molEat(o.mol); }
       } else {
-        for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), (2.4) + TY(r.z, lx + (n ? 4.5 : -4.5)), r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
+        for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), (2.4) + TY(r.z, lx + (n ? 4.5 : -4.5)), r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, DR && o.mol !== undefined ? colr.setRGB(MOLC[o.mol][0], MOLC[o.mol][1], MOLC[o.mol][2]).multiplyScalar(0.75 + 0.25 * Math.sin(t * 5)) : colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
-        if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 6.5 || Math.abs(camX - lx + 4.5) < 6.5) : mine) && ST.y < 3) crash('ROCK'); }
+        if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 6.5 || Math.abs(camX - lx + 4.5) < 6.5) : mine) && ST.y < 3) crash('ROCK', o.mol); }
       }
     }
     hz(wallMesh, i * 2); hz(wallMesh, i * 2 + 1);
@@ -1074,6 +1158,23 @@ async function tunePoll() {
 }
 setInterval(tunePoll, 2000);
 
+// THE SIX, along the top: each slot a molecule turning in it (an outline until it is found), a ring round it for how much of it is felt, its name and what it does beneath.
+const molHud = DR ? document.createElement('canvas') : null;
+if (molHud) { molHud.width = 6 * 76; molHud.height = 96; molHud.style.cssText = 'position:fixed;left:50%;top:50px;margin-left:' + (-3 * 76) + 'px;width:' + 6 * 76 + 'px;height:96px;z-index:6;pointer-events:none'; document.body.appendChild(molHud); }
+const molHeavy = MOL_ORDER.map((id) => { const m = MOLS[id], idx = [], map = {}; m.atoms.forEach((a, i) => { if (a[0] !== 'H') { map[i] = idx.length; idx.push(i); } }); let rr = 0; idx.forEach((i) => { rr = Math.max(rr, Math.hypot(m.atoms[i][1], m.atoms[i][2], m.atoms[i][3])); }); return { idx, map, rr: rr || 1 }; });
+function molHudDraw(tm) {
+  const g = molHud.getContext('2d'); g.clearRect(0, 0, molHud.width, molHud.height); g.textAlign = 'center';
+  for (let i = 0; i < 6; i++) {
+    const m = MOLS[MOL_ORDER[i]], cx = i * 76 + 38, cy = 34, rad = 30, c = MOLC[i], rgb = (k, a) => 'rgba(' + Math.round(c[0] * k * 255) + ',' + Math.round(c[1] * k * 255) + ',' + Math.round(c[2] * k * 255) + ',' + a + ')', got = MOL.got[i];
+    g.fillStyle = got ? rgb(0.22, 0.55) : 'rgba(0,0,0,.35)'; g.beginPath(); g.arc(cx, cy, rad, 0, 6.2832); g.fill();
+    g.lineWidth = 3; g.strokeStyle = rgb(1, got ? 0.9 : 0.25); g.beginPath(); g.arc(cx, cy, rad, -1.5708, -1.5708 + 6.2832 * Math.max(0, Math.min(1, MOL.body[i] / 6))); g.stroke();
+    const a = tm * 0.8 + i, ca = Math.cos(a), sa = Math.sin(a), H = molHeavy[i], sc = (rad - 6) / H.rr, P = (k) => { const at = m.atoms[k], x = at[1] * ca + at[3] * sa, z = -at[1] * sa + at[3] * ca; return [cx + x * sc, cy - at[2] * sc, z]; };
+    g.lineWidth = 1.6; g.strokeStyle = got ? 'rgba(220,225,240,.9)' : rgb(1, 0.3);
+    for (const b of m.bonds) { if (H.map[b[0]] === undefined || H.map[b[1]] === undefined) continue; const p0 = P(b[0]), p1 = P(b[1]); g.beginPath(); g.moveTo(p0[0], p0[1]); g.lineTo(p1[0], p1[1]); g.stroke(); }
+    for (const k of H.idx) { const p = P(k), el = m.atoms[k][0], ec = el === 'C' ? c : MOL_EL_COL[el]; g.fillStyle = got ? 'rgb(' + Math.round(ec[0] * 255) + ',' + Math.round(ec[1] * 255) + ',' + Math.round(ec[2] * 255) + ')' : rgb(1, 0.3); g.beginPath(); g.arc(p[0], p[1], 2.6 + p[2] * 0.0, 0, 6.2832); g.fill(); }
+    g.font = '11px ui-monospace,Consolas,monospace'; g.fillStyle = got ? '#fff' : 'rgba(255,255,255,.4)'; g.fillText(m.name, cx, 78); g.font = '9px ui-monospace,Consolas,monospace'; g.fillStyle = got ? rgb(1, 1) : 'rgba(255,255,255,.3)'; g.fillText(got ? MOL_PERK[i] : '?', cx, 90);
+  }
+}
 // THE LOOP
 let zPrev = 0, t = 0, zPos = 0, speed = 28, last = performance.now(), lastHud = 0, camX = 0, ping = 0;
 const fts = [];
@@ -1088,6 +1189,7 @@ function frame(now) {
   if (eyeMode && started) { readTracker(now); updateLane(dt); }
   telTick(now, dt);
   logSample(now);
+  if (molHud && now - (molHud._t || 0) > 90) { molHud._t = now; molHudDraw(now / 1000); }
   if (HEAD.on) {          // SNOWBOARD PHYSICS: the head says where to go, the board does not jump there. A damped spring pulls it toward the target with a limited sideways acceleration and speed, so it eases into a turn, carries it
     // through and settles (a correction is an arc, not a snap), and a hard turn costs a little speed.
     const xT = steerTarget * LANE_W, a = Math.max(-HEAD.amax, Math.min(HEAD.amax, HEAD.w * HEAD.w * (xT - camX) - 2 * HEAD.z * HEAD.w * HEAD.vx));
@@ -1097,7 +1199,7 @@ function frame(now) {
     if (playing && ctrlReady()) speed = Math.max(14, speed - Math.abs(a) * dt * HEAD.carve);
   } else steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
-  worldBlend(dt);
+  worldBlend(dt); if (DR) molTick(dt);
   if (HEAD.on) {          // HEAD mode: the speed is the PLAYER'S. The base pace still climbs with progress (28 up to 80), a lean forward adds up to half as much again, pulling back takes off up to half, boost and the slope still count
     const base = Math.min(80, 28 + tPlay * 0.45), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0);
     speed += Math.max(-38 * dt, Math.min((tgt > speed ? (ST.boost > 0 ? 40 : 24) : 38) * dt, tgt - speed));
@@ -1146,6 +1248,11 @@ function frame(now) {
     compMat.material.uniforms.uTrace.value = flags.tracers ? TH.trace : 0;
     compMat.material.uniforms.uSplit.value = flags.split ? TH.split : 0;
     compMat.material.uniforms.uFlash.value.set(G.fr, G.fg, G.fb, G.flash);
+    if (DR) {          // each look grows with its molecule's felt level (a touch of curve so there is something to see from the first) and flashes for a moment when it is taken
+      const lv = (i) => Math.pow(MOL.body[i] / 6, 1.15) + MOL.flash[i] * 0.9;
+      compMat.material.uniforms.uMA.value.set(lv(0), lv(1), lv(2)); compMat.material.uniforms.uMB.value.set(lv(3), lv(4), lv(5)); compMat.material.uniforms.uDmt.value = molDmt();
+    }
+    compMat.material.uniforms.uTime.value = t;
     renderer.setRenderTarget(null);
     renderer.render(compScene, quadCam);
   } else {
@@ -1165,4 +1272,4 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : 0, true);
 requestAnimationFrame(frame);
-window.__dh = { CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
+window.__dh = { MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
