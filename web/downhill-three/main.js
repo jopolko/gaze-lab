@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795091156';
+import { EyeModel } from './eyemodel.js?v=1795091516';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -265,13 +265,14 @@ function mkThing(avoid, noRamp) {
 const mkRocks = () => ({ type: 4, pick: 0, orbs: [], done: false });
 // GUIDED ROWS (the calibration that is part of the game): for the first 3 rows exactly ONE lane holds a prize and the matching card says LOOK HERE, in a shuffled left / middle / right order. The true lane
 // of the look is then known, so the model learns from it directly (EyeModel.supervise) and the log holds true-target / model-guess pairs. ?noguide skips it.
-const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), visible: Q.has('guide') || !CAL_DONE, max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], bSize: 0, bTried: 0, bHits: 0, pending: 0, warm: 0, tuneups: 0, lastTune: -999, first: false };
+const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), visible: Q.has('guide') || !CAL_DONE, max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], bSize: 0, bTried: 0, bHits: 0, pending: 0, warm: 0, rn: 0, every: Q.has('targets') ? parseInt(Q.get('targets'), 10) || 0 : 3, tuneups: 0, lastTune: -999, first: false };
 GUIDE.first = GUIDE.on && GUIDE.visible; GUIDE.bSize = GUIDE.first ? GUIDE.max : 0;          // 3 rows by default (one look at each lane, shuffled): the rings are SHOWN only on the first run on a device (or ?guide), and for a tune-up; every other session starts with 3 normal-looking rows, each with one obviously better prize (hidden warm-up)
 for (let k = 0; k < Math.ceil(GUIDE.max / 3); k++) GUIDE.seq.push(...[-1, 0, 1].sort(() => Math.random() - 0.5));
 const VAL = { 0: 1, 1: 2, 2: 3, 3: 2.5, 4: -5 };          // what a thing is worth to someone choosing: used to see which lane of a row is clearly the best one (an inferred label for the eyes)
 function setRow(r, z) {
   r.z = z; r.passed = false; r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0];
   const orbs = () => ({ type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false });
+  if (GUIDE.on && GUIDE.every && GUIDE.n >= GUIDE.max && GUIDE.pending === 0 && tPlay > 6 && ++GUIDE.rn % GUIDE.every === 0) GUIDE.pending = 1;          // ?targets=N (default 3 while testing, 0 = off): after the first rows, every Nth row is a visible LOOK HERE ring, all run long
   if (GUIDE.pending > 0 || GUIDE.warm > 0 || (GUIDE.on && GUIDE.n < GUIDE.max)) {          // a guided row: ONE lane holds the prize
     const g = (GUIDE.pending > 0 || GUIDE.warm > 0) ? [-1, 0, 1][Math.floor(Math.random() * 3)] : GUIDE.seq[GUIDE.n++];
     const vis = GUIDE.pending > 0 || (GUIDE.warm <= 0 && GUIDE.visible); if (GUIDE.pending > 0) GUIDE.pending--; else if (GUIDE.warm > 0) GUIDE.warm--;
