@@ -20,10 +20,10 @@ export class EyeModel {
     this.m = [0, 0];
     this.dL = prior && prior.dL ? prior.dL.slice() : [0.02, 0.02];          // left = middle + dL (hx rises for a look left)
     this.dR = prior && prior.dR ? prior.dR.slice() : [0.02, 0.02];          // right = middle - dR
-    this.S = prior && prior.S ? prior.S.slice() : [3.0e-5, 3.0e-5, 1.0e-5];          // [varA, varB, covAB]
+    this.S = [3.0e-5, 3.0e-5, 1.0e-5];          // (measured from the stare each time: a saved one once carried an inflated value from a bad run into the next)          // [varA, varB, covAB]
     this.post = [0, 1, 0]; this.state = 1; this.ready = false; this.init = [];
     this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.lastFix = 0; this.fixes = 0;
-    this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.02; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45;          // (tuned by simulation on eyes like the logged ones)
+    this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.04; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45; this.CLIP = 0.012; this.SIDEW = 0.5; this.SMAX = 7.0e-5;          // (tuned by simulation on eyes like the logged ones)
   }
   inv() { const [a, b, c] = this.S, det = Math.max(a * b - c * c, 1e-12); return [b / det, a / det, -c / det]; }          // inverse of [[a,c],[c,b]] as [ia, ib, ic]
   q(x, k) {          // squared Mahalanobis distance of x from state k's mean
@@ -60,8 +60,10 @@ export class EyeModel {
     // ADAPT. FLOAT: the middle follows the whole signal, each reading weighted by the state the filter believes it is in and measured from THAT state's own mean (so a long look to the left, which
     // sits at m + dL, does not drag the middle left; but a drift of everything moves all three places together). LEARN: each side's offset follows the readings believed to be that side, slowly.
     const rA = [x[0] - this.m[0], x[1] - this.m[1]], dl = this.dL, dr = this.dR;
-    const resA = np[0] * (rA[0] - dl[0]) + np[1] * rA[0] + np[2] * (rA[0] + dr[0]), resB = np[0] * (rA[1] - dl[1]) + np[1] * rA[1] + np[2] * (rA[1] + dr[1]);
-    this.m[0] += this.ETA_M * resA; this.m[1] += this.ETA_M * resB;
+    const sw = this.SIDEW;          // a side counts for less when moving the middle: a long look to one side must not drag the middle over to it
+    const resA = sw * np[0] * (rA[0] - dl[0]) + np[1] * rA[0] + sw * np[2] * (rA[0] + dr[0]), resB = sw * np[0] * (rA[1] - dl[1]) + np[1] * rA[1] + sw * np[2] * (rA[1] + dr[1]);
+    const cl = (v) => Math.max(-this.CLIP, Math.min(this.CLIP, v));          // one reading can only pull the middle so far (a long look to a side must not drag it over)
+    this.m[0] += this.ETA_M * cl(resA); this.m[1] += this.ETA_M * cl(resB);
     const r2 = [x[0] - this.m[0], x[1] - this.m[1]];
     if (np[0] > 0.7) { const e = this.ETA_S * np[0]; this.dL[0] += e * (r2[0] - this.dL[0]); this.dL[1] += e * (r2[1] - this.dL[1]); this.fixSep(this.dL); }
     if (np[2] > 0.7) { const e = this.ETA_S * np[2]; this.dR[0] += e * (-r2[0] - this.dR[0]); this.dR[1] += e * (-r2[1] - this.dR[1]); this.fixSep(this.dR); }
@@ -69,6 +71,7 @@ export class EyeModel {
     if (k >= 0) {
       const d = k === 0 ? this.dL : k === 2 ? [-this.dR[0], -this.dR[1]] : [0, 0], r0 = x[0] - this.m[0] - d[0], r1 = x[1] - this.m[1] - d[1], e = this.ETA_C;
       this.S[0] = Math.max((1 - e) * this.S[0] + e * r0 * r0, 1.2e-5); this.S[1] = Math.max((1 - e) * this.S[1] + e * r1 * r1, 1.2e-5);
+      this.S[0] = Math.min(this.S[0], this.SMAX); this.S[1] = Math.min(this.S[1], this.SMAX);
       this.S[2] = Math.max(Math.min((1 - e) * this.S[2] + e * r0 * r1, 0.8 * Math.sqrt(this.S[0] * this.S[1])), 0);
     }
     // SANITY (the middle is the most common state: people mostly look ahead). The three places can slide together by one place (everything read as RIGHT while the middle drifts to sit above the

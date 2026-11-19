@@ -14,7 +14,7 @@ const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
 // THE EYE MODEL (eyemodel.js): a three-state filter over both eyes together that floats with drift and remembers what it learned on this device. ?nomodel goes back to the threshold detector.
 let EM = null;
-if (!Q.has('nomodel')) { let pr = null; try { pr = JSON.parse(localStorage.getItem('spike_em') || 'null'); } catch (e) { /* */ } EM = new EyeModel(pr); }
+if (!Q.has('nomodel')) { let pr = null; try { pr = JSON.parse(localStorage.getItem('spike_em2') || 'null'); } catch (e) { /* */ } EM = new EyeModel(pr); }
 // WHICH EYE (glasses and lenses can distort one eye). The two eyes' readings are kept apart for the last ~25 s and each is judged at the moments BOTH eyes agree you looked left or right: the 15% of readings
 // where the two-eye average is furthest left, the 15% furthest right, against the middle 40%. An eye's score is its WEAKER side (how far it moves for a look that way) over its jitter, so an eye that barely
 // responds on one side, or is noisy, scores low. In play the looks are small and the eyes can not be told apart, so it only switches on strong evidence (a clear 1.5x win and a real spread of looks), and the
@@ -448,7 +448,7 @@ if (eyeMode) {
         if (EM && Number.isFinite(ha) && Number.isFinite(hb)) {          // the model decides the zone once the middle is learned (KIT still runs, for the setup bar, blinks and the logs)
           EM.step([ha, hb]);
           if (EM.ready && KIT.zones) { if (KIT.zone !== EM.zone) KIT.zone_t = t; KIT.zone = EM.zone; KIT.zn = EM.zn; }
-          if (EM.n % 150 === 0) { try { localStorage.setItem('spike_em', JSON.stringify(EM.save())); } catch (e) { /* */ } }
+          if (EM.n % 150 === 0) { try { localStorage.setItem('spike_em2', JSON.stringify(EM.save())); } catch (e) { /* */ } }
         }
       };          // (the tracker already holds readings through blinks, so the blink inputs are zero here)
       await tracker.start((st) => { $('mp').textContent = st; window.__gazeStatus = st === 'ready' ? 'camera on' : st; }, Q.get('fakecam'));
