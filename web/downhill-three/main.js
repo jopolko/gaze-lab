@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795104284';
+import { EyeModel } from './eyemodel.js?v=1795104414';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -1576,7 +1576,8 @@ function buggyStep(dt) {
   BUG.yv -= 34 * dt; BUG.y += BUG.yv * dt;
   if (BUG.y <= gh) { const into = vg - BUG.yv; BUG.y = gh; if (into > 8 && !BUG.wasG) { BUG.yv = vg + into * 0.4; BUG.squash = Math.min(0.55, into / 40); if (into > 14) { BUG.shake = Math.max(BUG.shake, into / 40); if (MUS) MUS.tone(110, 0.2, 0.12, false); } BUG.grounded = false; } else { BUG.yv = vg; BUG.grounded = true; } } else BUG.grounded = BUG.y - gh < 0.3;
   BUG.wasG = BUG.grounded; BUG.hopT -= dt; BUG.tramT -= dt;
-  if (HEAD.vt > 0.55 && BUG.grounded && BUG.hopT <= 0) { BUG.yv = vg + 13; BUG.grounded = false; BUG.hopT = 0.5; BUG.squash = 0.2; if (MUS) MUS.tone(660, 0.18, 0.09); }
+  HEAD.vslow = (HEAD.vslow === undefined ? HEAD.vt : HEAD.vslow) + (HEAD.vt - (HEAD.vslow === undefined ? HEAD.vt : HEAD.vslow)) * (1 - Math.exp(-dt / 0.8));          // a HOP is a quick nod: the nod signal minus its own slow average, so leaning in (which tips the head forward and holds it there) never counts
+  if (HEAD.vt - HEAD.vslow > 0.4 && BUG.grounded && BUG.hopT <= 0) { BUG.yv = vg + 13; BUG.grounded = false; BUG.hopT = 0.5; BUG.squash = 0.2; if (MUS) MUS.tone(660, 0.18, 0.09); }
   ST.y = Math.max(0, BUG.y - gh); ST.vy = BUG.yv - vg; speed = Math.hypot(OW.vx, OW.vz); zPrev = zPos; zPos = OW.z; camX = OW.x; BUG.vf = vf;
   BUG.wheel += vf * dt / 0.95; BUG.squash *= Math.exp(-dt * 7); BUG.shake *= Math.exp(-dt * 4);
   const slope = g[0] * fx + g[1] * fz; BUG.pitch += ((-Math.atan(slope) * 1.0 + Math.max(-0.2, Math.min(0.2, (BUG.acc || 0) * 0.004))) - BUG.pitch) * Math.min(1, dt * 10); BUG.roll += ((-(OW.om || 0) * 0.09 * Math.min(1, Math.abs(vf) / 18)) - BUG.roll) * Math.min(1, dt * 8);
