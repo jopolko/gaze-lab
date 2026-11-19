@@ -675,7 +675,9 @@ function stepRows(dt) {
   const chips = [];
   if (ST.boost > 0) chips.push('BOOST ' + ST.boost.toFixed(1)); if (ST.shield > 0) chips.push('SHIELD'); if (ST.mult > 0) chips.push('x2 ' + ST.mult.toFixed(0)); if (ST.chain > 1 && ST.chainT > 0) chips.push('CHAIN ' + ST.chain);
   chipEl.textContent = chips.join('   ');
-  speedEl.textContent = Math.round(speed * 3.6) + ' km/h\n' + THEMES[worldIdx].name;
+  const tm = Math.floor(tPlay / 60), ts = Math.floor(tPlay % 60);
+  speedEl.textContent = Math.round(speed * 3.6) + ' km/h\n' + THEMES[worldIdx].name + '\n' + tm + ':' + (ts < 10 ? '0' : '') + ts + (tPlay >= 60 ? '  ✓' : '');
+  if (!stepRows.said && tPlay >= 60) { stepRows.said = true; bannerShow('60 SECONDS: ENOUGH DATA', true); beep(880, 0.2, 0.08); setTimeout(() => beep(1320, 0.3, 0.08), 150); }
 }
 
 // TELEMETRY, the bare minimum, into the same anonymous log the Godot game used (log.php keeps only fields it already knows, so these are existing names): one environment record, then
