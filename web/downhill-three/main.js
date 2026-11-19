@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795095211';
+import { EyeModel } from './eyemodel.js?v=1795095326';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -683,10 +683,10 @@ function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.pa
 // HEAD STEERING TEST (?head): no eyes, no zones, no lanes chosen for you. The board goes where the HEAD points: a short two-step set-up (turn the head left, then right, 3 s each) learns which of yaw, roll and
 // the face's sideways position moves most, and by how much, for THIS person on THIS device; the board then follows a smooth number between -1 (head fully left) and +1 (fully right), exactly as far as the head has turned.
 // Live tuning (tune.json "HEAD": gain, dead, flip, tau, rc to re-centre on the current pose, redo to repeat the set-up).
-const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.1, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7 };
+const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.1, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.5 };
 if (HEAD.on) { TUNE.steerK = 40; TUNE.camK = 22; }          // the board follows the head almost at once (the eye game slides slowly on purpose)
 const headF = () => [KIT.yaw || 0, KIT.roll || 0, (KIT.fx || 0) * 100];
-const HN = [5, 2.5, 1.5];          // typical head movement in play: yaw degrees, roll degrees, face sideways position
+const HN = [8, 5, 3.5];          // typical head movement in play: yaw degrees, roll degrees, face sideways position
 function headFeed() {
   if (!HEAD.on) return;
   if (HEAD.phase === 'left' || HEAD.phase === 'right') HEAD.buf.push({ t: performance.now(), f: headF() });
@@ -695,6 +695,7 @@ function headFeed() {
 // SELF-CALIBRATION the player never sees: the head's three signals (yaw, roll, sideways position) move together when you turn to steer. The dominant direction of everything the head has done in the last
 // ~40 s is the steering axis (signed by a prior: left = more yaw, less roll, more x), the median along it is straight ahead, and the 90th percentile of how far it strays is a 0.9 turn. Re-fitted twice a second, so a
 // phone that is held differently, a lean on the bus or a new player re-tunes itself within seconds, and nothing is ever asked of the player. A one-euro filter keeps it still when the head is still and quick when it moves.
+const headProj = (v) => (v[0] * HEAD.ax[0] + v[1] * HEAD.ax[1] + v[2] * HEAD.ax[2]) / (Math.abs(HEAD.ax[0]) + Math.abs(HEAD.ax[1]) + Math.abs(HEAD.ax[2]));          // an AVERAGE of the three channels, not their sum: a head sweep moves all three together and the sum was three times too sensitive (it jumped side to side through the middle)
 function headFit() {
   const fb = HEAD.fb, n = fb.length; if (n < 20) return;
   const mean = [0, 0, 0]; for (const v of fb) for (let i = 0; i < 3; i++) mean[i] += v[i] / n;
@@ -706,7 +707,7 @@ function headFit() {
     if (d > 0.5) ax = a;
   }
   HEAD.ax = HEAD.ax.map((x, i) => x * 0.7 + ax[i] * 0.3); const m = Math.hypot(...HEAD.ax); HEAD.ax = HEAD.ax.map((x) => x / m);
-  const pr = fb.map((v) => v[0] * HEAD.ax[0] + v[1] * HEAD.ax[1] + v[2] * HEAD.ax[2]).sort((x, y) => x - y);
+  const pr = fb.map(headProj).sort((x, y) => x - y);
   const med = pr[Math.floor(pr.length / 2)], dev = pr.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * 0.9)];
   HEAD.neu = n < 40 ? med : HEAD.neu + (med - HEAD.neu) * 0.25;
   HEAD.k = HEAD.k + (0.9 / Math.max(0.9, Math.min(2.5, q90)) - HEAD.k) * (n < 40 ? 1 : 0.25);
@@ -714,13 +715,13 @@ function headFit() {
 function headAuto(dt, now, f) {
   if (!HEAD.cur) return; if (HEAD.fb.length < 12) { HEAD.phase = 'wait'; return; } HEAD.phase = 'run';
   if (now - HEAD.lastFit > 500) { HEAD.lastFit = now; headFit(); }
-  const nv = [HEAD.cur[0] / HN[0], HEAD.cur[1] / HN[1], HEAD.cur[2] / HN[2]], pcur = nv[0] * HEAD.ax[0] + nv[1] * HEAD.ax[1] + nv[2] * HEAD.ax[2];
+  const nv = [HEAD.cur[0] / HN[0], HEAD.cur[1] / HN[1], HEAD.cur[2] / HN[2]], pcur = headProj(nv);
   let sv = KIT.lost ? 0 : -HEAD.flip * (pcur - HEAD.neu) * HEAD.k;
   sv = Math.max(-1.3, Math.min(1.3, sv)); if (Math.abs(sv) < HEAD.dead) sv = 0;
   const dv = (sv - HEAD.vs) / Math.max(dt, 0.001); HEAD.vel += (dv - HEAD.vel) * 0.3; HEAD.vs = sv;          // one-euro: the faster the head moves the less it is smoothed
   const fc = HEAD.fc + HEAD.beta * Math.abs(HEAD.vel), a = 1 / (1 + 1 / (2 * Math.PI * fc * Math.max(dt, 0.001)));
   HEAD.s += (sv - HEAD.s) * a;
-  steerTarget = Math.max(-1, Math.min(1, (HEAD.s + HEAD.vel * HEAD.lead) * HEAD.gain)); lane = Math.round(steerTarget);
+  const xs = Math.max(-1.3, Math.min(1.3, HEAD.s + HEAD.vel * HEAD.lead)); steerTarget = Math.max(-1, Math.min(1, Math.sign(xs) * Math.pow(Math.abs(xs), HEAD.pw) * HEAD.gain)); lane = Math.round(steerTarget);          // (a power curve: small head movements do little, so the middle is wide and sticky; the sides still reach the full lane)
   KIT.zn = steerTarget; KIT.zone = lane; LOCK.lane = lane;
   const gd = $('gdot'); gd.style.left = ((steerTarget * 0.45 + 0.5) * innerWidth) + 'px'; gd.style.top = (innerHeight * 0.5) + 'px';
 }
