@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795102393';
+import { EyeModel } from './eyemodel.js?v=1795102687';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open');          // ?open: THE OPEN WORLD. No lanes, no rows: an endless hilly world made as you go; the head turns the board (carving), a lean in or out is the speed, a nod reaches up or down
@@ -145,7 +145,7 @@ const TERRAIN = !Q.has('flat');
 const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
   uniforms: { uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
-  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer, uOpen; float HO(vec2 p){ return 0.07*p.y + 14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.); } vec2 HG(vec2 p){ return vec2(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41., .07 + 14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer, uOpen; float HO(vec2 p){ return 0.03*p.y + 0.3*(14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.)); } vec2 HG(vec2 p){ return vec2(0.3*(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41.), .03 + 0.3*(14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.)); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
@@ -165,8 +165,10 @@ const groundMat = new THREE.ShaderMaterial({
       } else if (m < 1.5) {                                             // PSYCHEDELIC (GROUND_PSY): two grids of SQUARES, the second 3.7% finer and turning about the rider; where they fall in and out of step big slow shapes appear
         vec2 g1 = wp.xz / 6.0; float grid1 = sin(g1.x * 6.283) * sin(g1.y * 6.283);
         vec2 g2 = wp.xz * 1.037 / 6.0; float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
-        float far = 1.0 - smoothstep(130., 340., dist), amp = mix(.5, grid1 * grid2 * .5 + .5, far), sq = mix(.5, smoothstep(-.06, .06, grid1), far);
-        col = mix(vec3(1.), hsv(fract(amp * .5 + uT * .03)), .9) * (.25 + .75 * pow(amp, .65)) * (.62 + .38 * sq);
+        float far = 1.0 - smoothstep(130., 340., dist), w1 = max(.04, fwidth(grid1)), w2 = max(.04, fwidth(grid2));
+        float c1 = smoothstep(-w1, w1, grid1), c2 = smoothstep(-w2, w2, grid2);          // each grid's squares, with STRAIGHT crisp edges (they only change where the grid lines are)
+        float agree = c1 * c2 + (1. - c1) * (1. - c2), amp = mix(.5, agree, far), sq = mix(.5, c1, far);          // 1 where the two grids agree: straight-edged shapes of every size drifting by
+        col = mix(vec3(1.), hsv(fract(amp * .5 + (grid1 * grid2 * .5 + .5) * .08 + uT * .03)), .9) * (.28 + .72 * pow(amp, .65)) * (.62 + .38 * sq);
       } else if (m < 2.5) {                                             // TUNNEL ROAD: chevrons racing at you
         float v = abs(fract(wp.z/7. + abs(wp.x)*.045) - .5);
         float ch = smoothstep(.34, .44, v);
@@ -1241,10 +1243,11 @@ setInterval(tunePoll, 2000);
 // ======================================================================================================================================================================================================
 if (OPEN) { const hp = document.getElementById('help'); if (hp) hp.textContent = 'OPEN WORLD. Turn your head to carve, lean in for speed and back to slow, nod to reach up or down. Beams mark buffs; molecules turn the world. Esc pauses  N next world  M music  ?mouse to play with the mouse'; }
 const OW = { x: 0, z: 0, th: 0, vx: 0, vz: -24, om: 0, seed: 7, cells: new Map(), taken: new Set(), bump: 0, nTree: 0 };
-const HOf = (x, z) => 0.07 * z + 14 * Math.sin(x / 190 + 1.3) * Math.sin(z / 210 + 0.4) + 7 * Math.sin(x / 83 + z / 117 + 2) + 3.2 * Math.sin(x / 37 - z / 53 + 1) + 1.6 * Math.sin(z / 23 + x / 41);
-const HOg = (x, z) => [14 * Math.cos(x / 190 + 1.3) / 190 * Math.sin(z / 210 + 0.4) + 7 * Math.cos(x / 83 + z / 117 + 2) / 83 + 3.2 * Math.cos(x / 37 - z / 53 + 1) / 37 + 1.6 * Math.cos(z / 23 + x / 41) / 41,
-  0.07 + 14 * Math.sin(x / 190 + 1.3) * Math.cos(z / 210 + 0.4) / 210 + 7 * Math.cos(x / 83 + z / 117 + 2) / 117 - 3.2 * Math.cos(x / 37 - z / 53 + 1) / 53 + 1.6 * Math.cos(z / 23 + x / 41) / 23];
-const CELL = 90, RADC = 6, OPEN_G = 45;
+const HA = 0.3;          // the hub is a GENTLE plain (the racing levels have the real ski hill): the waves are 30% as big and the tilt toward -z is small
+const HOf = (x, z) => 0.03 * z + HA * (14 * Math.sin(x / 190 + 1.3) * Math.sin(z / 210 + 0.4) + 7 * Math.sin(x / 83 + z / 117 + 2) + 3.2 * Math.sin(x / 37 - z / 53 + 1) + 1.6 * Math.sin(z / 23 + x / 41));
+const HOg = (x, z) => [HA * (14 * Math.cos(x / 190 + 1.3) / 190 * Math.sin(z / 210 + 0.4) + 7 * Math.cos(x / 83 + z / 117 + 2) / 83 + 3.2 * Math.cos(x / 37 - z / 53 + 1) / 37 + 1.6 * Math.cos(z / 23 + x / 41) / 41),
+  0.03 + HA * (14 * Math.sin(x / 190 + 1.3) * Math.cos(z / 210 + 0.4) / 210 + 7 * Math.cos(x / 83 + z / 117 + 2) / 117 - 3.2 * Math.cos(x / 37 - z / 53 + 1) / 53 + 1.6 * Math.cos(z / 23 + x / 41) / 23)];
+const CELL = 90, RADC = 6, OPEN_G = 150;          // (gravity is stronger to match the gentler hills)
 const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let q = Math.imul(a ^ a >>> 15, 1 | a); q = q + Math.imul(q ^ q >>> 7, 61 | q) ^ q; return ((q ^ q >>> 14) >>> 0) / 4294967296; };
 let oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam;
 if (OPEN) {
