@@ -169,29 +169,42 @@ scene.add(sky);
 const N_PYL = 160, N_RING = 10, SPAN = 520, LANE_W = 22, ROW_GAP = SPAN / N_RING;          // wide lanes: the choices must be far apart ON THE SCREEN (at 70 m ahead, lanes 8 m apart sit within about 4 degrees of each other, too close for the eyes to tell apart)
 const pylMat = new THREE.MeshBasicMaterial({ wireframe: true, color: 0xffffff });
 const pylMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 7, 5, 1, false), pylMat, N_PYL);
-const ringMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(9, 0.18, 3, 28), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING);
-const orbMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 6);
+const ringMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(9, 0.18, 3, 28), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 2);
+const orbMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 12);
 const wallMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 2, 7, 2), new THREE.MeshBasicMaterial({ wireframe: true, color: 0xffffff }), N_RING * 2);
-const beamMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 90, 1.6), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING);          // a tall beam over each row's lane: visible from far away, so the choice can be seen (and looked at) long before the ring itself
-const padMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 4, 0.5, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING);          // a glowing pad on the ground at the open lane: the base of the gate, low on the screen, where the eyes rest
-const pickMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(2.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING);
-const pickWire = new THREE.InstancedMesh(new THREE.OctahedronGeometry(3.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), N_RING);
-const rampMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 6, 0.7, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING);
-const rockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 2);
+const beamMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1.6, 90, 1.6), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 2);          // a tall beam over each row's lane: visible from far away, so the choice can be seen (and looked at) long before the ring itself
+const padMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 4, 0.5, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 2);          // a glowing pad on the ground at the open lane: the base of the gate, low on the screen, where the eyes rest
+const pickMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(2.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 2);
+const pickWire = new THREE.InstancedMesh(new THREE.OctahedronGeometry(3.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), N_RING * 2);
+const rampMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 6, 0.7, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 2);
+const rockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 4);
 const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh];
+wallMesh.count = 0;          // (walls are gone: there is nothing to be walled off from, the middle is open)
 for (const mm of allMeshes) { mm.frustumCulled = false; scene.add(mm); }
 const PICKS = [          // kind: what it does (Godot: CRYSTAL a longer boost, CAGE a shield, RINGS double points, CLUSTER a lump of points)
   { name: 'BOOST', col: [1.0, 0.55, 0.1] }, { name: 'SHIELD', col: [0.3, 0.85, 1.0] }, { name: 'x2', col: [0.95, 0.4, 1.0] }, { name: 'POINTS', col: [1.0, 0.85, 0.35] },
 ];
 const rows = [];
+// EVERY ROW IS A CHOICE OF TWO (RunRig._gen_feats): something on the left and something DIFFERENT on the right, side by side, nothing in the middle. You can not have both, the board takes
+// neither by itself, and the one you get is the one you looked at. Resting your eyes in the middle (the board rides between them) costs nothing and picks nothing.
+// kinds: 0 orbs (points), 1 ring (a bonus ring), 2 pickup (boost / shield / x2 / points), 3 ramp (a jump), 4 rocks (a crash: rare, and the other side is never rocks too)
+function mkThing(avoid, calm) {
+  const hz = calm ? 0 : Math.min(0.12, 0.03 + tPlay * 0.0003);
+  for (let tries = 0; tries < 20; tries++) {
+    const k = Math.random();
+    const type = k < 0.28 ? 0 : k < 0.50 ? 1 : k < 0.78 ? 2 : k < 1 - hz ? 3 : 4;
+    const pick = Math.floor(Math.random() * 4);
+    if (avoid && avoid.type === type && (type !== 2 || avoid.pick === pick)) continue;
+    if (avoid && avoid.type === 4 && type === 4) continue;
+    return { type, pick, orbs: [0, 1, 2, 3, 4, 5].map(() => true), done: false };
+  }
+  return { type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false };
+}
 function setRow(r, z) {
-  r.z = z; r.lane = Math.floor(Math.random() * 3) - 1; r.done = false;
-  const k = Math.random(), calm = tPlay < 20;          // the first 20 seconds: no hazards
-  const hz = calm ? 0 : Math.min(0.2, 0.06 + tPlay * 0.0006);
-  r.type = k < 0.28 ? 0 : k < 0.28 + 0.30 ? 1 : k < 0.58 + 0.17 ? 2 : k < 0.75 + 0.10 ? 3 : (Math.random() < hz / 0.15 ? 4 : 0);          // 0 orbs, 1 gate, 2 pickup, 3 ramp, 4 rocks
-  r.pick = Math.floor(Math.random() * 4);
-  r.orbs = [0, 1, 2, 3, 4, 5].map(() => true);
-  r.free = r.lane;          // for rocks: the lane left clear
+  r.z = z; r.passed = false;
+  const calm = tPlay < 20;          // the first 20 seconds: no hazards
+  const a = mkThing(null, calm), b = mkThing(a, calm);
+  r.s = Math.random() < 0.5 ? [a, b] : [b, a];          // [left, right]
 }
 let tPlay = 0;
 for (let i = 0; i < N_RING; i++) { const r = { i }; setRow(r, -50 - i * ROW_GAP); rows.push(r); }
@@ -411,26 +424,25 @@ function readTracker(now) {
 // (0.35 s), then 0.14 s once the commitment is over. The board slides to the locked lane, so one glance starts a move that finishes by itself.
 const LOCK = { want: { '-1': 0, '0': 0, '1': 0 }, lane: 0, age: 9 };
 function lockStep(zone, dt) {
-  // RunRig._trail_pick, the stepping rule. The eyes do not name a lane: they MOVE ONE STEP from the lane already locked. A look left chooses the lane just left of it, a look right the lane just
-  // right, and a look at the middle chooses nothing: what is locked stays locked (resting eyes go to the middle, so it must never take the lane). At the end of the row (no lane further that way)
-  // a look to that side changes nothing. A look held on keeps stepping. Fill / drain and the commitment times are Godot's.
+  // RunRig._trail_pick on the open slope: two things, left and right. A look to a side chooses that side's thing; a look at the middle chooses nothing and changes nothing (what was chosen stays
+  // chosen, and with nothing chosen the board rides between them). Fill / drain / commitment times are Godot's: a first look settles after 0.11 s, a change of mind needs 0.35 s, then 0.14 s once
+  // the half-second commitment is over, and none in the last quarter second before the board reaches the thing.
   const qk = 0.7;          // at speed everything about choosing is quicker (Godot: qk 0.6 flat out)
-  const L = LOCK.lane, tl = zone < 0 ? L - 1 : zone > 0 ? L + 1 : L, ok = tl >= -1 && tl <= 1;
-  for (const l of [-1, 0, 1]) {
-    if (ok && l === tl) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (zone === 0 ? 0.35 / qk : 1.0), 0.5);
+  for (const l of [-1, 1]) {
+    if (zone === l) LOCK.want[l] = Math.min(LOCK.want[l] + dt, 0.5);
     else LOCK.want[l] = Math.max(LOCK.want[l] - dt * (zone !== 0 ? 3.0 : 0.6), 0);
   }
   LOCK.age += dt;
-  let need = (LOCK.age >= 0.5 * qk ? 0.14 : 0.35) * qk;          // just locked: committed for half a second, a change of mind then needs a longer, steadier look
-  const ng = nextGate();
-  if (ng && ng.dist / Math.max(speed, 14) < 0.25) need = 9;          // no change of mind in the last quarter second before the board reaches the thing
-  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.lane = l; LOCK.age = 0; break; }
+  let need = LOCK.lane === 0 ? 0.11 * qk : (LOCK.age >= 0.5 * qk ? 0.14 : 0.35) * qk;
+  const nd = nextRowDist();
+  if (LOCK.lane !== 0 && nd / Math.max(speed, 14) < 0.25) need = 9;
+  for (const l of [-1, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.lane = l; LOCK.age = 0; break; }
   return LOCK.lane;
 }
-function nextGate() {          // the open lane of the nearest gate still ahead (within 220 m), or null
-  let best = null, bz = -1e9;
-  for (const r of rows) if (!r.done && r.z < zPos && r.z > bz && zPos - r.z < 220) { bz = r.z; best = { lane: r.type === 4 ? r.free : r.lane, dist: zPos - r.z, type: r.type }; }          // (any kind of row: the lane worth being in: gate opening, orbs, pickup, ramp, or the clear lane between rocks)
-  return best;
+function nextRowDist() {          // how far ahead the nearest row is (m)
+  let bz = -1e9;
+  for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) bz = r.z;
+  return bz > -1e8 ? zPos - bz : 999;
 }
 function updateLane(dt) {
   if (!KIT.zones) {          // the first 40 readings are still coming in: the board stays in the middle, but the dot already follows the eyes (against the middle seen so far, at the starting size)
@@ -442,8 +454,8 @@ function updateLane(dt) {
     return;
   }
   lane = lockStep(KIT.zone, dt); steerTarget = lane;
-  const ng = nextGate(), cz = $('zones').children;
-  for (let i = 0; i < 3; i++) { const l = i - 1, c = []; if (l === lane) c.push('on'); if (ng && ng.lane === l) c.push('tg'); if (l === KIT.zone) c.push('zn'); cz[i].className = c.join(' '); }
+  const cz = $('zones').children;
+  for (let i = 0; i < 3; i++) { const l = i - 1, c = []; if (l === lane) c.push('on'); if (l === KIT.zone) c.push('zn'); cz[i].className = c.join(' '); }
   const gd = $('gdot'); gd.style.left = ((Math.tanh(KIT.zn * 0.8) * 0.45 + 0.5) * innerWidth) + 'px';          // (squashed so it always stays on the screen: the sides are at about 0.5 either way) gd.style.top = (innerHeight * 0.5) + 'px';
 }
 
@@ -501,65 +513,53 @@ function stepRows(dt) {
   for (let i = 0; i < N_RING; i++) {
     const r = rows[i];
     if (r.z > zPos + 25) setRow(r, r.z - SPAN);
-    const crossing = (z) => !r.done && z <= zPrev && z > zPos - 1;          // the line z lies between where the camera was and where it is now
-    for (let k = 0; k < 6; k++) hz(orbMesh, i * 6 + k);
-    hz(wallMesh, i * 2); hz(wallMesh, i * 2 + 1); hz(ringMesh, i); hz(beamMesh, i); hz(padMesh, i); hz(pickMesh, i); hz(pickWire, i); hz(rampMesh, i); hz(rockMesh, i * 2); hz(rockMesh, i * 2 + 1);
-    const lx = r.lane * LANE_W;
-    if (r.type === 0) {
-      for (let k = 0; k < 6; k++) {
-        const oz = r.z - k * 5, ox = lx + Math.sin(k * 0.9 + t * 3) * 0.6;
-        const oc = r.orbs[k] && oz <= zPrev && oz > zPos - 1 && Math.abs(camX - lx) < 8.0;
-        if (oc) { r.orbs[k] = false; G.combo++; G.best = Math.max(G.best, G.combo); award(10 * (1 + Math.floor(G.combo / 8))); G.got++; flash(0, 1, 0.8, 0.28); beep(440 + Math.min(G.combo, 14) * 40, 0.12, 0.08); }
-        if (r.orbs[k]) { m4.compose(v3.set(ox, 2.6, oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 6 + k, m4); orbMesh.setColorAt(i * 6 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
+    if (!r.passed && r.z <= zPrev && r.z > zPos - 1) { r.passed = true; LOCK.lane = 0; LOCK.age = 9; }          // past the choice: what was chosen is released, the board rides back between
+    for (let sd = 0; sd < 2; sd++) {
+      const o = r.s[sd], lane = sd === 0 ? -1 : 1, lx = lane * LANE_W, si = i * 2 + sd;
+      const crossing = (z) => !o.done && z <= zPrev && z > zPos - 1;          // the line z lies between where the camera was and where it is now
+      const mine = laneNow === lane;
+      for (let k = 0; k < 6; k++) hz(orbMesh, i * 12 + sd * 6 + k);
+      hz(ringMesh, si); hz(beamMesh, si); hz(padMesh, si); hz(pickMesh, si); hz(pickWire, si); hz(rampMesh, si); hz(rockMesh, i * 4 + sd * 2); hz(rockMesh, i * 4 + sd * 2 + 1);
+      if (o.type === 0) {
+        for (let k = 0; k < 6; k++) {
+          const oz = r.z - k * 5, ox = lx + Math.sin(k * 0.9 + t * 3) * 0.6;
+          const oc = o.orbs[k] && oz <= zPrev && oz > zPos - 1 && Math.abs(camX - lx) < 8.0;
+          if (oc) { o.orbs[k] = false; G.combo++; G.best = Math.max(G.best, G.combo); award(10 * (1 + Math.floor(G.combo / 8))); G.got++; flash(0, 1, 0.8, 0.28); beep(440 + Math.min(G.combo, 14) * 40, 0.12, 0.08); }
+          if (o.orbs[k]) { m4.compose(v3.set(ox, 2.6, oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 12 + sd * 6 + k, m4); orbMesh.setColorAt(i * 12 + sd * 6 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
+        }
+        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.2, 1, 0.5));
+        m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(0.1, 0.6, 0.3));
+      } else if (o.type === 1) {
+        m4.compose(v3.set(lx, 4.5, r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(si, m4); ringMesh.setColorAt(si, themeCol(t * 0.1 + i * 0.13, colr));
+        m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(1, 0.9 * (0.6 + 0.4 * Math.sin(t * 6)), 0.1));
+        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.9, 0.2));
+        if (crossing(r.z)) { o.done = true; if (mine) { G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); } }
+      } else if (o.type === 2) {
+        const pk = PICKS[o.pick], c = pk.col, a = t * 1.7 + i;
+        q4.setFromEuler(eul.set(a * 0.6, a, 0));
+        m4.compose(v3.set(lx, 3 + Math.sin(t * 3 + i) * 0.5, r.z), q4, s3.setScalar(1)); pickMesh.setMatrixAt(si, m4); pickMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
+        m4.compose(v3.set(lx, 3 + Math.sin(t * 3 + i) * 0.5, r.z), q4, s3.setScalar(1)); pickWire.setMatrixAt(si, m4); pickWire.setColorAt(si, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8));
+        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
+        m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(c[0] * 0.5, c[1] * 0.5, c[2] * 0.5));
+        if (crossing(r.z)) {
+          o.done = true;
+          if (mine) {
+            G.got++; link(2 + o.pick); G.combo += 2; G.best = Math.max(G.best, G.combo);
+            if (o.pick === 0) { ST.boost = 3; speed += 12; flash(1, 0.55, 0.1, 0.5); beep(520, 0.3, 0.1); bannerShow('BOOST', true); }
+            else if (o.pick === 1) { ST.shield = 1; flash(0.3, 0.85, 1, 0.5); beep(700, 0.3, 0.1); bannerShow('SHIELD', true); }
+            else if (o.pick === 2) { ST.mult = 12; flash(0.95, 0.4, 1, 0.5); beep(880, 0.3, 0.1); bannerShow('DOUBLE POINTS', true); }
+            else { award(150); flash(1, 0.85, 0.35, 0.5); beep(990, 0.3, 0.1); }
+          }
+        }
+      } else if (o.type === 3) {
+        m4.compose(v3.set(lx, 1.7, r.z), qRamp, s3.setScalar(1)); rampMesh.setMatrixAt(si, m4); rampMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
+        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
+        if (crossing(r.z - 8)) { o.done = true; if (mine) { ST.vy = 10 + speed * 0.18; ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); } }
+      } else {
+        for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), 2.4, r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 4 + sd * 2 + n, m4); rockMesh.setColorAt(i * 4 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
+        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
+        if (crossing(r.z)) { o.done = true; if (mine && ST.y < 3) crash('ROCK'); }
       }
-      m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(i, m4); beamMesh.setColorAt(i, colr.setRGB(0.2, 1, 0.5));
-      m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(i, m4); padMesh.setColorAt(i, colr.setRGB(0.1, 0.6, 0.3));
-    } else if (r.type === 1) {
-      m4.compose(v3.set(lx, 4.5, r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(i, m4); ringMesh.setColorAt(i, themeCol(t * 0.1 + i * 0.13, colr));
-      m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(i, m4); padMesh.setColorAt(i, colr.setRGB(1, 0.9 * (0.6 + 0.4 * Math.sin(t * 6)), 0.1));
-      m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(i, m4); beamMesh.setColorAt(i, colr.setRGB(1, 0.9, 0.2));
-      let w = 0;
-      for (let l = -1; l <= 1; l++) {
-        if (l === r.lane) continue;
-        m4.compose(v3.set(l * LANE_W, 3.5, r.z), q4.identity(), s3.setScalar(1)); wallMesh.setMatrixAt(i * 2 + w, m4);
-        wallMesh.setColorAt(i * 2 + w, colr.setRGB(1, 0.2 + 0.2 * Math.sin(t * 6), 0.3)); w++;
-      }
-      if (crossing(r.z)) {
-        r.done = true;
-        if (TEL.on) TEL.q.push({ kind: 'spike_gate', t: +(performance.now() / 1000).toFixed(1), target: r.lane, aim: laneNow, went: laneNow === r.lane ? 1 : 0, x: lane });          // the open lane, the lane the board was in, hit or not, the lane the eyes had chosen
-        if (laneNow === r.lane) { G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); }
-        else crash('MISSED THE GATE');
-      }
-    } else if (r.type === 2) {
-      const pk = PICKS[r.pick], c = pk.col, a = t * 1.7 + i;
-      q4.setFromEuler(eul.set(a * 0.6, a, 0));
-      m4.compose(v3.set(lx, 3 + Math.sin(t * 3 + i) * 0.5, r.z), q4, s3.setScalar(1)); pickMesh.setMatrixAt(i, m4); pickMesh.setColorAt(i, colr.setRGB(c[0], c[1], c[2]));
-      m4.compose(v3.set(lx, 3 + Math.sin(t * 3 + i) * 0.5, r.z), q4, s3.setScalar(1)); pickWire.setMatrixAt(i, m4); pickWire.setColorAt(i, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8));
-      m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(i, m4); beamMesh.setColorAt(i, colr.setRGB(c[0], c[1], c[2]));
-      m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(i, m4); padMesh.setColorAt(i, colr.setRGB(c[0] * 0.5, c[1] * 0.5, c[2] * 0.5));
-      if (crossing(r.z) && laneNow === r.lane) {
-        r.done = true; G.got++; link(2 + r.pick); G.combo += 2; G.best = Math.max(G.best, G.combo);
-        if (r.pick === 0) { ST.boost = 3; speed += 12; flash(1, 0.55, 0.1, 0.5); beep(520, 0.3, 0.1); bannerShow('BOOST', true); }
-        else if (r.pick === 1) { ST.shield = 1; flash(0.3, 0.85, 1, 0.5); beep(700, 0.3, 0.1); bannerShow('SHIELD', true); }
-        else if (r.pick === 2) { ST.mult = 12; flash(0.95, 0.4, 1, 0.5); beep(880, 0.3, 0.1); bannerShow('DOUBLE POINTS', true); }
-        else { award(150); flash(1, 0.85, 0.35, 0.5); beep(990, 0.3, 0.1); }
-      } else if (crossing(r.z)) r.done = true;
-    } else if (r.type === 3) {
-      m4.compose(v3.set(lx, 1.7, r.z), qRamp, s3.setScalar(1)); rampMesh.setMatrixAt(i, m4); rampMesh.setColorAt(i, colr.setRGB(0.95, 0.35, 1));
-      m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(i, m4); beamMesh.setColorAt(i, colr.setRGB(0.95, 0.35, 1));
-      if (crossing(r.z - 8)) {
-        r.done = true;
-        if (laneNow === r.lane) { ST.vy = 10 + speed * 0.18; ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); }
-      }
-    } else {
-      let n = 0;
-      for (let l = -1; l <= 1; l++) {
-        if (l === r.free) continue;
-        m4.compose(v3.set(l * LANE_W, 2.4, r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 2 + n, m4); rockMesh.setColorAt(i * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); n++;
-      }
-      m4.compose(v3.set(r.free * LANE_W, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(i, m4); beamMesh.setColorAt(i, colr.setRGB(0.2, 1, 0.5));
-      m4.compose(v3.set(r.free * LANE_W, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(i, m4); padMesh.setColorAt(i, colr.setRGB(0.1, 0.6, 0.3));
-      if (crossing(r.z)) { r.done = true; if (laneNow !== r.free && ST.y < 3) crash('ROCK'); else { award(60); G.got++; link(7); } }
     }
   }
   for (const mm of allMeshes) { mm.instanceMatrix.needsUpdate = true; if (mm.instanceColor) mm.instanceColor.needsUpdate = true; }
@@ -614,7 +614,7 @@ function logSample(now) {
   if (!started || !playing || !eyeMode || now - LOG.last < 100 || KIT.lastHx === null) return;          // (not while paused: a paused run logged the same gate hundreds of times)
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
-  for (const r of rows) if (!r.done && r.z < zPos && r.z > bz) { bz = r.z; open = r.type === 4 ? r.free : r.lane; dist = zPos - r.z; }          // (every row type: the lane worth being in)
+  for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s[0].type * 10 + r.s[1].type; dist = zPos - r.z; }          // the nearest row's two kinds (left * 10 + right): there is no right answer now, the log shows what was offered and what the eyes picked
   LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2)]);
   if (LOG.buf.length >= 50) flushLog();
 }
