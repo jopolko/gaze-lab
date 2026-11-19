@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795096850';
+import { EyeModel } from './eyemodel.js?v=1795097085';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -139,15 +139,16 @@ const terrD = (s) => 0.10 * s - 11.9 * (Math.cos(s / 170 + 1) - Math.cos(1)) - 3
 const TY = (z, x = 0) => (TERRAIN ? -terrD(-z) + 0.0009 * x * x + 1.2 * Math.sin(x * 0.03 - z * 0.011) : 0);          // the ground height at world (x, z): the long rollers down the slope, a shallow bowl across it (the sides rise) and a slow lateral swell, so it is rolling ground and not a bent plane
 const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0.05 * Math.sin(s / 61 + 2) + 0.04 * Math.sin(s / 383); };          // the grade there
 const TERRAIN = !Q.has('flat');
+const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uTer: { value: Q.has('flat') ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  uniforms: { uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
   vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer; float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
     varying vec3 nrm;
     uniform float uT;
-    uniform float uMode;
+    uniform float uMode, uLine;
     uniform vec3 uCam, uC1, uC2, uHor;
     vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
     float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -202,11 +203,12 @@ const groundMat = new THREE.ShaderMaterial({
         float pulse = .75 + .25*sin(wp.z*.05 - uT*2.);
         col = vec3(.03,0.,.07) + vec3(.07,.02,.14)*chk + mix(uC1, uC2, .5+.5*sin(wp.x*.02+uT*.3)) * line * pulse * .9;
       }
+      if (uLine > .5) { float hh = wp.y * .3; float cont = smoothstep(.5 - fwidth(hh) * 1.2, .5, abs(fract(hh) - .5)); col = col * .07 + uC2 * gline(wp.xz / 12., 1.0) * .85 + uC1 * cont * .75; }
       col += uC2 * (1.0 - smoothstep(.0, .25, abs(abs(wp.x) - 38.))) * .9;          // the edge of the slope
       float fade = smoothstep(110., 400., dist);
       float shade = 0.38 + 0.68 * max(dot(normalize(nrm), normalize(vec3(-0.35, 0.7, 0.6))), 0.);          // light from behind and above: rises face the player and glow, drops fall away darker, so the ground reads as ROUND
       col *= shade;
-      gl_FragColor = vec4(mix(col, uHor, fade), 1.0);
+      gl_FragColor = vec4(mix(col, uHor * (uLine > .5 ? .22 : 1.), fade), 1.0);
     }`,
 });
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000, 40, 100), groundMat);
@@ -216,9 +218,9 @@ scene.add(ground);
 
 // THE SKY: a gradient dome that follows the camera (and a sun disc in the worlds that have one: stripes cut into it in SYNTHWAVE).
 const skyMat = new THREE.ShaderMaterial({
-  uniforms: { uTop: { value: TH.top }, uHor: { value: TH.hor }, uC1: { value: TH.c1 }, uSun: { value: 0 }, uStripe: { value: 0 }, uT: { value: 0 } },
+  uniforms: { uLine: { value: LINE ? 1 : 0 }, uTop: { value: TH.top }, uHor: { value: TH.hor }, uC1: { value: TH.c1 }, uSun: { value: 0 }, uStripe: { value: 0 }, uT: { value: 0 } },
   vertexShader: 'varying vec3 dir; void main(){ dir = normalize(position); gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0); }',
-  fragmentShader: `precision mediump float; varying vec3 dir; uniform vec3 uTop, uHor, uC1; uniform float uSun, uStripe, uT;
+  fragmentShader: `precision mediump float; varying vec3 dir; uniform vec3 uTop, uHor, uC1; uniform float uSun, uStripe, uT, uLine;
     void main(){
       float y = dir.y;
       vec3 col = mix(uHor, uTop, smoothstep(.0, .55, y));
@@ -229,6 +231,7 @@ const skyMat = new THREE.ShaderMaterial({
       float cut = mix(1., step(.5, fract(y*40. + uT*.1)) , uStripe * step(dir.y, .16));
       col = mix(col, uC1 + .35, disc * cut);
       col += uC1 * .25 * uSun * smoothstep(.5, .0, d);
+      col *= mix(1., .22, uLine);
       gl_FragColor = vec4(col, 1.);
     }`,
   side: THREE.BackSide, depthWrite: false, depthTest: false,
@@ -251,6 +254,7 @@ const pickMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(2.6, 0), n
 const pickWire = new THREE.InstancedMesh(new THREE.OctahedronGeometry(3.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), N_RING * 3);
 const rampMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 6, 0.7, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 3);
 const rockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 6);
+if (LINE) for (const mm of [ringMesh, orbMesh, beamMesh, padMesh, rampMesh, rockMesh]) mm.material.wireframe = true;
 const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh];
 wallMesh.count = 0;          // (walls are gone: there is nothing to be walled off from, the middle is open)
 for (const mm of allMeshes) { mm.frustumCulled = false; scene.add(mm); }
@@ -326,7 +330,7 @@ function setWorld(i, instant) {
   worldIdx = i % THEMES.length;
   TH.idx = worldIdx; TH.mode = th.mode; TH.wire = th.wire; TH.rainbow = th.rainbow; TH.sun = th.sun;
   groundMat.uniforms.uMode.value = th.mode;
-  pylMat.wireframe = th.wire; wallMesh.material.wireframe = th.wire;
+  pylMat.wireframe = th.wire || LINE; wallMesh.material.wireframe = th.wire;
   TH.tgt = th;
   if (instant) { TH.top.setRGB(...th.top); TH.hor.setRGB(...th.hor); TH.c1.setRGB(...th.c1); TH.c2.setRGB(...th.c2); TH.trace = th.trace; TH.split = th.split; }
   else { G.flash = 1.0; G.fr = th.c1[0]; G.fg = th.c1[1]; G.fb = th.c1[2]; bannerShow(th.name); }
