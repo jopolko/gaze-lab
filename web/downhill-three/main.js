@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795104680';
+import { EyeModel } from './eyemodel.js?v=1795104868';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -1565,12 +1565,12 @@ function explode(x, z, chain) {
   award(150 * (1 + chain)); G.combo += 3; G.best = Math.max(G.best, G.combo); G.got++; bannerShow(chain ? 'CHAIN BOOM x' + (chain + 1) : 'BOOM', true);
 }
 function buggyStep(dt) {
-  const thr = HEAD.u || 0, st = Math.max(-1.2, Math.min(1.2, steerTarget)), g = HOg(OW.x, OW.z);
+  const st0 = Math.max(-1.3, Math.min(1.3, steerTarget)), st = Math.sign(st0) * Math.pow(Math.abs(st0), 0.7) * 1.3, thr = HEAD.u || 0, g = HOg(OW.x, OW.z); BUG.st = st;          // (a small turn of the head already steers: the curve lifts small inputs, from the phone log a typical steer was only 0.2 to 0.3)
   let fx = Math.sin(OW.th), fz = -Math.cos(OW.th), rx = Math.cos(OW.th), rz = Math.sin(OW.th), vf = OW.vx * fx + OW.vz * fz, vl = OW.vx * rx + OW.vz * rz;
   if (BUG.grounded) {
     let a = 0; if (thr > 0.02) a = 26 * thr * (1 - Math.max(0, vf) / 38); else if (thr < -0.02) a = vf > 0.8 ? -50 * -thr : (vf > -17 ? -22 * -thr : 0);
     a -= 0.22 * vf + 0.0016 * vf * Math.abs(vf); a -= 70 * (g[0] * fx + g[1] * fz); vf += a * dt; BUG.acc = a;
-    const turn = st * 2.5 * Math.min(1, Math.abs(vf) / 4.5) / (1 + Math.max(0, Math.abs(vf) - 14) / 30) * (vf >= 0 ? 1 : -1);          // (tight when slow, steadier when fast) OW.th += turn * dt; OW.om = turn; vl *= Math.exp(-9 * dt);
+    const turn = st * 2.6 * Math.min(1, Math.abs(vf) / 4.5) / (1 + Math.max(0, Math.abs(vf) - 16) / 45) * (vf >= 0 ? 1 : -1);          // (tight when slow, steadier when fast) OW.th += turn * dt; OW.om = turn; vl *= Math.exp(-9 * dt);
   } else { OW.th += (OW.om * 0.6 + st * 1.5 * (vf >= 0 ? 1 : -1)) * dt; OW.om *= Math.exp(-0.6 * dt); if (thr > 0.02) vf += 10 * thr * dt; vf *= Math.exp(-0.05 * dt); }          // (in the air you can still steer and push a little: it is never dead)
   fx = Math.sin(OW.th); fz = -Math.cos(OW.th); rx = Math.cos(OW.th); rz = Math.sin(OW.th); OW.vx = fx * vf + rx * vl; OW.vz = fz * vf + rz * vl; OW.x += OW.vx * dt; OW.z += OW.vz * dt;
   const gh = groundAt(OW.x, OW.z); if (!BUG.inited) { BUG.inited = true; BUG.gPrev = gh; BUG.y = gh; BUG.yv = 0; } const vg = Math.max(-60, Math.min(60, (gh - BUG.gPrev) / Math.max(dt, 1e-3))); BUG.gPrev = gh;
@@ -1607,7 +1607,7 @@ function buggyFx(dt) {
   n = 0; for (const b of BLASTS) { const k = b.t / 0.55; m4.compose(v3.set(b.x, b.y, b.z), q4.identity(), s3.setScalar(3 + k * 26)); oBlast.setMatrixAt(n, m4); oBlast.setColorAt(n, colr.setRGB(1, 0.6 - 0.4 * k, 0.15).multiplyScalar(1 - k)); n++; }
   oBlast.count = n; oBlast.instanceMatrix.needsUpdate = true; if (oBlast.instanceColor) oBlast.instanceColor.needsUpdate = true;
   bugGrp.visible = inHub; const sq = BUG.squash; bugGrp.position.set(OW.x, BUG.y, OW.z); bugGrp.rotation.set(BUG.pitch, -OW.th, BUG.roll, 'YXZ'); bugGrp.scale.set(1 + 0.35 * sq, 1 - 0.55 * sq, 1 + 0.35 * sq);
-  bugGrp.wheels.forEach((w, i) => { w.children.forEach((c) => { c.rotation.x = 0; }); w.rotation.x = -BUG.wheel; if (i < 2) w.rotation.y = -Math.max(-1.2, Math.min(1.2, steerTarget)) * 0.4; });
+  bugGrp.wheels.forEach((w, i) => { w.children.forEach((c) => { c.rotation.x = 0; }); w.rotation.x = -BUG.wheel; if (i < 2) w.rotation.y = -Math.max(-1.7, Math.min(1.7, BUG.st || 0)) * 0.3; });
 }
 function buggyCamera(dt) {
   const fx = Math.sin(OW.th), fz = -Math.cos(OW.th), tx = OW.x - fx * 12.5, tz = OW.z - fz * 12.5, ty = BUG.y + 6.2;
