@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795099860';
+import { EyeModel } from './eyemodel.js?v=1795100414';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -131,7 +131,8 @@ const THEMES = [
   { id: 'egypt',       name: 'EGYPT',       mode: 5, top: [0.20, 0.45, 0.85], hor: [1.00, 0.82, 0.50], c1: [1.00, 0.78, 0.25], c2: [0.15, 0.80, 0.75], wire: false, rainbow: 0, sun: 0.6, trace: 0.20, split: 0.30, fog: 1.0 },
 ];
 const TH = { mode: 0, wire: false, rainbow: 0, sun: 0, trace: 1, split: 1, top: new THREE.Color(), hor: new THREE.Color(), c1: new THREE.Color(), c2: new THREE.Color(), idx: -1 };
-const themeCol = (phase, out) => (TH.rainbow > 0.5 ? out.copy(hue(phase)) : out.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(phase * 6.2832)));
+let MOLRB = 0;          // 2C-B's level: the colour on the things (they cycle through every hue)
+const themeCol = (phase, out) => (TH.rainbow > 0.5 || MOLRB > 0.25 ? out.copy(hue(phase)) : out.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(phase * 6.2832)));
 
 // THE GROUND: one plane that follows the rider; the pattern is computed from world position, so it is fixed to the ground as you speed by. One shader, eight looks (uMode).
 // TERRAIN: rounded rollers of different pitch. The grade (how steeply it falls as you travel s metres) is 0.10 + three slow waves of different lengths, so it runs from a slight rise (-0.06) through gentle benches to a
@@ -142,14 +143,14 @@ const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0
 const TERRAIN = !Q.has('flat');
 const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  uniforms: { uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
   vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer; float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
     varying vec3 nrm;
     uniform float uT;
-    uniform float uMode, uLine;
+    uniform float uMode, uLine, uDmtG; uniform vec3 uLA, uLB;
     uniform vec3 uCam, uC1, uC2, uHor;
     vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
     float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -204,7 +205,16 @@ const groundMat = new THREE.ShaderMaterial({
         float pulse = .75 + .25*sin(wp.z*.05 - uT*2.);
         col = vec3(.03,0.,.07) + vec3(.07,.02,.14)*chk + mix(uC1, uC2, .5+.5*sin(wp.x*.02+uT*.3)) * line * pulse * .9;
       }
-      if (uLine > .5) { float hh = wp.y * .3; float cont = smoothstep(.5 - fwidth(hh) * 1.2, .5, abs(fract(hh) - .5)); col = col * .07 + uC2 * gline(wp.xz / 12., 1.0) * .85 + uC1 * cont * .75; }
+      float lvAll = (uLA.x + uLA.y + uLA.z + uLB.x + uLB.y + uLB.z) / 6.;
+      col *= 1. + uLA.x * .45 * sin(wp.z * .07 - uT * 1.6 + sin(wp.x * .05) * 2.);          // mescaline: slow light waves across the ground
+      col += hsv(fract(dist * .004 - uT * .2)) * uLB.y * .5 * pow(.5 + .5 * sin(dist * .35 - uT * 3.), 3.);          // 2C-T-2: ripples running out from the rider
+      float moW = 0.;
+      if (lvAll > .03 || uDmtG > .01) {          // every molecule turns the ground a little more into the moire of squares (two grids falling in and out of step)
+        float ang = .035 + .02 * sin(uT * .1); vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * wp.xz;
+        vec3 mo = hsv(fract(dist * .004 - uT * .05 + wp.z * .002)) * (gline(wp.xz / 6., 1.2) * .9 + gline(q / 5.8 + vec2(uT * .05, 0.), 1.2) * .56);
+        moW = clamp(smoothstep(.04, .5, lvAll) * .8 + uDmtG * .3, 0., .9); col = mix(col, mo, moW);
+      }
+      if (uLine > .5) { float hh = wp.y * .3; float cont = smoothstep(.5 - fwidth(hh) * 1.2, .5, abs(fract(hh) - .5)); vec3 la = col * .07 + uC2 * gline(wp.xz / 12., 1.0) * .85 + uC1 * cont * .75; col = mix(la, col, moW); }          // (line art, until the molecules turn the ground into the moire)
       col += uC2 * (1.0 - smoothstep(.0, .25, abs(abs(wp.x) - 38.))) * .9;          // the edge of the slope
       float fade = smoothstep(110., 400., dist);
       float shade = 0.38 + 0.68 * max(dot(normalize(nrm), normalize(vec3(-0.35, 0.7, 0.6))), 0.);          // light from behind and above: rises face the player and glow, drops fall away darker, so the ground reads as ROUND
@@ -219,9 +229,10 @@ scene.add(ground);
 
 // THE SKY: a gradient dome that follows the camera (and a sun disc in the worlds that have one: stripes cut into it in SYNTHWAVE).
 const skyMat = new THREE.ShaderMaterial({
-  uniforms: { uLine: { value: LINE ? 1 : 0 }, uTop: { value: TH.top }, uHor: { value: TH.hor }, uC1: { value: TH.c1 }, uSun: { value: 0 }, uStripe: { value: 0 }, uT: { value: 0 } },
+  uniforms: { uDom: { value: 0 }, uPul: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTop: { value: TH.top }, uHor: { value: TH.hor }, uC1: { value: TH.c1 }, uSun: { value: 0 }, uStripe: { value: 0 }, uT: { value: 0 } },
   vertexShader: 'varying vec3 dir; void main(){ dir = normalize(position); gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0); }',
-  fragmentShader: `precision mediump float; varying vec3 dir; uniform vec3 uTop, uHor, uC1; uniform float uSun, uStripe, uT, uLine;
+  fragmentShader: `precision mediump float; varying vec3 dir; uniform vec3 uTop, uHor, uC1; uniform float uSun, uStripe, uT, uLine, uDom, uPul;
+    vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
     void main(){
       float y = dir.y;
       vec3 col = mix(uHor, uTop, smoothstep(.0, .55, y));
@@ -232,6 +243,10 @@ const skyMat = new THREE.ShaderMaterial({
       float cut = mix(1., step(.5, fract(y*40. + uT*.1)) , uStripe * step(dir.y, .16));
       col = mix(col, uC1 + .35, disc * cut);
       col += uC1 * .25 * uSun * smoothstep(.5, .0, d);
+      float rr = acos(clamp(dir.y, -1., 1.));
+      col += hsv(fract(dir.y * 5. + uT * .08 + atan(dir.x, dir.z) * .3)) * uDom * .6 * smoothstep(-.1, .5, dir.y) * (.5 + .5 * sin(dir.y * 30. - uT * .5));          // DOM: bands of colour far up
+      col += hsv(fract(rr * 4. - uT * .1)) * uDom * .5 * smoothstep(1.1, .2, rr) * step(.5, fract(rr * 9. - uT * .4));          // ... and the polar field of rings overhead
+      col += hsv(fract(rr * 3. - uT * .3)) * uPul * .45 * smoothstep(1.2, .1, rr) * (.5 + .5 * sin(rr * 26. - uT * 4.));          // 2C-T-7: a tunnel of pulses in the sky
       col *= mix(1., .22, uLine);
       gl_FragColor = vec4(col, 1.);
     }`,
@@ -354,7 +369,7 @@ function gateRow(r) {
   r.s = [null, null, null]; r.gap = { c: SLM.c, w: Math.max(9, 22 - (tPlay - 12) * 0.09), orbs: [true, true, true, true, true, true] };
   return true;
 }
-const molGap = () => Q.has('molgap') ? parseFloat(Q.get('molgap')) || 250 : (MOL.n >= 6 ? 1100 : 700);          // metres between molecule rows (Godot paces six finds over a whole session; here 700 m, ?molgap=250 to find them fast)
+const molGap = () => Q.has('molgap') ? parseFloat(Q.get('molgap')) || 250 : (MOL.n >= 6 ? 900 : 320);          // metres between molecule rows (Godot paces six finds over a whole session; here 700 m, ?molgap=250 to find them fast)
 function molRow(r) {
   if (!DR || tPlay < 5) return false;
   MOL.since += ROW_GAP; if (MOL.since < MOL.nextGap) return false;
@@ -381,9 +396,12 @@ function molHurt(mi) {          // a hazard costs a level of ITS OWN molecule an
 }
 function molTick(dt) {
   const wear = 1;
-  for (let i = 0; i < 6; i++) { MOL.dose[i] = Math.max(MOL.dose[i] - (i === 1 ? 0.004 : 0.008) * wear * dt, 0); const rate = MOL.dose[i] > MOL.body[i] ? 25 : 8; MOL.body[i] += (MOL.dose[i] - MOL.body[i]) * (1 - Math.exp(-dt / rate)); MOL.flash[i] = Math.max(MOL.flash[i] - dt * 1.1, 0); }
+  for (let i = 0; i < 6; i++) { MOL.dose[i] = Math.max(MOL.dose[i] - (i === 1 ? 0.004 : 0.008) * wear * dt, 0); const rate = MOL.dose[i] > MOL.body[i] ? 12 : 6; MOL.body[i] += (MOL.dose[i] - MOL.body[i]) * (1 - Math.exp(-dt / rate)); MOL.flash[i] = Math.max(MOL.flash[i] - dt * 1.1, 0); }
   MOL.hurtT = Math.max(MOL.hurtT - dt * 1.5, 0);
+  for (let i = 0; i < 6; i++) MOL.lv[i] = Math.min(1.4, (Math.pow(MOL.body[i] / 6, 1.0) * 1.5 + MOL.flash[i] * 0.9));          // (a little stronger than the molecule's level alone: something to see from the first one)
+  MOLRB = MOL.lv[2];
 }
+MOL.lv = new Float32Array(6);
 const molDmt = () => { let mn = 6; for (let i = 0; i < 6; i++) mn = Math.min(mn, MOL.body[i]); return Math.max(0, Math.min(1, (mn / 6 - 0.52) / 0.23)); };
 function setRow(r, z) {
   r.z = z; r.passed = false; r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0];
@@ -1215,6 +1233,7 @@ function frame(now) {
   camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t;
   skyMat.uniforms.uT.value = t; sky.position.copy(camera.position);
+  if (DR) { groundMat.uniforms.uLA.value.set(MOL.lv[0], MOL.lv[1], MOL.lv[2]); groundMat.uniforms.uLB.value.set(MOL.lv[3], MOL.lv[4], MOL.lv[5]); groundMat.uniforms.uDmtG.value = molDmt(); skyMat.uniforms.uDom.value = MOL.lv[1]; skyMat.uniforms.uPul.value = MOL.lv[5]; }
   groundMat.uniforms.uCam.value.copy(camera.position);
   ground.position.set(Math.round(camera.position.x / 25) * 25, 0, Math.round((camera.position.z - 300) / 10) * 10);          // (snapped to the mesh grid so the vertices do not swim over the hills as the camera moves)
   for (const mm of allMeshes) mm.visible = flags.objects;
@@ -1222,7 +1241,8 @@ function frame(now) {
     for (let i = 0; i < N_PYL; i++) {
       const p = pyl[i];
       if (p.z > zPos + 20) { p.z -= SPAN; p.x = (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 8 + Math.random() * 34); }
-      m4.compose(v3.set(p.x, (3.5 * p.s) + TY(p.z, p.x), p.z), q4.identity(), s3.set(p.s, p.s, p.s));
+      const br = DR ? 1 + 0.4 * MOL.lv[5] * Math.sin(t * 5 + p.z * 0.04) : 1, sw = DR ? 2.2 * MOL.lv[5] * Math.sin(t * 2 + p.z * 0.02) : 0;          // 2C-T-7: the trees breathe and sway
+      m4.compose(v3.set(p.x + sw, (3.5 * p.s * br) + TY(p.z, p.x), p.z), q4.identity(), s3.set(p.s * (2 - br), p.s * br, p.s * (2 - br)));
       pylMesh.setMatrixAt(i, m4);
       pylMesh.setColorAt(i, themeCol(t * 0.05 + p.z * 0.003, colr));
     }
@@ -1249,7 +1269,7 @@ function frame(now) {
     compMat.material.uniforms.uSplit.value = flags.split ? TH.split : 0;
     compMat.material.uniforms.uFlash.value.set(G.fr, G.fg, G.fb, G.flash);
     if (DR) {          // each look grows with its molecule's felt level (a touch of curve so there is something to see from the first) and flashes for a moment when it is taken
-      const lv = (i) => Math.pow(MOL.body[i] / 6, 1.15) + MOL.flash[i] * 0.9;
+      const lv = (i) => MOL.lv[i];
       compMat.material.uniforms.uMA.value.set(lv(0), lv(1), lv(2)); compMat.material.uniforms.uMB.value.set(lv(3), lv(4), lv(5)); compMat.material.uniforms.uDmt.value = molDmt();
     }
     compMat.material.uniforms.uTime.value = t;
