@@ -418,12 +418,13 @@ function lockStep(zone, dt) {
   }
   LOCK.age += dt;
   const need = (LOCK.age >= 0.8 * qk ? 0.16 : 0.45) * qk;          // (Godot: committed 0.5 s, then 0.14 / 0.35. Stickier here: the lane still changed 10 to 18 times in 10 s, about twice what the gates ask for)
-  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.lane = l; LOCK.age = 0; break; }
+  // a side lane is held until the eyes clearly go somewhere else: returning to the MIDDLE needs a long steady look there (about 1.3 s), because following a target that moves inward as it nears reads as 'middle' for a moment
+  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > (l === 0 && LOCK.lane !== 0 ? 0.45 : need)) { LOCK.lane = l; LOCK.age = 0; break; }
   return LOCK.lane;
 }
 function nextGate() {          // the open lane of the nearest gate still ahead (within 220 m), or null
   let best = null, bz = -1e9;
-  for (const r of rows) if (r.type === 1 && !r.done && r.z < zPos && r.z > bz && zPos - r.z < 220) { bz = r.z; best = { lane: r.lane, dist: zPos - r.z }; }
+  for (const r of rows) if (!r.done && r.z < zPos && r.z > bz && zPos - r.z < 220) { bz = r.z; best = { lane: r.type === 4 ? r.free : r.lane, dist: zPos - r.z, type: r.type }; }          // (any kind of row: the lane worth being in: gate opening, orbs, pickup, ramp, or the clear lane between rocks)
   return best;
 }
 function updateLane(dt) {
@@ -608,7 +609,7 @@ function logSample(now) {
   if (!started || !playing || !eyeMode || now - LOG.last < 100 || KIT.lastHx === null) return;          // (not while paused: a paused run logged the same gate hundreds of times)
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
-  for (const r of rows) if (r.type === 1 && !r.done && r.z < zPos && r.z > bz) { bz = r.z; open = r.lane; dist = zPos - r.z; }
+  for (const r of rows) if (!r.done && r.z < zPos && r.z > bz) { bz = r.z; open = r.type === 4 ? r.free : r.lane; dist = zPos - r.z; }          // (every row type: the lane worth being in)
   LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2)]);
   if (LOG.buf.length >= 50) flushLog();
 }
