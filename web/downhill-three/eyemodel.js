@@ -22,8 +22,8 @@ export class EyeModel {
     this.dR = prior && prior.dR ? prior.dR.slice() : [0.02, 0.02];          // right = middle - dR
     this.S = prior && prior.S ? prior.S.slice() : [3.0e-5, 3.0e-5, 1.0e-5];          // [varA, varB, covAB]
     this.post = [0, 1, 0]; this.state = 1; this.ready = false; this.init = [];
-    this.n = 0; this.zn = 0;
-    this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.02; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 30;          // (tuned by simulation on eyes like the logged ones)
+    this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.lastFix = 0; this.fixes = 0;
+    this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.02; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45;          // (tuned by simulation on eyes like the logged ones)
   }
   inv() { const [a, b, c] = this.S, det = Math.max(a * b - c * c, 1e-12); return [b / det, a / det, -c / det]; }          // inverse of [[a,c],[c,b]] as [ia, ib, ic]
   q(x, k) {          // squared Mahalanobis distance of x from state k's mean
@@ -41,6 +41,7 @@ export class EyeModel {
     if (!this.ready) {          // the first readings (the stare at the centre) set the middle and the noise
       this.init.push(x);
       if (this.init.length >= this.NEED) {
+        this.init = this.init.slice(15);          // the first second is thrown away: the eyes are still settling on the centre and the camera is still adjusting (in one run the first readings sat 0.03 away from where they stayed)
         const n = this.init.length, mA = this.init.reduce((s, v) => s + v[0], 0) / n, mB = this.init.reduce((s, v) => s + v[1], 0) / n;
         let a = 0, b = 0, c = 0; for (const v of this.init) { a += (v[0] - mA) ** 2; b += (v[1] - mB) ** 2; c += (v[0] - mA) * (v[1] - mB); }
         this.m = [mA, mB]; this.S = [Math.max(a / n, 1.2e-5), Math.max(b / n, 1.2e-5), Math.max(Math.min(c / n, 0.8 * Math.sqrt((a / n) * (b / n))), 0)];
@@ -69,6 +70,17 @@ export class EyeModel {
       const d = k === 0 ? this.dL : k === 2 ? [-this.dR[0], -this.dR[1]] : [0, 0], r0 = x[0] - this.m[0] - d[0], r1 = x[1] - this.m[1] - d[1], e = this.ETA_C;
       this.S[0] = Math.max((1 - e) * this.S[0] + e * r0 * r0, 1.2e-5); this.S[1] = Math.max((1 - e) * this.S[1] + e * r1 * r1, 1.2e-5);
       this.S[2] = Math.max(Math.min((1 - e) * this.S[2] + e * r0 * r1, 0.8 * Math.sqrt(this.S[0] * this.S[1])), 0);
+    }
+    // SANITY (the middle is the most common state: people mostly look ahead). The three places can slide together by one place (everything read as RIGHT while the middle drifts to sit above the
+    // readings: the centre follows what it believes, so a wrong belief holds itself up). If the filter has spent less than 30% of the last 10 s in the MIDDLE, the middle is put back on the median
+    // of the recent readings and the filter starts again from MIDDLE.
+    this.xs.push(x); this.ss.push(this.state); if (this.xs.length > 150) { this.xs.shift(); this.ss.shift(); }
+    if (this.xs.length >= 150 && this.n - this.lastFix > 15) {
+      const occ = this.ss.reduce((c, v) => c + (v === 1 ? 1 : 0), 0) / this.ss.length;
+      if (occ < 0.3) {
+        const med = (k) => { const v = this.xs.map((q) => q[k]).sort((p, q2) => p - q2); return v[v.length >> 1]; };
+        this.m = [med(0), med(1)]; this.post = [0.05, 0.9, 0.05]; this.state = 1; this.lastFix = this.n; this.fixes++; this.ss = this.ss.map(() => 1);
+      }
     }
     // DECIDE with hysteresis
     let best = 0; for (let j = 1; j < 3; j++) if (np[j] > np[best]) best = j;
