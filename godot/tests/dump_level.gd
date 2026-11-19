@@ -7,6 +7,9 @@ var mats: Dictionary = {}            # material id -> data
 var nodes: Array = []
 var seen: Dictionary = {}
 var out_rows: Dictionary = {}
+var out_anims: Array = []
+var out_vx: Dictionary = {}
+var out_kick: Dictionary = {}
 var rig_ref: RunRig = null
 var shots: Array = []
 
@@ -115,6 +118,10 @@ func dump_mat(m: Material) -> String:
 		d["transparency"] = int(s.transparency)
 		d["cull_mode"] = int(s.cull_mode)
 		d["unshaded"] = s.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED
+		d["blend"] = int(s.blend_mode)
+		d["billboard"] = int(s.billboard_mode)
+		d["tex"] = s.albedo_texture != null
+		d["nofog"] = s.disable_fog
 	mats[id] = d
 	return id
 
@@ -211,6 +218,13 @@ func walk(n: Node, path: String, depth: int) -> void:
 	elif n is Camera3D:
 		var c: Camera3D = n
 		rec["cam"] = {"fov": r3(c.fov), "near": r3(c.near), "far": r3(c.far), "current": c.current}
+	if n is CanvasItem:
+		var ci: CanvasItem = n
+		if ci.material != null:
+			rec["cmat"] = dump_mat(ci.material)
+		if n is Control:
+			var ct: Control = n
+			rec["rect"] = [r3(ct.position.x), r3(ct.position.y), r3(ct.size.x), r3(ct.size.y)]
 	nodes.append(rec)
 	for ch in n.get_children():
 		walk(ch, path + "/" + str(ch.name), depth + 1)
@@ -218,6 +232,27 @@ func walk(n: Node, path: String, depth: int) -> void:
 
 func capture(level: Node) -> void:
 	walk(level, "/MainLevel", 0)
+	for kk in rig_ref._kickers:
+		var kkey := str(snappedf(float(kk["z"]), 0.01))
+		if out_vx.has(kkey):
+			continue
+		out_kick[kkey] = js(kk)
+		var rings = kk.get("vx", null)
+		if rings == null:
+			continue
+		var gi := 0
+		var lst := []
+		for rn in rings:
+			if is_instance_valid(rn):
+				var e := {"gi": gi, "iid": str((rn as Node).get_instance_id()), "Z": float((rn as Node3D).get_meta("Z", kk["z"]))}
+				if (rn as Node3D).has_meta("R"):
+					e["R"] = float((rn as Node3D).get_meta("R"))
+				else:
+					var sv: Vector3 = (rn as Node3D).get_meta("S", Vector3.ONE)
+					e["S"] = [sv.x, sv.y, sv.z]
+				lst.append(e)
+			gi += 1
+		out_vx[kkey] = {"x": kk["x"], "z": kk["z"], "len": kk["len"], "w": kk["w"], "trail": kk.get("trail", false), "super": kk.get("super", false), "rings": lst}
 	for k in rig_ref._rows:
 		if out_rows.has(str(k)):
 			continue
@@ -229,6 +264,18 @@ func capture(level: Node) -> void:
 				continue
 			rd[str(kk)] = js(v)
 		out_rows[str(k)] = rd
+		for b in row.get("buffs", []):
+			var an := {"t": str(b.get("t", "")), "ph": float(b.get("ph", 0.0)), "y": float(b.get("y", 0.0)), "moving": bool(b.get("moving", false))}
+			for key in ["n", "spin", "halo"]:
+				var o: Variant = b.get(key)
+				if o is Node:
+					an[key] = str((o as Node).get_instance_id())
+			var exs := []
+			for e in b.get("extra", []):
+				if e is Node:
+					exs.append(str((e as Node).get_instance_id()))
+			an["extra"] = exs
+			out_anims.append(an)
 
 
 func _ready() -> void:
@@ -291,8 +338,17 @@ func _ready() -> void:
 	out["materials"] = mats
 	out["shots"] = shots
 	out["rows"] = out_rows
+	out["anims"] = out_anims
+	var tx := []
+	var zz := 0.0
+	while zz > -2700.0:
+		tx.append(snappedf(rig.trail_x(zz), 0.001))
+		zz -= 6.0
+	out["trailx"] = tx
+	out["vx"] = out_vx.values()
+	out["kickers"] = out_kick.values()
+	out["feat_off"] = rig.FEAT_OFF
 	var rows := out_rows
-	out["kickers"] = js(rig._kickers)
 	out["pitch"] = js(rig._pitch)
 	var f := FileAccess.open(OS.get_environment("OUT") if OS.get_environment("OUT") != "" else "user://level.json", FileAccess.WRITE)
 	f.store_string(JSON.stringify(out))
