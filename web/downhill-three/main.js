@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795099085';
+import { EyeModel } from './eyemodel.js?v=1795099450';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -255,7 +255,8 @@ const pickWire = new THREE.InstancedMesh(new THREE.OctahedronGeometry(3.6, 0), n
 const rampMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 6, 0.7, 18), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 3);
 const rockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 6);
 if (LINE) for (const mm of [ringMesh, orbMesh, beamMesh, padMesh, rampMesh, rockMesh]) mm.material.wireframe = true;
-const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh];
+const mineMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1.7, 0), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true }), N_RING * 14);          // MINES: small spiked wire bodies, a field of them with one meandering corridor
+const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh];
 wallMesh.count = Q.has('head') ? N_RING * 2 : 0;          // (eye mode: no walls, the middle is open. Head mode uses two wall pieces per row for CARVE GATES)
 for (const mm of allMeshes) { mm.frustumCulled = false; scene.add(mm); }
 const PICKS = [          // kind: what it does (Godot: CRYSTAL a longer boost, CAGE a shield, RINGS double points, CLUSTER a lump of points)
@@ -285,6 +286,39 @@ const VAL = { 0: 1, 1: 2, 2: 3, 3: 2.5, 4: -5 };          // what a thing is wor
 // CARVE GATES (head mode): a wall across the whole slope with ONE opening, anywhere and of any width. They come in runs of five to seven, each opening a smooth step sideways from the last (8 to 16 units, bouncing
 // off the sides), so the way through is an S-curve to carve, with a string of orbs down the middle of each opening; the openings narrow with time (22 units wide to 9). Touching a wall is a crash (a jump clears it).
 const SLM = { left: 0, brk: 0, c: 0, dir: 1 };
+// MINEFIELDS (head mode): eight to ten rows where the whole width is mines except one corridor, 7 wide, that wanders from row to row. Threading it takes time: lean back to go slowly. But something is
+// CHASING (the chase bar), and it closes whenever you are slower than its pace: ease through, then lean in and blast out. Every few zones; never before 30 s.
+const MF = { left: 0, brk: 8, c: 0, start: false };
+function mineRow(r) {
+  if (MF.left <= 0) {
+    if (tPlay < 30) return false;
+    if (MF.brk > 0) { MF.brk--; return false; }
+    if (Math.random() > 0.2) return false;
+    MF.left = 8 + Math.floor(Math.random() * 3); MF.c = 0; MF.start = true;
+  }
+  MF.left--; if (MF.left <= 0) MF.brk = 10 + Math.floor(Math.random() * 6);
+  MF.c = Math.max(-22, Math.min(22, MF.c + (Math.random() - 0.5) * 22)); r.s = [null, null, null]; r.mines = [];
+  for (let x = -37; x <= 37; x += 5.4) { const mx = x + (Math.random() - 0.5) * 2.4; if (Math.abs(mx - MF.c) > 3.9) r.mines.push(mx); }
+  if (MF.start) { r.mfStart = true; MF.start = false; }
+  return true;
+}
+const CH = { on: false, gap: 100, caught: 0 };
+const chBar = document.createElement('div'); chBar.style.cssText = 'position:fixed;left:50%;top:78px;width:200px;margin-left:-100px;height:10px;border:1px solid #f66;border-radius:5px;z-index:6;pointer-events:none;display:none';
+const chFill = document.createElement('div'); chFill.style.cssText = 'height:100%;background:#f43;border-radius:4px;width:100%'; chBar.appendChild(chFill); document.body.appendChild(chBar);
+const chVig = document.createElement('div'); chVig.style.cssText = 'position:fixed;inset:0;z-index:5;pointer-events:none;opacity:0;box-shadow:inset 0 0 140px 30px rgba(255,30,30,.9)'; document.body.appendChild(chVig);
+function chaseUpdate(dt) {
+  if (!HEAD.on) return;
+  const inField = rows.some((r) => r.mines && r.z < zPos + 4 && r.z > zPos - 190);
+  if (inField && !CH.on) { CH.on = true; CH.gap = 100; }
+  if (CH.on && !inField && CH.gap >= 100) CH.on = false;
+  if (CH.on) {
+    const vC = 0.55 * Math.min(80, 28 + tPlay * 0.45) + 8;
+    CH.gap = Math.min(100, CH.gap + (speed - vC) * dt * (speed > vC ? 0.8 : 1));
+    if (CH.gap <= 0) { CH.gap = 70; crash('CAUGHT'); }
+  }
+  const danger = CH.on ? Math.max(0, 1 - CH.gap / 60) : 0;
+  chBar.style.display = CH.on ? 'block' : 'none'; chFill.style.width = Math.max(0, CH.gap) + '%'; chVig.style.opacity = (danger * 0.85).toFixed(2);
+}
 function gateRow(r) {
   if (SLM.left <= 0) {
     if (SLM.brk > 0) { SLM.brk--; return false; }
@@ -308,8 +342,8 @@ function setRow(r, z) {
     else { r.lw = 0.6; r.s = [orbs(), orbs(), orbs()]; r.s[g + 1] = { type: 2, pick: Math.floor(Math.random() * 4), orbs: [], done: false }; }          // hidden: three normal lanes, one clearly better (a pickup against orbs)
     return;
   }
-  r.gap = null; r.gapDone = false;
-  if (Q.has('head') && tPlay > 12 && gateRow(r)) return;
+  r.gap = null; r.gapDone = false; r.mines = null; r.mfStart = false; r.mfAnn = false; r.mDone = false;
+  if (Q.has('head') && tPlay > 12 && (mineRow(r) || gateRow(r))) return;
   const calm = tPlay < 20;          // the first 20 seconds: no hazards
   const hzK = calm ? 0 : Math.min(0.7, 0.25 + tPlay * 0.002);          // how often something nasty is put in
   const roll = Math.random(), flip = Math.random() < 0.5 ? 1 : -1;
@@ -712,7 +746,7 @@ function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.pa
 // HEAD STEERING TEST (?head): no eyes, no zones, no lanes chosen for you. The board goes where the HEAD points: a short two-step set-up (turn the head left, then right, 3 s each) learns which of yaw, roll and
 // the face's sideways position moves most, and by how much, for THIS person on THIS device; the board then follows a smooth number between -1 (head fully left) and +1 (fully right), exactly as far as the head has turned.
 // Live tuning (tune.json "HEAD": gain, dead, flip, tau, rc to re-centre on the current pose, redo to repeat the set-up).
-const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.15, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.0, w: 5, z: 0.9, amax: 110, vmax: 42, vx: 0, carve: 0.02, vflip: Q.has('vflip') ? -1 : 1, pfb: [], pcur: null, vneu: 0, vk: 1, vtau: 0.12, vv: 0, vy: 0, vt: 0, vw: 6, vzt: 0.9 };          // w / z: the board's spring (how quickly it turns toward where the head points) and damping; amax / vmax: the most the board can accelerate and slide sideways (units per s); carve: speed lost to hard turns
+const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.15, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.0, w: 5, z: 0.9, amax: 110, vmax: 42, vx: 0, carve: 0.02, vflip: Q.has('vflip') ? -1 : 1, pfb: [], pcur: null, vneu: 0, vk: 1, vtau: 0.12, vv: 0, vy: 0, vt: 0, vw: 6, vzt: 0.9, zfb: [], zneu: 0, zk: 1, u: 0, ut: 0, utau: 0.2, uup: 0.5, udn: 0.5, udead: 0.12 };          // w / z: the board's spring (how quickly it turns toward where the head points) and damping; amax / vmax: the most the board can accelerate and slide sideways (units per s); carve: speed lost to hard turns
 if (HEAD.on) { TUNE.steerK = 40; TUNE.camK = 22; }          // the board follows the head almost at once (the eye game slides slowly on purpose)
 let vbar = null, vmark = null;
 if (HEAD.on) { vbar = document.createElement('div'); vbar.style.cssText = 'position:fixed;right:8px;top:30%;width:8px;height:40%;border:1px solid #fff8;border-radius:4px;z-index:6;pointer-events:none'; vmark = document.createElement('div'); vmark.style.cssText = 'position:absolute;left:-4px;width:14px;height:6px;border-radius:3px;background:#ff0'; vbar.appendChild(vmark); /* (the side bar is replaced by the dot: it now moves up and down too) */ }
@@ -721,7 +755,7 @@ const HN = [8, 5, 3.5];          // typical head movement in play: yaw degrees, 
 function headFeed() {
   if (!HEAD.on) return;
   if (HEAD.phase === 'left' || HEAD.phase === 'right') HEAD.buf.push({ t: performance.now(), f: headF() });
-  if (!HEAD.cal && !KIT.lost) { HEAD.pfb.push(KIT.pitch || 0); if (HEAD.pfb.length > 600) HEAD.pfb.shift(); const f = headF(); HEAD.fb.push([f[0] / HN[0], f[1] / HN[1], f[2] / HN[2]]); if (HEAD.fb.length > 600) HEAD.fb.shift(); }
+  if (!HEAD.cal && !KIT.lost) { if (KIT.fsz > 0) { HEAD.zfb.push(Math.log(KIT.fsz)); if (HEAD.zfb.length > 900) HEAD.zfb.shift(); } HEAD.pfb.push(KIT.pitch || 0); if (HEAD.pfb.length > 600) HEAD.pfb.shift(); const f = headF(); HEAD.fb.push([f[0] / HN[0], f[1] / HN[1], f[2] / HN[2]]); if (HEAD.fb.length > 600) HEAD.fb.shift(); }
 }
 // SELF-CALIBRATION the player never sees: the head's three signals (yaw, roll, sideways position) move together when you turn to steer. The dominant direction of everything the head has done in the last
 // ~40 s is the steering axis (signed by a prior: left = more yaw, less roll, more x), the median along it is straight ahead, and the 90th percentile of how far it strays is a 0.9 turn. Re-fitted twice a second, so a
@@ -753,8 +787,16 @@ function headVert(dt, now) {
   let v = KIT.lost ? 0 : HEAD.vflip * (HEAD.pcur - HEAD.vneu) * HEAD.vk; v = Math.max(-1, Math.min(1.2, v)); if (Math.abs(v) < 0.1) v = 0;
   HEAD.vt += (v - HEAD.vt) * (1 - Math.exp(-dt / HEAD.vtau));
 }
+function headLean(dt, now) {          // SPEED: how close the face is. Leaning in (a bigger face in the frame) is faster, pulling back is slower. Straight ahead is the median of the last ~60 s, the scale the 90th percentile of the sway (floor 4%), so it works at any distance and tilt.
+  if (HEAD.zfb.length >= 20 && now - (HEAD.lastFitZ || 0) > 500) {
+    HEAD.lastFitZ = now; const a = HEAD.zfb.slice().sort((x, y) => x - y), med = a[Math.floor(a.length / 2)], dev = a.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * 0.9)];
+    HEAD.zneu = HEAD.zfb.length < 60 ? med : HEAD.zneu + (med - HEAD.zneu) * 0.1; HEAD.zk = HEAD.zk + (0.9 / Math.max(0.04, Math.min(0.4, q90)) - HEAD.zk) * 0.2;
+  }
+  const l = KIT.fsz > 0 ? Math.log(KIT.fsz) : HEAD.zneu; let u = KIT.lost ? 0 : (l - HEAD.zneu) * HEAD.zk; u = Math.max(-1, Math.min(1, u)); if (Math.abs(u) < HEAD.udead) u = 0; else u -= Math.sign(u) * HEAD.udead;
+  HEAD.ut = u; HEAD.u += (u - HEAD.u) * (1 - Math.exp(-dt / HEAD.utau));
+}
 function headAuto(dt, now, f) {
-  headVert(dt, now);
+  headVert(dt, now); headLean(dt, now);
   if (!HEAD.cur) return; if (HEAD.fb.length < 12) { HEAD.phase = 'wait'; return; } HEAD.phase = 'run';
   if (now - HEAD.lastFit > 500) { HEAD.lastFit = now; headFit(); }
   const nv = [HEAD.cur[0] / HN[0], HEAD.cur[1] / HN[1], HEAD.cur[2] / HN[2]], pcur = headProj(nv);
@@ -765,7 +807,7 @@ function headAuto(dt, now, f) {
   HEAD.s += (sv - HEAD.s) * a;
   const xs = Math.max(-1.3, Math.min(1.3, HEAD.s + HEAD.vel * HEAD.lead)); steerTarget = Math.max(-1.5, Math.min(1.5, Math.sign(xs) * Math.pow(Math.abs(xs), HEAD.pw) * HEAD.gain)); lane = Math.round(steerTarget);          // (a power curve: small head movements do little, so the middle is wide and sticky; the sides still reach the full lane)
   KIT.zn = steerTarget; KIT.zone = lane; LOCK.lane = lane;
-  const gd = $('gdot'); gd.style.display = 'block'; gd.style.left = ((Math.max(-1.2, Math.min(1.2, steerTarget)) * 0.45 / 1.2 * 1.2 + 0.5) * innerWidth) + 'px'; gd.style.top = ((0.5 - 0.38 * Math.max(-1, Math.min(1, HEAD.vt))) * innerHeight) + 'px';          // the dot is where the head is AIMING: sideways = the steering target, up / down = the reach (a nod up lifts it)
+  const gd = $('gdot'); gd.style.display = 'block'; gd.style.left = ((Math.max(-1.2, Math.min(1.2, steerTarget)) * 0.45 / 1.2 * 1.2 + 0.5) * innerWidth) + 'px'; gd.style.top = ((0.5 - 0.38 * Math.max(-1, Math.min(1, HEAD.vt))) * innerHeight) + 'px'; gd.style.transform = 'scale(' + (1 + 0.6 * HEAD.u).toFixed(2) + ')';          // the dot is where the head is AIMING: sideways = the steering target, up / down = the reach (a nod up lifts it)
 }
 function headStats(t0) { const a = HEAD.buf.filter((b) => b.t > t0 + 1200); const n = Math.max(a.length, 1), m = [0, 0, 0], v = [0, 0, 0]; for (const b of a) for (let i = 0; i < 3; i++) m[i] += b.f[i] / n; for (const b of a) for (let i = 0; i < 3; i++) v[i] += (b.f[i] - m[i]) ** 2 / n; return { m, v, n: a.length }; }
 function headUpdate(dt, now) {
@@ -941,6 +983,16 @@ function stepRows(dt) {
         else { award(Math.round(30 + (22 - g.w) * 6)); G.combo += 2; G.best = Math.max(G.best, G.combo); G.got++; flash(0.3, 1, 0.8, 0.25); }
       }
     }
+    for (let k = 0; k < 14; k++) hz(mineMesh, i * 14 + k);
+    if (r.mines) {
+      if (r.mfStart && !r.mfAnn && zPos - r.z < 170) { r.mfAnn = true; bannerShow('MINEFIELD: EASE OFF, THEN BLAST', true); }
+      r.mines.forEach((mx, k) => { m4.compose(v3.set(mx, 1.9 + Math.sin(t * 4 + k) * 0.25 + TY(r.z, mx), r.z), q4.setFromEuler(eul.set(t * 1.3 + k, t * 0.9, 0)), s3.setScalar(1)); mineMesh.setMatrixAt(i * 14 + k, m4); mineMesh.setColorAt(i * 14 + k, colr.setRGB(1, 0.25 + 0.25 * Math.sin(t * 6 + k), 0.1)); });
+      if (!r.mDone && r.z <= zPrev && r.z > zPos - 1) {
+        r.mDone = true;
+        if (r.mines.some((mx) => Math.abs(camX - mx) < 2.3) && ST.y < 3) crash('MINE');
+        else { award(25); G.combo++; G.best = Math.max(G.best, G.combo); }
+      }
+    }
   }
   for (const mm of allMeshes) { mm.instanceMatrix.needsUpdate = true; if (mm.instanceColor) mm.instanceColor.needsUpdate = true; }
   G.flash = Math.max(0, G.flash - dt * 1.6);
@@ -998,12 +1050,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3), +HEAD.vy.toFixed(3)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3), +HEAD.vy.toFixed(3), +HEAD.u.toFixed(3), +CH.gap.toFixed(0)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk,hv', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk,hv,hu,cg', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch(LOCAL ? '/spike/log' : '../log.php', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
@@ -1046,7 +1098,11 @@ function frame(now) {
   } else steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt);
-  speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
+  if (HEAD.on) {          // HEAD mode: the speed is the PLAYER'S. The base pace still climbs with progress (28 up to 80), a lean forward adds up to half as much again, pulling back takes off up to half, boost and the slope still count
+    const base = Math.min(80, 28 + tPlay * 0.45), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0);
+    speed += Math.max(-38 * dt, Math.min((tgt > speed ? (ST.boost > 0 ? 40 : 24) : 38) * dt, tgt - speed));
+  } else speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
+  if (playing && ctrlReady()) chaseUpdate(dt);
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
   if (!HEAD.on) camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
@@ -1109,4 +1165,4 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : 0, true);
 requestAnimationFrame(frame);
-window.__dh = { HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
+window.__dh = { CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
