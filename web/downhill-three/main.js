@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795101400';
+import { EyeModel } from './eyemodel.js?v=1795102181';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open');          // ?open: THE OPEN WORLD. No lanes, no rows: an endless hilly world made as you go; the head turns the board (carving), a lean in or out is the speed, a nod reaches up or down
@@ -116,7 +116,7 @@ resize();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x000000);
-const camera = new THREE.PerspectiveCamera(85, 1, 0.1, 700);
+const camera = new THREE.PerspectiveCamera(85, 1, 0.3, 3000);
 const hue = (h) => new THREE.Color().setHSL(((h % 1) + 1) % 1, 1, 0.55);
 
 // THE WORLDS (Themes.gd): a sky, a ground pattern (mode), two colours the objects wear, and how strongly the tracers and the colour split work. The journey cycles through them.
@@ -164,12 +164,12 @@ const groundMat = new THREE.ShaderMaterial({
         float chk = step(0., sin(wp.x*.5236)*sin(wp.z*.5236));
         col = mix(vec3(.58,.68,.86), vec3(.72,.80,.94), chk);
         col -= vec3(.10,.06,.0) * gline(wp.xz/12., 1.0);
-      } else if (m < 1.5) {                                             // PSYCHEDELIC: two grids of squares that fall in and out of step (moire), coloured by how far in step they are
-        float a = gline(wp.xz / 6.0, 1.2);
-        float ang = .035 + .02*sin(uT*.1);
-        vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * wp.xz;
-        float b = gline(q / 5.8 + vec2(uT*.05, 0.), 1.2) * .8;
-        col = hsv(fract(dist*.004 - uT*.05 + wp.z*.002)) * (a*.9 + b*.7);
+      } else if (m < 1.5) {                                             // PSYCHEDELIC (GROUND_PSY): two grids of SQUARES, the second 3.7% finer and turning about the rider; where they fall in and out of step big slow shapes appear
+        vec2 g1 = wp.xz / 6.0; float grid1 = sin(g1.x * 6.283) * sin(g1.y * 6.283);
+        float tt = uT * .045, ca = cos(tt), sa = sin(tt); vec2 rp = wp.xz - uCam.xz;
+        vec2 g2 = vec2(rp.x * ca - rp.y * sa, rp.x * sa + rp.y * ca) * 1.037 / 6.0; float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
+        float far = 1.0 - smoothstep(130., 340., dist), amp = mix(.5, grid1 * grid2 * .5 + .5, far), sq = mix(.5, smoothstep(-.06, .06, grid1), far);
+        col = mix(vec3(1.), hsv(fract(amp * .5 + uT * .03)), .9) * (.25 + .75 * pow(amp, .65)) * (.62 + .38 * sq);
       } else if (m < 2.5) {                                             // TUNNEL ROAD: chevrons racing at you
         float v = abs(fract(wp.z/7. + abs(wp.x)*.045) - .5);
         float ch = smoothstep(.34, .44, v);
@@ -210,7 +210,7 @@ const groundMat = new THREE.ShaderMaterial({
       col *= 1. + uLA.x * .45 * sin(wp.z * .07 - uT * 1.6 + sin(wp.x * .05) * 2.);          // mescaline: slow light waves across the ground
       col += hsv(fract(dist * .004 - uT * .2)) * uLB.y * .5 * pow(.5 + .5 * sin(dist * .35 - uT * 3.), 3.);          // 2C-T-2: ripples running out from the rider
       float moW = 0.;
-      if (lvAll > .03 || uDmtG > .01) {          // every molecule turns the ground a little more into the moire of squares (two grids falling in and out of step)
+      if ((lvAll > .03 || uDmtG > .01) && abs(uMode - 1.) > .5) {          // every molecule turns the ground a little more into the moire of squares (two grids falling in and out of step)
         float ang = .035 + .02 * sin(uT * .1); vec2 q = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * wp.xz;
         vec3 mo = hsv(fract(dist * .004 - uT * .05 + wp.z * .002)) * (gline(wp.xz / 6., 1.2) * .9 + gline(q / 5.8 + vec2(uT * .05, 0.), 1.2) * .56);
         moW = clamp(smoothstep(.04, .5, lvAll) * .8 + uDmtG * .3, 0., .9); col = mix(col, mo, moW);
@@ -248,6 +248,8 @@ const skyMat = new THREE.ShaderMaterial({
       col += hsv(fract(dir.y * 5. + uT * .08 + atan(dir.x, dir.z) * .3)) * uDom * .6 * smoothstep(-.1, .5, dir.y) * (.5 + .5 * sin(dir.y * 30. - uT * .5));          // DOM: bands of colour far up
       col += hsv(fract(rr * 4. - uT * .1)) * uDom * .5 * smoothstep(1.1, .2, rr) * step(.5, fract(rr * 9. - uT * .4));          // ... and the polar field of rings overhead
       col += hsv(fract(rr * 3. - uT * .3)) * uPul * .45 * smoothstep(1.2, .1, rr) * (.5 + .5 * sin(rr * 26. - uT * 4.));          // 2C-T-7: a tunnel of pulses in the sky
+      col += (uHor * .55 + .25) * pow(max(sin(atan(dir.x, dir.z) * 9. + uT * .05), 0.), 6.) * smoothstep(-.05, .55, dir.y) * (1. - smoothstep(.5, 1., dir.y)) * .35;          // soft rays of light fanning up from the horizon
+      col += uHor * .5 * smoothstep(.35, .0, abs(dir.y));          // a glow along the horizon
       col *= mix(1., .22, uLine);
       gl_FragColor = vec4(col, 1.);
     }`,
@@ -260,8 +262,61 @@ scene.add(sky);
 // OBJECTS (all instanced, one draw each): pylons down both sides (trees / crystals), and ten rows ahead, one every 52 m. A row is one of: ORBS (a string of points in one lane), a GATE (a ring marks the open lane,
 // barriers fill the other two), a PICKUP (boost / shield / x2 / points), a RAMP (a jump), or ROCKS (two lanes blocked: crash).
 const N_PYL = 160, N_RING = 10, SPAN = 520, LANE_W = 22, ROW_GAP = SPAN / N_RING;          // wide lanes: the choices must be far apart ON THE SCREEN (at 70 m ahead, lanes 8 m apart sit within about 4 degrees of each other, too close for the eyes to tell apart)
-const pylMat = new THREE.MeshBasicMaterial({ wireframe: true, color: 0xffffff });
-const pylMesh = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 7, 5, 1, false), pylMat, N_PYL);
+// THE LOOK (Themes.gd's): solid, soft-lit shapes, not lines. A tree is three stacked cones, dark at the skirt and pale at the tip, in the world's colours; the mountains are tall faceted peaks round the horizon. Both wear a MOIRE SKIN
+// (two stripe fields that fall in and out of step, coloured by how far in step they are) that comes up with the molecules (2C-E, the mountains' piece), and the peaks always wear a little of it.
+const SKIN = { uT: { value: 0 }, uHor: { value: TH.hor }, uCam: { value: new THREE.Vector3() } };
+const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint;
+  void main(){ vec4 p = vec4(position, 1.); vec3 n = normal;
+  #ifdef USE_INSTANCING
+    p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
+  #endif
+  vec4 w = modelMatrix * p; vW = w.xyz; vN = normalize(mat3(modelMatrix) * n); vS = color.r;
+  #ifdef USE_INSTANCING_COLOR
+    vTint = instanceColor;
+  #else
+    vTint = vec3(1.);
+  #endif
+  gl_Position = projectionMatrix * viewMatrix * w; }`;
+const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar; uniform vec3 uHor, uCam;
+  vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
+  void main(){
+    vec3 n = normalize(vN); float lit = .55 + .6 * max(dot(n, normalize(vec3(-.35, .7, .6))), 0.);
+    vec3 base = mix(vTint * .30, vTint * 1.05 + .12, vS) * lit;
+    float a = sin(dot(vW.xz, vec2(.9, .35)) * 2.6 + vW.y * 3.1), b = sin(dot(vW.xz, vec2(.9, -.3)) * 2.72 + vW.y * 3.0 + uT * .25), m = a * b * .5 + .5;
+    vec3 mo = mix(hsv(fract(m * .55 + uT * .04 + vW.y * .004 + vS * .15)), vec3(1.), .28) * (.4 + .6 * m) * lit * 1.1;
+    vec3 col = mix(base, mo, uMo);
+    float d = length(vW - uCam); col = mix(col, uHor, smoothstep(uFar * .35, uFar, d) * .85);
+    gl_FragColor = vec4(col, 1.);
+  }`;
+const mkSkin = (far) => new THREE.ShaderMaterial({ uniforms: { uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
+function shadeGeo(g, y0, y1) { const a = g.attributes.position, c = []; for (let i = 0; i < a.count; i++) { const k = Math.max(0, Math.min(1, (a.getY(i) - y0) / (y1 - y0))); c.push(k, k, k); } g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); return g; }
+function pineGeo() {          // three stacked cones, base at -3.5 and tip at +3.5 (the old single cone's size), each tier dark at its skirt and pale at its tip
+  const parts = [[2.5, 3.6, -3.5], [1.9, 3.2, -1.6], [1.3, 2.8, 0.4]], pos = [], nor = [], col = [];
+  for (const [r, h, y] of parts) { const g = new THREE.ConeGeometry(r, h, 7, 1, false).toNonIndexed(); g.computeVertexNormals(); const a = g.attributes.position, n = g.attributes.normal; for (let i = 0; i < a.count; i++) { pos.push(a.getX(i), a.getY(i) + y + h / 2, a.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i)); const k = Math.max(0, Math.min(1, (a.getY(i) + h / 2) / h)); col.push(k, k, k); } }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g;
+}
+const treeMat = mkSkin(700), peakMat = mkSkin(2600);
+const N_PEAK = 40;
+const peakMesh = new THREE.InstancedMesh(shadeGeo(new THREE.ConeGeometry(1, 1, 5, 1, false).toNonIndexed(), -0.5, 0.5), peakMat, N_PEAK);
+peakMesh.geometry.computeVertexNormals(); peakMesh.frustumCulled = false; scene.add(peakMesh);
+function updatePeaks() {          // a ring of peaks that follows the rider (so they stay far away and never grow) but keeps its compass direction, so turning sweeps them past
+  const cx = camera.position.x, cz = camera.position.z, cy = camera.position.y;
+  for (let i = 0; i < N_PEAK; i++) {
+    const a = (i / N_PEAK) * 6.2832 + Math.sin(i * 12.9898) * 0.08, dist = 900 + ((i * 37) % 5) * 90, h = 260 + ((i * 53) % 7) * 55, r = 150 + ((i * 29) % 6) * 38;
+    m4.compose(v3.set(cx + Math.sin(a) * dist, cy - 120 + h / 2, cz - Math.cos(a) * dist), q4.identity(), s3.set(r, h, r)); peakMesh.setMatrixAt(i, m4);
+    peakMesh.setColorAt(i, colr.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(i * 2.1)).lerp(TH.hor, 0.25));
+  }
+  peakMesh.instanceMatrix.needsUpdate = true; if (peakMesh.instanceColor) peakMesh.instanceColor.needsUpdate = true;
+}
+function skinTick() {
+  SKIN.uT.value = t; SKIN.uCam.value.copy(camera.position);
+  const lvAll = DR ? (MOL.lv[0] + MOL.lv[1] + MOL.lv[2] + MOL.lv[3] + MOL.lv[4] + MOL.lv[5]) / 6 : 0;
+  treeMat.uniforms.uMo.value = DR ? Math.min(0.95, MOL.lv[3] * 1.2 + molDmt() * 0.4 + lvAll * 0.4) : 0;
+  peakMat.uniforms.uMo.value = Math.min(0.95, 0.35 + lvAll * 0.6 + (DR ? MOL.lv[3] * 0.3 : 0));
+  updatePeaks();
+}
+const pylMat = treeMat;
+const pylMesh = new THREE.InstancedMesh(pineGeo(), pylMat, N_PYL);
 const ringMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(9, 0.18, 3, 28), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 3);
 const orbMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 18);
 const wallMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 2, 7, 2), new THREE.MeshBasicMaterial({ wireframe: true, color: 0xffffff }), N_RING * 2);
@@ -458,7 +513,7 @@ function setWorld(i, instant) {
   worldIdx = i % THEMES.length;
   TH.idx = worldIdx; TH.mode = th.mode; TH.wire = th.wire; TH.rainbow = th.rainbow; TH.sun = th.sun;
   groundMat.uniforms.uMode.value = th.mode;
-  pylMat.wireframe = th.wire || LINE; wallMesh.material.wireframe = th.wire || LINE;
+  SKIN.uHor.value = TH.hor; wallMesh.material.wireframe = th.wire || LINE;
   TH.tgt = th;
   if (instant) { TH.top.setRGB(...th.top); TH.hor.setRGB(...th.hor); TH.c1.setRGB(...th.c1); TH.c2.setRGB(...th.c2); TH.trace = th.trace; TH.split = th.split; }
   else { G.flash = 1.0; G.fr = th.c1[0]; G.fg = th.c1[1]; G.fb = th.c1[2]; bannerShow(th.name); }
@@ -680,7 +735,7 @@ if (eyeMode) {
     }
   });
 } else {
-  addEventListener('pointermove', (e) => { steerTarget = OPEN ? Math.max(-1.2, Math.min(1.2, (e.clientX / innerWidth - 0.5) * 2.6)) : Math.max(-1, Math.min(1, Math.round((e.clientX / innerWidth - 0.5) * 3))); lane = steerTarget; if (OPEN) HEAD.vt = Math.max(-1, Math.min(1, (0.5 - e.clientY / innerHeight) * 2)); });
+  addEventListener('pointermove', (e) => { if (!innerWidth || !innerHeight) return; steerTarget = OPEN ? Math.max(-1.2, Math.min(1.2, (e.clientX / innerWidth - 0.5) * 2.6)) : Math.max(-1, Math.min(1, Math.round((e.clientX / innerWidth - 0.5) * 3))); lane = steerTarget; if (OPEN) HEAD.vt = Math.max(-1, Math.min(1, (0.5 - e.clientY / innerHeight) * 2)); });
   beginPlay();
 }
 function setPause(on) {
@@ -1198,7 +1253,7 @@ const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let q = Math.imu
 let oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam;
 if (OPEN) {
   for (const mm of [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh]) mm.count = 0;
-  oTree = new THREE.InstancedMesh(new THREE.ConeGeometry(1.6, 7, 5, 1, false), pylMat, 1500);
+  oTree = new THREE.InstancedMesh(pineGeo(), pylMat, 1500);
   oOrb = new THREE.InstancedMesh(new THREE.SphereGeometry(1.5, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: LINE }), 900);
   oRing = new THREE.InstancedMesh(new THREE.TorusGeometry(9, 0.18, 3, 28), new THREE.MeshBasicMaterial({ color: 0xffffff }), 120);
   oPick = new THREE.InstancedMesh(new THREE.OctahedronGeometry(2.6, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), 200);
@@ -1304,7 +1359,7 @@ function openFrame(dt) {
   camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
   camera.rotation.set(-0.08 + HEAD.vy * 0.12 + Math.atan(slopeF) * 0.55, -OW.th, -OW.om * 0.22, 'YXZ');
   camera.aspect = W / H; camera.updateProjectionMatrix();
-  groundMat.uniforms.uT.value = t; skyMat.uniforms.uT.value = t; sky.position.copy(camera.position);
+  groundMat.uniforms.uT.value = t; skyMat.uniforms.uT.value = t; sky.position.copy(camera.position); skinTick();
   groundMat.uniforms.uLA.value.set(MOL.lv[0], MOL.lv[1], MOL.lv[2]); groundMat.uniforms.uLB.value.set(MOL.lv[3], MOL.lv[4], MOL.lv[5]); groundMat.uniforms.uDmtG.value = molDmt(); skyMat.uniforms.uDom.value = MOL.lv[1]; skyMat.uniforms.uPul.value = MOL.lv[5];
   groundMat.uniforms.uCam.value.copy(camera.position); ground.position.set(Math.round(OW.x / 10) * 10, 0, Math.round(OW.z / 10) * 10);
   for (const mm of allMeshes) mm.visible = flags.objects;
@@ -1372,7 +1427,7 @@ function frame(now) {
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t;
-  skyMat.uniforms.uT.value = t; sky.position.copy(camera.position);
+  skyMat.uniforms.uT.value = t; sky.position.copy(camera.position); skinTick();
   if (DR) { groundMat.uniforms.uLA.value.set(MOL.lv[0], MOL.lv[1], MOL.lv[2]); groundMat.uniforms.uLB.value.set(MOL.lv[3], MOL.lv[4], MOL.lv[5]); groundMat.uniforms.uDmtG.value = molDmt(); skyMat.uniforms.uDom.value = MOL.lv[1]; skyMat.uniforms.uPul.value = MOL.lv[5]; }
   groundMat.uniforms.uCam.value.copy(camera.position);
   ground.position.set(Math.round(camera.position.x / 25) * 25, 0, Math.round((camera.position.z - 300) / 10) * 10);          // (snapped to the mesh grid so the vertices do not swim over the hills as the camera moves)
