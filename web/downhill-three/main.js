@@ -491,7 +491,7 @@ if (eyeMode) {
           const gr = EM.ready && wasReady ? labRow() : null;
           if (gr) {
             const tt = (zPos - gr.z) / Math.max(speed, 14);
-            if (tt < 1.4 && tt > 0.25) {
+            if (tt < 1.0 && tt > 0.2) {          // (the eyes need about half a second to find a ring: only the last second counts)
               KIT.gl = gr.lab; KIT.gp = EM.zone; KIT.gw = gr.lw; if (gr.guide !== 9) gr.votes[EM.zone + 1]++;
               if (EM.hold && EM.labeled.length >= 25) profChoose();
               if (gr.lw >= 0.99 || EM.post[gr.lab + 1] >= 0.12 || EM.labeled.length < 30) EM.supervise([ha, hb], gr.lab, gr.lw);          // an inferred label only counts when the model does not flatly disagree with it (a player who ignored the prize must not retrain it)

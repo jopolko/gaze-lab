@@ -98,6 +98,8 @@ export class EyeModel {
     if (this.hold) return;          // the profile for this person / glasses is chosen first, from the first few labelled looks (the app releases the hold)
     const e = this.SUP * w;          // gentle: a few looks are only a start, and one odd look (the move itself, a blink, a wandering eye) must not set a side (it once taught a right look of A -0.044 / B -0.010 when play showed -0.020 / -0.020)
     if (k !== 0 && Math.abs((x[0] - this.m[0]) - (x[1] - this.m[1])) > 0.04) return;          // the two eyes disagree strongly: not a clean look
+    const side = ((x[0] - this.m[0]) + (x[1] - this.m[1])) / 2;
+    if ((k < 0 && side < 0.004) || (k > 0 && side > -0.004)) return;          // the reading is not on the side the look was meant for (the eyes were still on the way, or still on the last ring): a look to the right can not read left, so it teaches nothing
     if (k === 0) { this.m[0] += e * (x[0] - this.m[0]); this.m[1] += e * (x[1] - this.m[1]); }
     else {
       const r0 = x[0] - this.m[0], r1 = x[1] - this.m[1];
