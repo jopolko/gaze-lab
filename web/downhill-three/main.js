@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795098532';
+import { EyeModel } from './eyemodel.js?v=1795098800';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -271,7 +271,7 @@ function mkThing(avoid, noRamp) {
     const type = k < 0.30 ? 0 : k < 0.52 ? 1 : k < 0.84 || noRamp ? 2 : 3;
     const pick = Math.floor(Math.random() * 4);
     if (avoid.some((a) => a && a.type === type && (type !== 2 || a.pick === pick))) continue;
-    return { type, pick, orbs: [0, 1, 2, 3, 4, 5].map(() => true), done: false };
+    const q = Math.random(); return { type, pick, orbs: [0, 1, 2, 3, 4, 5].map(() => true), done: false, hy: Q.has('head') && type <= 2 ? (q < 0.22 ? 9.5 : q < 0.36 ? 0.9 : 2.6) : 0 };          // (head mode: some are high, some low, the rest at board height)
   }
   return { type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false };
 }
@@ -696,14 +696,16 @@ function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.pa
 // HEAD STEERING TEST (?head): no eyes, no zones, no lanes chosen for you. The board goes where the HEAD points: a short two-step set-up (turn the head left, then right, 3 s each) learns which of yaw, roll and
 // the face's sideways position moves most, and by how much, for THIS person on THIS device; the board then follows a smooth number between -1 (head fully left) and +1 (fully right), exactly as far as the head has turned.
 // Live tuning (tune.json "HEAD": gain, dead, flip, tau, rc to re-centre on the current pose, redo to repeat the set-up).
-const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.15, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.0, w: 5, z: 0.9, amax: 110, vmax: 42, vx: 0, carve: 0.02 };          // w / z: the board's spring (how quickly it turns toward where the head points) and damping; amax / vmax: the most the board can accelerate and slide sideways (units per s); carve: speed lost to hard turns
+const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.15, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.0, w: 5, z: 0.9, amax: 110, vmax: 42, vx: 0, carve: 0.02, vflip: Q.has('vflip') ? -1 : 1, pfb: [], pcur: null, vneu: 0, vk: 1, vtau: 0.12, vv: 0, vy: 0, vt: 0, vw: 6, vzt: 0.9 };          // w / z: the board's spring (how quickly it turns toward where the head points) and damping; amax / vmax: the most the board can accelerate and slide sideways (units per s); carve: speed lost to hard turns
 if (HEAD.on) { TUNE.steerK = 40; TUNE.camK = 22; }          // the board follows the head almost at once (the eye game slides slowly on purpose)
+let vbar = null, vmark = null;
+if (HEAD.on) { vbar = document.createElement('div'); vbar.style.cssText = 'position:fixed;right:8px;top:30%;width:8px;height:40%;border:1px solid #fff8;border-radius:4px;z-index:6;pointer-events:none'; vmark = document.createElement('div'); vmark.style.cssText = 'position:absolute;left:-4px;width:14px;height:6px;border-radius:3px;background:#ff0'; vbar.appendChild(vmark); document.body.appendChild(vbar); }
 const headF = () => [KIT.yaw || 0, KIT.roll || 0, (KIT.fx || 0) * 100];
 const HN = [8, 5, 3.5];          // typical head movement in play: yaw degrees, roll degrees, face sideways position
 function headFeed() {
   if (!HEAD.on) return;
   if (HEAD.phase === 'left' || HEAD.phase === 'right') HEAD.buf.push({ t: performance.now(), f: headF() });
-  if (!HEAD.cal && !KIT.lost) { const f = headF(); HEAD.fb.push([f[0] / HN[0], f[1] / HN[1], f[2] / HN[2]]); if (HEAD.fb.length > 600) HEAD.fb.shift(); }
+  if (!HEAD.cal && !KIT.lost) { HEAD.pfb.push(KIT.pitch || 0); if (HEAD.pfb.length > 600) HEAD.pfb.shift(); const f = headF(); HEAD.fb.push([f[0] / HN[0], f[1] / HN[1], f[2] / HN[2]]); if (HEAD.fb.length > 600) HEAD.fb.shift(); }
 }
 // SELF-CALIBRATION the player never sees: the head's three signals (yaw, roll, sideways position) move together when you turn to steer. The dominant direction of everything the head has done in the last
 // ~40 s is the steering axis (signed by a prior: left = more yaw, less roll, more x), the median along it is straight ahead, and the 90th percentile of how far it strays is a 0.9 turn. Re-fitted twice a second, so a
@@ -725,7 +727,18 @@ function headFit() {
   HEAD.neu = n < 40 ? med : HEAD.neu + (med - HEAD.neu) * 0.25;
   HEAD.k = HEAD.k + (0.9 / Math.max(0.9, Math.min(2.5, q90)) - HEAD.k) * (n < 40 ? 1 : 0.25);
 }
+function headVert(dt, now) {
+  if (vmark) vmark.style.top = ((1 - Math.max(-1, Math.min(1, HEAD.vy)) ) * 0.5 * 100 - 2) + '%';          // UP / DOWN: the head's pitch (a nod). The straight-ahead pitch is the median of the last ~40 s (so how the phone is held does not matter), the scale the 90th percentile of the nods, floor 2.5 degrees.
+  const p = KIT.pitch || 0; HEAD.pcur = HEAD.pcur === null ? p : HEAD.pcur + (p - HEAD.pcur) * 0.3;
+  if (HEAD.pfb.length >= 15 && now - (HEAD.lastFitV || 0) > 500) {
+    HEAD.lastFitV = now; const a = HEAD.pfb.slice().sort((x, y) => x - y), med = a[Math.floor(a.length / 2)], dev = a.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * 0.9)];
+    HEAD.vneu = HEAD.pfb.length < 40 ? med : HEAD.vneu + (med - HEAD.vneu) * 0.25; HEAD.vk = HEAD.vk + (0.9 / Math.max(2.5, Math.min(14, q90)) - HEAD.vk) * 0.25;
+  }
+  let v = KIT.lost ? 0 : HEAD.vflip * (HEAD.pcur - HEAD.vneu) * HEAD.vk; v = Math.max(-1, Math.min(1.2, v)); if (Math.abs(v) < 0.1) v = 0;
+  HEAD.vt += (v - HEAD.vt) * (1 - Math.exp(-dt / HEAD.vtau));
+}
 function headAuto(dt, now, f) {
+  headVert(dt, now);
   if (!HEAD.cur) return; if (HEAD.fb.length < 12) { HEAD.phase = 'wait'; return; } HEAD.phase = 'run';
   if (now - HEAD.lastFit > 500) { HEAD.lastFit = now; headFit(); }
   const nv = [HEAD.cur[0] / HN[0], HEAD.cur[1] / HN[1], HEAD.cur[2] / HN[2]], pcur = headProj(nv);
@@ -849,29 +862,30 @@ function stepRows(dt) {
     for (let sd = 0; sd < 3; sd++) {
       const o = r.s[sd], lane = sd - 1, lx = lane * LANE_W, si = i * 3 + sd;
       const crossing = (z) => !o.done && z <= zPrev && z > zPos - 1;          // the line z lies between where the camera was and where it is now
-      const mine = HEAD.on ? Math.abs(camX - lx) < 7.5 : laneNow === lane;          // (head steering: the board is anywhere, so a thing is taken when it is within reach and a rock only when the board is on one)
+      const reachY = 2.6 + ST.y + (HEAD.vy >= 0 ? 8 * HEAD.vy : 3 * HEAD.vy), near = HEAD.on ? Math.abs(camX - lx) < 7.5 : laneNow === lane;          // HEAD mode: where the head reaches up and down matters too
+      const mine = near && (!HEAD.on || !o || o.type > 2 || Math.abs((o.type === 1 ? (o.hy || 2.6) + 1.9 : (o.hy || 2.6) + 0.4) - reachY) < (o.type === 1 ? 5.5 : 4.2));          // (head steering: the board is anywhere, so a thing is taken when it is within reach and a rock only when the board is on one)
       for (let k = 0; k < 6; k++) hz(orbMesh, i * 18 + sd * 6 + k);
       hz(ringMesh, si); hz(beamMesh, si); hz(padMesh, si); hz(pickMesh, si); hz(pickWire, si); hz(rampMesh, si); hz(rockMesh, i * 6 + sd * 2); hz(rockMesh, i * 6 + sd * 2 + 1);
       if (!o) continue;
       if (o.type === 0) {
         for (let k = 0; k < 6; k++) {
           const oz = r.z - k * 5, ox = lx + Math.sin(k * 0.9 + t * 3) * 0.6;
-          const oc = o.orbs[k] && oz <= zPrev && oz > zPos - 1 && Math.abs(camX - lx) < 8.0;
+          const oc = o.orbs[k] && oz <= zPrev && oz > zPos - 1 && Math.abs(camX - lx) < 8.0 && (!HEAD.on || Math.abs((o.hy || 2.6) - reachY) < 2.6);
           if (oc) { o.orbs[k] = false; G.combo++; G.best = Math.max(G.best, G.combo); award(10 * (1 + Math.floor(G.combo / 8))); G.got++; flash(0, 1, 0.8, 0.28); beep(440 + Math.min(G.combo, 14) * 40, 0.12, 0.08); }
-          if (o.orbs[k]) { m4.compose(v3.set(ox, (2.6) + TY(oz, ox), oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 18 + sd * 6 + k, m4); orbMesh.setColorAt(i * 18 + sd * 6 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
+          if (o.orbs[k]) { m4.compose(v3.set(ox, (o.hy || 2.6) + TY(oz, ox), oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 18 + sd * 6 + k, m4); orbMesh.setColorAt(i * 18 + sd * 6 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
         }
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.2, 1, 0.5));
         m4.compose(v3.set(lx, (0.25) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(0.1, 0.6, 0.3));
       } else if (o.type === 1) {
-        m4.compose(v3.set(lx, (4.5) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(si, m4); ringMesh.setColorAt(si, themeCol(t * 0.1 + i * 0.13, colr));
+        m4.compose(v3.set(lx, ((o.hy || 2.6) + 1.9) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(si, m4); ringMesh.setColorAt(si, themeCol(t * 0.1 + i * 0.13, colr));
         m4.compose(v3.set(lx, (0.25) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(1, 0.9 * (0.6 + 0.4 * Math.sin(t * 6)), 0.1));
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.9, 0.2));
         if (crossing(r.z)) { o.done = true; if (mine) { G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); } }
       } else if (o.type === 2) {
         const pk = PICKS[o.pick], c = pk.col, a = t * 1.7 + i;
         q4.setFromEuler(eul.set(a * 0.6, a, 0));
-        m4.compose(v3.set(lx, (3 + Math.sin(t * 3 + i) * 0.5) + TY(r.z, lx), r.z), q4, s3.setScalar(1)); pickMesh.setMatrixAt(si, m4); pickMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
-        m4.compose(v3.set(lx, (3 + Math.sin(t * 3 + i) * 0.5) + TY(r.z, lx), r.z), q4, s3.setScalar(1)); pickWire.setMatrixAt(si, m4); pickWire.setColorAt(si, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8));
+        m4.compose(v3.set(lx, ((o.hy ? o.hy + 0.4 : 3) + Math.sin(t * 3 + i) * 0.5) + TY(r.z, lx), r.z), q4, s3.setScalar(1)); pickMesh.setMatrixAt(si, m4); pickMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
+        m4.compose(v3.set(lx, ((o.hy ? o.hy + 0.4 : 3) + Math.sin(t * 3 + i) * 0.5) + TY(r.z, lx), r.z), q4, s3.setScalar(1)); pickWire.setMatrixAt(si, m4); pickWire.setColorAt(si, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8));
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
         m4.compose(v3.set(lx, (0.25) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(c[0] * 0.5, c[1] * 0.5, c[2] * 0.5));
         if (crossing(r.z)) {
@@ -951,12 +965,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3), +HEAD.vy.toFixed(3)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk,hv', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch(LOCAL ? '/spike/log' : '../log.php', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
@@ -993,6 +1007,7 @@ function frame(now) {
     // through and settles (a correction is an arc, not a snap), and a hard turn costs a little speed.
     const xT = steerTarget * LANE_W, a = Math.max(-HEAD.amax, Math.min(HEAD.amax, HEAD.w * HEAD.w * (xT - camX) - 2 * HEAD.z * HEAD.w * HEAD.vx));
     HEAD.vx = Math.max(-HEAD.vmax, Math.min(HEAD.vmax, HEAD.vx + a * dt)); HEAD.acc = a;
+    HEAD.vv += (HEAD.vw * HEAD.vw * (HEAD.vt - HEAD.vy) - 2 * HEAD.vzt * HEAD.vw * HEAD.vv) * dt; HEAD.vy += HEAD.vv * dt;          // the height of the reach follows the nod through its own damped spring
     camX = Math.max(-LANE_W * 1.6, Math.min(LANE_W * 1.6, camX + HEAD.vx * dt)); steer = camX / LANE_W;
     if (playing && ctrlReady()) speed = Math.max(14, speed - Math.abs(a) * dt * HEAD.carve);
   } else steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
@@ -1002,9 +1017,9 @@ function frame(now) {
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
   if (!HEAD.on) camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
-  camera.position.set(camX, 3.2 + ST.y + TY(zPos, camX), zPos);
+  camera.position.set(camX, 3.2 + ST.y + TY(zPos, camX) + (HEAD.on ? HEAD.vy * 1.6 : 0), zPos);
   camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
-  camera.rotation.set(-0.08 - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), HEAD.on ? -HEAD.vx * 0.0035 : -steer * 0.08, HEAD.on ? -HEAD.vx * 0.0065 - (HEAD.acc || 0) * 0.0006 : -steer * 0.12, 'YXZ');          // (the board leans into a turn by how fast it is sliding and how hard it is accelerating)          // the view tips down a falling slope and up a rise
+  camera.rotation.set(-0.08 + (HEAD.on ? HEAD.vy * 0.12 : 0) - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), HEAD.on ? -HEAD.vx * 0.0035 : -steer * 0.08, HEAD.on ? -HEAD.vx * 0.0065 - (HEAD.acc || 0) * 0.0006 : -steer * 0.12, 'YXZ');          // (the board leans into a turn by how fast it is sliding and how hard it is accelerating)          // the view tips down a falling slope and up a rise
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t;
