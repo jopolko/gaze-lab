@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795104503';
+import { EyeModel } from './eyemodel.js?v=1795104680';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -948,7 +948,8 @@ function headVert(dt, now) {
     HEAD.lastFitV = now; const a = HEAD.pfb.slice().sort((x, y) => x - y), med = a[Math.floor(a.length / 2)], dev = a.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * 0.9)];
     HEAD.vneu = HEAD.pfb.length < 40 ? med : HEAD.vneu + (med - HEAD.vneu) * 0.25; HEAD.vk = HEAD.vk + (0.9 / Math.max(2.5, Math.min(14, q90)) - HEAD.vk) * 0.25;
   }
-  let v = KIT.lost ? 0 : HEAD.vflip * (HEAD.pcur - HEAD.vneu) * HEAD.vk; v = Math.max(-1, Math.min(1.2, v)); if (Math.abs(v) < 0.1) v = 0;
+  const pd = HEAD.pcur - HEAD.vneu, uu = HEAD.u || 0; if (HEAD.pl === undefined) HEAD.pl = 10; const pe = pd - HEAD.pl * uu; HEAD.pl = Math.max(0, Math.min(25, HEAD.pl + 0.004 * pe * uu / (uu * uu + 0.08)));          // leaning in tips the head too (on a phone about 12 degrees of pitch for a full lean): that part is learned and taken OUT, so what is left is the nod
+  let v = KIT.lost ? 0 : HEAD.vflip * pe * HEAD.vk; v = Math.max(-1, Math.min(1.2, v)); if (Math.abs(v) < 0.1) v = 0;
   HEAD.vt += (v - HEAD.vt) * (1 - Math.exp(-dt / HEAD.vtau));
 }
 function headLean(dt, now) {          // SPEED: how close the face is. Leaning in (a bigger face in the frame) is faster, pulling back is slower. Straight ahead is the median of the last ~60 s, the scale the 90th percentile of the sway (floor 4%), so it works at any distance and tilt.
@@ -1570,7 +1571,7 @@ function buggyStep(dt) {
     let a = 0; if (thr > 0.02) a = 26 * thr * (1 - Math.max(0, vf) / 38); else if (thr < -0.02) a = vf > 0.8 ? -50 * -thr : (vf > -17 ? -22 * -thr : 0);
     a -= 0.22 * vf + 0.0016 * vf * Math.abs(vf); a -= 70 * (g[0] * fx + g[1] * fz); vf += a * dt; BUG.acc = a;
     const turn = st * 2.5 * Math.min(1, Math.abs(vf) / 4.5) / (1 + Math.max(0, Math.abs(vf) - 14) / 30) * (vf >= 0 ? 1 : -1);          // (tight when slow, steadier when fast) OW.th += turn * dt; OW.om = turn; vl *= Math.exp(-9 * dt);
-  } else { OW.th += OW.om * dt * 0.6; OW.om *= Math.exp(-0.6 * dt); vf *= Math.exp(-0.05 * dt); }
+  } else { OW.th += (OW.om * 0.6 + st * 1.5 * (vf >= 0 ? 1 : -1)) * dt; OW.om *= Math.exp(-0.6 * dt); if (thr > 0.02) vf += 10 * thr * dt; vf *= Math.exp(-0.05 * dt); }          // (in the air you can still steer and push a little: it is never dead)
   fx = Math.sin(OW.th); fz = -Math.cos(OW.th); rx = Math.cos(OW.th); rz = Math.sin(OW.th); OW.vx = fx * vf + rx * vl; OW.vz = fz * vf + rz * vl; OW.x += OW.vx * dt; OW.z += OW.vz * dt;
   const gh = groundAt(OW.x, OW.z); if (!BUG.inited) { BUG.inited = true; BUG.gPrev = gh; BUG.y = gh; BUG.yv = 0; } const vg = Math.max(-60, Math.min(60, (gh - BUG.gPrev) / Math.max(dt, 1e-3))); BUG.gPrev = gh;
   BUG.yv -= 34 * dt; BUG.y += BUG.yv * dt;
@@ -1578,8 +1579,8 @@ function buggyStep(dt) {
   BUG.wasG = BUG.grounded; BUG.hopT -= dt; BUG.tramT -= dt;
   HEAD.vslow = (HEAD.vslow === undefined ? HEAD.vt : HEAD.vslow) + (HEAD.vt - (HEAD.vslow === undefined ? HEAD.vt : HEAD.vslow)) * (1 - Math.exp(-dt / 0.8));          // a HOP is a quick nod: the nod signal minus its own slow average, so leaning in (which tips the head forward and holds it there) never counts
   HEAD.uslow = (HEAD.uslow === undefined ? (HEAD.u || 0) : HEAD.uslow) + ((HEAD.u || 0) - (HEAD.uslow === undefined ? (HEAD.u || 0) : HEAD.uslow)) * (1 - Math.exp(-dt / 0.9));
-  const nod = HEAD.vt - HEAD.vslow > 0.4, uq = Q.has('mouse') ? (HEAD.u || 0) : (HEAD.ut === undefined ? HEAD.u || 0 : HEAD.ut), nudge = uq - HEAD.uslow > 0.22 && HEAD.uslow > 0.15;          // a HOP is a quick nod up, OR a quick nudge forward while you are already leaning on the gas (so you can cruise at a mid lean and pop over a jump without lifting off the throttle)
-  if ((nod || nudge) && BUG.grounded && BUG.hopT <= 0) { BUG.yv = vg + (nudge && !nod ? 10 : 13); BUG.grounded = false; BUG.hopT = 0.5; BUG.squash = 0.2; if (nudge && !nod) { OW.vx += fx * 3; OW.vz += fz * 3; } if (MUS) MUS.tone(660, 0.18, 0.09); }
+  const nod = HEAD.vt - HEAD.vslow > 0.5, uq = Q.has('mouse') ? (HEAD.u || 0) : (HEAD.ut === undefined ? HEAD.u || 0 : HEAD.ut), nudge = false && uq - HEAD.uslow > 0.22 && HEAD.uslow > 0.15;          // (the forward nudge hop is off for now: on a phone the lean itself looked like a nudge)          // a HOP is a quick nod up, OR a quick nudge forward while you are already leaning on the gas (so you can cruise at a mid lean and pop over a jump without lifting off the throttle)
+  if ((nod || nudge) && BUG.grounded && BUG.hopT <= 0) { BUG.yv = vg + (nudge && !nod ? 10 : 13); BUG.grounded = false; BUG.hopT = 0.9; BUG.squash = 0.2; if (nudge && !nod) { OW.vx += fx * 3; OW.vz += fz * 3; } if (MUS) MUS.tone(660, 0.18, 0.09); }
   ST.y = Math.max(0, BUG.y - gh); ST.vy = BUG.yv - vg; speed = Math.hypot(OW.vx, OW.vz); zPrev = zPos; zPos = OW.z; camX = OW.x; BUG.vf = vf;
   BUG.wheel += vf * dt / 0.95; BUG.squash *= Math.exp(-dt * 7); BUG.shake *= Math.exp(-dt * 4);
   const slope = g[0] * fx + g[1] * fz; BUG.pitch += ((-Math.atan(slope) * 1.0 + Math.max(-0.2, Math.min(0.2, (BUG.acc || 0) * 0.004))) - BUG.pitch) * Math.min(1, dt * 10); BUG.roll += ((-(OW.om || 0) * 0.09 * Math.min(1, Math.abs(vf) / 18)) - BUG.roll) * Math.min(1, dt * 8);
