@@ -451,24 +451,26 @@ function readTracker(now) {
 // the eyes are in that lane's zone (the middle only at 0.35 of the pace, because resting eyes go there), and drains when they are elsewhere (3x as fast when the eyes are on a side).
 // A lane takes the lock after a ninth of a second at first; once locked it holds however the eyes wander, committed for half a second, and a change of mind then needs a steadier look
 // (0.35 s), then 0.14 s once the commitment is over. The board slides to the locked lane, so one glance starts a move that finishes by itself.
-const LOCK = { want: { '-1': 0, '0': 0, '1': 0 }, lane: 0, age: 9, block: 0 };
+const LOCK = { want: { '-1': 0, '0': 0, '1': 0 }, lane: 0, age: 9, block: 0, free: true };
 function lockStep(zone, dt) {
-  // RunRig._trail_pick: the eyes do not name a lane, they MOVE ONE STEP from the thing the board is going for. A look left takes the one just left of it, a look right the one just right, and a
-  // look at the middle keeps it (resting eyes go to the middle, so it must never take the lane away; with nothing locked yet it settles on the thing in the board's own lane). At the end of the row a look
-  // further that way changes nothing, and a look held on keeps stepping. Fill / drain / commitment times are Godot's: a first look settles after 0.11 s, a change of mind needs 0.35 s, then 0.14 s
-  // once the half-second commitment is over, and none in the last quarter second before the board reaches the thing.
+  // The lane FOLLOWS THE EYES (left / middle / right), with Godot's lock-on only as a hold: a lane chosen is kept while the thing is still ahead, so a flicker (or a glance at the middle while you follow a
+  // target in) can not snap it back, and it is FREE again the moment the board passes the thing (RunRig clears its lock there), when any lane the eyes are asking for takes over at once.
+  // Fill / drain are Godot's (the middle fills at 0.35 of the pace: resting eyes go there). A lane is taken after a first look of 0.11 s, a change of mind needs 0.35 s, then 0.14 s once the half-second
+  // commitment is over, and none in the last quarter second before the board reaches the thing; between passes the MIDDLE needs a steady look of about 0.8 s to take a side lane away.
   const qk = 0.7;          // at speed everything about choosing is quicker (Godot: qk 0.6 flat out)
-  if (zone === 0 || zone === -LOCK.block) LOCK.block = 0;          // the eyes came back to the middle, or went the other way: the next glance may step again
-  const blocked = zone !== 0 && zone === LOCK.block && LOCK.age < 0.9;          // ONE STEP PER GLANCE: right after a step the eyes are still reading that side, which would take the next step at once and skip the middle lane; a look held 0.9 s keeps stepping
-  const L = LOCK.lane, tl = zone < 0 ? L - 1 : zone > 0 ? L + 1 : L, ok = tl >= -1 && tl <= 1 && !blocked;
   for (const l of [-1, 0, 1]) {
-    if (ok && l === tl) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (zone === 0 ? 0.35 / qk : 1.0), 0.5);
+    if (zone === l) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (l === 0 ? 0.35 / qk : 1.0), 0.5);
     else LOCK.want[l] = Math.max(LOCK.want[l] - dt * (zone !== 0 ? 3.0 : 0.6), 0);
   }
   LOCK.age += dt;
-  let need = (LOCK.age >= 0.5 * qk ? 0.14 : 0.35) * qk;
-  if (nextRowDist() / Math.max(speed, 14) < 0.25) need = 9;
-  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.block = l > LOCK.lane ? 1 : -1; LOCK.lane = l; LOCK.age = 0; break; }
+  let need = LOCK.free ? 0.11 * qk : (LOCK.age >= 0.5 * qk ? 0.14 : 0.35) * qk;
+  const nd = nextRowDist();
+  if (!LOCK.free && nd / Math.max(speed, 14) < 0.25) need = 9;
+  for (const l of [-1, 0, 1]) {
+    if (l === LOCK.lane) continue;
+    const nl = !LOCK.free && l === 0 && LOCK.lane !== 0 ? Math.max(need, 0.28) : need;
+    if (LOCK.want[l] > nl) { LOCK.lane = l; LOCK.age = 0; LOCK.free = false; break; }
+  }
   return LOCK.lane;
 }
 function nextRowDist() {          // how far ahead the nearest row is (m)
@@ -541,9 +543,9 @@ function cardsUpdate() {
   let row = null, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; }
   for (let i = 0; i < 3; i++) {
-    const e = cards[i], p = i - 1, lane = LOCK.lane + p;
+    const e = cards[i], p = i - 1, lane = p;
     if (!row || lane < -1 || lane > 1 || !KIT.zones) { e.style.display = 'none'; continue; }
-    const k = CARD_KIND(row.s[lane + 1]), fill = p === 0 ? 1 : Math.min(1, LOCK.want[lane] / 0.5), on = p === 0;
+    const k = CARD_KIND(row.s[lane + 1]), fill = lane === LOCK.lane ? 1 : Math.min(1, LOCK.want[lane] / 0.5), on = lane === LOCK.lane;
     e.style.display = 'block';
     e.style.background = 'radial-gradient(circle,#000b 58%,transparent 60%), conic-gradient(' + (on ? '#6f6' : k.c) + ' ' + Math.round(fill * 360) + 'deg, #fff3 0)';
     e.style.boxShadow = '0 0 ' + (on ? 14 : 8) + 'px ' + k.c; e.textContent = k.n;
@@ -619,7 +621,7 @@ function stepRows(dt) {
   for (let i = 0; i < N_RING; i++) {
     const r = rows[i];
     if (r.z > zPos + 25) setRow(r, r.z - SPAN);
-    if (!r.passed && r.z <= zPrev && r.z > zPos - 1) r.passed = true;
+    if (!r.passed && r.z <= zPrev && r.z > zPos - 1) { r.passed = true; LOCK.free = true; }          // past the thing: the lock is let go
     for (let sd = 0; sd < 3; sd++) {
       const o = r.s[sd], lane = sd - 1, lx = lane * LANE_W, si = i * 3 + sd;
       const crossing = (z) => !o.done && z <= zPrev && z > zPos - 1;          // the line z lies between where the camera was and where it is now
