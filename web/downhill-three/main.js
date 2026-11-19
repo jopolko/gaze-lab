@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795098800';
+import { EyeModel } from './eyemodel.js?v=1795098946';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -699,7 +699,7 @@ function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.pa
 const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.15, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7, pw: 1.0, w: 5, z: 0.9, amax: 110, vmax: 42, vx: 0, carve: 0.02, vflip: Q.has('vflip') ? -1 : 1, pfb: [], pcur: null, vneu: 0, vk: 1, vtau: 0.12, vv: 0, vy: 0, vt: 0, vw: 6, vzt: 0.9 };          // w / z: the board's spring (how quickly it turns toward where the head points) and damping; amax / vmax: the most the board can accelerate and slide sideways (units per s); carve: speed lost to hard turns
 if (HEAD.on) { TUNE.steerK = 40; TUNE.camK = 22; }          // the board follows the head almost at once (the eye game slides slowly on purpose)
 let vbar = null, vmark = null;
-if (HEAD.on) { vbar = document.createElement('div'); vbar.style.cssText = 'position:fixed;right:8px;top:30%;width:8px;height:40%;border:1px solid #fff8;border-radius:4px;z-index:6;pointer-events:none'; vmark = document.createElement('div'); vmark.style.cssText = 'position:absolute;left:-4px;width:14px;height:6px;border-radius:3px;background:#ff0'; vbar.appendChild(vmark); document.body.appendChild(vbar); }
+if (HEAD.on) { vbar = document.createElement('div'); vbar.style.cssText = 'position:fixed;right:8px;top:30%;width:8px;height:40%;border:1px solid #fff8;border-radius:4px;z-index:6;pointer-events:none'; vmark = document.createElement('div'); vmark.style.cssText = 'position:absolute;left:-4px;width:14px;height:6px;border-radius:3px;background:#ff0'; vbar.appendChild(vmark); /* (the side bar is replaced by the dot: it now moves up and down too) */ }
 const headF = () => [KIT.yaw || 0, KIT.roll || 0, (KIT.fx || 0) * 100];
 const HN = [8, 5, 3.5];          // typical head movement in play: yaw degrees, roll degrees, face sideways position
 function headFeed() {
@@ -749,7 +749,7 @@ function headAuto(dt, now, f) {
   HEAD.s += (sv - HEAD.s) * a;
   const xs = Math.max(-1.3, Math.min(1.3, HEAD.s + HEAD.vel * HEAD.lead)); steerTarget = Math.max(-1.5, Math.min(1.5, Math.sign(xs) * Math.pow(Math.abs(xs), HEAD.pw) * HEAD.gain)); lane = Math.round(steerTarget);          // (a power curve: small head movements do little, so the middle is wide and sticky; the sides still reach the full lane)
   KIT.zn = steerTarget; KIT.zone = lane; LOCK.lane = lane;
-  const gd = $('gdot'); gd.style.left = ((steerTarget * 0.45 + 0.5) * innerWidth) + 'px'; gd.style.top = (innerHeight * 0.5) + 'px';
+  const gd = $('gdot'); gd.style.display = 'block'; gd.style.left = ((Math.max(-1.2, Math.min(1.2, steerTarget)) * 0.45 / 1.2 * 1.2 + 0.5) * innerWidth) + 'px'; gd.style.top = ((0.5 - 0.38 * Math.max(-1, Math.min(1, HEAD.vt))) * innerHeight) + 'px';          // the dot is where the head is AIMING: sideways = the steering target, up / down = the reach (a nod up lifts it)
 }
 function headStats(t0) { const a = HEAD.buf.filter((b) => b.t > t0 + 1200); const n = Math.max(a.length, 1), m = [0, 0, 0], v = [0, 0, 0]; for (const b of a) for (let i = 0; i < 3; i++) m[i] += b.f[i] / n; for (const b of a) for (let i = 0; i < 3; i++) v[i] += (b.f[i] - m[i]) ** 2 / n; return { m, v, n: a.length }; }
 function headUpdate(dt, now) {
