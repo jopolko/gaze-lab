@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795095326';
+import { EyeModel } from './eyemodel.js?v=1795095750';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -133,9 +133,15 @@ const TH = { mode: 0, wire: false, rainbow: 0, sun: 0, trace: 1, split: 1, top: 
 const themeCol = (phase, out) => (TH.rainbow > 0.5 ? out.copy(hue(phase)) : out.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(phase * 6.2832)));
 
 // THE GROUND: one plane that follows the rider; the pattern is computed from world position, so it is fixed to the ground as you speed by. One shader, eight looks (uMode).
+// TERRAIN: rounded rollers of different pitch. The grade (how steeply it falls as you travel s metres) is 0.10 + three slow waves of different lengths, so it runs from a slight rise (-0.06) through gentle benches to a
+// 0.26 (about 15 degrees) drop, always smooth; the height is its exact integral, so the ground mesh (vertex shader), the camera, every object and the speed all agree on the same hill.
+const terrD = (s) => 0.10 * s - 11.9 * (Math.cos(s / 170 + 1) - Math.cos(1)) - 3.05 * (Math.cos(s / 61 + 2) - Math.cos(2)) - 15.32 * (Math.cos(s / 383) - 1);
+const TY = (z) => (TERRAIN ? -terrD(-z) : 0);          // the ground height at world z (z runs down to negative as you travel)
+const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0.05 * Math.sin(s / 61 + 2) + 0.04 * Math.sin(s / 383); };          // the grade there
+const TERRAIN = !Q.has('flat');
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
-  vertexShader: 'varying vec3 wp; void main(){ vec4 w = modelMatrix * vec4(position,1.0); wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+  uniforms: { uTer: { value: Q.has('flat') ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  vertexShader: 'varying vec3 wp; uniform float uTer; float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); w.y += uTer * TY(w.z); wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
@@ -200,7 +206,7 @@ const groundMat = new THREE.ShaderMaterial({
       gl_FragColor = vec4(mix(col, uHor, fade), 1.0);
     }`,
 });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000, 1, 1), groundMat);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000, 1000, 4, 100), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.frustumCulled = false;
 scene.add(ground);
@@ -845,22 +851,22 @@ function stepRows(dt) {
           const oz = r.z - k * 5, ox = lx + Math.sin(k * 0.9 + t * 3) * 0.6;
           const oc = o.orbs[k] && oz <= zPrev && oz > zPos - 1 && Math.abs(camX - lx) < 8.0;
           if (oc) { o.orbs[k] = false; G.combo++; G.best = Math.max(G.best, G.combo); award(10 * (1 + Math.floor(G.combo / 8))); G.got++; flash(0, 1, 0.8, 0.28); beep(440 + Math.min(G.combo, 14) * 40, 0.12, 0.08); }
-          if (o.orbs[k]) { m4.compose(v3.set(ox, 2.6, oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 18 + sd * 6 + k, m4); orbMesh.setColorAt(i * 18 + sd * 6 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
+          if (o.orbs[k]) { m4.compose(v3.set(ox, (2.6) + TY(oz), oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 18 + sd * 6 + k, m4); orbMesh.setColorAt(i * 18 + sd * 6 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
         }
-        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.2, 1, 0.5));
-        m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(0.1, 0.6, 0.3));
+        m4.compose(v3.set(lx, (45) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.2, 1, 0.5));
+        m4.compose(v3.set(lx, (0.25) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(0.1, 0.6, 0.3));
       } else if (o.type === 1) {
-        m4.compose(v3.set(lx, 4.5, r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(si, m4); ringMesh.setColorAt(si, themeCol(t * 0.1 + i * 0.13, colr));
-        m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(1, 0.9 * (0.6 + 0.4 * Math.sin(t * 6)), 0.1));
-        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.9, 0.2));
+        m4.compose(v3.set(lx, (4.5) + TY(r.z), r.z), q4.identity(), s3.setScalar(0.8)); ringMesh.setMatrixAt(si, m4); ringMesh.setColorAt(si, themeCol(t * 0.1 + i * 0.13, colr));
+        m4.compose(v3.set(lx, (0.25) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(1, 0.9 * (0.6 + 0.4 * Math.sin(t * 6)), 0.1));
+        m4.compose(v3.set(lx, (45) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.9, 0.2));
         if (crossing(r.z)) { o.done = true; if (mine) { G.combo += 3; G.best = Math.max(G.best, G.combo); award(100 * (1 + Math.floor(G.combo / 8))); G.got++; link(1); flash(1, 0.9, 0.2, 0.55); beep(660, 0.25, 0.1); setTimeout(() => beep(990, 0.3, 0.08), 90); } }
       } else if (o.type === 2) {
         const pk = PICKS[o.pick], c = pk.col, a = t * 1.7 + i;
         q4.setFromEuler(eul.set(a * 0.6, a, 0));
-        m4.compose(v3.set(lx, 3 + Math.sin(t * 3 + i) * 0.5, r.z), q4, s3.setScalar(1)); pickMesh.setMatrixAt(si, m4); pickMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
-        m4.compose(v3.set(lx, 3 + Math.sin(t * 3 + i) * 0.5, r.z), q4, s3.setScalar(1)); pickWire.setMatrixAt(si, m4); pickWire.setColorAt(si, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8));
-        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
-        m4.compose(v3.set(lx, 0.25, r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(c[0] * 0.5, c[1] * 0.5, c[2] * 0.5));
+        m4.compose(v3.set(lx, (3 + Math.sin(t * 3 + i) * 0.5) + TY(r.z), r.z), q4, s3.setScalar(1)); pickMesh.setMatrixAt(si, m4); pickMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
+        m4.compose(v3.set(lx, (3 + Math.sin(t * 3 + i) * 0.5) + TY(r.z), r.z), q4, s3.setScalar(1)); pickWire.setMatrixAt(si, m4); pickWire.setColorAt(si, colr.setRGB(c[0], c[1], c[2]).multiplyScalar(0.8));
+        m4.compose(v3.set(lx, (45) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(c[0], c[1], c[2]));
+        m4.compose(v3.set(lx, (0.25) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); padMesh.setMatrixAt(si, m4); padMesh.setColorAt(si, colr.setRGB(c[0] * 0.5, c[1] * 0.5, c[2] * 0.5));
         if (crossing(r.z)) {
           o.done = true;
           if (mine) {
@@ -872,12 +878,12 @@ function stepRows(dt) {
           }
         }
       } else if (o.type === 3) {
-        m4.compose(v3.set(lx, 1.7, r.z), qRamp, s3.setScalar(1)); rampMesh.setMatrixAt(si, m4); rampMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
-        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
+        m4.compose(v3.set(lx, (1.7) + TY(r.z), r.z), qRamp, s3.setScalar(1)); rampMesh.setMatrixAt(si, m4); rampMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
+        m4.compose(v3.set(lx, (45) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(0.95, 0.35, 1));
         if (crossing(r.z - 8)) { o.done = true; if (mine) { ST.vy = 10 + speed * 0.18; ST.y = 0.01; ST.air = 0; G.got++; link(6); flash(0.95, 0.35, 1, 0.4); beep(260, 0.25, 0.1); } }
       } else {
-        for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), 2.4, r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
-        m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
+        for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), (2.4) + TY(r.z), r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
+        m4.compose(v3.set(lx, (45) + TY(r.z), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
         if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 3.6 || Math.abs(camX - lx + 4.5) < 3.6) : mine) && ST.y < 3) crash('ROCK'); }
       }
     }
@@ -979,13 +985,13 @@ function frame(now) {
   steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
   if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt);
-  speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
+  speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
   camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
-  camera.position.set(camX, 3.2 + ST.y, zPos);
+  camera.position.set(camX, 3.2 + ST.y + TY(zPos), zPos);
   camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
-  camera.rotation.set(-0.08, -steer * 0.08, -steer * 0.12, 'YXZ');
+  camera.rotation.set(-0.08 - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), -steer * 0.08, -steer * 0.12, 'YXZ');          // the view tips down a falling slope and up a rise
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t;
@@ -997,7 +1003,7 @@ function frame(now) {
     for (let i = 0; i < N_PYL; i++) {
       const p = pyl[i];
       if (p.z > zPos + 20) { p.z -= SPAN; p.x = (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 8 + Math.random() * 34); }
-      m4.compose(v3.set(p.x, 3.5 * p.s, p.z), q4.identity(), s3.set(p.s, p.s, p.s));
+      m4.compose(v3.set(p.x, (3.5 * p.s) + TY(p.z), p.z), q4.identity(), s3.set(p.s, p.s, p.s));
       pylMesh.setMatrixAt(i, m4);
       pylMesh.setColorAt(i, themeCol(t * 0.05 + p.z * 0.003, colr));
     }
