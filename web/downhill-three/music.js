@@ -13,8 +13,8 @@ export class Music {
     this.master = c.createGain(); this.master.gain.value = this.vol;
     this.lp = c.createBiquadFilter(); this.lp.type = 'lowpass'; this.lp.frequency.value = 3000; this.lp.Q.value = 0.6;
     this.comp = c.createDynamicsCompressor(); this.comp.threshold.value = -16; this.comp.knee.value = 12; this.comp.ratio.value = 3; this.comp.attack.value = 0.01; this.comp.release.value = 0.2;
-    this.musicBus = c.createGain(); this.sfxBus = c.createGain(); this.sfxBus.gain.value = 0.9;
-    this.musicBus.connect(this.lp); this.lp.connect(this.comp); this.sfxBus.connect(this.comp); this.comp.connect(this.master); this.master.connect(c.destination);
+    this.musicBus = c.createGain(); this.sfxBus = c.createGain(); this.sfxBus.gain.value = 0.7; this.sfxLp = c.createBiquadFilter(); this.sfxLp.type = 'lowpass'; this.sfxLp.frequency.value = 3200; this.sfxLp.Q.value = 0.4;          // everything that is not music passes a soft low-pass: nothing sharp
+    this.musicBus.connect(this.lp); this.lp.connect(this.comp); this.sfxBus.connect(this.sfxLp); this.sfxLp.connect(this.comp); this.comp.connect(this.master); this.master.connect(c.destination);
   }
   load(name) {
     if (this.stems[name]) return this.stems[name].ready;
@@ -40,9 +40,15 @@ export class Music {
     v.gain.setValueAtTime(0.0001, when); v.gain.linearRampToValueAtTime(g, when + 0.006); v.gain.exponentialRampToValueAtTime(0.0008, when + d); const m2 = c.createGain(); m2.gain.value = 0.3; o1.connect(v); o2.connect(m2); m2.connect(v); v.connect(lp); lp.connect(this.sfxBus);
     o1.start(when); o2.start(when); o1.stop(when + d + 0.05); o2.stop(when + d + 0.05);
   }
+  boom() {          // a low thump with a burst of noise, on the next eighth note so it lands in the groove
+    const c = this.ctx, when = this.started ? this.nextGrid(2) : c.currentTime + 0.005, o = c.createOscillator(), v = c.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(130, when); o.frequency.exponentialRampToValueAtTime(34, when + 0.35);
+    v.gain.setValueAtTime(0.0001, when); v.gain.linearRampToValueAtTime(0.26, when + 0.02); v.gain.exponentialRampToValueAtTime(0.001, when + 0.6); o.connect(v); v.connect(this.sfxBus); o.start(when); o.stop(when + 0.6);
+    const n = Math.floor(c.sampleRate * 0.4), b = c.createBuffer(1, n, c.sampleRate), x = b.getChannelData(0); for (let i = 0; i < n; i++) x[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2);
+    const src = c.createBufferSource(), lp = c.createBiquadFilter(), g2 = c.createGain(); src.buffer = b; lp.type = 'lowpass'; lp.frequency.value = 700; g2.gain.value = 0.12; src.connect(lp); lp.connect(g2); g2.connect(this.sfxBus); src.start(when);
+  }
   whoosh(dur = 1.4, up = true) {          // a noise sweep for the tunnel dive
     const c = this.ctx, when = c.currentTime + 0.01, n = Math.floor(c.sampleRate * dur), b = c.createBuffer(1, n, c.sampleRate), x = b.getChannelData(0); for (let i = 0; i < n; i++) x[i] = Math.random() * 2 - 1;
     const src = c.createBufferSource(), bp = c.createBiquadFilter(), v = c.createGain(); src.buffer = b; bp.type = 'bandpass'; bp.Q.value = 1.2; bp.frequency.setValueAtTime(up ? 200 : 6000, when); bp.frequency.exponentialRampToValueAtTime(up ? 6000 : 200, when + dur);
-    v.gain.setValueAtTime(0.0001, when); v.gain.linearRampToValueAtTime(0.22, when + dur * 0.7); v.gain.linearRampToValueAtTime(0.0001, when + dur); src.connect(bp); bp.connect(v); v.connect(this.sfxBus); src.start(when);
+    v.gain.setValueAtTime(0.0001, when); v.gain.linearRampToValueAtTime(0.12, when + dur * 0.7); v.gain.linearRampToValueAtTime(0.0001, when + dur); src.connect(bp); bp.connect(v); v.connect(this.sfxBus); src.start(when);
   }
 }
