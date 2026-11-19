@@ -435,14 +435,16 @@ function readTracker(now) {
 // the eyes are in that lane's zone (the middle only at 0.35 of the pace, because resting eyes go there), and drains when they are elsewhere (3x as fast when the eyes are on a side).
 // A lane takes the lock after a ninth of a second at first; once locked it holds however the eyes wander, committed for half a second, and a change of mind then needs a steadier look
 // (0.35 s), then 0.14 s once the commitment is over. The board slides to the locked lane, so one glance starts a move that finishes by itself.
-const LOCK = { want: { '-1': 0, '0': 0, '1': 0 }, lane: 0, age: 9 };
+const LOCK = { want: { '-1': 0, '0': 0, '1': 0 }, lane: 0, age: 9, block: 0 };
 function lockStep(zone, dt) {
   // RunRig._trail_pick: the eyes do not name a lane, they MOVE ONE STEP from the thing the board is going for. A look left takes the one just left of it, a look right the one just right, and a
   // look at the middle keeps it (resting eyes go to the middle, so it must never take the lane away; with nothing locked yet it settles on the thing in the board's own lane). At the end of the row a look
   // further that way changes nothing, and a look held on keeps stepping. Fill / drain / commitment times are Godot's: a first look settles after 0.11 s, a change of mind needs 0.35 s, then 0.14 s
   // once the half-second commitment is over, and none in the last quarter second before the board reaches the thing.
   const qk = 0.7;          // at speed everything about choosing is quicker (Godot: qk 0.6 flat out)
-  const L = LOCK.lane, tl = zone < 0 ? L - 1 : zone > 0 ? L + 1 : L, ok = tl >= -1 && tl <= 1;
+  if (zone === 0 || zone === -LOCK.block) LOCK.block = 0;          // the eyes came back to the middle, or went the other way: the next glance may step again
+  const blocked = zone !== 0 && zone === LOCK.block && LOCK.age < 0.9;          // ONE STEP PER GLANCE: right after a step the eyes are still reading that side, which would take the next step at once and skip the middle lane; a look held 0.9 s keeps stepping
+  const L = LOCK.lane, tl = zone < 0 ? L - 1 : zone > 0 ? L + 1 : L, ok = tl >= -1 && tl <= 1 && !blocked;
   for (const l of [-1, 0, 1]) {
     if (ok && l === tl) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (zone === 0 ? 0.35 / qk : 1.0), 0.5);
     else LOCK.want[l] = Math.max(LOCK.want[l] - dt * (zone !== 0 ? 3.0 : 0.6), 0);
@@ -450,7 +452,7 @@ function lockStep(zone, dt) {
   LOCK.age += dt;
   let need = (LOCK.age >= 0.5 * qk ? 0.14 : 0.35) * qk;
   if (nextRowDist() / Math.max(speed, 14) < 0.25) need = 9;
-  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.lane = l; LOCK.age = 0; break; }
+  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.block = l > LOCK.lane ? 1 : -1; LOCK.lane = l; LOCK.age = 0; break; }
   return LOCK.lane;
 }
 function nextRowDist() {          // how far ahead the nearest row is (m)
