@@ -460,7 +460,28 @@ function nextRowDist() {          // how far ahead the nearest row is (m)
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) bz = r.z;
   return bz > -1e8 ? zPos - bz : 999;
 }
+// THE SETUP INDICATOR: while the first 40 readings come in (about 3 s) the player is told to stare at the centre of the screen, with a progress bar; when the middle is learned it says CONTROL ON and the board starts to obey.
+const calEl = document.createElement('div');
+calEl.style.cssText = 'position:fixed;left:0;right:0;top:38%;text-align:center;color:#fff;font:300 clamp(18px,4.5vw,40px) ui-monospace,Consolas,monospace;letter-spacing:.25em;text-shadow:0 0 14px #000,0 0 3px #000;z-index:6;pointer-events:none;display:none';
+calEl.innerHTML = '<div id="calT"></div><div style="width:min(320px,60vw);height:8px;margin:14px auto 0;border:1px solid #fff9;border-radius:6px;overflow:hidden"><div id="calB" style="height:100%;width:0;background:#0ff"></div></div>';
+document.body.appendChild(calEl);
+let calState = 0, calT = 0;          // 0 waiting for the camera, 1 learning, 2 done (showing CONTROL ON), 3 hidden
+function calUpdate(dt) {
+  if (calState === 3) return;
+  const T = document.getElementById('calT'), B = document.getElementById('calB');
+  if (!KIT.zones) {
+    calState = 1; calEl.style.display = 'block';
+    T.textContent = KIT.lastHx === null ? 'FINDING YOUR EYES' : 'STARE AT THE CENTRE';
+    B.style.width = Math.round(100 * Math.min(1, KIT.zauto.length / 40)) + '%'; B.style.background = '#0ff';
+  } else if (calState <= 1) {
+    calState = 2; calT = 0; T.textContent = 'CONTROL ON'; B.style.width = '100%'; B.style.background = '#6f6';
+    beep(660, 0.15, 0.08); setTimeout(() => beep(990, 0.2, 0.08), 110);
+  } else if (calState === 2) {
+    calT += dt; if (calT > 1.6) { calState = 3; calEl.style.display = 'none'; }
+  }
+}
 function updateLane(dt) {
+  calUpdate(dt);
   if (!KIT.zones) {          // the first 40 readings are still coming in: the board stays in the middle, but the dot already follows the eyes (against the middle seen so far, at the starting size)
     lane = 0; steerTarget = 0;
     if (KIT.lastHx !== null && KIT.zauto.length) {
