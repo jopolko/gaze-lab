@@ -13,6 +13,8 @@ import { EyeModel } from './eyemodel.js';
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
 // THE EYE MODEL (eyemodel.js): a three-state filter over both eyes together that floats with drift and remembers what it learned on this device. ?nomodel goes back to the threshold detector.
+// LIVE TUNING: tune.json beside the log (web/spike/tune.json) is read every 2 s and applied to the running game, so settings can be changed while it is being played. {"v":N,"EM":{"DECIDE":0.8,...},"LOCK":{"qk":0.7,"midhold":0.28},"KIT":{...},"recentre":true}
+const TUNE = { qk: 0.7, midhold: 0.28, v: -1 };
 let EM = null;
 if (!Q.has('nomodel')) { let pr = null; try { pr = JSON.parse(localStorage.getItem('spike_em2') || 'null'); } catch (e) { /* */ } EM = new EyeModel(pr); }
 // WHICH EYE (glasses and lenses can distort one eye). The two eyes' readings are kept apart for the last ~25 s and each is judged at the moments BOTH eyes agree you looked left or right: the 15% of readings
@@ -496,7 +498,7 @@ function lockStep(zone, dt) {
   // target in) can not snap it back, and it is FREE again the moment the board passes the thing (RunRig clears its lock there), when any lane the eyes are asking for takes over at once.
   // Fill / drain are Godot's (the middle fills at 0.35 of the pace: resting eyes go there). A lane is taken after a first look of 0.11 s, a change of mind needs 0.35 s, then 0.14 s once the half-second
   // commitment is over, and none in the last quarter second before the board reaches the thing; between passes the MIDDLE needs a steady look of about 0.8 s to take a side lane away.
-  const qk = 0.7;          // at speed everything about choosing is quicker (Godot: qk 0.6 flat out)
+  const qk = TUNE.qk;          // at speed everything about choosing is quicker (Godot: qk 0.6 flat out); live-tunable
   for (const l of [-1, 0, 1]) {
     if (zone === l) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (l === 0 ? 0.35 / qk : 1.0), 0.5);
     else LOCK.want[l] = Math.max(LOCK.want[l] - dt * (zone !== 0 ? 3.0 : 0.6), 0);
@@ -507,7 +509,7 @@ function lockStep(zone, dt) {
   if (!LOCK.free && nd / Math.max(speed, 14) < 0.25) need = 9;
   for (const l of [-1, 0, 1]) {
     if (l === LOCK.lane) continue;
-    const nl = !LOCK.free && l === 0 && LOCK.lane !== 0 ? Math.max(need, 0.28) : need;
+    const nl = !LOCK.free && l === 0 && LOCK.lane !== 0 ? Math.max(need, TUNE.midhold) : need;
     if (LOCK.want[l] > nl) { LOCK.lane = l; LOCK.age = 0; LOCK.free = false; break; }
   }
   return LOCK.lane;
@@ -770,11 +772,23 @@ function logSample(now) {
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB', eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
 addEventListener('pagehide', flushLog);
+async function tunePoll() {
+  try {
+    const r = await fetch('../spike/tune.json?_=' + Date.now(), { cache: 'no-store' }); if (!r.ok) return;
+    const j = await r.json(); if (j.v === TUNE.v) return; TUNE.v = j.v;
+    if (j.EM && EM) for (const k in j.EM) if (typeof EM[k] === 'number' && typeof j.EM[k] === 'number') EM[k] = j.EM[k];
+    if (j.LOCK) for (const k in j.LOCK) if (typeof j.LOCK[k] === 'number') TUNE[k] = j.LOCK[k];
+    if (j.KIT) for (const k in j.KIT) if (typeof KIT[k] === 'number' && typeof j.KIT[k] === 'number') KIT[k] = j.KIT[k];
+    if (j.recentre && EM) EM.recentre();
+    bannerShow('TUNED v' + j.v, true);
+  } catch (e) { /* no tune file */ }
+}
+setInterval(tunePoll, 2000);
 
 // THE LOOP
 let zPrev = 0, t = 0, zPos = 0, speed = 28, last = performance.now(), lastHud = 0, camX = 0, ping = 0;

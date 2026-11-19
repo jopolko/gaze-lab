@@ -92,5 +92,10 @@ export class EyeModel {
     return this.state;
   }
   get zone() { return this.state - 1; }          // -1 left, 0 middle, +1 right
+  recentre() {          // put the middle on the median of the last ~4 s of readings and start again from MIDDLE (used by the live tuning)
+    if (this.xs.length < 30) return false;
+    const w = this.xs.slice(-60), med = (k) => { const v = w.map((q) => q[k]).sort((p, q) => p - q); return v[v.length >> 1]; };
+    this.m = [med(0), med(1)]; this.post = [0.05, 0.9, 0.05]; this.state = 1; this.ss = this.ss.map(() => 1); return true;
+  }
   save() { return { dL: this.dL, dR: this.dR, S: this.S }; }
 }
