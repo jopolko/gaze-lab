@@ -9,7 +9,12 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795106204';
+const BEND = { value: new THREE.Vector2(0, 0) };          // (sideways, down) displacement per metre-squared ahead, shared by every material
+THREE.Material.prototype.onBeforeCompile = function (shader) {
+  if (!(this.isMeshBasicMaterial || this.isLineBasicMaterial)) return;
+  shader.uniforms.uBend = BEND; shader.vertexShader = 'uniform vec2 uBend;\n' + shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  { float dzb = max(-mvPosition.z, 0.); mvPosition.xy += uBend * dzb * dzb; gl_Position = projectionMatrix * mvPosition; }');
+};
+import { EyeModel } from './eyemodel.js?v=1795106550';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -128,7 +133,7 @@ const hue = (h) => new THREE.Color().setHSL(((h % 1) + 1) % 1, 1, 0.55);
 // rainbow 1 = objects cycle through every hue (psychedelic); wire = objects drawn as wireframes (the neon worlds) or solid (the daylight ones); sun = a sun disc on the horizon.
 const THEMES = [
   { id: 'alpine',      name: 'ALPINE',      mode: 0, top: [0.12, 0.35, 0.85], hor: [0.62, 0.75, 0.95], c1: [0.06, 0.30, 0.16], c2: [0.30, 0.55, 0.70], wire: false, rainbow: 0, sun: 0.0, trace: 0.10, split: 0.15, fog: 1.0 },
-  { id: 'psychedelic', name: 'PSYCHEDELIC', mode: 1, top: [0.08, 0.00, 0.20], hor: [0.55, 0.08, 0.65], c1: [1.00, 0.25, 0.85], c2: [0.20, 0.90, 1.00], wire: true,  rainbow: 1, sun: 0.0, trace: 1.00, split: 1.00, fog: 1.0 },
+  { id: 'psychedelic', name: 'PSYCHEDELIC', mode: 1, top: [0.01, 0.00, 0.03], hor: [0.20, 0.03, 0.24], c1: [1.00, 0.25, 0.85], c2: [0.20, 0.90, 1.00], wire: true,  rainbow: 1, sun: 0.0, trace: 1.00, split: 1.00, fog: 1.0 },
   { id: 'candy',       name: 'CANDYLAND',   mode: 4, top: [0.70, 0.62, 1.00], hor: [1.00, 0.84, 0.88], c1: [1.00, 0.45, 0.72], c2: [0.50, 0.95, 0.80], wire: false, rainbow: 0, sun: 0.0, trace: 0.25, split: 0.30, fog: 1.0 },
   { id: 'tunnel',      name: 'TUNNEL ROAD', mode: 2, top: [0.02, 0.00, 0.08], hor: [0.40, 0.08, 0.45], c1: [0.15, 0.85, 1.00], c2: [1.00, 0.25, 0.80], wire: true,  rainbow: 0, sun: 0.0, trace: 0.70, split: 0.70, fog: 1.0 },
   { id: 'synthwave',   name: 'SYNTHWAVE',   mode: 7, top: [0.05, 0.00, 0.18], hor: [1.00, 0.30, 0.60], c1: [1.00, 0.20, 0.70], c2: [0.20, 0.80, 1.00], wire: true,  rainbow: 0, sun: 1.0, trace: 0.70, split: 0.60, fog: 1.0 },
@@ -149,8 +154,8 @@ const GR = (z) => { const s = -z; return 0.10 + 0.07 * Math.sin(s / 170 + 1) + 0
 const TERRAIN = !Q.has('flat');
 const LINE = Q.has('line');          // ?line: LINE ART. The ground is a dark fill with a grid and height contour lines (the contours are what make a hill read as round), every object is a wireframe, the sky is darker: far less to shade and fill
 const groundMat = new THREE.ShaderMaterial({
-  uniforms: { uHA: { value: OPEN && !Q.has('board') ? 0.6 : 0.3 }, uBeat: { value: 0 }, uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
-  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform float uTer, uOpen, uHA; float HO(vec2 p){ return 0.03*p.y + uHA*(14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.)); } vec2 HG(vec2 p){ return vec2(uHA*(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41.), .03 + uHA*(14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.)); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+  uniforms: { uBend: BEND, uHA: { value: OPEN && !Q.has('board') ? 0.6 : 0.3 }, uBeat: { value: 0 }, uOpen: { value: OPEN ? 1 : 0 }, uLA: { value: new THREE.Vector3() }, uLB: { value: new THREE.Vector3() }, uDmtG: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTer: { value: Q.has('flat') || OPEN ? 0 : 1 }, uT: { value: 0 }, uMode: { value: 1 }, uCam: { value: new THREE.Vector3() }, uC1: { value: TH.c1 }, uC2: { value: TH.c2 }, uHor: { value: TH.hor } },
+  vertexShader: 'varying vec3 wp; varying vec3 nrm; uniform vec2 uBend; uniform float uTer, uOpen, uHA; float HO(vec2 p){ return 0.03*p.y + uHA*(14.*sin(p.x/190.+1.3)*sin(p.y/210.+.4) + 7.*sin(p.x/83.+p.y/117.+2.) + 3.2*sin(p.x/37.-p.y/53.+1.) + 1.6*sin(p.y/23.+p.x/41.)); } vec2 HG(vec2 p){ return vec2(uHA*(14.*cos(p.x/190.+1.3)/190.*sin(p.y/210.+.4) + 7.*cos(p.x/83.+p.y/117.+2.)/83. + 3.2*cos(p.x/37.-p.y/53.+1.)/37. + 1.6*cos(p.y/23.+p.x/41.)/41.), .03 + uHA*(14.*sin(p.x/190.+1.3)*cos(p.y/210.+.4)/210. + 7.*cos(p.x/83.+p.y/117.+2.)/117. - 3.2*cos(p.x/37.-p.y/53.+1.)/53. + 1.6*cos(p.y/23.+p.x/41.)/23.)); } float TY(float z){ float s=-z; return -(0.10*s - 11.9*(cos(s/170.+1.)-cos(1.)) - 3.05*(cos(s/61.+2.)-cos(2.)) - 15.32*(cos(s/383.)-1.)); } void main(){ vec4 w = modelMatrix * vec4(position,1.0); float s=-w.z; w.y += uTer * (TY(w.z) + 0.0009*w.x*w.x + 1.2*sin(w.x*0.03 + s*0.011)); float gr = 0.10 + 0.07*sin(s/170.+1.) + 0.05*sin(s/61.+2.) + 0.04*sin(s/383.); float cc = cos(w.x*0.03 + s*0.011); nrm = normalize(vec3(-(0.0018*w.x + 0.036*cc)*uTer, 1., -(gr - 0.0132*cc)*uTer)); if (uOpen > .5) { w.y = HO(w.xz); vec2 g = HG(w.xz); nrm = normalize(vec3(-g.x, 1., -g.y)); } wp = w.xyz; vec4 vp = viewMatrix * w; float dzb = max(-vp.z, 0.); vp.xy += uBend * dzb * dzb; gl_Position = projectionMatrix * vp; }',
   fragmentShader: `
     precision mediump float;
     varying vec3 wp;
@@ -172,8 +177,8 @@ const groundMat = new THREE.ShaderMaterial({
         vec2 g2 = wp.xz * 1.037 / 6.0; float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
         float far = 1.0 - smoothstep(130., 340., dist), w1 = max(.04, fwidth(grid1)), w2 = max(.04, fwidth(grid2));
         float c1 = smoothstep(-w1, w1, grid1), c2 = smoothstep(-w2, w2, grid2);          // each grid's squares, with STRAIGHT crisp edges (they only change where the grid lines are)
-        float agree = c1 * c2 + (1. - c1) * (1. - c2), amp = mix(.5, agree, far), sq = mix(.5, c1, far);          // 1 where the two grids agree: straight-edged shapes of every size drifting by
-        col = mix(vec3(1.), hsv(fract(amp * .5 + (grid1 * grid2 * .5 + .5) * .08 + uT * .03)), .9) * (.28 + .72 * pow(amp, .65)) * (.62 + .38 * sq);
+        float amp = mix(.5, grid1 * grid2 * .5 + .5, far), sq = mix(.5, c1, far);          // the squares keep straight crisp edges (a light and dark board); the soft blobs of colour are where the two grids fall in and out of step
+        col = mix(vec3(1.), hsv(fract(amp * .5 + uT * .03)), .9) * (.25 + .75 * pow(amp, .65)) * (.55 + .45 * sq);
       } else if (m < 2.5) {                                             // TUNNEL ROAD: chevrons racing at you
         float v = abs(fract(wp.z/7. + abs(wp.x)*.045) - .5);
         float ch = smoothstep(.34, .44, v);
@@ -243,7 +248,7 @@ const skyMat = new THREE.ShaderMaterial({
       if (uMode > .5 && uMode < 1.5) {          // PSYCHEDELIC: slow bands of colour that drift, a dark magenta below
         float az = atan(dir.x, -dir.z), band = .5 + .5 * sin(az * 2. + dir.y * 5. + sin(dir.y * 3. + uT * .15) * 1.2 + uT * .05);
         vec3 pc = (.5 + .5 * cos(6.28318 * (dir.y * .5 + az * .08 + uT * .02 + vec3(0., .33, .67)))) * (.05 + .20 * band * smoothstep(0., .6, dir.y)) + vec3(.02, 0., .06);
-        col = mix(vec3(.12, .01, .2), pc * 3.4 + vec3(.25, .0, .35) * smoothstep(.5, .0, dir.y), smoothstep(-.1, .25, dir.y)); col += (.5 + .5 * cos(6.28318 * (uT * .03 + az * .5 + vec3(0., .33, .67)))) * .22 * smoothstep(.5, .1, abs(dir.y - .12));          // (bands, a magenta glow up from the horizon and a slow rainbow along it)
+        col = mix(vec3(.03, .0, .05), pc * 1.1 + vec3(.14, .02, .05) * smoothstep(.45, .0, dir.y), smoothstep(-.1, .25, dir.y));          // (bands, a magenta glow up from the horizon and a slow rainbow along it)
       }
       vec3 sd = normalize(vec3(0., .16, -1.));
       float d = distance(dir, sd);
@@ -268,11 +273,11 @@ scene.add(sky);
 
 // OBJECTS (all instanced, one draw each): pylons down both sides (trees / crystals), and ten rows ahead, one every 52 m. A row is one of: ORBS (a string of points in one lane), a GATE (a ring marks the open lane,
 // barriers fill the other two), a PICKUP (boost / shield / x2 / points), a RAMP (a jump), or ROCKS (two lanes blocked: crash).
-const N_PYL = 160, N_RING = 10, SPAN = 520, LANE_W = 22, ROW_GAP = SPAN / N_RING;          // wide lanes: the choices must be far apart ON THE SCREEN (at 70 m ahead, lanes 8 m apart sit within about 4 degrees of each other, too close for the eyes to tell apart)
+const N_PYL = 300, N_RING = 10, SPAN = 520, LANE_W = 22, ROW_GAP = SPAN / N_RING;          // wide lanes: the choices must be far apart ON THE SCREEN (at 70 m ahead, lanes 8 m apart sit within about 4 degrees of each other, too close for the eyes to tell apart)
 // THE LOOK (Themes.gd's): solid, soft-lit shapes, not lines. A tree is three stacked cones, dark at the skirt and pale at the tip, in the world's colours; the mountains are tall faceted peaks round the horizon. Both wear a MOIRE SKIN
 // (two stripe fields that fall in and out of step, coloured by how far in step they are) that comes up with the molecules (2C-E, the mountains' piece), and the peaks always wear a little of it.
 const SKIN = { uPsy: { value: 0 }, uBeat: { value: 0 }, uT: { value: 0 }, uHor: { value: TH.hor }, uCam: { value: new THREE.Vector3() } };
-const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint;
+const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform vec2 uBend;
   void main(){ vec4 p = vec4(position, 1.); vec3 n = normal;
   #ifdef USE_INSTANCING
     p = instanceMatrix * p; n = mat3(instanceMatrix) * n;
@@ -283,15 +288,15 @@ const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3
   #else
     vTint = vec3(1.);
   #endif
-  gl_Position = projectionMatrix * viewMatrix * w; }`;
-const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar, uBeat, uPsy; uniform vec3 uHor, uCam;
+  vec4 vp = viewMatrix * w; float dzb = max(-vp.z, 0.); vp.xy += uBend * dzb * dzb; gl_Position = projectionMatrix * vp; }`;
+const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar, uBeat, uPsy, uNeon; uniform vec3 uHor, uCam;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec3 n = normalize(vN); float lit = (.55 + .6 * max(dot(n, normalize(vec3(-.35, .7, .6))), 0.)) * (1. + uBeat * .22);
     vec3 base = mix(vTint * .30, vTint * 1.05 + .12, vS) * lit;
-    if (uPsy > .5) {          // PSYCHEDELIC (Themes.gd VEG_PSY): near black purple, neon where it is bright, the neon's hue drifting with where it stands and with time
-      float hue = fract(vW.z * .012 + vW.x * .007 + uT * .07 + vS * .2); vec3 neon = mix(vec3(1.), hsv(hue), .85);
-      base = (mix(vec3(.03, 0., .06), neon * .75, smoothstep(.1, .9, vS)) + neon * smoothstep(.35, 1., vS) * .75) * (.7 + .3 * lit);
+    if (uPsy * uNeon > .5) {          // PSYCHEDELIC (Themes.gd VEG_PSY): near black purple, neon where it is bright, the neon's hue drifting with where it stands and with time
+      float hue = fract(vW.z * .012 + vW.x * .007 + uT * .07 + vS * .2 + floor(vW.x * .05 + vW.z * .031) * .17); vec3 neon = mix(vec3(1.), hsv(hue), .95);
+      base = (mix(vec3(.05, 0., .09), neon, smoothstep(0., .75, vS)) + neon * smoothstep(.3, 1., vS) * .55) * (.85 + .3 * lit);
     }
     float a = sin(dot(vW.xz, vec2(.9, .35)) * 2.6 + vW.y * 3.1), b = sin(dot(vW.xz, vec2(.9, -.3)) * 2.72 + vW.y * 3.0 + uT * .25), m = a * b * .5 + .5;
     vec3 mo = mix(hsv(fract(m * .55 + uT * .04 + vW.y * .004 + vS * .15)), vec3(1.), .28) * (.4 + .6 * m) * lit * 1.1;
@@ -299,33 +304,34 @@ const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varyi
     float d = length(vW - uCam); col = mix(col, uHor, smoothstep(uFar * .35, uFar, d) * .85);
     gl_FragColor = vec4(col, 1.);
   }`;
-const mkSkin = (far) => new THREE.ShaderMaterial({ uniforms: { uPsy: SKIN.uPsy, uBeat: SKIN.uBeat, uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
+const mkSkin = (far, neon = 1) => new THREE.ShaderMaterial({ uniforms: { uBend: BEND, uNeon: { value: neon }, uPsy: SKIN.uPsy, uBeat: SKIN.uBeat, uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
 function shadeGeo(g, y0, y1) { const a = g.attributes.position, c = []; for (let i = 0; i < a.count; i++) { const k = Math.max(0, Math.min(1, (a.getY(i) - y0) / (y1 - y0))); c.push(k, k, k); } g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); return g; }
 function pineGeo() {          // three stacked cones, base at -3.5 and tip at +3.5 (the old single cone's size), each tier dark at its skirt and pale at its tip
   const parts = [[2.5, 3.6, -3.5], [1.9, 3.2, -1.6], [1.3, 2.8, 0.4]], pos = [], nor = [], col = [];
   for (const [r, h, y] of parts) { const g = new THREE.ConeGeometry(r, h, 7, 1, false).toNonIndexed(); g.computeVertexNormals(); const a = g.attributes.position, n = g.attributes.normal; for (let i = 0; i < a.count; i++) { pos.push(a.getX(i), a.getY(i) + y + h / 2, a.getZ(i)); nor.push(n.getX(i), n.getY(i), n.getZ(i)); const k = Math.max(0, Math.min(1, (a.getY(i) + h / 2) / h)); col.push(k, k, k); } }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); return g;
 }
-const treeMat = mkSkin(700), peakMat = mkSkin(2600);
+const treeMat = mkSkin(700, 1), peakMat = mkSkin(2600, 0);          // (the trees take the drifting neon in the psychedelic world; the mountains stay plain bright violet)
 const N_PEAK = 40;
 const peakMesh = new THREE.InstancedMesh(shadeGeo(new THREE.ConeGeometry(1, 1, 5, 1, false).toNonIndexed(), -0.5, 0.5), peakMat, N_PEAK);
 peakMesh.geometry.computeVertexNormals(); peakMesh.frustumCulled = false; scene.add(peakMesh);
 function updatePeaks() {          // a ring of peaks that follows the rider (so they stay far away and never grow) but keeps its compass direction, so turning sweeps them past
   const cx = camera.position.x, cz = camera.position.z, cy = camera.position.y;
   for (let i = 0; i < N_PEAK; i++) {
-    const a = (i / N_PEAK) * 6.2832 + Math.sin(i * 12.9898) * 0.08, dist = 900 + ((i * 37) % 5) * 90, h = 260 + ((i * 53) % 7) * 55, r = 150 + ((i * 29) % 6) * 38;
+    const a = (i / N_PEAK) * 6.2832 + Math.sin(i * 12.9898) * 0.08, dist = 430 + ((i * 37) % 5) * 70, h = 250 + ((i * 53) % 7) * 50, r = 130 + ((i * 29) % 6) * 34;
     m4.compose(v3.set(cx + Math.sin(a) * dist, cy - 120 + h / 2, cz - Math.cos(a) * dist), q4.identity(), s3.set(r, h, r)); peakMesh.setMatrixAt(i, m4);
-    peakMesh.setColorAt(i, colr.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(i * 2.1)).lerp(TH.hor, 0.25));
+    peakMesh.setColorAt(i, SKIN.uPsy.value ? colr.setHSL(0.74 + 0.06 * Math.sin(i * 2.1), 0.85, 0.5) : colr.copy(TH.c1).lerp(TH.c2, 0.5 + 0.5 * Math.sin(i * 2.1)).lerp(TH.hor, 0.25));
   }
   peakMesh.instanceMatrix.needsUpdate = true; if (peakMesh.instanceColor) peakMesh.instanceColor.needsUpdate = true;
 }
 function skinTick() {
+  if (inHub) BEND.value.set(0, 0); else { const sp = Math.min(1, speed / 60), k = 0.55 + 0.45 * sp; BEND.value.set(k * 0.0009 * (Math.sin(tPlay * 0.045) + 0.5 * Math.sin(tPlay * 0.11 + 1.3)), -k * (0.00045 + 0.00025 * Math.sin(tPlay * 0.07 + 0.5))); }
   { const psy = Math.abs(TH.mode - 1) < 0.5 ? 1 : 0; SKIN.uPsy.value = psy; compMat.material.uniforms.uPsy.value = psy; skyMat.uniforms.uMode.value = TH.mode; }
   SKIN.uBeat.value = BEAT.v; groundMat.uniforms.uBeat.value = BEAT.v; compMat.material.uniforms.uBeat.value = BEAT.v;
   SKIN.uT.value = t; SKIN.uCam.value.copy(camera.position);
   const lvAll = DR ? (MOL.lv[0] + MOL.lv[1] + MOL.lv[2] + MOL.lv[3] + MOL.lv[4] + MOL.lv[5]) / 6 : 0;
   treeMat.uniforms.uMo.value = DR ? Math.min(0.95, MOL.lv[3] * 1.2 + molDmt() * 0.4 + lvAll * 0.4) : 0;
-  peakMat.uniforms.uMo.value = Math.min(0.95, 0.35 + lvAll * 0.6 + (DR ? MOL.lv[3] * 0.3 : 0));
+  peakMat.uniforms.uMo.value = Math.min(0.95, (SKIN.uPsy.value ? 0.06 : 0.35) + lvAll * 0.6 + (DR ? MOL.lv[3] * 0.3 : 0));
   updatePeaks();
 }
 const pylMat = treeMat;
@@ -513,7 +519,7 @@ function setRow(r, z) {
 let tPlay = 0;
 for (let i = 0; i < N_RING; i++) { const r = { i }; setRow(r, -(GUIDE.on ? 110 : 50) - i * ROW_GAP); rows.push(r); }
 const pyl = [];
-for (let i = 0; i < N_PYL; i++) pyl.push({ z: -Math.random() * SPAN, x: (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 8 + Math.random() * 34), s: 1.2 + Math.random() * 2 });
+for (let i = 0; i < N_PYL; i++) pyl.push({ z: -Math.random() * SPAN, x: (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 1 + Math.random() * 32), s: 1.8 + Math.random() * 2.6 });
 const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(), colr = new THREE.Color(), qRamp = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.22, 0, 0));
 const HIDE = new THREE.Matrix4().compose(new THREE.Vector3(0, -50, 0), new THREE.Quaternion(), new THREE.Vector3(0.0001, 0.0001, 0.0001));
 
@@ -568,12 +574,13 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     float kf = clamp(uMB.x * .22 + uDmt * .4, 0., .55) * smoothstep(.24, .5, r);
     if (kf > .001) { float seg = 6.2831853 / (6. + 2. * uDmt), an = atan(c.y, c.x), af = abs(mod(an, seg) - seg * .5); wuv = mix(wuv, vec2(.5) + vec2(cos(af), sin(af)) * r, kf); }          // 2C-E: the picture folds into mirrored segments toward the edges
     wuv = vec2(.5) + (wuv - vec2(.5)) * (1. - .006 * uMB.z * pl * keep + .006 * uDmt * sin(uTime * .8) * keep - .005 * uBeat);          // 2C-T-7: a pulse that pushes in
-    float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6);          // 2C-B: the colours split apart
+    wuv += c * (.0013 * uPsy * sin(uTime * .7 + r * 9.));          // the psychedelic world breathes
+    float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6 + uPsy * 2.4);          // 2C-B: the colours split apart (and always, wide, in the psychedelic world)
     vec3 col = vec3(texture2D(uScene, wuv + c*ca).r, texture2D(uScene, wuv).g, texture2D(uScene, wuv - c*ca).b);
     if (uPsy > .5) {          // PSYCHEDELIC (Themes.gd's pass): where the picture was a moment ago and is not now, a ghost whose hue turns with time and distance from the middle
       vec3 old = texture2D(uTrail, vUv).rgb, diff = max(old - texture2D(uScene, vUv).rgb * .92 - .02, vec3(0.));
       float m = clamp(dot(diff, vec3(.34)) * 3.2 * (.4 + .6 * smoothstep(.1, .45, r)), 0., 1.);
-      col += hsv(fract(uTime * .12 + r * .9 + m * .5)) * m * .45 * uTrace;
+      col += hsv(fract(uTime * .12 + r * .9 + m * .5)) * m * .6 * uTrace + max(old - .3, vec3(0.)) * .55;          // (and a bloom: the bright parts of the trail glow)
       col = mix(col, col * hsv(fract(uTime * .05)) * 1.1, .12); col *= 1. - .45 * smoothstep(.45, .95, r);
     } else col += texture2D(uTrail, vUv).rgb * .8 * uTrace * (1. - clamp(dot(col, vec3(.35,.5,.15)) * 1.2, 0., .9));
     col += uFlash.rgb * uFlash.a * (0.08 + r * 0.45);
@@ -1760,7 +1767,7 @@ function frame(now) {
   if (flags.objects) {
     for (let i = 0; i < N_PYL; i++) {
       const p = pyl[i];
-      if (p.z > zPos + 20) { p.z -= SPAN; p.x = (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 8 + Math.random() * 34); }
+      if (p.z > zPos + 20) { p.z -= SPAN; p.x = (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 1 + Math.random() * 32); }
       const br = DR ? 1 + 0.4 * MOL.lv[5] * Math.sin(t * 5 + p.z * 0.04) : 1, sw = DR ? 2.2 * MOL.lv[5] * Math.sin(t * 2 + p.z * 0.02) : 0;          // 2C-T-7: the trees breathe and sway
       m4.compose(v3.set(p.x + sw, (3.5 * p.s * br) + TY(p.z, p.x), p.z), q4.identity(), s3.set(p.s * (2 - br), p.s * br, p.s * (2 - br)));
       pylMesh.setMatrixAt(i, m4);
