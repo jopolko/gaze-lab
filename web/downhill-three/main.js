@@ -235,8 +235,14 @@ function mkThing(avoid, noRamp) {
   return { type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false };
 }
 const mkRocks = () => ({ type: 4, pick: 0, orbs: [], done: false });
+// GUIDED ROWS (the calibration that is part of the game): for the first 3 rows exactly ONE lane holds a prize and the matching card says LOOK HERE, in a shuffled left / middle / right order. The true lane
+// of the look is then known, so the model learns from it directly (EyeModel.supervise) and the log holds true-target / model-guess pairs. ?noguide skips it.
+const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], hits: 0, tried: 0 };          // 3 rows by default (one look at each lane, in a shuffled order); ?guide=9 repeats them, for measuring how well the eyes are read
+for (let k = 0; k < Math.ceil(GUIDE.max / 3); k++) GUIDE.seq.push(...[-1, 0, 1].sort(() => Math.random() - 0.5));
 function setRow(r, z) {
   r.z = z; r.passed = false;
+  if (GUIDE.on && GUIDE.n < GUIDE.max) { const g = GUIDE.seq[GUIDE.n++]; r.guide = g; r.votes = [0, 0, 0]; r.s = [null, null, null]; r.s[g + 1] = { type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false }; return; }
+  r.guide = 9;
   const calm = tPlay < 20;          // the first 20 seconds: no hazards
   const hzK = calm ? 0 : Math.min(0.7, 0.25 + tPlay * 0.002);          // how often something nasty is put in
   const roll = Math.random(), flip = Math.random() < 0.5 ? 1 : -1;
@@ -256,7 +262,7 @@ function setRow(r, z) {
   r.s = [L, M, R];
 }
 let tPlay = 0;
-for (let i = 0; i < N_RING; i++) { const r = { i }; setRow(r, -50 - i * ROW_GAP); rows.push(r); }
+for (let i = 0; i < N_RING; i++) { const r = { i }; setRow(r, -(GUIDE.on ? 110 : 50) - i * ROW_GAP); rows.push(r); }
 const pyl = [];
 for (let i = 0; i < N_PYL; i++) pyl.push({ z: -Math.random() * SPAN, x: (Math.random() < 0.5 ? -1 : 1) * (LANE_W * 1.5 + 8 + Math.random() * 34), s: 1.2 + Math.random() * 2 });
 const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), v3 = new THREE.Vector3(), s3 = new THREE.Vector3(), colr = new THREE.Color(), qRamp = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.22, 0, 0));
@@ -449,6 +455,9 @@ if (eyeMode) {
         KIT.add(pick, 0, 0, t);
         if (EM && Number.isFinite(ha) && Number.isFinite(hb)) {          // the model decides the zone once the middle is learned (KIT still runs, for the setup bar, blinks and the logs)
           EM.step([ha, hb]);
+          KIT.gl = 9; KIT.gp = 9;
+          const gr = EM.ready && wasReady ? guideRow() : null;
+          if (gr) { const tt = (zPos - gr.z) / Math.max(speed, 14); if (tt < 1.8 && tt > 0.25) { KIT.gl = gr.guide; KIT.gp = EM.zone; gr.votes[EM.zone + 1]++; EM.supervise([ha, hb], gr.guide); } }
           if (EM.ready && KIT.zones) { if (KIT.zone !== EM.zone) KIT.zone_t = t; KIT.zone = EM.zone; KIT.zn = EM.zn; }
           if (EM.n % 150 === 0) { try { localStorage.setItem('spike_em2', JSON.stringify(EM.save())); } catch (e) { /* */ } }
         }
@@ -590,9 +599,21 @@ function cardsUpdate() {
     e.style.display = 'block';
     e.style.background = 'radial-gradient(circle,#000b 58%,transparent 60%), conic-gradient(' + (on ? '#6f6' : k.c) + ' ' + Math.round(fill * 360) + 'deg, #fff3 0)';
     e.style.boxShadow = '0 0 ' + (on ? 14 : 8) + 'px ' + k.c; e.textContent = k.n;
+    if (row.guide !== 9) {          // a guided row: the card to look at pulses and says so, the others fade
+      const g = lane === row.guide; e.style.opacity = g ? '1' : '0.25';
+      if (g) { e.textContent = 'LOOK HERE'; e.style.boxShadow = '0 0 ' + (18 + 10 * Math.sin(performance.now() / 120)) + 'px #fff'; e.style.outline = '3px solid #fff'; } else e.style.outline = 'none';
+    } else { e.style.opacity = '1'; e.style.outline = 'none'; }
   }
 }
+let waitT = 0, wasReady = false;
+function ctrlReady() {          // the world holds still until the middle is learned (or 15 s have passed without a camera: then it plays on)
+  const ok = !eyeMode || (KIT.zones && (!EM || EM.ready)) || waitT > 15;
+  if (ok && !wasReady) { wasReady = true; if (GUIDE.on) bannerShow('LOOK WHERE IT SAYS', true); }
+  return ok;
+}
+function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; } return row && row.guide !== 9 ? row : null; }
 function updateLane(dt) {
+  if (playing && !wasReady) waitT += dt;
   calUpdate(dt); gaugeUpdate(); cardsUpdate();
   if (!KIT.zones) {          // the first 40 readings are still coming in: the board stays in the middle, but the dot already follows the eyes (against the middle seen so far, at the starting size)
     lane = 0; steerTarget = 0;
@@ -662,7 +683,10 @@ function stepRows(dt) {
   for (let i = 0; i < N_RING; i++) {
     const r = rows[i];
     if (r.z > zPos + 25) setRow(r, r.z - SPAN);
-    if (!r.passed && r.z <= zPrev && r.z > zPos - 1) { r.passed = true; LOCK.free = true; }          // past the thing: the lock is let go
+    if (!r.passed && r.z <= zPrev && r.z > zPos - 1) {
+      r.passed = true; LOCK.free = true;
+      if (r.guide !== 9 && r.votes) { GUIDE.tried++; const v = r.votes, best = v.indexOf(Math.max(...v)) - 1; if (v[0] + v[1] + v[2] > 0 && best === r.guide) GUIDE.hits++; if (GUIDE.tried === GUIDE.max) bannerShow('EYES TUNED: ' + GUIDE.hits + ' OF ' + GUIDE.max + ' LOOKS READ', true); }
+    }          // past the thing: the lock is let go
     for (let sd = 0; sd < 3; sd++) {
       const o = r.s[sd], lane = sd - 1, lx = lane * LANE_W, si = i * 3 + sd;
       const crossing = (z) => !o.done && z <= zPrev && z > zPos - 1;          // the line z lies between where the camera was and where it is now
@@ -767,12 +791,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : +(((cards[KIT.gl + 1].getBoundingClientRect().left + cards[KIT.gl + 1].getBoundingClientRect().right) / 2) / innerWidth).toFixed(3)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
@@ -805,11 +829,11 @@ function frame(now) {
   telTick(now, dt);
   logSample(now);
   steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
-  if (playing) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
+  if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt);
   speed = Math.min(Math.min(64, 28 + tPlay * 0.4) + (ST.boost > 0 ? 22 : 0), speed + (ST.boost > 0 ? 40 : 15) * dt);          // slower than before (it was up to 110): time to look, choose, and let the board slide          // (a crash halves it; it climbs back at 25 m/s per second, up to the pace of the run)
   zPrev = zPos;
-  if (playing) zPos -= speed * dt;
+  if (playing && ctrlReady()) zPos -= speed * dt;
   camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
   camera.position.set(camX, 3.2 + ST.y, zPos);
   camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);

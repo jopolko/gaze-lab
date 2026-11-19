@@ -92,6 +92,17 @@ export class EyeModel {
     return this.state;
   }
   get zone() { return this.state - 1; }          // -1 left, 0 middle, +1 right
+  supervise(x, k) {          // a look whose TRUE lane is known (k = -1 / 0 / +1: the guided rows): learn from it directly and quickly, and put the filter on that state
+    if (!this.ready) return;
+    const e = 0.06;
+    if (k === 0) { this.m[0] += e * (x[0] - this.m[0]); this.m[1] += e * (x[1] - this.m[1]); }
+    else {
+      const r0 = x[0] - this.m[0], r1 = x[1] - this.m[1];
+      if (k < 0) { this.dL[0] += e * (r0 - this.dL[0]); this.dL[1] += e * (r1 - this.dL[1]); this.fixSep(this.dL); }
+      else { this.dR[0] += e * (-r0 - this.dR[0]); this.dR[1] += e * (-r1 - this.dR[1]); this.fixSep(this.dR); }
+    }
+    this.post = k < 0 ? [0.9, 0.08, 0.02] : k > 0 ? [0.02, 0.08, 0.9] : [0.05, 0.9, 0.05]; this.state = k + 1;
+  }
   recentre() {          // put the middle on the median of the last ~4 s of readings and start again from MIDDLE (used by the live tuning)
     if (this.xs.length < 30) return false;
     const w = this.xs.slice(-60), med = (k) => { const v = w.map((q) => q[k]).sort((p, q) => p - q); return v[v.length >> 1]; };
