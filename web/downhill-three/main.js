@@ -356,10 +356,17 @@ const KIT = {
     this.zall.push(hx); if (this.zall.length > 360) this.zall.shift();
     if (this.zone === 0 || Math.abs(this.zn) > 2.2 || this.zside > 8) { this.zbuf.push(hx); if (this.zbuf.length > 360) this.zbuf.shift(); }          // only readings taken while the eyes were in the MIDDLE shape the middle (plus a way out if it is badly off: a reading more than 2.2 sides away, or 8 s on one side, also counts, or a wrong middle could never be corrected): a long run of looks to one side must not drag it over there (the lane then dropped back to the middle while still looking right)
     this.zbt += dt;
-    // THE MIDDLE ALSO FOLLOWS A SLOW DRIFT of the whole signal (a head that turns or leans as you play, glare on the glasses): the median of the last ~10 s of ALL readings pulls it along, gently
-    // (about a 10 s time constant, and not at all while that median is within 0.004 of it). Before this, a long run of looks to one side left the middle behind and the dot stuck on that side.
+    // THE FLOATING CENTRE (a gyroscope for the eyes): the middle is held at the midpoint of the envelope of your last ~20 s of readings, (10th percentile + 90th percentile) / 2. Unlike a median it does not care
+    // how long you dwell in each lane, only that you have visited both ends, so a head that turns or leans as you play, or glare on the glasses, slides the middle along with the whole signal and the three
+    // places stay balanced around you. With no real movement in the window (less than 0.012 between the two percentiles) it uses the median instead. It moves about a third of the way every 1.5 s, and not at
+    // all while within 0.002 of where it is.
     this.zft = (this.zft || 0) + dt;
-    if (this.zft >= 0.5 && this.zall.length >= 90 && z.auto) { this.zft = 0; const gap = median(this.zall.slice(-150)) - (z.m + this.zdrift); if (Math.abs(gap) > 0.004) z.m += gap * 0.05; }
+    if (this.zft >= 0.5 && this.zall.length >= 120 && z.auto) {
+      this.zft = 0;
+      const w = this.zall.slice(-300).sort((a, b) => a - b), q = (p) => w[Math.min(w.length - 1, Math.floor(p * w.length))];
+      const env = (q(0.9) - q(0.1) >= 0.012) ? (q(0.1) + q(0.9)) * 0.5 : median(w), gap = env - (z.m + this.zdrift);
+      if (Math.abs(gap) > 0.002) z.m += gap * 0.15;
+    }
     if (this.zbt >= 0.5 && this.zbuf.length >= 60 && z.auto) {
       this.zbt = 0;
       const m0 = z.m + this.zdrift;
@@ -662,7 +669,7 @@ function logSample(now) {
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR', gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR', gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
