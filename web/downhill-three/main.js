@@ -18,6 +18,7 @@ const TUNE = { qk: 0.7, midhold: 0.28, steerK: 14, camK: 10, v: -1 };          /
 let EM = null;
 // PROFILES (per device, in this browser only): up to three sets of learned left / right offsets (glasses on, glasses off, another person). The most recent one is the starting point; when there are two or more, the
 // first few labelled looks of the session choose the one that fits them best (profChoose), and what is learned is written back to it (profStore). A first run on a device shows the LOOK HERE rings once.
+if (Q.has('resetprofiles')) { try { localStorage.removeItem('spike_profiles'); localStorage.removeItem('spike_cal_done'); localStorage.removeItem('spike_eye'); } catch (e) { /* */ } }          // ?resetprofiles forgets everything learned about eyes on this device
 const PROF = { list: [], cur: -1, chosen: false };
 let CAL_DONE = false; try { CAL_DONE = localStorage.getItem('spike_cal_done') === '1'; } catch (e) { /* */ }
 function profSave() { try { localStorage.setItem('spike_profiles', JSON.stringify(PROF.list)); } catch (e) { /* */ } }
@@ -31,10 +32,16 @@ function profChoose() {
   const dflt = EM.fit([0.02, 0.02], [0.02, 0.02], EM.labeled); let best = -1, bs = 1e9;
   PROF.list.forEach((p, i) => { const sc = EM.fit(p.dL, p.dR, EM.labeled); if (sc < bs) { bs = sc; best = i; } });
   EM.hold = false; PROF.chosen = true;
-  if (best >= 0 && bs < dflt * 1.2) { EM.dL = PROF.list[best].dL.slice(); EM.dR = PROF.list[best].dR.slice(); PROF.cur = best; } else PROF.cur = -1;          // none fits: a new one is made when saving
+  if (best >= 0 && bs < dflt * 1.2) { EM.dL = PROF.list[best].dL.slice(); EM.dR = PROF.list[best].dR.slice(); PROF.cur = best; }
+  else {          // none fits: a new person (or new glasses). A new profile is made when saving, the sizes start from the defaults, and the LOOK HERE rings are shown once for them
+    PROF.cur = -1; EM.dL = [0.02, 0.02]; EM.dR = [0.02, 0.02];
+    if (GUIDE.on && GUIDE.pending === 0) { GUIDE.pending = 3; GUIDE.bSize = 3; GUIDE.bTried = 0; GUIDE.bHits = 0; bannerShow('NEW PLAYER: LOOK AT THE RINGS', true); }
+  }
 }
 function profStore() {
   const p = { dL: EM.dL.slice(), dR: EM.dR.slice(), t: Date.now() };
+  const rel = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) / Math.max(Math.hypot(b[0], b[1]), 0.02);
+  if (PROF.cur >= 0 && (rel(p.dL, PROF.list[PROF.cur].dL) > 0.7 || rel(p.dR, PROF.list[PROF.cur].dR) > 0.7)) PROF.cur = -1;          // it has drifted far from this profile: it is probably someone else, so it does not overwrite it
   if (PROF.cur >= 0) PROF.list[PROF.cur] = p; else { PROF.list.push(p); if (PROF.list.length > 3) PROF.list.shift(); PROF.cur = PROF.list.length - 1; }
   profSave();
 }
@@ -258,16 +265,16 @@ function mkThing(avoid, noRamp) {
 const mkRocks = () => ({ type: 4, pick: 0, orbs: [], done: false });
 // GUIDED ROWS (the calibration that is part of the game): for the first 3 rows exactly ONE lane holds a prize and the matching card says LOOK HERE, in a shuffled left / middle / right order. The true lane
 // of the look is then known, so the model learns from it directly (EyeModel.supervise) and the log holds true-target / model-guess pairs. ?noguide skips it.
-const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), visible: Q.has('guide') || !CAL_DONE, max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], bSize: 0, bTried: 0, bHits: 0, pending: 0, tuneups: 0, lastTune: -999, first: false };
+const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), visible: Q.has('guide') || !CAL_DONE, max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], bSize: 0, bTried: 0, bHits: 0, pending: 0, warm: 0, tuneups: 0, lastTune: -999, first: false };
 GUIDE.first = GUIDE.on && GUIDE.visible; GUIDE.bSize = GUIDE.first ? GUIDE.max : 0;          // 3 rows by default (one look at each lane, shuffled): the rings are SHOWN only on the first run on a device (or ?guide), and for a tune-up; every other session starts with 3 normal-looking rows, each with one obviously better prize (hidden warm-up)
 for (let k = 0; k < Math.ceil(GUIDE.max / 3); k++) GUIDE.seq.push(...[-1, 0, 1].sort(() => Math.random() - 0.5));
 const VAL = { 0: 1, 1: 2, 2: 3, 3: 2.5, 4: -5 };          // what a thing is worth to someone choosing: used to see which lane of a row is clearly the best one (an inferred label for the eyes)
 function setRow(r, z) {
   r.z = z; r.passed = false; r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0];
   const orbs = () => ({ type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false });
-  if (GUIDE.pending > 0 || (GUIDE.on && GUIDE.n < GUIDE.max)) {          // a guided row: ONE lane holds the prize
-    const g = GUIDE.pending > 0 ? [-1, 0, 1][Math.floor(Math.random() * 3)] : GUIDE.seq[GUIDE.n++];
-    const vis = GUIDE.pending > 0 || GUIDE.visible; if (GUIDE.pending > 0) GUIDE.pending--;
+  if (GUIDE.pending > 0 || GUIDE.warm > 0 || (GUIDE.on && GUIDE.n < GUIDE.max)) {          // a guided row: ONE lane holds the prize
+    const g = (GUIDE.pending > 0 || GUIDE.warm > 0) ? [-1, 0, 1][Math.floor(Math.random() * 3)] : GUIDE.seq[GUIDE.n++];
+    const vis = GUIDE.pending > 0 || (GUIDE.warm <= 0 && GUIDE.visible); if (GUIDE.pending > 0) GUIDE.pending--; else if (GUIDE.warm > 0) GUIDE.warm--;
     r.lab = g; r.s = [null, null, null];
     if (vis) { r.guide = g; r.lw = 1; r.s[g + 1] = orbs(); }          // shown: the ring says LOOK HERE
     else { r.lw = 0.6; r.s = [orbs(), orbs(), orbs()]; r.s[g + 1] = { type: 2, pick: Math.floor(Math.random() * 4), orbs: [], done: false }; }          // hidden: three normal lanes, one clearly better (a pickup against orbs)
@@ -532,9 +539,15 @@ addEventListener('keydown', (e) => {
 
 // the tracker publishes a packet on window.__gaze and counts them in window.__gazeSeq: each new packet with an iris reading goes to the zone detector, as GazeProvider.gd did
 let lastSeq = 0;
+let lostSince = 0, wasAway = false;
+function handover() {          // the face was gone for more than 1.5 s and came back: possibly another player. Forget the labelled looks, choose a profile again from the next few looks, and warm up with hidden rows.
+  if (!EM || !EM.ready) return;
+  EM.labeled = []; EM.hold = true; PROF.chosen = false; CONF.length = 0; GUIDE.warm = 3;
+}
 function readTracker(now) {
   window.__gazeStats = { pk: pkCount, inf: tracker ? tracker.modelMs : 0, lat: 0, dlg: tracker ? (tracker.delegate || '') : '', vw: video.videoWidth, vh: video.videoHeight };
   KIT.idle(now / 1000, 1 / 60);
+  if (KIT.lost) { if (!lostSince) lostSince = now; if (now - lostSince > 1500) wasAway = true; } else { lostSince = 0; if (wasAway) { wasAway = false; handover(); } }          // real time, whatever the frame rate
   KIT.zh_n = 3;          // (Godot used 2 at speed. With the lowered thresholds 2 readings flipped the lane 15 to 19 times in 10 s, so it is 3 here)
 }
 // LOCK-ON, the way RunRig.gd chose things (this is what made Godot forgiving, and why it needed no calibration): the zone is NOT the lane. Each lane keeps a leaky "want": it fills while
