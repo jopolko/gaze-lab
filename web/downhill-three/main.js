@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795094018';
+import { EyeModel } from './eyemodel.js?v=1795095211';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -709,7 +709,7 @@ function headFit() {
   const pr = fb.map((v) => v[0] * HEAD.ax[0] + v[1] * HEAD.ax[1] + v[2] * HEAD.ax[2]).sort((x, y) => x - y);
   const med = pr[Math.floor(pr.length / 2)], dev = pr.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * 0.9)];
   HEAD.neu = n < 40 ? med : HEAD.neu + (med - HEAD.neu) * 0.25;
-  HEAD.k = HEAD.k + (0.9 / Math.max(0.25, Math.min(2.5, q90)) - HEAD.k) * (n < 40 ? 1 : 0.25);
+  HEAD.k = HEAD.k + (0.9 / Math.max(0.9, Math.min(2.5, q90)) - HEAD.k) * (n < 40 ? 1 : 0.25);
 }
 function headAuto(dt, now, f) {
   if (!HEAD.cur) return; if (HEAD.fb.length < 12) { HEAD.phase = 'wait'; return; } HEAD.phase = 'run';
