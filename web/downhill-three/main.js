@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795105279';
+import { EyeModel } from './eyemodel.js?v=1795105665';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -1554,9 +1554,15 @@ if (BUGGY) {
   scene.add(bugGrp);
   scene.add(camera);          // (so that things fixed to the camera are drawn)
   cockpit.rotation.order = 'YXZ'; camera.add(cockpit);
-  const hoodM = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.5, 3.6), MBC([1.0, 0.45, 0.1])); hoodM.position.set(0, -1.55, -4.6); hoodM.rotation.x = -0.08; cockpit.add(hoodM);
-  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.52, 3.62), MBC([1.0, 0.85, 0.3])); stripe.position.set(0, -1.54, -4.6); stripe.rotation.x = -0.08; cockpit.add(stripe);
-  cockpit.wheels = []; for (const wx of [-2.2, 2.2]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.95, 16), MBC([0.1, 0.1, 0.12])); w.rotation.z = Math.PI / 2; const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.0, 8), MBC([0.9, 0.9, 0.95])); hb.rotation.z = Math.PI / 2; const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.add(w); g.add(hb); g.position.set(wx, -1.85, -5.2); cockpit.add(g); cockpit.wheels.push(g); }
+  // (as small as the tip of the board was: low in the view, just the nose of the hood and the tops of the front wheels)
+  const hoodM = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.16, 1.1), MBC([1.0, 0.45, 0.1])); hoodM.position.set(0, -1.02, -1.95); hoodM.rotation.x = -0.12; cockpit.add(hoodM);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 1.12), MBC([1.0, 0.85, 0.3])); stripe.position.set(0, -1.01, -1.95); stripe.rotation.x = -0.12; cockpit.add(stripe);
+  cockpit.wheels = []; for (const wx of [-1.15, 1.15]) {
+    const g = new THREE.Group(); g.rotation.order = 'YXZ'; const tyre = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.34, 16), MBC([0.1, 0.1, 0.13])); tyre.rotation.z = Math.PI / 2; g.add(tyre);
+    const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 0.37, 12), MBC([0.85, 0.86, 0.92])); rim.rotation.z = Math.PI / 2; g.add(rim);
+    for (let k = 0; k < 3; k++) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.64, 0.07), MBC([1.0, 0.5, 0.1])); sp.rotation.x = k * Math.PI / 3; g.add(sp); }
+    g.position.set(wx, -1.14, -2.1); cockpit.add(g); cockpit.wheels.push(g);
+  }
   // mouse / keyboard: arrow keys or WASD drive it (a desk without a head)
   if (Q.has('mouse')) { const kd = { up: 0, dn: 0 }; const upd = () => { HEAD.u = kd.up - kd.dn; }; addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'w') { kd.up = 1; upd(); } if (e.key === 'ArrowDown' || e.key === 's') { kd.dn = 1; upd(); } if (e.key === ' ') HEAD.vt = 1; }); addEventListener('keyup', (e) => { if (e.key === 'ArrowUp' || e.key === 'w') { kd.up = 0; upd(); } if (e.key === 'ArrowDown' || e.key === 's') { kd.dn = 0; upd(); } if (e.key === ' ') HEAD.vt = 0; }); }
 }
@@ -1573,12 +1579,13 @@ function explode(x, z, chain) {
   award(150 * (1 + chain)); G.combo += 3; G.best = Math.max(G.best, G.combo); G.got++; bannerShow(chain ? 'CHAIN BOOM x' + (chain + 1) : 'BOOM', true);
 }
 function buggyStep(dt) {
-  const st0 = Math.max(-1.3, Math.min(1.3, steerTarget)), st = Math.sign(st0) * Math.pow(Math.abs(st0), 0.7) * 1.3, thr = HEAD.u || 0, g = HOg(OW.x, OW.z); BUG.st = st;          // (a small turn of the head already steers: the curve lifts small inputs, from the phone log a typical steer was only 0.2 to 0.3)
+  const st0 = Math.max(-1.3, Math.min(1.3, steerTarget)), st = Math.sign(st0) * Math.min(1.1, Math.pow(Math.abs(st0), 0.7) * 1.3), thr = HEAD.u || 0, g = HOg(OW.x, OW.z); BUG.st = st;          // (a small turn of the head already steers: the curve lifts small inputs, from the phone log a typical steer was only 0.2 to 0.3)
   let fx = Math.sin(OW.th), fz = -Math.cos(OW.th), rx = Math.cos(OW.th), rz = Math.sin(OW.th), vf = OW.vx * fx + OW.vz * fz, vl = OW.vx * rx + OW.vz * rz;
   if (BUG.grounded) {
     let a = 0; if (thr > 0.02) a = 26 * thr * (1 - Math.max(0, vf) / 38); else if (thr < -0.02) a = vf > 0.8 ? -50 * -thr : (vf > -17 ? -22 * -thr : 0);
     a -= 0.22 * vf + 0.0016 * vf * Math.abs(vf); a -= 70 * (g[0] * fx + g[1] * fz); vf += a * dt; BUG.acc = a;
-    const turn = st * 2.6 * Math.min(1, Math.abs(vf) / 4.5) / (1 + Math.max(0, Math.abs(vf) - 16) / 45) * (vf >= 0 ? 1 : -1);          // (tight when slow, steadier when fast) OW.th += turn * dt; OW.om = turn; vl *= Math.exp(-9 * dt);
+    const turn = st * 2.6 * Math.min(1, Math.abs(vf) / 4.5) / (1 + Math.max(0, Math.abs(vf) - 16) / 45) * (vf >= 0 ? 1 : -1);
+    OW.th += turn * dt; OW.om = turn; vl *= Math.exp(-9 * dt);          // (the turn is tight when slow and steadier when fast)
   } else { OW.th += (OW.om * 0.6 + st * 1.5 * (vf >= 0 ? 1 : -1)) * dt; OW.om *= Math.exp(-0.6 * dt); if (thr > 0.02) vf += 10 * thr * dt; vf *= Math.exp(-0.05 * dt); }          // (in the air you can still steer and push a little: it is never dead)
   fx = Math.sin(OW.th); fz = -Math.cos(OW.th); rx = Math.cos(OW.th); rz = Math.sin(OW.th); OW.vx = fx * vf + rx * vl; OW.vz = fz * vf + rz * vl; OW.x += OW.vx * dt; OW.z += OW.vz * dt;
   const gh = groundAt(OW.x, OW.z); if (!BUG.inited) { BUG.inited = true; BUG.gPrev = gh; BUG.y = gh; BUG.yv = 0; } const vg = Math.max(-60, Math.min(60, (gh - BUG.gPrev) / Math.max(dt, 1e-3))); BUG.gPrev = gh;
@@ -1589,7 +1596,7 @@ function buggyStep(dt) {
   HEAD.uslow = (HEAD.uslow === undefined ? (HEAD.u || 0) : HEAD.uslow) + ((HEAD.u || 0) - (HEAD.uslow === undefined ? (HEAD.u || 0) : HEAD.uslow)) * (1 - Math.exp(-dt / 0.9));
   const nod = HEAD.vt - HEAD.vslow > 0.5, uq = Q.has('mouse') ? (HEAD.u || 0) : (HEAD.ut === undefined ? HEAD.u || 0 : HEAD.ut), nudge = false && uq - HEAD.uslow > 0.22 && HEAD.uslow > 0.15;          // (the forward nudge hop is off for now: on a phone the lean itself looked like a nudge)          // a HOP is a quick nod up, OR a quick nudge forward while you are already leaning on the gas (so you can cruise at a mid lean and pop over a jump without lifting off the throttle)
   if ((nod || nudge) && BUG.grounded && BUG.hopT <= 0) { BUG.yv = vg + (nudge && !nod ? 10 : 13); BUG.grounded = false; BUG.hopT = 0.9; BUG.squash = 0.2; if (nudge && !nod) { OW.vx += fx * 3; OW.vz += fz * 3; } if (MUS) MUS.tone(660, 0.18, 0.09); }
-  ST.y = Math.max(0, BUG.y - gh); ST.vy = BUG.yv - vg; speed = Math.hypot(OW.vx, OW.vz); zPrev = zPos; zPos = OW.z; camX = OW.x; BUG.vf = vf;
+  ST.y = Math.max(0, BUG.y - gh); ST.vy = BUG.yv - vg; speed = Math.hypot(OW.vx, OW.vz); zPrev = zPos; zPos = OW.z; camX = OW.x; BUG.vf = vf; BUG.vl = vl;
   BUG.wheel += vf * dt / 0.95; BUG.squash *= Math.exp(-dt * 7); BUG.shake *= Math.exp(-dt * 4);
   const slope = g[0] * fx + g[1] * fz; BUG.pitch += ((-Math.atan(slope) * 1.0 + Math.max(-0.2, Math.min(0.2, (BUG.acc || 0) * 0.004))) - BUG.pitch) * Math.min(1, dt * 10); BUG.roll += ((-(OW.om || 0) * 0.09 * Math.min(1, Math.abs(vf) / 18)) - BUG.roll) * Math.min(1, dt * 8);
 }
@@ -1614,14 +1621,15 @@ function buggyFx(dt) {
   oDeb.count = n; oDeb.instanceMatrix.needsUpdate = true; if (oDeb.instanceColor) oDeb.instanceColor.needsUpdate = true;
   n = 0; for (const b of BLASTS) { const k = b.t / 0.55; m4.compose(v3.set(b.x, b.y, b.z), q4.identity(), s3.setScalar(3 + k * 26)); oBlast.setMatrixAt(n, m4); oBlast.setColorAt(n, colr.setRGB(1, 0.6 - 0.4 * k, 0.15).multiplyScalar(1 - k)); n++; }
   oBlast.count = n; oBlast.instanceMatrix.needsUpdate = true; if (oBlast.instanceColor) oBlast.instanceColor.needsUpdate = true;
-  bugGrp.visible = inHub && CHASE; cockpit.visible = inHub && !CHASE; cockpit.position.y = -BUG.squash * 0.5; cockpit.wheels.forEach((w) => { w.rotation.y = -Math.max(-1.7, Math.min(1.7, BUG.st || 0)) * 0.3; w.rotation.x = -BUG.wheel; }); const sq = BUG.squash; bugGrp.position.set(OW.x, BUG.y, OW.z); bugGrp.rotation.set(BUG.pitch, -OW.th, BUG.roll, 'YXZ'); bugGrp.scale.set(1 + 0.35 * sq, 1 - 0.55 * sq, 1 + 0.35 * sq);
+  bugGrp.visible = inHub && CHASE; cockpit.visible = inHub && !CHASE; cockpit.position.y = -BUG.squash * 0.25; cockpit.rotation.y = Math.max(-0.25, Math.min(0.25, Math.atan2(BUG.vl || 0, Math.max(2, BUG.vf || 0)) * 0.6)); cockpit.rotation.z = (BUG.roll || 0) * 0.6;          // it swings with the slip between where the car points and where it goes, and leans into a turn, like the tip of the board
+  cockpit.wheels.forEach((w) => { w.rotation.y = -Math.max(-1.7, Math.min(1.7, BUG.st || 0)) * 0.28; w.rotation.x = -BUG.wheel; }); const sq = BUG.squash; bugGrp.position.set(OW.x, BUG.y, OW.z); bugGrp.rotation.set(BUG.pitch, -OW.th, BUG.roll, 'YXZ'); bugGrp.scale.set(1 + 0.35 * sq, 1 - 0.55 * sq, 1 + 0.35 * sq);
   bugGrp.wheels.forEach((w, i) => { w.children.forEach((c) => { c.rotation.x = 0; }); w.rotation.x = -BUG.wheel; if (i < 2) w.rotation.y = -Math.max(-1.7, Math.min(1.7, BUG.st || 0)) * 0.3; });
 }
 function buggyCamera(dt) {
   if (!CHASE) {
     const fx = Math.sin(OW.th), fz = -Math.cos(OW.th), sh = BUG.shake * 0.5, sq = BUG.squash;
     camera.position.set(OW.x - fx * 0.6 + (Math.random() - 0.5) * sh, BUG.y + 3.4 - sq * 1.2 + (Math.random() - 0.5) * sh, OW.z - fz * 0.6 + (Math.random() - 0.5) * sh);
-    camera.rotation.order = 'YXZ'; camera.rotation.set(-0.06 + BUG.pitch * 0.7 + Math.max(-0.15, Math.min(0.15, (BUG.yv || 0) * -0.004)), -OW.th, BUG.roll * 0.9 - (OW.om || 0) * 0.025, 'YXZ'); camera.fov = 78 + Math.min(1, speed / 45) * 14 + TR.tun * 35; return;
+    camera.rotation.order = 'YXZ'; camera.rotation.set(-0.06 + BUG.pitch * 0.7 + Math.max(-0.15, Math.min(0.15, (BUG.yv || 0) * -0.004)), -OW.th, BUG.roll * 0.4 - (OW.om || 0) * 0.012, 'YXZ'); camera.fov = 78 + Math.min(1, speed / 45) * 14 + TR.tun * 35; return;
   }
   const fx = Math.sin(OW.th), fz = -Math.cos(OW.th), tx = OW.x - fx * 12.5, tz = OW.z - fz * 12.5, ty = BUG.y + 6.2;
   if (!BUG.camInit) { BUG.camX = tx; BUG.camY = ty; BUG.camZ = tz; BUG.camInit = true; }
