@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795105665';
+import { EyeModel } from './eyemodel.js?v=1795105742';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -232,14 +232,19 @@ scene.add(ground);
 
 // THE SKY: a gradient dome that follows the camera (and a sun disc in the worlds that have one: stripes cut into it in SYNTHWAVE).
 const skyMat = new THREE.ShaderMaterial({
-  uniforms: { uDom: { value: 0 }, uPul: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTop: { value: TH.top }, uHor: { value: TH.hor }, uC1: { value: TH.c1 }, uSun: { value: 0 }, uStripe: { value: 0 }, uT: { value: 0 } },
+  uniforms: { uMode: { value: 0 }, uDom: { value: 0 }, uPul: { value: 0 }, uLine: { value: LINE ? 1 : 0 }, uTop: { value: TH.top }, uHor: { value: TH.hor }, uC1: { value: TH.c1 }, uSun: { value: 0 }, uStripe: { value: 0 }, uT: { value: 0 } },
   vertexShader: 'varying vec3 dir; void main(){ dir = normalize(position); gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position,1.0); }',
-  fragmentShader: `precision mediump float; varying vec3 dir; uniform vec3 uTop, uHor, uC1; uniform float uSun, uStripe, uT, uLine, uDom, uPul;
+  fragmentShader: `precision mediump float; varying vec3 dir; uniform vec3 uTop, uHor, uC1; uniform float uSun, uStripe, uT, uLine, uDom, uPul, uMode;
     vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
     void main(){
       float y = dir.y;
       vec3 col = mix(uHor, uTop, smoothstep(.0, .55, y));
       col = mix(col, uHor*.6, smoothstep(.0, -.4, y));
+      if (uMode > .5 && uMode < 1.5) {          // PSYCHEDELIC: slow bands of colour that drift, a dark magenta below
+        float az = atan(dir.x, -dir.z), band = .5 + .5 * sin(az * 2. + dir.y * 5. + sin(dir.y * 3. + uT * .15) * 1.2 + uT * .05);
+        vec3 pc = (.5 + .5 * cos(6.28318 * (dir.y * .5 + az * .08 + uT * .02 + vec3(0., .33, .67)))) * (.05 + .20 * band * smoothstep(0., .6, dir.y)) + vec3(.02, 0., .06);
+        col = mix(vec3(.10, .01, .16), pc * 1.7, smoothstep(-.1, .3, dir.y));
+      }
       vec3 sd = normalize(vec3(0., .16, -1.));
       float d = distance(dir, sd);
       float disc = smoothstep(.20, .185, d) * uSun;
@@ -266,7 +271,7 @@ scene.add(sky);
 const N_PYL = 160, N_RING = 10, SPAN = 520, LANE_W = 22, ROW_GAP = SPAN / N_RING;          // wide lanes: the choices must be far apart ON THE SCREEN (at 70 m ahead, lanes 8 m apart sit within about 4 degrees of each other, too close for the eyes to tell apart)
 // THE LOOK (Themes.gd's): solid, soft-lit shapes, not lines. A tree is three stacked cones, dark at the skirt and pale at the tip, in the world's colours; the mountains are tall faceted peaks round the horizon. Both wear a MOIRE SKIN
 // (two stripe fields that fall in and out of step, coloured by how far in step they are) that comes up with the molecules (2C-E, the mountains' piece), and the peaks always wear a little of it.
-const SKIN = { uBeat: { value: 0 }, uT: { value: 0 }, uHor: { value: TH.hor }, uCam: { value: new THREE.Vector3() } };
+const SKIN = { uPsy: { value: 0 }, uBeat: { value: 0 }, uT: { value: 0 }, uHor: { value: TH.hor }, uCam: { value: new THREE.Vector3() } };
 const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint;
   void main(){ vec4 p = vec4(position, 1.); vec3 n = normal;
   #ifdef USE_INSTANCING
@@ -279,18 +284,22 @@ const skinVS = `varying vec3 vW; varying vec3 vN; varying float vS; varying vec3
     vTint = vec3(1.);
   #endif
   gl_Position = projectionMatrix * viewMatrix * w; }`;
-const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar, uBeat; uniform vec3 uHor, uCam;
+const skinFS = `precision mediump float; varying vec3 vW; varying vec3 vN; varying float vS; varying vec3 vTint; uniform float uT, uMo, uFar, uBeat, uPsy; uniform vec3 uHor, uCam;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec3 n = normalize(vN); float lit = (.55 + .6 * max(dot(n, normalize(vec3(-.35, .7, .6))), 0.)) * (1. + uBeat * .22);
     vec3 base = mix(vTint * .30, vTint * 1.05 + .12, vS) * lit;
+    if (uPsy > .5) {          // PSYCHEDELIC (Themes.gd VEG_PSY): near black purple, neon where it is bright, the neon's hue drifting with where it stands and with time
+      float hue = fract(vW.z * .012 + vW.x * .007 + uT * .07 + vS * .2); vec3 neon = mix(vec3(1.), hsv(hue), .85);
+      base = (mix(vec3(.03, 0., .06), neon * .75, smoothstep(.1, .9, vS)) + neon * smoothstep(.35, 1., vS) * .75) * (.7 + .3 * lit);
+    }
     float a = sin(dot(vW.xz, vec2(.9, .35)) * 2.6 + vW.y * 3.1), b = sin(dot(vW.xz, vec2(.9, -.3)) * 2.72 + vW.y * 3.0 + uT * .25), m = a * b * .5 + .5;
     vec3 mo = mix(hsv(fract(m * .55 + uT * .04 + vW.y * .004 + vS * .15)), vec3(1.), .28) * (.4 + .6 * m) * lit * 1.1;
     vec3 col = mix(base, mo, uMo);
     float d = length(vW - uCam); col = mix(col, uHor, smoothstep(uFar * .35, uFar, d) * .85);
     gl_FragColor = vec4(col, 1.);
   }`;
-const mkSkin = (far) => new THREE.ShaderMaterial({ uniforms: { uBeat: SKIN.uBeat, uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
+const mkSkin = (far) => new THREE.ShaderMaterial({ uniforms: { uPsy: SKIN.uPsy, uBeat: SKIN.uBeat, uT: SKIN.uT, uHor: SKIN.uHor, uCam: SKIN.uCam, uMo: { value: 0 }, uFar: { value: far } }, vertexShader: skinVS, fragmentShader: skinFS, vertexColors: true });
 function shadeGeo(g, y0, y1) { const a = g.attributes.position, c = []; for (let i = 0; i < a.count; i++) { const k = Math.max(0, Math.min(1, (a.getY(i) - y0) / (y1 - y0))); c.push(k, k, k); } g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3)); return g; }
 function pineGeo() {          // three stacked cones, base at -3.5 and tip at +3.5 (the old single cone's size), each tier dark at its skirt and pale at its tip
   const parts = [[2.5, 3.6, -3.5], [1.9, 3.2, -1.6], [1.3, 2.8, 0.4]], pos = [], nor = [], col = [];
@@ -311,6 +320,7 @@ function updatePeaks() {          // a ring of peaks that follows the rider (so 
   peakMesh.instanceMatrix.needsUpdate = true; if (peakMesh.instanceColor) peakMesh.instanceColor.needsUpdate = true;
 }
 function skinTick() {
+  { const psy = Math.abs(TH.mode - 1) < 0.5 ? 1 : 0; SKIN.uPsy.value = psy; compMat.material.uniforms.uPsy.value = psy; skyMat.uniforms.uMode.value = TH.mode; }
   SKIN.uBeat.value = BEAT.v; groundMat.uniforms.uBeat.value = BEAT.v; compMat.material.uniforms.uBeat.value = BEAT.v;
   SKIN.uT.value = t; SKIN.uCam.value.copy(camera.position);
   const lvAll = DR ? (MOL.lv[0] + MOL.lv[1] + MOL.lv[2] + MOL.lv[3] + MOL.lv[4] + MOL.lv[5]) / 6 : 0;
@@ -546,7 +556,7 @@ const feedMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
   void main(){ vec3 c = texture2D(uScene, vUv).rgb; vec3 p = texture2D(uPrev, vUv + (vUv-.5)*.004).rgb; gl_FragColor = vec4(max(c*.55, p*uK), 1.); }`,
   { uScene: { value: null }, uPrev: { value: null }, uK: { value: 0.86 } });
 const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2D uScene; uniform sampler2D uTrail; uniform float uTrace; uniform float uSplit;
-  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun, uBeat; uniform vec3 uTunC;
+  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun, uBeat, uPsy; uniform vec3 uTunC;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec2 c = vUv - .5; float r = length(c);
@@ -560,7 +570,12 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     wuv = vec2(.5) + (wuv - vec2(.5)) * (1. - .006 * uMB.z * pl * keep + .006 * uDmt * sin(uTime * .8) * keep - .005 * uBeat);          // 2C-T-7: a pulse that pushes in
     float ca = uSplit * (.002 + r * .01) * (1. + uMA.z * .5 + uDmt * .6);          // 2C-B: the colours split apart
     vec3 col = vec3(texture2D(uScene, wuv + c*ca).r, texture2D(uScene, wuv).g, texture2D(uScene, wuv - c*ca).b);
-    col += texture2D(uTrail, vUv).rgb * .8 * uTrace * (1. - clamp(dot(col, vec3(.35,.5,.15)) * 1.2, 0., .9));
+    if (uPsy > .5) {          // PSYCHEDELIC (Themes.gd's pass): where the picture was a moment ago and is not now, a ghost whose hue turns with time and distance from the middle
+      vec3 old = texture2D(uTrail, vUv).rgb, diff = max(old - texture2D(uScene, vUv).rgb * .92 - .02, vec3(0.));
+      float m = clamp(dot(diff, vec3(.34)) * 3.2 * (.4 + .6 * smoothstep(.1, .45, r)), 0., 1.);
+      col += hsv(fract(uTime * .12 + r * .9 + m * .5)) * m * .45 * uTrace;
+      col = mix(col, col * hsv(fract(uTime * .05)) * 1.1, .12); col *= 1. - .45 * smoothstep(.45, .95, r);
+    } else col += texture2D(uTrail, vUv).rgb * .8 * uTrace * (1. - clamp(dot(col, vec3(.35,.5,.15)) * 1.2, 0., .9));
     col += uFlash.rgb * uFlash.a * (0.08 + r * 0.45);
     col *= 1. + uBeat * .06;
     col = mix(col, col * vec3(1.15, .95, .78), uMA.x * .5);          // mescaline: warm
@@ -581,7 +596,7 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
     }
     float mxc = max(max(col.r, col.g), col.b); if (mxc > .75) col *= (.75 + .25 * (1. - exp(-(mxc - .75) * 2.5))) / mxc;          // soft shoulder: light added by the effects is folded back, so bright areas keep their colour
     gl_FragColor = vec4(col, 1.);
-  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uBeat: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
+  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uBeat: { value: 0 }, uPsy: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
 const feedScene = new THREE.Scene();
 feedScene.add(feedMat);
 const compScene = new THREE.Scene();
