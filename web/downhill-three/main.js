@@ -11,6 +11,35 @@ import { Tracker } from '../stargaze/tracker.js';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
+// WHICH EYE (glasses and lenses can distort one eye). The two eyes' readings are kept apart for the last ~25 s and each is judged at the moments BOTH eyes agree you looked left or right: the 15% of readings
+// where the two-eye average is furthest left, the 15% furthest right, against the middle 40%. An eye's score is its WEAKER side (how far it moves for a look that way) over its jitter, so an eye that barely
+// responds on one side, or is noisy, scores low. In play the looks are small and the eyes can not be told apart, so it only switches on strong evidence (a clear 1.5x win and a real spread of looks), and the
+// choice is remembered on this device (localStorage spike_eye). Until it is sure both eyes are averaged. ?eye=a / ?eye=b force one (and remember it); ?eye=auto forgets.
+let eyeSaved = ''; try { eyeSaved = localStorage.getItem('spike_eye') || ''; } catch (e) { /* no storage */ }
+if (EYE_PICK === 'auto') { try { localStorage.removeItem('spike_eye'); } catch (e) { /* */ } eyeSaved = ''; }
+if (EYE_PICK === 'a' || EYE_PICK === 'b') { try { localStorage.setItem('spike_eye', EYE_PICK.toUpperCase()); } catch (e) { /* */ } }
+const EYE = { sel: EYE_PICK === 'a' ? 'A' : EYE_PICK === 'b' ? 'B' : (eyeSaved === 'A' || eyeSaved === 'B') ? eyeSaved : 'avg', bufA: [], bufB: [], t: 0, sA: 0, sB: 0, spread: 0, auto: EYE_PICK !== 'a' && EYE_PICK !== 'b', switches: 0 };
+function eyeScores(A, B) {
+  const n = Math.min(A.length, B.length); if (n < 100) return null;
+  const a = A.slice(-n), b = B.slice(-n), avg = a.map((x, i) => (x + b[i]) / 2), idx = avg.map((v, i) => i).sort((i, j) => avg[i] - avg[j]);
+  const k = Math.floor(n * 0.15), lo = idx.slice(0, k), hi = idx.slice(n - k), mid = idx.slice(Math.floor(n * 0.3), Math.floor(n * 0.7));
+  const mean = (v, ix) => ix.reduce((t, i) => t + v[i], 0) / ix.length;
+  const jit = (v) => { let j = 0; for (let i = 1; i < v.length; i++) j += Math.abs(v[i] - v[i - 1]); return j / (v.length - 1); };
+  const one = (v) => { const c = mean(v, mid), up = mean(v, hi) - c, dn = c - mean(v, lo); return { med: c, score: Math.max(0, Math.min(up, dn)) / (jit(v) + 0.002) }; };
+  return { A: one(a), B: one(b), spread: Math.abs(mean(avg, hi) - mean(avg, lo)) };
+}
+function eyeAuto(t) {
+  if (!EYE.auto || t - EYE.t < 2) return; EYE.t = t;
+  const r = eyeScores(EYE.bufA, EYE.bufB); if (!r) return;
+  EYE.sA = r.A.score; EYE.sB = r.B.score; EYE.spread = r.spread;
+  if (r.spread < 0.05) return;          // no real looking around yet: can not tell
+  const want = r.A.score > r.B.score * 1.5 ? 'A' : r.B.score > r.A.score * 1.5 ? 'B' : EYE.sel;
+  if (want === EYE.sel) return;
+  const nb = want === 'A' ? EYE.bufA : EYE.bufB;
+  if (KIT.zones) { const old = median(KIT.zall.slice(-300)); KIT.zones.m += (want === 'A' ? r.A.med : r.B.med) - old; KIT.zall = nb.slice(-300); KIT.zbuf = []; KIT.zh = []; }          // the new eye reads at a different level: move the middle with it
+  EYE.sel = want; EYE.switches++;
+  try { localStorage.setItem('spike_eye', want); } catch (e) { /* no storage */ }
+}
 const RS = Math.min(1, Math.max(0.3, parseFloat(Q.get('rs') || '1')));
 // MUSIC: the funk tracks of the Godot game, played in turn (the server maps /music/ to godot/music_web). M mutes. ?nomusic turns it off.
 const TRACKS = ['funk_it', 'quirky_funk', 'funk_express'];
@@ -409,7 +438,8 @@ if (eyeMode) {
       tracker.camW = 1280; tracker.camH = 720; tracker.fullRes = true; tracker.useWorker = true;
       tracker.onSteady = (hx, t, ha, hb) => {          // hx = both eyes averaged; ha / hb = each eye alone (a lens can distort one of them). ?eye=a or ?eye=b drives the game from one eye; ?eye=best picks the cleaner one as it goes
         pkCount++; KIT.ha = ha; KIT.hb = hb; KIT.yaw = tracker.head ? tracker.head.yaw * 57.2958 : 0; KIT.pitch = tracker.head ? tracker.head.pitch * 57.2958 : 0;
-        const pick = EYE_PICK === 'a' && Number.isFinite(ha) ? ha : EYE_PICK === 'b' && Number.isFinite(hb) ? hb : hx;
+        if (Number.isFinite(ha) && Number.isFinite(hb)) { EYE.bufA.push(ha); EYE.bufB.push(hb); if (EYE.bufA.length > 400) { EYE.bufA.shift(); EYE.bufB.shift(); } eyeAuto(t); }
+        const pick = EYE.sel === 'A' && Number.isFinite(ha) ? ha : EYE.sel === 'B' && Number.isFinite(hb) ? hb : hx;
         KIT.add(pick, 0, 0, t);
       };          // (the tracker already holds readings through blinks, so the blink inputs are zero here)
       await tracker.start((st) => { $('mp').textContent = st; window.__gazeStatus = st === 'ready' ? 'camera on' : st; }, Q.get('fakecam'));
@@ -527,7 +557,7 @@ function gaugeUpdate() {
   const ly = mid + LOCK.lane * -0.9 * k;          // the locked lane, drawn at the same height as a full look that way
   c.fillStyle = '#0f8'; c.fillRect(plotW + 6, ly - 5, 14, 10);
   const z = KIT.zones;
-  gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  A ' + (Number.isFinite(KIT.ha) ? KIT.ha.toFixed(4) : '-') + ' B ' + (Number.isFinite(KIT.hb) ? KIT.hb.toFixed(4) : '-') + '  yaw ' + (KIT.yaw || 0).toFixed(0) + '°' + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\nsides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
+  gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  A ' + (Number.isFinite(KIT.ha) ? KIT.ha.toFixed(4) : '-') + ' B ' + (Number.isFinite(KIT.hb) ? KIT.hb.toFixed(4) : '-') + '  yaw ' + (KIT.yaw || 0).toFixed(0) + '°  EYE ' + EYE.sel + ' (' + EYE.sA.toFixed(1) + ' / ' + EYE.sB.toFixed(1) + ' spread ' + EYE.spread.toFixed(2) + ')' + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\nsides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
 }
 addEventListener('keydown', (e) => { if (e.key === 'g' || e.key === 'G') gaugeOn = !gaugeOn; });
 // LOOK TARGETS (RunRig._draw_cards, which Godot showed out at the sides because things far away sit close to the middle of the screen, where looking at them barely moves the eyes). Three big round
@@ -731,7 +761,7 @@ function logSample(now) {
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch', gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch', eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
