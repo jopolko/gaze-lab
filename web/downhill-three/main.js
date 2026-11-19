@@ -441,7 +441,7 @@ if (eyeMode) {
       tracker = new Tracker(video);
       tracker.camW = 1280; tracker.camH = 720; tracker.fullRes = true; tracker.useWorker = true;
       tracker.onSteady = (hx, t, ha, hb) => {          // hx = both eyes averaged; ha / hb = each eye alone (a lens can distort one of them). ?eye=a or ?eye=b drives the game from one eye; ?eye=best picks the cleaner one as it goes
-        pkCount++; KIT.ha = ha; KIT.hb = hb; KIT.yaw = tracker.head ? tracker.head.yaw * 57.2958 : 0; KIT.pitch = tracker.head ? tracker.head.pitch * 57.2958 : 0;
+        pkCount++; KIT.ha = ha; KIT.hb = hb; KIT.roll = tracker.head ? tracker.head.roll * 57.2958 : 0; KIT.fx = tracker.feat ? tracker.feat[5] : 0; KIT.fy = tracker.feat ? tracker.feat[6] : 0; KIT.fsz = tracker.fsz || 0; KIT.lids = tracker.lids || [0, 0]; KIT.yaw = tracker.head ? tracker.head.yaw * 57.2958 : 0; KIT.pitch = tracker.head ? tracker.head.pitch * 57.2958 : 0;
         if (Number.isFinite(ha) && Number.isFinite(hb)) { EYE.bufA.push(ha); EYE.bufB.push(hb); if (EYE.bufA.length > 400) { EYE.bufA.shift(); EYE.bufB.shift(); } eyeAuto(t); }
         const pick = EYE.sel === 'A' && Number.isFinite(ha) ? ha : EYE.sel === 'B' && Number.isFinite(hb) ? hb : hx;
         KIT.add(pick, 0, 0, t);
@@ -765,12 +765,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch', eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB', eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
