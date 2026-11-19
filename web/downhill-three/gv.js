@@ -16,7 +16,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.toneMapping = THREE.CineonToneMapping; renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(78, 1, 0.2, 1600);
 const clock = { t: 0 };
-const U = { uTime: { value: 0 }, uBoard: { value: new THREE.Vector2() } };
+const U = { uTime: { value: 0 }, uBoard: { value: new THREE.Vector2() }, fogColor: { value: new THREE.Color(0.35, 0.05, 0.45) }, fogDensity: { value: 0.001 } };          // (Godot's exponential fog, shared with the custom shaders: 1 - exp(-density * distance) toward the fog colour, in linear light, before the tonemap)
+const FOGF = 'float fd = distance(wp, cameraPosition); col = mix(col, fogColor, 1. - exp(-fogDensity * fd));';
 const rgb = (a, srgb = true) => new THREE.Color().setRGB(a[0], a[1], a[2], srgb ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace);
 const mat4 = (x) => new THREE.Matrix4().set(x[0], x[3], x[6], x[9], x[1], x[4], x[7], x[10], x[2], x[5], x[8], x[11], 0, 0, 0, 1);          // dump: basis columns x,y,z then origin
 
@@ -29,14 +30,14 @@ const TAIL = `
 `;
 function groundMat(params) {          // GROUND_PSY (Themes.gd): two grids of squares, the second 3.7% finer and turning about the board, coloured by how far in step they are
   return new THREE.ShaderMaterial({
-    uniforms: { uTime: U.uTime, gcen: U.uBoard, speed: { value: params.speed || 0 } }, side: THREE.DoubleSide,
+    uniforms: { uTime: U.uTime, gcen: U.uBoard, fogColor: U.fogColor, fogDensity: U.fogDensity, speed: { value: params.speed || 0 } }, side: THREE.DoubleSide,
     vertexShader: 'varying vec3 wp; varying vec3 vC; attribute vec3 color; void main(){ wp = (modelMatrix * vec4(position,1.)).xyz; vC = color; gl_Position = projectionMatrix * viewMatrix * vec4(wp,1.); }',
-    fragmentShader: `uniform float uTime, speed; uniform vec2 gcen; varying vec3 wp; ${GLSL_HSV}
+    fragmentShader: `uniform float uTime, speed, fogDensity; uniform vec3 fogColor; uniform vec2 gcen; varying vec3 wp; ${GLSL_HSV}
       void main(){ float dist = distance(wp, cameraPosition); float sc = 1. / 6.; vec2 g1 = wp.xz * sc; float grid1 = sin(g1.x * 6.283) * sin(g1.y * 6.283);
         float t = uTime * .15 * .3, ca = cos(t), sa = sin(t); vec2 rp = wp.xz - gcen; vec2 g2 = vec2(rp.x * ca - rp.y * sa, rp.x * sa + rp.y * ca) * sc * 1.037; float grid2 = sin(g2.x * 6.283) * sin(g2.y * 6.283);
         float far = 1. - smoothstep(130., 340., dist); float amp = mix(.5, grid1 * grid2 * .5 + .5, far); float sq = mix(.5, smoothstep(-.06, .06, grid1), far);
         vec3 col = hsv(fract(amp * .5 + uTime * .03), .9, .25 + .75 * pow(amp, .65)) * (.62 + .38 * sq); col *= .75 + .25 * speed;
-        gl_FragColor = vec4(col * col, 1.); ${TAIL} }`,
+        col = col * col; ${FOGF} gl_FragColor = vec4(col, 1.); ${TAIL} }`,
   });
 }
 function vegMat() {          // VEG_PSY: dark purple, neon where bright, the neon hue drifting with where it stands and with time; lit (roughness .5), so it is a standard material with the albedo and emission replaced
@@ -61,9 +62,9 @@ function skyMat() {          // SKY_PSY
         gl_FragColor = vec4(mix(vec3(.10, .01, .16), col, horizon), 1.); ${TAIL} }` });
 }
 function backdropMat(params) {          // the distant backdrop with the HORIZON BEND (past 140 m the world curls up with the square of the distance)
-  return new THREE.ShaderMaterial({ uniforms: { albedo: { value: rgb(params.albedo_color || [1, 1, 1], true) }, bend_k: { value: params.bend_k || 0 } }, side: THREE.DoubleSide,
-    vertexShader: 'attribute vec3 color; varying vec3 vC; uniform float bend_k; void main(){ vC = color; vec4 w = modelMatrix * vec4(position, 1.); float bd = max(length(w.xz - cameraPosition.xz) - 140., 0.); w.y += bend_k * bd * bd; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: `uniform vec3 albedo; varying vec3 vC; void main(){ gl_FragColor = vec4(vC * albedo, 1.); ${TAIL} }` });
+  return new THREE.ShaderMaterial({ uniforms: { fogColor: U.fogColor, fogDensity: U.fogDensity, albedo: { value: rgb(params.albedo_color || [1, 1, 1], true) }, bend_k: { value: params.bend_k || 0 } }, side: THREE.DoubleSide,
+    vertexShader: 'attribute vec3 color; varying vec3 vC; varying vec3 wp; uniform float bend_k; void main(){ vC = color; vec4 w = modelMatrix * vec4(position, 1.); wp = w.xyz; float bd = max(length(w.xz - cameraPosition.xz) - 140., 0.); w.y += bend_k * bd * bd; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: `uniform vec3 albedo, fogColor; uniform float fogDensity; varying vec3 wp; varying vec3 vC; void main(){ vec3 col = vC * albedo; ${FOGF} gl_FragColor = vec4(col, 1.); ${TAIL} }` });
 }
 function quadMat(code, params) {          // the soft additive glow quads and the tint gradient
   const add = code.includes('blend_add');
@@ -116,13 +117,13 @@ function geoOf(id) {
 }
 // ancestors must be visible; only the level's own world (the rig's meshes), not the UI or the player body
 const vis = {}; const ground = []; let nMesh = 0, nInst = 0;
-const NODE = new THREE.Group(); scene.add(NODE);
+const NODE = new THREE.Group(); scene.add(NODE); let ring = null;          // the mountain ring (the 1620-vertex vertex-coloured mesh): Godot moves it with the board so it never moves against the road
 for (const n of lvl.nodes) {
   vis[n.path] = n.vis !== false; const parts = n.path.split('/'); let ok = true; for (let k = 2; k < parts.length; k++) if (vis['/' + parts.slice(1, k + 1).join('/')] === false) { ok = false; break; }
   if (!ok || !n.path.startsWith('/MainLevel/RunRig') || n.path.includes('@Camera3D') || n.path.includes('SubViewport')) continue;
   if (n.class === 'MeshInstance3D' && n.mesh) {
     const gs = geoOf(n.mesh); const M4 = mat4(n.xf);
-    for (const [g, sm] of gs) { const mat = matOf(n.mat_override || sm); if (!mat) continue; const m = new THREE.Mesh(g, mat); m.matrixAutoUpdate = false; m.matrix.copy(M4); m.frustumCulled = false; NODE.add(m); nMesh++; if (lvl.materials[n.mat_override || sm]?.shader_code?.includes('MOIRE')) ground.push(m); }
+    for (const [g, sm] of gs) { const mat = matOf(n.mat_override || sm); if (!mat) continue; const m = new THREE.Mesh(g, mat); m.matrixAutoUpdate = false; m.matrix.copy(M4); m.frustumCulled = false; NODE.add(m); nMesh++; if (lvl.materials[n.mat_override || sm]?.shader_code?.includes('MOIRE')) ground.push(m); if (g.attributes.position.count === 1620 && !ring) ring = m; }
   } else if (n.class === 'MultiMeshInstance3D' && n.mesh && n.count) {
     const gs = geoOf(n.mesh); const NM = mat4(n.xf);
     for (const [g, sm] of gs) {
@@ -139,7 +140,7 @@ if (sunNode) {
   sun.position.copy(dir.clone().multiplyScalar(-200)); sun.target.position.set(0, 0, 0); scene.add(sun, sun.target);
 }
 if (envNode) {
-  const e = envNode.env; scene.fog = new THREE.FogExp2(rgb(e.fog_light_color), e.fog_density);
+  const e = envNode.env; scene.fog = new THREE.FogExp2(rgb(e.fog_light_color), e.fog_density); U.fogColor.value.copy(rgb(e.fog_light_color)); U.fogDensity.value = e.fog_density;
   scene.add(new THREE.HemisphereLight(new THREE.Color(0.10, 0.01, 0.16), new THREE.Color(0.05, 0.0, 0.12), e.ambient_light_energy * Math.PI));          // (ambient comes from the sky: dark violet here)
   renderer.toneMappingExposure = e.tonemap_exposure || 1.05;
 }
@@ -152,11 +153,15 @@ addEventListener('keydown', (e) => { if (e.key === ' ') st.paused = !st.paused; 
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize); resize();
 let last = performance.now(), fps = 0, acc = 0, frames = 0;
+const SHOT = Q.has('shot') ? lvl.shots[parseInt(Q.get('shot'), 10) || 0] : null;
+if (SHOT) { st.paused = true; const img = document.createElement('img'); img.src = './shots/godot_' + String(SHOT.i).padStart(2, '0') + '.png'; img.id = 'ref'; img.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;object-fit:fill;opacity:' + (Q.get('ref') || '0') + ';pointer-events:none;z-index:4'; document.body.appendChild(img); addEventListener('keydown', (e) => { if (e.key === 'g') img.style.opacity = img.style.opacity === '1' ? '0' : (img.style.opacity === '0.5' ? '1' : '0.5'); }); camera.fov = SHOT.fov; }
 function frame(now) {
   requestAnimationFrame(frame); const dt = Math.min(0.05, (now - last) / 1000); last = now; clock.t += dt; U.uTime.value = clock.t;
   if (!st.paused) st.z -= st.speed * dt;
+  if (SHOT) { const M4 = mat4(SHOT.xf), p = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3(); M4.decompose(p, q, sc); camera.position.copy(p); camera.quaternion.copy(q); if (ring) { const e = ring.matrix.elements; e[12] = p.x; e[13] = p.y - 1.7 - 159.696; e[14] = p.z; } U.uBoard.value.set(p.x, p.z); sky.position.copy(camera.position); renderer.render(scene, camera); return; }
   const gy = groundY(st.x, st.z); if (gy !== null) st.y += ((gy + 3.2) - st.y) * Math.min(1, dt * 8); else st.y -= 0;
   const ahead = groundY(st.x, st.z - 30); const pitch = (gy !== null && ahead !== null) ? Math.atan2(ahead - gy, 30) : 0;
+  if (ring) { const e = ring.matrix.elements; e[12] = st.x; e[13] = st.y - 1.7 - 159.696; e[14] = st.z; }
   camera.position.set(st.x, st.y, st.z); camera.rotation.set(-0.06 + pitch * 0.8, 0, 0, 'YXZ'); U.uBoard.value.set(st.x, st.z); sky.position.copy(camera.position);
   renderer.render(scene, camera);
   frames++; acc += dt; if (acc > 0.5) { fps = frames / acc; frames = 0; acc = 0; hud.textContent = LVL + '  seed ' + lvl.seed + '  ' + lvl.theme + '\n' + nMesh + ' meshes, ' + nInst + ' instances, ' + Object.keys(lvl.meshes).length + ' unique meshes\nz ' + st.z.toFixed(0) + '  speed ' + st.speed.toFixed(0) + '  ' + fps.toFixed(0) + ' fps'; }

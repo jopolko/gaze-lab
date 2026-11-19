@@ -8,6 +8,7 @@ var nodes: Array = []
 var seen: Dictionary = {}
 var out_rows: Dictionary = {}
 var rig_ref: RunRig = null
+var shots: Array = []
 
 
 func r3(x: float) -> float:
@@ -249,7 +250,7 @@ func _ready() -> void:
 	var seed_v := int(OS.get_environment("SEED")) if OS.get_environment("SEED") != "" else 7
 	var theme := OS.get_environment("THEME") if OS.get_environment("THEME") != "" else "psychedelic"
 	var segs := int(OS.get_environment("SEGS")) if OS.get_environment("SEGS") != "" else 12
-	rig.apply_menu({"journey": true, "seed": seed_v, "theme": theme, "mus": "off", "session": 10, "trip": 1}, level)
+	rig.apply_menu({"journey": OS.get_environment("JOURNEY") != "", "seed": seed_v, "theme": theme, "mus": "off", "session": 10, "trip": 0 if OS.get_environment("JOURNEY") == "" else 1}, level)
 	await get_tree().process_frame
 	var dt := 1.0 / 60.0
 	GazeProvider.set_scripted(Vector2(0.5, 0.45))
@@ -258,21 +259,37 @@ func _ready() -> void:
 	capture(level)
 	var guard := 0
 	var stage := 0
+	var shot_stage := 0
 	while rig._next_j < segs and guard < 6000:
 		guard += 1
 		rig.spos.z -= 12.0
+		rig.spos.y = rig.terrain_h(rig.spos.x, rig.spos.z)
+		rig.grounded = true
+		rig._gh_prev = rig.spos.y
+		rig.vel = Vector2(0.0, -20.0)
 		rig._physics_process(dt)
 		rig._process(dt)
 		if int(-rig.spos.z / 270.0) > stage:
 			stage = int(-rig.spos.z / 270.0)
 			await get_tree().process_frame
 			capture(level)
+		if OS.get_environment("SHOTS") != "" and int(-rig.spos.z / 450.0) > shot_stage and -rig.spos.z > 100.0:
+			shot_stage = int(-rig.spos.z / 450.0)
+			rig._process(dt)
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			var cam := get_viewport().get_camera_3d()
+			var img := get_viewport().get_texture().get_image()
+			var idx := shots.size()
+			img.save_png(OS.get_environment("SHOTS") + "/godot_%02d.png" % idx)
+			shots.append({"i": idx, "z": r3(rig.spos.z), "xf": xf(cam.global_transform), "fov": r3(cam.fov), "w": img.get_width(), "h": img.get_height()})
 	await get_tree().process_frame
 	capture(level)
 	var out := {"seed": seed_v, "theme": theme, "segs": rig._next_j, "ROW_GAP": rig.ROW_GAP, "W_HALF": rig.W_HALF, "SLOPE": rig.SLOPE, "start": v3a(start)}
 	out["nodes"] = nodes
 	out["meshes"] = meshes
 	out["materials"] = mats
+	out["shots"] = shots
 	out["rows"] = out_rows
 	var rows := out_rows
 	out["kickers"] = js(rig._kickers)
