@@ -589,9 +589,17 @@ const cards = [-1, 0, 1].map((p) => {
   e.style.cssText = 'position:fixed;z-index:4;pointer-events:none;border-radius:50%;display:none;text-align:center;font:700 clamp(9px,1.6vmin,13px) ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#fff;text-shadow:0 0 4px #000;width:' + sz + ';height:' + sz + ';line-height:' + sz + ';top:' + (big ? '46%' : '24%') + ';left:' + (p < 0 ? '4%' : p > 0 ? 'auto' : 'calc(50% - 33px)') + ';right:' + (p > 0 ? '4%' : 'auto');
   document.body.appendChild(e); return e;
 });
+// THE GUIDE MARKER: a big pulsing ring with LOOK HERE at the exact place to look (left 12% / middle 50% / right 88% of the screen width, 46% down): the true position of the look, which is also logged.
+const GX = { '-1': 0.12, '0': 0.5, '1': 0.88 };
+const guideEl = document.createElement('div');
+guideEl.style.cssText = 'position:fixed;z-index:6;pointer-events:none;display:none;border-radius:50%;width:clamp(120px,19vmin,200px);height:clamp(120px,19vmin,200px);margin:calc(clamp(120px,19vmin,200px) / -2) 0 0 calc(clamp(120px,19vmin,200px) / -2);top:46%;border:6px solid #fff;background:radial-gradient(circle,#fff3,#fff0 70%);color:#fff;font:700 clamp(15px,2.6vmin,26px) ui-monospace,Consolas,monospace;letter-spacing:.12em;text-align:center;display:none;text-shadow:0 0 8px #000;align-items:center;justify-content:center';
+guideEl.textContent = 'LOOK HERE';
+document.body.appendChild(guideEl);
 function cardsUpdate() {
   let row = null, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; }
+  const grow = row && row.guide !== 9 && wasReady ? row : null;
+  if (grow) { const k = 1 + 0.08 * Math.sin(performance.now() / 140); guideEl.style.display = 'flex'; guideEl.style.left = (GX[grow.guide] * 100) + '%'; guideEl.style.transform = 'scale(' + k.toFixed(3) + ')'; guideEl.style.boxShadow = '0 0 ' + (30 + 20 * Math.sin(performance.now() / 140)) + 'px #fff'; } else guideEl.style.display = 'none';
   for (let i = 0; i < 3; i++) {
     const e = cards[i], p = i - 1, lane = p;
     if (!row || lane < -1 || lane > 1 || !KIT.zones) { e.style.display = 'none'; continue; }
@@ -600,15 +608,14 @@ function cardsUpdate() {
     e.style.background = 'radial-gradient(circle,#000b 58%,transparent 60%), conic-gradient(' + (on ? '#6f6' : k.c) + ' ' + Math.round(fill * 360) + 'deg, #fff3 0)';
     e.style.boxShadow = '0 0 ' + (on ? 14 : 8) + 'px ' + k.c; e.textContent = k.n;
     if (row.guide !== 9) {          // a guided row: the card to look at pulses and says so, the others fade
-      const g = lane === row.guide; e.style.opacity = g ? '1' : '0.25';
-      if (g) { e.textContent = 'LOOK HERE'; e.style.boxShadow = '0 0 ' + (18 + 10 * Math.sin(performance.now() / 120)) + 'px #fff'; e.style.outline = '3px solid #fff'; } else e.style.outline = 'none';
+      const g = lane === row.guide; e.style.opacity = g ? '0.5' : '0.15'; e.style.outline = 'none';
     } else { e.style.opacity = '1'; e.style.outline = 'none'; }
   }
 }
 let waitT = 0, wasReady = false;
 function ctrlReady() {          // the world holds still until the middle is learned (or 15 s have passed without a camera: then it plays on)
   const ok = !eyeMode || (KIT.zones && (!EM || EM.ready)) || waitT > 15;
-  if (ok && !wasReady) { wasReady = true; if (GUIDE.on) bannerShow('LOOK WHERE IT SAYS', true); }
+  if (ok && !wasReady) { wasReady = true; if (GUIDE.on) { bannerShow('LOOK AT THE RING', false); setTimeout(() => bannerShow('LOOK AT THE RING', true), 1700); } }
   return ok;
 }
 function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; } return row && row.guide !== 9 ? row : null; }
@@ -791,7 +798,7 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : +(((cards[KIT.gl + 1].getBoundingClientRect().left + cards[KIT.gl + 1].getBoundingClientRect().right) / 2) / innerWidth).toFixed(3)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl]]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
