@@ -523,8 +523,29 @@ function gaugeUpdate() {
   gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\nsides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
 }
 addEventListener('keydown', (e) => { if (e.key === 'g' || e.key === 'G') gaugeOn = !gaugeOn; });
+// LOOK TARGETS (RunRig._draw_cards, which Godot showed out at the sides because things far away sit close to the middle of the screen, where looking at them barely moves the eyes). Three big round
+// cards: the thing LEFT of the lane the board is going for, the thing RIGHT of it, and (small, top middle) the thing it is going for. Each is coloured as the thing in the nearest row and its ring fills while the
+// eyes ask for it. Looking at the left card is a look left, so it steps the board one lane left; the lane in the middle of the row is the card in the middle.
+const CARD_KIND = (o) => !o ? { n: 'EMPTY', c: '#667' } : o.type === 0 ? { n: 'POINTS', c: '#3f8' } : o.type === 1 ? { n: 'RING', c: '#fd3' } : o.type === 2 ? { n: PICKS[o.pick].name, c: 'rgb(' + PICKS[o.pick].col.map((v) => Math.round(v * 255)).join(',') + ')' } : o.type === 3 ? { n: 'RAMP', c: '#f5f' } : { n: 'ROCKS', c: '#f44' };
+const cards = [-1, 0, 1].map((p) => {
+  const e = document.createElement('div'), big = p !== 0, sz = big ? 'clamp(60px,11vmin,96px)' : 'clamp(44px,8vmin,66px)';
+  e.style.cssText = 'position:fixed;z-index:4;pointer-events:none;border-radius:50%;display:none;text-align:center;font:700 clamp(9px,1.6vmin,13px) ui-monospace,Consolas,monospace;letter-spacing:.08em;color:#fff;text-shadow:0 0 4px #000;width:' + sz + ';height:' + sz + ';line-height:' + sz + ';top:' + (big ? '46%' : '24%') + ';left:' + (p < 0 ? '4%' : p > 0 ? 'auto' : 'calc(50% - 33px)') + ';right:' + (p > 0 ? '4%' : 'auto');
+  document.body.appendChild(e); return e;
+});
+function cardsUpdate() {
+  let row = null, bz = -1e9;
+  for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; }
+  for (let i = 0; i < 3; i++) {
+    const e = cards[i], p = i - 1, lane = LOCK.lane + p;
+    if (!row || lane < -1 || lane > 1 || !KIT.zones) { e.style.display = 'none'; continue; }
+    const k = CARD_KIND(row.s[lane + 1]), fill = p === 0 ? 1 : Math.min(1, LOCK.want[lane] / 0.5), on = p === 0;
+    e.style.display = 'block';
+    e.style.background = 'radial-gradient(circle,#000b 58%,transparent 60%), conic-gradient(' + (on ? '#6f6' : k.c) + ' ' + Math.round(fill * 360) + 'deg, #fff3 0)';
+    e.style.boxShadow = '0 0 ' + (on ? 14 : 8) + 'px ' + k.c; e.textContent = k.n;
+  }
+}
 function updateLane(dt) {
-  calUpdate(dt); gaugeUpdate();
+  calUpdate(dt); gaugeUpdate(); cardsUpdate();
   if (!KIT.zones) {          // the first 40 readings are still coming in: the board stays in the middle, but the dot already follows the eyes (against the middle seen so far, at the starting size)
     lane = 0; steerTarget = 0;
     if (KIT.lastHx !== null && KIT.zauto.length) {
