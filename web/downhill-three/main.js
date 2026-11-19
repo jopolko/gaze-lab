@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795104868';
+import { EyeModel } from './eyemodel.js?v=1795105279';
 
 const Q = new URLSearchParams(location.search);
 const OPEN = Q.has('open') || Q.has('hub');
@@ -858,7 +858,9 @@ function gaugeUpdate() {
   const ly = mid + LOCK.lane * -0.9 * k;          // the locked lane, drawn at the same height as a full look that way
   c.fillStyle = '#0f8'; c.fillRect(plotW + 6, ly - 5, 14, 10);
   const z = KIT.zones;
+  const carTxt = BUGGY && inHub ? '\ncar: steer ' + (BUG.st || 0).toFixed(2) + '  fwd ' + (BUG.vf || 0).toFixed(1) + '  grounded ' + BUG.grounded + '  heading ' + OW.th.toFixed(2) + '  lean ' + (HEAD.u || 0).toFixed(2) : '';
   gTxt.textContent = z ? 'hx ' + (KIT.lastHx || 0).toFixed(4) + '  A ' + (Number.isFinite(KIT.ha) ? KIT.ha.toFixed(4) : '-') + ' B ' + (Number.isFinite(KIT.hb) ? KIT.hb.toFixed(4) : '-') + '  yaw ' + (KIT.yaw || 0).toFixed(0) + '°  EYE ' + EYE.sel + ' (' + EYE.sA.toFixed(1) + ' / ' + EYE.sB.toFixed(1) + ' spread ' + EYE.spread.toFixed(2) + ')' + '  centre ' + (z.m + KIT.zdrift).toFixed(4) + '  zn ' + KIT.zn.toFixed(2) + '\n' + (EM ? 'MODEL  L ' + EM.post[0].toFixed(2) + '  M ' + EM.post[1].toFixed(2) + '  R ' + EM.post[2].toFixed(2) + '   ' : '') + 'sides L ' + Math.abs(z.dl).toFixed(3) + ' R ' + Math.abs(z.dr).toFixed(3) + '  lock ' + ['LEFT', 'MID', 'RIGHT'][LOCK.lane + 1] : 'learning the middle...';
+  gTxt.textContent += carTxt;
 }
 addEventListener('keydown', (e) => { if (e.key === 'g' || e.key === 'G') gaugeOn = !gaugeOn; });
 // LOOK TARGETS (RunRig._draw_cards, which Godot showed out at the sides because things far away sit close to the middle of the screen, where looking at them barely moves the eyes). Three big round
@@ -1224,12 +1226,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3), +HEAD.vy.toFixed(3), +HEAD.u.toFixed(3), +CH.gap.toFixed(0)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3), +HEAD.vy.toFixed(3), +HEAD.u.toFixed(3), +CH.gap.toFixed(0), +(BUG.st || 0).toFixed(2), +(BUG.vf || 0).toFixed(1), BUG.grounded ? 1 : 0, +OW.th.toFixed(2)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk,hv,hu,cg', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk,hv,hu,cg,bst,bvf,bgr,oth', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch(LOCAL ? '/spike/log' : '../log.php', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
@@ -1501,7 +1503,7 @@ function quickShow(on) { quick.style.display = on ? 'flex' : 'none'; }
 function setHelp(txt) { const hp = document.getElementById('help'); if (hp) hp.textContent = txt; }
 const HUBWORLD = BUGGY ? 6 : 0, HELP_HUB = BUGGY ? 'THE HUB. Lean forward for gas, back to brake and reverse, turn your head to steer, nod up to hop. Smash things, find molecules, drive up a ramp to race, or tap a button below.' : 'THE HUB. Turn your head to carve, lean in for speed and back to slow, nod to reach up or down. Ride up a ramp and through a gateway to start that world\'s run. Molecules you find come with you.', HELP_RUN = 'RUN: reach the finish line. Steer with your head, lean for speed, nod for high and low. Molecules change the world.';
 function enterRun(P) {
-  quickShow(false); inHub = false; RUN.active = true; RUN.done = false; RUN.theme = P.theme; RUN.id = P.id; groundMat.uniforms.uOpen.value = 0; groundMat.uniforms.uTer.value = Q.has('flat') ? 0 : 1; hubGroup.visible = false; hubTrail.visible = false;
+  quickShow(false); if (typeof cockpit !== 'undefined') { cockpit.visible = false; bugGrp.visible = false; } inHub = false; RUN.active = true; RUN.done = false; RUN.theme = P.theme; RUN.id = P.id; groundMat.uniforms.uOpen.value = 0; groundMat.uniforms.uTer.value = Q.has('flat') ? 0 : 1; hubGroup.visible = false; hubTrail.visible = false;
   for (const mm of OPENM) mm.count = 0; OLDM.forEach((m, i) => { m.count = OLDC[i]; }); molMeshes.forEach((m, i) => { m.count = MOLC0[i]; });
   worldLocked = true; setWorld(P.theme, true);
   zPos = 0; zPrev = 0; camX = 0; speed = 28; tPlay = 0; steer = 0; steerTarget = 0; lane = 0; HEAD.vx = 0; HEAD.s = 0; HEAD.vv = 0; HEAD.acc = 0; Object.assign(ST, { boost: 0, shield: 0, mult: 0, y: 0, vy: 0, air: 0, chainT: 0, chain: 0 });
@@ -1537,6 +1539,7 @@ function musicTick(dt) {
 // crests with the vertical speed it had, lands with a squash and a bounce, and everything it hits is rubber: bumpers throw it back harder than it came, trampolines fire it up, barrels burst into pieces, bombs go off
 // and shove everything near (and set the next bomb off). Hits are notes and booms on the music's beat.
 // ======================================================================================================================================================================================================
+const cockpit = new THREE.Group(), CHASE = Q.has('chase');          // the view is from the driver's seat with the hood and front wheels in front (?chase for the camera behind)
 const BUG = { y: 0, yv: 0, gPrev: 0, grounded: true, wasG: true, squash: 0, hopT: 0, pitch: 0, roll: 0, wheel: 0, shake: 0, camX: 0, camY: 0, camZ: 0, camInit: false, tramT: 0, spin: 0 };
 const rampH = (x, z) => { let h = 0; for (const P of PORTALS) { const dx = x - P.x, dz = z - P.z; if (Math.abs(dx) < 12 && dz > -1 && dz < 44.5) h = Math.max(h, P.gy - HOf(x, z) + Math.max(0, 6.2 - (dz - 22) * 0.3093)); } return h; };
 const groundAt = (x, z) => HOf(x, z) + (PORTALS ? rampH(x, z) : 0);
@@ -1546,9 +1549,14 @@ if (BUGGY) {
   const hood = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.5, 2.0), MBC([1.0, 0.7, 0.3])); hood.position.set(0, 2.25, -1.6); bugGrp.add(hood);
   const seat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.9, 1.2), MBC([0.15, 0.15, 0.2])); seat.position.set(0, 2.4, 0.9); bugGrp.add(seat);
   const cage = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(3.0, 2.4, 3.0)), new THREE.LineBasicMaterial({ color: 0xffffff })); cage.position.set(0, 3.2, 1.0); bugGrp.add(cage);
-  bugGrp.wheels = []; for (const [wx, wz] of [[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.9, 14), MBC([0.1, 0.1, 0.12])); w.rotation.z = Math.PI / 2; const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.95, 8), MBC([0.9, 0.9, 0.95])); hub.rotation.z = Math.PI / 2; const g = new THREE.Group(); g.add(w); g.add(hub); g.position.set(wx, 1.0, wz); bugGrp.add(g); bugGrp.wheels.push(g); }
+  bugGrp.wheels = []; for (const [wx, wz] of [[-1.9, -1.9], [1.9, -1.9], [-1.9, 1.9], [1.9, 1.9]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.9, 14), MBC([0.1, 0.1, 0.12])); w.rotation.z = Math.PI / 2; const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.95, 8), MBC([0.9, 0.9, 0.95])); hub.rotation.z = Math.PI / 2; const g = new THREE.Group(); g.add(w); g.add(hub); g.rotation.order = 'YXZ'; g.position.set(wx, 1.0, wz); bugGrp.add(g); bugGrp.wheels.push(g); }
   for (const lx of [-1.1, 1.1]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.5, 0.2), MBC([1, 1, 0.6])); l.position.set(lx, 1.8, -2.85); bugGrp.add(l); }
   scene.add(bugGrp);
+  scene.add(camera);          // (so that things fixed to the camera are drawn)
+  cockpit.rotation.order = 'YXZ'; camera.add(cockpit);
+  const hoodM = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.5, 3.6), MBC([1.0, 0.45, 0.1])); hoodM.position.set(0, -1.55, -4.6); hoodM.rotation.x = -0.08; cockpit.add(hoodM);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.52, 3.62), MBC([1.0, 0.85, 0.3])); stripe.position.set(0, -1.54, -4.6); stripe.rotation.x = -0.08; cockpit.add(stripe);
+  cockpit.wheels = []; for (const wx of [-2.2, 2.2]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.05, 0.95, 16), MBC([0.1, 0.1, 0.12])); w.rotation.z = Math.PI / 2; const hb = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.0, 8), MBC([0.9, 0.9, 0.95])); hb.rotation.z = Math.PI / 2; const g = new THREE.Group(); g.rotation.order = 'YXZ'; g.add(w); g.add(hb); g.position.set(wx, -1.85, -5.2); cockpit.add(g); cockpit.wheels.push(g); }
   // mouse / keyboard: arrow keys or WASD drive it (a desk without a head)
   if (Q.has('mouse')) { const kd = { up: 0, dn: 0 }; const upd = () => { HEAD.u = kd.up - kd.dn; }; addEventListener('keydown', (e) => { if (e.key === 'ArrowUp' || e.key === 'w') { kd.up = 1; upd(); } if (e.key === 'ArrowDown' || e.key === 's') { kd.dn = 1; upd(); } if (e.key === ' ') HEAD.vt = 1; }); addEventListener('keyup', (e) => { if (e.key === 'ArrowUp' || e.key === 'w') { kd.up = 0; upd(); } if (e.key === 'ArrowDown' || e.key === 's') { kd.dn = 0; upd(); } if (e.key === ' ') HEAD.vt = 0; }); }
 }
@@ -1606,10 +1614,15 @@ function buggyFx(dt) {
   oDeb.count = n; oDeb.instanceMatrix.needsUpdate = true; if (oDeb.instanceColor) oDeb.instanceColor.needsUpdate = true;
   n = 0; for (const b of BLASTS) { const k = b.t / 0.55; m4.compose(v3.set(b.x, b.y, b.z), q4.identity(), s3.setScalar(3 + k * 26)); oBlast.setMatrixAt(n, m4); oBlast.setColorAt(n, colr.setRGB(1, 0.6 - 0.4 * k, 0.15).multiplyScalar(1 - k)); n++; }
   oBlast.count = n; oBlast.instanceMatrix.needsUpdate = true; if (oBlast.instanceColor) oBlast.instanceColor.needsUpdate = true;
-  bugGrp.visible = inHub; const sq = BUG.squash; bugGrp.position.set(OW.x, BUG.y, OW.z); bugGrp.rotation.set(BUG.pitch, -OW.th, BUG.roll, 'YXZ'); bugGrp.scale.set(1 + 0.35 * sq, 1 - 0.55 * sq, 1 + 0.35 * sq);
+  bugGrp.visible = inHub && CHASE; cockpit.visible = inHub && !CHASE; cockpit.position.y = -BUG.squash * 0.5; cockpit.wheels.forEach((w) => { w.rotation.y = -Math.max(-1.7, Math.min(1.7, BUG.st || 0)) * 0.3; w.rotation.x = -BUG.wheel; }); const sq = BUG.squash; bugGrp.position.set(OW.x, BUG.y, OW.z); bugGrp.rotation.set(BUG.pitch, -OW.th, BUG.roll, 'YXZ'); bugGrp.scale.set(1 + 0.35 * sq, 1 - 0.55 * sq, 1 + 0.35 * sq);
   bugGrp.wheels.forEach((w, i) => { w.children.forEach((c) => { c.rotation.x = 0; }); w.rotation.x = -BUG.wheel; if (i < 2) w.rotation.y = -Math.max(-1.7, Math.min(1.7, BUG.st || 0)) * 0.3; });
 }
 function buggyCamera(dt) {
+  if (!CHASE) {
+    const fx = Math.sin(OW.th), fz = -Math.cos(OW.th), sh = BUG.shake * 0.5, sq = BUG.squash;
+    camera.position.set(OW.x - fx * 0.6 + (Math.random() - 0.5) * sh, BUG.y + 3.4 - sq * 1.2 + (Math.random() - 0.5) * sh, OW.z - fz * 0.6 + (Math.random() - 0.5) * sh);
+    camera.rotation.order = 'YXZ'; camera.rotation.set(-0.06 + BUG.pitch * 0.7 + Math.max(-0.15, Math.min(0.15, (BUG.yv || 0) * -0.004)), -OW.th, BUG.roll * 0.9 - (OW.om || 0) * 0.025, 'YXZ'); camera.fov = 78 + Math.min(1, speed / 45) * 14 + TR.tun * 35; return;
+  }
   const fx = Math.sin(OW.th), fz = -Math.cos(OW.th), tx = OW.x - fx * 12.5, tz = OW.z - fz * 12.5, ty = BUG.y + 6.2;
   if (!BUG.camInit) { BUG.camX = tx; BUG.camY = ty; BUG.camZ = tz; BUG.camInit = true; }
   const k = 1 - Math.exp(-dt * 6); BUG.camX += (tx - BUG.camX) * k; BUG.camZ += (tz - BUG.camZ) * k; BUG.camY += (ty - BUG.camY) * (1 - Math.exp(-dt * 4));
