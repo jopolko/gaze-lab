@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Godot level viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 8px; top: 6px; color: #cfe; font: 11px/1.4 ui-monospace, Consolas, monospace; text-shadow: 0 0 4px #000; white-space: pre; pointer-events: none; z-index: 5; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 10px; text-align: center; color: #ddd; font: 12px ui-monospace, Consolas, monospace; z-index: 5; pointer-events: none; text-shadow: 0 0 4px #000; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../stargaze/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hud">loading the level data...</div>
+<div id="bar">space: pause / go &nbsp; arrows: steer sideways &nbsp; up / down: speed &nbsp; ?lvl=level_psy_s7  ?speed=40</div>
+<script type="module" src="./gv.js?v=1"></script>
+</body>
+</html>
