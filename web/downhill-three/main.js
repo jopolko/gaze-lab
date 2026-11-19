@@ -16,7 +16,28 @@ const EYE_PICK = Q.get('eye') || '';
 // LIVE TUNING: tune.json beside the log (web/spike/tune.json) is read every 2 s and applied to the running game, so settings can be changed while it is being played. {"v":N,"EM":{"DECIDE":0.8,...},"LOCK":{"qk":0.7,"midhold":0.28},"KIT":{...},"recentre":true}
 const TUNE = { qk: 0.7, midhold: 0.28, steerK: 14, camK: 10, v: -1 };          // steerK / camK: how fast the steering and the board follow the chosen lane (they were 6 and 5: the board took 0.31 s to get half way across, and 20% of rows were passed before it arrived)
 let EM = null;
-if (!Q.has('nomodel')) { let pr = null; try { pr = JSON.parse(localStorage.getItem('spike_em2') || 'null'); } catch (e) { /* */ } EM = new EyeModel(pr); }
+// PROFILES (per device, in this browser only): up to three sets of learned left / right offsets (glasses on, glasses off, another person). The most recent one is the starting point; when there are two or more, the
+// first few labelled looks of the session choose the one that fits them best (profChoose), and what is learned is written back to it (profStore). A first run on a device shows the LOOK HERE rings once.
+const PROF = { list: [], cur: -1, chosen: false };
+let CAL_DONE = false; try { CAL_DONE = localStorage.getItem('spike_cal_done') === '1'; } catch (e) { /* */ }
+function profSave() { try { localStorage.setItem('spike_profiles', JSON.stringify(PROF.list)); } catch (e) { /* */ } }
+if (!Q.has('nomodel')) {
+  try { PROF.list = JSON.parse(localStorage.getItem('spike_profiles') || '[]'); } catch (e) { PROF.list = []; }
+  let pr = null;
+  if (PROF.list.length) { PROF.cur = PROF.list.reduce((b, p, i) => (p.t > PROF.list[b].t ? i : b), 0); pr = { dL: PROF.list[PROF.cur].dL, dR: PROF.list[PROF.cur].dR }; }
+  EM = new EyeModel(pr); EM.hold = PROF.list.length > 1;          // with several profiles the first labelled looks choose one before any learning
+}
+function profChoose() {
+  const dflt = EM.fit([0.02, 0.02], [0.02, 0.02], EM.labeled); let best = -1, bs = 1e9;
+  PROF.list.forEach((p, i) => { const sc = EM.fit(p.dL, p.dR, EM.labeled); if (sc < bs) { bs = sc; best = i; } });
+  EM.hold = false; PROF.chosen = true;
+  if (best >= 0 && bs < dflt * 1.2) { EM.dL = PROF.list[best].dL.slice(); EM.dR = PROF.list[best].dR.slice(); PROF.cur = best; } else PROF.cur = -1;          // none fits: a new one is made when saving
+}
+function profStore() {
+  const p = { dL: EM.dL.slice(), dR: EM.dR.slice(), t: Date.now() };
+  if (PROF.cur >= 0) PROF.list[PROF.cur] = p; else { PROF.list.push(p); if (PROF.list.length > 3) PROF.list.shift(); PROF.cur = PROF.list.length - 1; }
+  profSave();
+}
 // WHICH EYE (glasses and lenses can distort one eye). The two eyes' readings are kept apart for the last ~25 s and each is judged at the moments BOTH eyes agree you looked left or right: the 15% of readings
 // where the two-eye average is furthest left, the 15% furthest right, against the middle 40%. An eye's score is its WEAKER side (how far it moves for a look that way) over its jitter, so an eye that barely
 // responds on one side, or is noisy, scores low. In play the looks are small and the eyes can not be told apart, so it only switches on strong evidence (a clear 1.5x win and a real spread of looks), and the
@@ -237,12 +258,21 @@ function mkThing(avoid, noRamp) {
 const mkRocks = () => ({ type: 4, pick: 0, orbs: [], done: false });
 // GUIDED ROWS (the calibration that is part of the game): for the first 3 rows exactly ONE lane holds a prize and the matching card says LOOK HERE, in a shuffled left / middle / right order. The true lane
 // of the look is then known, so the model learns from it directly (EyeModel.supervise) and the log holds true-target / model-guess pairs. ?noguide skips it.
-const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], hits: 0, tried: 0 };          // 3 rows by default (one look at each lane, in a shuffled order); ?guide=9 repeats them, for measuring how well the eyes are read
+const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse'), visible: Q.has('guide') || !CAL_DONE, max: Math.max(3, parseInt(Q.get('guide') || '3', 10) || 3), n: 0, seq: [], bSize: 0, bTried: 0, bHits: 0, pending: 0, tuneups: 0, lastTune: -999, first: false };
+GUIDE.first = GUIDE.on && GUIDE.visible; GUIDE.bSize = GUIDE.first ? GUIDE.max : 0;          // 3 rows by default (one look at each lane, shuffled): the rings are SHOWN only on the first run on a device (or ?guide), and for a tune-up; every other session starts with 3 normal-looking rows, each with one obviously better prize (hidden warm-up)
 for (let k = 0; k < Math.ceil(GUIDE.max / 3); k++) GUIDE.seq.push(...[-1, 0, 1].sort(() => Math.random() - 0.5));
+const VAL = { 0: 1, 1: 2, 2: 3, 3: 2.5, 4: -5 };          // what a thing is worth to someone choosing: used to see which lane of a row is clearly the best one (an inferred label for the eyes)
 function setRow(r, z) {
-  r.z = z; r.passed = false;
-  if (GUIDE.on && GUIDE.n < GUIDE.max) { const g = GUIDE.seq[GUIDE.n++]; r.guide = g; r.votes = [0, 0, 0]; r.s = [null, null, null]; r.s[g + 1] = { type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false }; return; }
-  r.guide = 9;
+  r.z = z; r.passed = false; r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0];
+  const orbs = () => ({ type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false });
+  if (GUIDE.pending > 0 || (GUIDE.on && GUIDE.n < GUIDE.max)) {          // a guided row: ONE lane holds the prize
+    const g = GUIDE.pending > 0 ? [-1, 0, 1][Math.floor(Math.random() * 3)] : GUIDE.seq[GUIDE.n++];
+    const vis = GUIDE.pending > 0 || GUIDE.visible; if (GUIDE.pending > 0) GUIDE.pending--;
+    r.lab = g; r.s = [null, null, null];
+    if (vis) { r.guide = g; r.lw = 1; r.s[g + 1] = orbs(); }          // shown: the ring says LOOK HERE
+    else { r.lw = 0.6; r.s = [orbs(), orbs(), orbs()]; r.s[g + 1] = { type: 2, pick: Math.floor(Math.random() * 4), orbs: [], done: false }; }          // hidden: three normal lanes, one clearly better (a pickup against orbs)
+    return;
+  }
   const calm = tPlay < 20;          // the first 20 seconds: no hazards
   const hzK = calm ? 0 : Math.min(0.7, 0.25 + tPlay * 0.002);          // how often something nasty is put in
   const roll = Math.random(), flip = Math.random() < 0.5 ? 1 : -1;
@@ -260,6 +290,8 @@ function setRow(r, z) {
     else if (Math.random() < 0.3) M = mkThing([L, R], true);          // the middle lane is rarely empty
   }
   r.s = [L, M, R];
+  const vals = r.s.map((o) => (o ? VAL[o.type] : 0)), top = Math.max(...vals), bi = vals.indexOf(top), second = Math.max(...vals.filter((v, i) => i !== bi));
+  if (top >= 2.5 && top - second >= 1.5) { r.lab = bi - 1; r.lw = (bi === 1 && L && L.type === 4 && R && R.type === 4) ? 0.8 : 0.4; }          // one lane clearly worth taking: the eyes are probably there (weak label; the centre layout, rocks on both sides, is the strongest)
 }
 let tPlay = 0;
 for (let i = 0; i < N_RING; i++) { const r = { i }; setRow(r, -(GUIDE.on ? 110 : 50) - i * ROW_GAP); rows.push(r); }
@@ -455,11 +487,19 @@ if (eyeMode) {
         KIT.add(pick, 0, 0, t);
         if (EM && Number.isFinite(ha) && Number.isFinite(hb)) {          // the model decides the zone once the middle is learned (KIT still runs, for the setup bar, blinks and the logs)
           EM.step([ha, hb]);
-          KIT.gl = 9; KIT.gp = 9;
-          const gr = EM.ready && wasReady ? guideRow() : null;
-          if (gr) { const tt = (zPos - gr.z) / Math.max(speed, 14); if (tt < 1.4 && tt > 0.25) { KIT.gl = gr.guide; KIT.gp = EM.zone; gr.votes[EM.zone + 1]++; EM.supervise([ha, hb], gr.guide); } }
+          KIT.gl = 9; KIT.gp = 9; KIT.gw = 0;
+          const gr = EM.ready && wasReady ? labRow() : null;
+          if (gr) {
+            const tt = (zPos - gr.z) / Math.max(speed, 14);
+            if (tt < 1.4 && tt > 0.25) {
+              KIT.gl = gr.lab; KIT.gp = EM.zone; KIT.gw = gr.lw; if (gr.guide !== 9) gr.votes[EM.zone + 1]++;
+              if (EM.hold && EM.labeled.length >= 25) profChoose();
+              if (gr.lw >= 0.99 || EM.post[gr.lab + 1] >= 0.12 || EM.labeled.length < 30) EM.supervise([ha, hb], gr.lab, gr.lw);          // an inferred label only counts when the model does not flatly disagree with it (a player who ignored the prize must not retrain it)
+            }
+          }
+          if (EM.ready && wasReady) { CONF.push(Math.max(EM.post[0], EM.post[1], EM.post[2])); if (CONF.length > 300) CONF.shift(); tuneCheck(); }
           if (EM.ready && KIT.zones) { if (KIT.zone !== EM.zone) KIT.zone_t = t; KIT.zone = EM.zone; KIT.zn = EM.zn; }
-          if (EM.n % 150 === 0) { try { localStorage.setItem('spike_em2', JSON.stringify(EM.save())); } catch (e) { /* */ } }
+          if (EM.n % 150 === 0 && EM.ready && !EM.hold && EM.labeled.length >= 15) profStore();
         }
       };          // (the tracker already holds readings through blinks, so the blink inputs are zero here)
       await tracker.start((st) => { $('mp').textContent = st; window.__gazeStatus = st === 'ready' ? 'camera on' : st; }, Q.get('fakecam'));
@@ -615,9 +655,16 @@ function cardsUpdate() {
 let waitT = 0, wasReady = false;
 function ctrlReady() {          // the world holds still until the middle is learned (or 15 s have passed without a camera: then it plays on)
   const ok = !eyeMode || (KIT.zones && (!EM || EM.ready)) || waitT > 15;
-  if (ok && !wasReady) { wasReady = true; if (GUIDE.on) { bannerShow('LOOK AT THE RING', false); setTimeout(() => bannerShow('LOOK AT THE RING', true), 1700); } }
+  if (ok && !wasReady) { wasReady = true; if (GUIDE.on && GUIDE.visible) { bannerShow('LOOK AT THE RING', false); setTimeout(() => bannerShow('LOOK AT THE RING', true), 1700); } }
   return ok;
 }
+const CONF = [];
+function tuneCheck() {          // a visible TUNE-UP (three rings, a bonus round) only when the model has been unsure for 20 s; at most twice a session, a minute apart
+  if (!GUIDE.on || GUIDE.pending > 0 || GUIDE.tuneups >= 2 || tPlay < 25 || tPlay - GUIDE.lastTune < 60 || CONF.length < 300) return;
+  const med = CONF.slice().sort((a, b) => a - b)[150];
+  if (med < 0.7) { GUIDE.pending = 3; GUIDE.tuneups++; GUIDE.lastTune = tPlay; GUIDE.bSize = 3; GUIDE.bTried = 0; GUIDE.bHits = 0; CONF.length = 0; bannerShow('TUNE-UP: LOOK AT THE RINGS', true); }
+}
+function labRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; } return row && row.lab !== 9 ? row : null; }
 function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; row = r; } return row && row.guide !== 9 ? row : null; }
 function updateLane(dt) {
   if (playing && !wasReady) waitT += dt;
@@ -692,7 +739,14 @@ function stepRows(dt) {
     if (r.z > zPos + 25) setRow(r, r.z - SPAN);
     if (!r.passed && r.z <= zPrev && r.z > zPos - 1) {
       r.passed = true; LOCK.free = true;
-      if (r.guide !== 9 && r.votes) { GUIDE.tried++; const v = r.votes, best = v.indexOf(Math.max(...v)) - 1; if (v[0] + v[1] + v[2] > 0 && best === r.guide) GUIDE.hits++; if (GUIDE.tried === GUIDE.max) bannerShow('EYES TUNED: ' + GUIDE.hits + ' OF ' + GUIDE.max + ' LOOKS READ', true); }
+      if (r.guide !== 9 && r.votes) {
+        GUIDE.bTried++; const v = r.votes, best = v.indexOf(Math.max(...v)) - 1; if (v[0] + v[1] + v[2] > 0 && best === r.guide) GUIDE.bHits++;
+        if (GUIDE.bTried >= GUIDE.bSize && GUIDE.bSize > 0) {
+          bannerShow('EYES TUNED: ' + GUIDE.bHits + ' OF ' + GUIDE.bSize + ' LOOKS READ', true);
+          if (GUIDE.first && GUIDE.bHits >= 2) { try { localStorage.setItem('spike_cal_done', '1'); } catch (e) { /* */ } }          // the intro is not shown again on this device once it has read two of the three looks
+          GUIDE.first = false; GUIDE.bSize = 0; GUIDE.bTried = 0; GUIDE.bHits = 0;
+        }
+      }
     }          // past the thing: the lock is let go
     for (let sd = 0; sd < 3; sd++) {
       const o = r.s[sd], lane = sd - 1, lx = lane * LANE_W, si = i * 3 + sd;
@@ -798,12 +852,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl]]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
@@ -901,4 +955,4 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : 0, true);
 requestAnimationFrame(frame);
-window.__dh = { renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G };
+window.__dh = { renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };

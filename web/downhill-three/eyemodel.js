@@ -22,7 +22,7 @@ export class EyeModel {
     this.dR = prior && prior.dR ? prior.dR.slice() : [0.02, 0.02];          // right = middle - dR
     this.S = [3.0e-5, 3.0e-5, 1.0e-5];          // (measured from the stare each time: a saved one once carried an inflated value from a bad run into the next)          // [varA, varB, covAB]
     this.post = [0, 1, 0]; this.state = 1; this.ready = false; this.init = [];
-    this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.lastFix = 0; this.fixes = 0;
+    this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.labeled = []; this.hold = false; this.lastFix = 0; this.fixes = 0;
     this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.04; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45; this.CLIP = 0.012; this.SUP = 0.03; this.SIDEW = 0.5; this.SMAX = 7.0e-5;          // (tuned by simulation on eyes like the logged ones)
   }
   inv() { const [a, b, c] = this.S, det = Math.max(a * b - c * c, 1e-12); return [b / det, a / det, -c / det]; }          // inverse of [[a,c],[c,b]] as [ia, ib, ic]
@@ -92,9 +92,11 @@ export class EyeModel {
     return this.state;
   }
   get zone() { return this.state - 1; }          // -1 left, 0 middle, +1 right
-  supervise(x, k) {          // a look whose TRUE lane is known (k = -1 / 0 / +1: the guided rows): learn from it directly and quickly, and put the filter on that state
+  supervise(x, k, w = 1) {          // a look whose lane is known (k = -1 / 0 / +1), with a trust w in 0..1 (1 = told to look there; less = inferred from what was worth taking): learn from it, gently
     if (!this.ready) return;
-    const e = this.SUP;          // gentle: three looks are only a start, and one odd look (the move itself, a blink, a wandering eye) must not set a side (it once taught a right look of A -0.044 / B -0.010 when play showed -0.020 / -0.020)
+    this.labeled.push([[x[0], x[1]], k]); if (this.labeled.length > 200) this.labeled.shift();
+    if (this.hold) return;          // the profile for this person / glasses is chosen first, from the first few labelled looks (the app releases the hold)
+    const e = this.SUP * w;          // gentle: a few looks are only a start, and one odd look (the move itself, a blink, a wandering eye) must not set a side (it once taught a right look of A -0.044 / B -0.010 when play showed -0.020 / -0.020)
     if (k !== 0 && Math.abs((x[0] - this.m[0]) - (x[1] - this.m[1])) > 0.04) return;          // the two eyes disagree strongly: not a clean look
     if (k === 0) { this.m[0] += e * (x[0] - this.m[0]); this.m[1] += e * (x[1] - this.m[1]); }
     else {
@@ -102,7 +104,12 @@ export class EyeModel {
       if (k < 0) { this.dL[0] += e * (r0 - this.dL[0]); this.dL[1] += e * (r1 - this.dL[1]); this.fixSep(this.dL); }
       else { this.dR[0] += e * (-r0 - this.dR[0]); this.dR[1] += e * (-r1 - this.dR[1]); this.fixSep(this.dR); }
     }
-    this.post = k < 0 ? [0.9, 0.08, 0.02] : k > 0 ? [0.02, 0.08, 0.9] : [0.05, 0.9, 0.05]; this.state = k + 1;
+    if (w >= 0.99) { this.post = k < 0 ? [0.9, 0.08, 0.02] : k > 0 ? [0.02, 0.08, 0.9] : [0.05, 0.9, 0.05]; this.state = k + 1; }
+  }
+  fit(dL, dR, data) {          // how well a set of left / right offsets explains labelled looks: the mean squared Mahalanobis distance (lower is better)
+    let sum = 0, n = 0; const [ia, ib, ic] = this.inv();
+    for (const [x, k] of data) { const d = k < 0 ? dL : k > 0 ? [-dR[0], -dR[1]] : [0, 0], r0 = x[0] - this.m[0] - d[0], r1 = x[1] - this.m[1] - d[1]; sum += ia * r0 * r0 + ib * r1 * r1 + 2 * ic * r0 * r1; n++; }
+    return n ? sum / n : 99;
   }
   recentre() {          // put the middle on the median of the last ~4 s of readings and start again from MIDDLE (used by the live tuning)
     if (this.xs.length < 30) return false;
