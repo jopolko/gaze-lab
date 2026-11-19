@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795091984';
+import { EyeModel } from './eyemodel.js?v=1795094018';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -668,7 +668,7 @@ function cardsUpdate() {
 }
 let waitT = 0, wasReady = false;
 function ctrlReady() {          // the world holds still until the middle is learned (or 15 s have passed without a camera: then it plays on)
-  const ok = !eyeMode || (HEAD.on ? HEAD.phase === 'run' : (KIT.zones && (!EM || EM.ready))) || waitT > (HEAD.on ? 40 : 15);
+  const ok = !eyeMode || (HEAD.on ? HEAD.phase === 'run' || (!HEAD.cal && HEAD.fb.length >= 12) : (KIT.zones && (!EM || EM.ready))) || waitT > (HEAD.on ? 40 : 15);
   if (ok && !wasReady) { wasReady = true; if (GUIDE.on && GUIDE.visible) { bannerShow('LOOK AT THE RING', false); setTimeout(() => bannerShow('LOOK AT THE RING', true), 1700); } }
   return ok;
 }
@@ -683,12 +683,51 @@ function guideRow() { let row = null, bz = -1e9; for (const r of rows) if (!r.pa
 // HEAD STEERING TEST (?head): no eyes, no zones, no lanes chosen for you. The board goes where the HEAD points: a short two-step set-up (turn the head left, then right, 3 s each) learns which of yaw, roll and
 // the face's sideways position moves most, and by how much, for THIS person on THIS device; the board then follows a smooth number between -1 (head fully left) and +1 (fully right), exactly as far as the head has turned.
 // Live tuning (tune.json "HEAD": gain, dead, flip, tau, rc to re-centre on the current pose, redo to repeat the set-up).
-const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.1, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '' };
+const HEAD = { on: Q.has('head'), phase: 'wait', t0: 0, buf: [], L: null, R: null, mid: null, w: null, s: 0, gain: 1.1, dead: 0.05, flip: 1, tau: 0.06, rc: 0, redo: 0, cur: null, msg: '', cal: Q.has('cal'), fb: [], ax: [0.577, -0.577, 0.577], ax0: [0.577, -0.577, 0.577], neu: 0, k: 0.9, lastFit: 0, vs: 0, sOut: 0, vel: 0, lead: 0.05, fc: 1.2, beta: 0.7 };
+if (HEAD.on) { TUNE.steerK = 40; TUNE.camK = 22; }          // the board follows the head almost at once (the eye game slides slowly on purpose)
 const headF = () => [KIT.yaw || 0, KIT.roll || 0, (KIT.fx || 0) * 100];
-function headFeed() { if (HEAD.on && (HEAD.phase === 'left' || HEAD.phase === 'right')) HEAD.buf.push({ t: performance.now(), f: headF() }); }
+const HN = [5, 2.5, 1.5];          // typical head movement in play: yaw degrees, roll degrees, face sideways position
+function headFeed() {
+  if (!HEAD.on) return;
+  if (HEAD.phase === 'left' || HEAD.phase === 'right') HEAD.buf.push({ t: performance.now(), f: headF() });
+  if (!HEAD.cal && !KIT.lost) { const f = headF(); HEAD.fb.push([f[0] / HN[0], f[1] / HN[1], f[2] / HN[2]]); if (HEAD.fb.length > 600) HEAD.fb.shift(); }
+}
+// SELF-CALIBRATION the player never sees: the head's three signals (yaw, roll, sideways position) move together when you turn to steer. The dominant direction of everything the head has done in the last
+// ~40 s is the steering axis (signed by a prior: left = more yaw, less roll, more x), the median along it is straight ahead, and the 90th percentile of how far it strays is a 0.9 turn. Re-fitted twice a second, so a
+// phone that is held differently, a lean on the bus or a new player re-tunes itself within seconds, and nothing is ever asked of the player. A one-euro filter keeps it still when the head is still and quick when it moves.
+function headFit() {
+  const fb = HEAD.fb, n = fb.length; if (n < 20) return;
+  const mean = [0, 0, 0]; for (const v of fb) for (let i = 0; i < 3; i++) mean[i] += v[i] / n;
+  let ax = HEAD.ax0.slice();
+  if (n >= 150) {
+    const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (const v of fb) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += (v[i] - mean[i]) * (v[j] - mean[j]) / n;
+    let a = [1, 1, 1]; for (let it = 0; it < 14; it++) { const b = [0, 1, 2].map((i) => C[i][0] * a[0] + C[i][1] * a[1] + C[i][2] * a[2]); const m = Math.hypot(b[0], b[1], b[2]) || 1; a = b.map((x) => x / m); }
+    let d = a[0] * HEAD.ax0[0] + a[1] * HEAD.ax0[1] + a[2] * HEAD.ax0[2]; if (d < 0) { a = a.map((x) => -x); d = -d; }
+    if (d > 0.5) ax = a;
+  }
+  HEAD.ax = HEAD.ax.map((x, i) => x * 0.7 + ax[i] * 0.3); const m = Math.hypot(...HEAD.ax); HEAD.ax = HEAD.ax.map((x) => x / m);
+  const pr = fb.map((v) => v[0] * HEAD.ax[0] + v[1] * HEAD.ax[1] + v[2] * HEAD.ax[2]).sort((x, y) => x - y);
+  const med = pr[Math.floor(pr.length / 2)], dev = pr.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * 0.9)];
+  HEAD.neu = n < 40 ? med : HEAD.neu + (med - HEAD.neu) * 0.25;
+  HEAD.k = HEAD.k + (0.9 / Math.max(0.25, Math.min(2.5, q90)) - HEAD.k) * (n < 40 ? 1 : 0.25);
+}
+function headAuto(dt, now, f) {
+  if (!HEAD.cur) return; if (HEAD.fb.length < 12) { HEAD.phase = 'wait'; return; } HEAD.phase = 'run';
+  if (now - HEAD.lastFit > 500) { HEAD.lastFit = now; headFit(); }
+  const nv = [HEAD.cur[0] / HN[0], HEAD.cur[1] / HN[1], HEAD.cur[2] / HN[2]], pcur = nv[0] * HEAD.ax[0] + nv[1] * HEAD.ax[1] + nv[2] * HEAD.ax[2];
+  let sv = KIT.lost ? 0 : -HEAD.flip * (pcur - HEAD.neu) * HEAD.k;
+  sv = Math.max(-1.3, Math.min(1.3, sv)); if (Math.abs(sv) < HEAD.dead) sv = 0;
+  const dv = (sv - HEAD.vs) / Math.max(dt, 0.001); HEAD.vel += (dv - HEAD.vel) * 0.3; HEAD.vs = sv;          // one-euro: the faster the head moves the less it is smoothed
+  const fc = HEAD.fc + HEAD.beta * Math.abs(HEAD.vel), a = 1 / (1 + 1 / (2 * Math.PI * fc * Math.max(dt, 0.001)));
+  HEAD.s += (sv - HEAD.s) * a;
+  steerTarget = Math.max(-1, Math.min(1, (HEAD.s + HEAD.vel * HEAD.lead) * HEAD.gain)); lane = Math.round(steerTarget);
+  KIT.zn = steerTarget; KIT.zone = lane; LOCK.lane = lane;
+  const gd = $('gdot'); gd.style.left = ((steerTarget * 0.45 + 0.5) * innerWidth) + 'px'; gd.style.top = (innerHeight * 0.5) + 'px';
+}
 function headStats(t0) { const a = HEAD.buf.filter((b) => b.t > t0 + 1200); const n = Math.max(a.length, 1), m = [0, 0, 0], v = [0, 0, 0]; for (const b of a) for (let i = 0; i < 3; i++) m[i] += b.f[i] / n; for (const b of a) for (let i = 0; i < 3; i++) v[i] += (b.f[i] - m[i]) ** 2 / n; return { m, v, n: a.length }; }
 function headUpdate(dt, now) {
-  const f = headF(); HEAD.cur = HEAD.cur ? HEAD.cur.map((c, i) => c + (f[i] - c) * 0.15) : f;
+  const f = headF(); HEAD.cur = HEAD.cur ? HEAD.cur.map((c, i) => c + (f[i] - c) * 0.35) : f;
+  if (!HEAD.cal) { if (HEAD.rc && HEAD.rc !== HEAD.rcDone) { HEAD.rcDone = HEAD.rc; HEAD.fb = HEAD.fb.slice(-30); HEAD.lastFit = 0; } headAuto(dt, now, f); return; }
   if (HEAD.phase === 'wait') { if (pkCount > 15 && !KIT.lost) { HEAD.phase = 'left'; HEAD.t0 = now; HEAD.buf = []; bannerShow('TURN YOUR HEAD LEFT AND HOLD', false); } return; }
   if ((HEAD.phase === 'left' || HEAD.phase === 'right') && now - (HEAD.shown || 0) > 1500) { HEAD.shown = now; bannerShow(HEAD.phase === 'left' ? 'TURN YOUR HEAD LEFT AND HOLD' : 'NOW TURN YOUR HEAD RIGHT AND HOLD', false); }
   if (HEAD.phase === 'left' && now - HEAD.t0 > 3000) { HEAD.L = headStats(HEAD.t0); HEAD.phase = 'right'; HEAD.t0 = now; HEAD.buf = []; bannerShow('NOW TURN YOUR HEAD RIGHT AND HOLD', false); return; }
@@ -796,7 +835,7 @@ function stepRows(dt) {
     for (let sd = 0; sd < 3; sd++) {
       const o = r.s[sd], lane = sd - 1, lx = lane * LANE_W, si = i * 3 + sd;
       const crossing = (z) => !o.done && z <= zPrev && z > zPos - 1;          // the line z lies between where the camera was and where it is now
-      const mine = laneNow === lane;
+      const mine = HEAD.on ? Math.abs(camX - lx) < 7.5 : laneNow === lane;          // (head steering: the board is anywhere, so a thing is taken when it is within reach and a rock only when the board is on one)
       for (let k = 0; k < 6; k++) hz(orbMesh, i * 18 + sd * 6 + k);
       hz(ringMesh, si); hz(beamMesh, si); hz(padMesh, si); hz(pickMesh, si); hz(pickWire, si); hz(rampMesh, si); hz(rockMesh, i * 6 + sd * 2); hz(rockMesh, i * 6 + sd * 2 + 1);
       if (!o) continue;
@@ -838,7 +877,7 @@ function stepRows(dt) {
       } else {
         for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), 2.4, r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
         m4.compose(v3.set(lx, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
-        if (crossing(r.z)) { o.done = true; if (mine && ST.y < 3) crash('ROCK'); }
+        if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 3.6 || Math.abs(camX - lx + 4.5) < 3.6) : mine) && ST.y < 3) crash('ROCK'); }
       }
     }
   }
@@ -898,12 +937,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3)]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4), +HEAD.s.toFixed(3), +HEAD.neu.toFixed(3), +HEAD.k.toFixed(3)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB,hs,hn,hk', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch(LOCAL ? '/spike/log' : '../log.php', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }
