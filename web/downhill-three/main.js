@@ -9,10 +9,11 @@
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
 import { MOLS, MOL_ORDER } from './molecules.js';
-import { EyeModel } from './eyemodel.js?v=1795102687';
+import { EyeModel } from './eyemodel.js?v=1795102981';
 
 const Q = new URLSearchParams(location.search);
-const OPEN = Q.has('open');          // ?open: THE OPEN WORLD. No lanes, no rows: an endless hilly world made as you go; the head turns the board (carving), a lean in or out is the speed, a nod reaches up or down
+const OPEN = Q.has('open') || Q.has('hub');
+let inHub = OPEN;          // which mode is on RIGHT NOW: the hub (open world) or a run (the track). OPEN only says the hub exists          // ?open: THE OPEN WORLD. No lanes, no rows: an endless hilly world made as you go; the head turns the board (carving), a lean in or out is the speed, a nod reaches up or down
 const EYE_PICK = Q.get('eye') || '';
 // THE EYE MODEL (eyemodel.js): a three-state filter over both eyes together that floats with drift and remembers what it learned on this device. ?nomodel goes back to the threshold detector.
 // LIVE TUNING: tune.json beside the log (web/spike/tune.json) is read every 2 s and applied to the running game, so settings can be changed while it is being played. {"v":N,"EM":{"DECIDE":0.8,...},"LOCK":{"qk":0.7,"midhold":0.28},"KIT":{...},"recentre":true}
@@ -505,6 +506,7 @@ const HIDE = new THREE.Matrix4().compose(new THREE.Vector3(0, -50, 0), new THREE
 // WORLD CHANGES: the colours blend over two seconds; the ground pattern and the object style switch at once, hidden under a flash of the new world's colour.
 let worldIdx = -1, worldT = 0;
 const WORLD_SECS = Q.has('fast') ? 12 : 50;
+let worldLocked = false;
 const worldQ = Q.get('world');
 function setWorld(i, instant) {
   const th = THEMES[i % THEMES.length];
@@ -540,7 +542,7 @@ const feedMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
   void main(){ vec3 c = texture2D(uScene, vUv).rgb; vec3 p = texture2D(uPrev, vUv + (vUv-.5)*.004).rgb; gl_FragColor = vec4(max(c*.55, p*uK), 1.); }`,
   { uScene: { value: null }, uPrev: { value: null }, uK: { value: 0.86 } });
 const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2D uScene; uniform sampler2D uTrail; uniform float uTrace; uniform float uSplit;
-  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime;
+  uniform vec4 uFlash; uniform vec3 uMA, uMB; uniform float uDmt, uTime, uTun; uniform vec3 uTunC;
   vec3 hsv(float h){ return clamp(abs(fract(vec3(h)+vec3(0.,.6667,.3333))*6.-3.)-1.,0.,1.); }
   void main(){
     vec2 c = vUv - .5; float r = length(c);
@@ -566,9 +568,15 @@ const compMat = fsq(`precision mediump float; varying vec2 vUv; uniform sampler2
       col = mix(col, col * hsv(fract(uTime * .2 + r * 2.)) * 1.4, uDmt * .4 * keep);
       col += hsv(fract(r * 8. - uTime * .6)) * .18 * uDmt * (.5 + .5 * sin(r * 40. - uTime * 4.)) * keep;
     }
+    if (uTun > .001) {          // THE TUNNEL DIVE: rays and rings streaming out of the vanishing point, in the world's colours (the middle stays a bright mouth)
+      float ta = atan(c.y, c.x), rays = .5 + .5 * sin(ta * 18. + sin(uTime * 1.7) * 3. + r * 8. - uTime * 12.), rng = .5 + .5 * sin(r * 34. - uTime * 20.), edge = smoothstep(.04, .55, r);
+      vec3 rc2 = mix(uTunC, hsv(fract(uTime * .35 + r * 1.4 + ta * .16)), .45);
+      col = mix(col, col * (1. + .5 * rng * edge) * (1. - .5 * uTun * edge) + rc2 * (rays * .75 + .25) * (.25 + .75 * edge) * .9, uTun);
+      col += uTunC * uTun * uTun * smoothstep(.3, .0, r) * 1.2;
+    }
     float mxc = max(max(col.r, col.g), col.b); if (mxc > .75) col *= (.75 + .25 * (1. - exp(-(mxc - .75) * 2.5))) / mxc;          // soft shoulder: light added by the effects is folded back, so bright areas keep their colour
     gl_FragColor = vec4(col, 1.);
-  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 } });
+  }`, { uScene: { value: null }, uTrail: { value: null }, uTrace: { value: 1 }, uSplit: { value: 1 }, uFlash: { value: new THREE.Vector4() }, uMA: { value: new THREE.Vector3() }, uMB: { value: new THREE.Vector3() }, uDmt: { value: 0 }, uTime: { value: 0 }, uTun: { value: 0 }, uTunC: { value: new THREE.Vector3(1, 1, 1) } });
 const feedScene = new THREE.Scene();
 feedScene.add(feedMat);
 const compScene = new THREE.Scene();
@@ -733,7 +741,7 @@ if (eyeMode) {
     }
   });
 } else {
-  addEventListener('pointermove', (e) => { if (!innerWidth || !innerHeight) return; steerTarget = OPEN ? Math.max(-1.2, Math.min(1.2, (e.clientX / innerWidth - 0.5) * 2.6)) : Math.max(-1, Math.min(1, Math.round((e.clientX / innerWidth - 0.5) * 3))); lane = steerTarget; if (OPEN) HEAD.vt = Math.max(-1, Math.min(1, (0.5 - e.clientY / innerHeight) * 2)); });
+  addEventListener('pointermove', (e) => { if (!innerWidth || !innerHeight) return; steerTarget = inHub ? Math.max(-1.2, Math.min(1.2, (e.clientX / innerWidth - 0.5) * 2.6)) : Math.max(-1, Math.min(1, Math.round((e.clientX / innerWidth - 0.5) * 3))); lane = steerTarget; if (inHub) HEAD.vt = Math.max(-1, Math.min(1, (0.5 - e.clientY / innerHeight) * 2)); });
   beginPlay();
 }
 function setPause(on) {
@@ -1277,7 +1285,7 @@ function cellItems(cx, cz) {
       else if (r < 0.45) c.push({ k: 'ring', x, z, hy, a });
       else if (r < 0.80) c.push({ k: 'pick', x, z, hy, pick: Math.floor(rnd() * 4) });
       else if (r < 0.90) c.push({ k: 'ramp', x, z, a });
-      else c.push({ k: 'rock', x, z, mol: Math.floor(rnd() * 6) });
+      else c.push({ k: 'pick', x, z, hy, pick: Math.floor(rnd() * 4) });          // (the hub is a place to enjoy: no rocks)
     }
     if (rnd() < 0.045 || (cx === 0 && cz === -2)) {          // a molecule: one not yet found keeps turning up (and there is always one near the start)
       const [x, z] = P(), w = MOL_ORDER.map((_, i) => (MOL.got[i] ? 0.5 : 4)); let tot = 0, mi = 0; w.forEach((v) => { tot += v; }); let qq = rnd() * tot; for (let i = 0; i < 6; i++) { qq -= w[i]; mi = i; if (qq <= 0) break; }
@@ -1349,21 +1357,127 @@ function openObjects() {
   for (const mm of [oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam, ...molMeshes]) { mm.instanceMatrix.needsUpdate = true; if (mm.instanceColor) mm.instanceColor.needsUpdate = true; }
 }
 function openFrame(dt) {
-  if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
+  if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && !worldLocked && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   ST.boost = Math.max(0, ST.boost - dt); ST.mult = Math.max(0, ST.mult - dt); ST.chainT = Math.max(0, ST.chainT - dt);
   worldBlend(dt); molTick(dt);
-  if (playing && ctrlReady()) { openPhysics(dt); openCollect(); }
+  if (playing && ctrlReady()) { if (TR.on && TR.kind === 'in') hubAuto(dt); else openPhysics(dt); openCollect(); hubTick(dt); }
   const gh = HOf(OW.x, OW.z), fx = Math.sin(OW.th), fz = -Math.cos(OW.th), g = HOg(OW.x, OW.z), slopeF = g[0] * fx + g[1] * fz;
-  camera.position.set(OW.x, gh + 3.2 + ST.y + HEAD.vy * 1.6, OW.z);
-  camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
+  camera.position.set(OW.x, gh + 3.2 + ST.y + HEAD.vy * 1.6 + (OW.rampY || 0), OW.z);
+  camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0) + TR.tun * 35;
   camera.rotation.set(-0.08 + HEAD.vy * 0.12 + Math.atan(slopeF) * 0.55, -OW.th, -OW.om * 0.22, 'YXZ');
   camera.aspect = W / H; camera.updateProjectionMatrix();
   groundMat.uniforms.uT.value = t; skyMat.uniforms.uT.value = t; sky.position.copy(camera.position); skinTick();
   groundMat.uniforms.uLA.value.set(MOL.lv[0], MOL.lv[1], MOL.lv[2]); groundMat.uniforms.uLB.value.set(MOL.lv[3], MOL.lv[4], MOL.lv[5]); groundMat.uniforms.uDmtG.value = molDmt(); skyMat.uniforms.uDom.value = MOL.lv[1]; skyMat.uniforms.uPul.value = MOL.lv[5];
   groundMat.uniforms.uCam.value.copy(camera.position); ground.position.set(Math.round(OW.x / 10) * 10, 0, Math.round(OW.z / 10) * 10);
   for (const mm of allMeshes) mm.visible = flags.objects;
-  if (flags.objects) openObjects();
+  if (flags.objects) { openObjects(); hubTrailDraw(); }
+  trTick(dt);
 }
+
+// ======================================================================================================================================================================================================
+// THE HUB. The open world is the level select: four landmarks stand in an arc ahead of the spawn, each a ramp up to a gateway with a big sign over it (name, what it is, your best). Ride up the ramp and through the
+// gateway and the screen dives down a tunnel of rays in that world's colours, and the RUN starts: the curved ski hill in that world (the track), a race to the finish line. The finish dives back up the tunnel and drops you in
+// the hub with your result on the sign. Molecules collected in the hub (and in runs) carry on, so what you find while exploring is what you ride with.
+// ======================================================================================================================================================================================================
+const TR = { on: false, t: 0, dur: 1.5, kind: '', p: null, tun: 0, flip: false };
+const RUN = { active: false, done: false, theme: 0, id: '', len: parseFloat(Q.get('runlen')) || 2400, t0: 0 };
+const PORTALS = [
+  { id: 'alpine', theme: 0, name: 'ALPINE', sub: 'crisp snow, dark pine, low sun', x: -150, z: -250, col: [0.45, 0.78, 1.0], kind: 'arch' },
+  { id: 'psychedelic', theme: 1, name: 'PSYCHEDELIC', sub: 'moire squares, rainbow tracers', x: -50, z: -300, col: [1.0, 0.3, 0.9], kind: 'spiral' },
+  { id: 'tunnel', theme: 3, name: 'TUNNEL ROAD', sub: 'neon chevrons to the vanishing point', x: 50, z: -300, col: [0.2, 0.9, 1.0], kind: 'tunnel' },
+  { id: 'desert', theme: 6, name: 'DESERT SUN', sub: 'a giant red sun, rust and cactus', x: 150, z: -250, col: [1.0, 0.55, 0.25], kind: 'sun' },
+];
+let HUBBEST = {}; try { HUBBEST = JSON.parse(localStorage.getItem('hub_best') || '{}'); } catch (e) { HUBBEST = {}; }
+const fmtT = (sec) => Math.floor(sec / 60) + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+function signDraw(P) {
+  const g = P.ctx, w = 512, h = 256, c = P.col.map((x) => Math.round(x * 255)), rgb = 'rgb(' + c.join(',') + ')';
+  g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(8,6,24,.72)'; g.strokeStyle = rgb; g.lineWidth = 6; g.beginPath(); g.roundRect(8, 8, w - 16, h - 16, 28); g.fill(); g.stroke();
+  g.textAlign = 'center'; g.fillStyle = rgb; g.shadowColor = rgb; g.shadowBlur = 18; g.font = '700 ' + (P.name.length > 10 ? 54 : 66) + 'px ui-monospace,Consolas,monospace'; g.fillText(P.name, w / 2, 100); g.shadowBlur = 0;
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.font = '24px ui-monospace,Consolas,monospace'; g.fillText(P.sub, w / 2, 142);
+  const b = HUBBEST[P.id]; g.font = '700 30px ui-monospace,Consolas,monospace'; g.fillStyle = b ? '#ffe36b' : 'rgba(255,255,255,.55)'; g.fillText(b ? 'BEST ' + fmtT(b.t) + '   ' + b.s : 'NOT RIDDEN YET', w / 2, 196);
+  g.font = '20px ui-monospace,Consolas,monospace'; g.fillStyle = 'rgba(255,255,255,.6)'; g.fillText('ride the ramp, fly through', w / 2, 230);
+  P.tex.needsUpdate = true;
+}
+const hubGroup = new THREE.Group(); scene.add(hubGroup);
+const MBC = (c, o = {}) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c[0], c[1], c[2]), ...o });
+for (const P of PORTALS) {
+  const grp = new THREE.Group(), col = P.col, gy = HOf(P.x, P.z); P.grp = grp; grp.position.set(P.x, gy, P.z); P.gy = gy;
+  const ramp = new THREE.Mesh(new THREE.BoxGeometry(24, 1, 46), MBC([0.95, 0.97, 1.0])); ramp.rotation.x = 0.3; ramp.position.set(0, 6.2, 22); grp.add(ramp);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(24.6, 0.4, 46.4), MBC(col)); edge.rotation.x = 0.3; edge.position.set(0, 5.9, 22); grp.add(edge);
+  if (P.kind === 'arch') {
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(15, 2.2, 8, 24, Math.PI), MBC([0.9, 0.96, 1.0])); arch.position.set(0, 4, 0); grp.add(arch);
+    for (const [sx, sz] of [[-19, 2], [19, 2], [-23, -6], [23, -6]]) { const tr = new THREE.Mesh(pineGeo(), treeMat); tr.scale.setScalar(2.4); tr.position.set(sx, 8.4, sz); grp.add(tr); }
+  } else if (P.kind === 'spiral') {
+    P.rings = []; for (let i = 0; i < 9; i++) { const r = 16 - i * 1.1, m = new THREE.Mesh(new THREE.TorusGeometry(r, 1.2, 8, 28), mkSkin(2600)); m.material.uniforms.uMo.value = 0.95; m.position.set(0, 4 + 16 - 0 * i, -i * 7); m.position.y = 4 + r; grp.add(m); P.rings.push(m); }
+  } else if (P.kind === 'tunnel') {
+    for (let i = 0; i < 8; i++) { const sz = 30 - i * 2.4, e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(sz, sz, 0.6)), new THREE.LineBasicMaterial({ color: i % 2 ? 0xff40d0 : 0x40f0ff })); e.position.set(0, 4 + sz / 2, -i * 7); grp.add(e); }
+  } else {
+    for (const sx of [-17, 17]) { const pl = new THREE.Mesh(new THREE.BoxGeometry(5, 24, 5), MBC([0.85, 0.5, 0.3])); pl.position.set(sx, 14, 0); grp.add(pl); }
+    const lin = new THREE.Mesh(new THREE.BoxGeometry(40, 5, 6), MBC([0.9, 0.55, 0.32])); lin.position.set(0, 28, 0); grp.add(lin);
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(24, 40), MBC([1.0, 0.22, 0.12])); sun.position.set(0, 38, -16); grp.add(sun);
+    const halo = new THREE.Mesh(new THREE.RingGeometry(26, 30, 40), MBC([1.0, 0.6, 0.2], { transparent: true, opacity: 0.6 })); halo.position.set(0, 38, -16.5); grp.add(halo);
+  }
+  const bm = new THREE.Mesh(new THREE.BoxGeometry(2.2, 170, 2.2), MBC(col, { transparent: true, opacity: 0.55 })); bm.position.set(0, 85, -4); grp.add(bm);
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256; P.ctx = cv.getContext('2d'); P.tex = new THREE.CanvasTexture(cv); signDraw(P);
+  P.sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: P.tex, transparent: true })); P.sign.scale.set(64, 32, 1); P.sign.position.set(0, 58, 6); grp.add(P.sign);
+  hubGroup.add(grp);
+}
+const hubTrail = new THREE.InstancedMesh(new THREE.SphereGeometry(1.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), PORTALS.length * 36); hubTrail.frustumCulled = false; scene.add(hubTrail);
+const OLDM = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh, mineMesh], OLDC = OLDM.map((m) => m.count), MOLC0 = molMeshes.map((m) => m.count);
+const OPENM = [oTree, oOrb, oRing, oPick, oPickW, oRamp, oRock, oBeam];
+function hubTick(dt) {          // the glowing trails to each gateway, the signs bobbing, the ramp lifting you, and the gateway itself
+  let ramp = 0, trig = null;
+  for (const P of PORTALS) {
+    const dx = OW.x - P.x, dz = OW.z - P.z;
+    if (Math.abs(dx) < 12 && dz > -2 && dz < 46) ramp = Math.max(ramp, (46 - dz) * 0.2 * (1 - Math.abs(dx) / 24));          // up the ramp
+    if (Math.hypot(dx, dz) < 17 && dz < 2 && speed > 8 && !TR.on) trig = P;
+    P.sign.position.y = 58 + Math.sin(t * 1.6 + P.x) * 1.6; if (P.rings) P.rings.forEach((m, i) => { m.rotation.z = t * (0.4 + i * 0.05) * (i % 2 ? 1 : -1); });
+  }
+  OW.rampY += ((ramp * 0.9) - OW.rampY) * Math.min(1, dt * 10);
+  if (trig) hubGo(trig);
+}
+function hubTrailDraw() {
+  let n = 0;
+  PORTALS.forEach((P, k) => {
+    for (let i = 0; i < 36; i++) { const f = i / 35, x = P.x * f * 0.9 + Math.sin(f * 3 + k) * 12 * f * (1 - f) * 4, z = -(-P.z * f * 0.8 + 20) + 0; const px = x, pz = -20 + (P.z + 55 + 20) * f; const pulse = 0.55 + 0.45 * Math.sin(t * 3 - i * 0.55 + k); m4.compose(v3.set(px, HOf(px, pz) + 1.1, pz), q4.identity(), s3.setScalar(0.4 + 0.9 * pulse)); hubTrail.setMatrixAt(k * 36 + i, m4); hubTrail.setColorAt(k * 36 + i, colr.setRGB(P.col[0], P.col[1], P.col[2]).multiplyScalar(0.4 + 0.6 * pulse)); n++; }
+  });
+  hubTrail.count = n; hubTrail.instanceMatrix.needsUpdate = true; if (hubTrail.instanceColor) hubTrail.instanceColor.needsUpdate = true;
+}
+function hubGo(P) { TR.on = true; TR.t = 0; TR.kind = 'in'; TR.p = P; TR.dur = 1.5; bannerShow(P.name, true); beep(330, 0.4, 0.1); setTimeout(() => beep(660, 0.5, 0.1), 140); setTimeout(() => beep(990, 0.6, 0.1), 300); }
+function hubAuto(dt) {          // the dive: the board is taken straight down the tunnel, faster and faster
+  const P = TR.p, want = Math.atan2(P.x - OW.x, -(P.z - 20 - OW.z)), d = Math.atan2(Math.sin(want - OW.th), Math.cos(want - OW.th)); OW.th += d * Math.min(1, dt * 5); OW.om = 0;
+  const sp = 36 + 90 * (TR.t / TR.dur), fx = Math.sin(OW.th), fz = -Math.cos(OW.th); OW.vx = fx * sp; OW.vz = fz * sp; OW.x += OW.vx * dt; OW.z += OW.vz * dt; speed = sp; zPrev = zPos; zPos = OW.z; camX = OW.x;
+}
+function trTick(dt) {
+  if (!TR.on) { TR.tun = 0; return; }
+  TR.t += dt; const k = Math.min(1, TR.t / TR.dur);
+  if (TR.kind === 'in') { TR.tun = k * k; if (TR.t >= TR.dur) { enterRun(TR.p); TR.kind = 'fade'; TR.t = 0; TR.dur = 1.2; } }
+  else if (TR.kind === 'out') { TR.tun = k * k; if (TR.t >= TR.dur) { exitRun(); TR.kind = 'fade'; TR.t = 0; TR.dur = 1.2; } }
+  else { TR.tun = 1 - k; if (TR.t >= TR.dur) { TR.on = false; TR.tun = 0; } }
+}
+function setHelp(txt) { const hp = document.getElementById('help'); if (hp) hp.textContent = txt; }
+const HELP_HUB = 'THE HUB. Turn your head to carve, lean in for speed and back to slow, nod to reach up or down. Ride up a ramp and through a gateway to start that world\'s run. Molecules you find come with you.', HELP_RUN = 'RUN: reach the finish line. Steer with your head, lean for speed, nod for high and low. Molecules change the world.';
+function enterRun(P) {
+  inHub = false; RUN.active = true; RUN.done = false; RUN.theme = P.theme; RUN.id = P.id; groundMat.uniforms.uOpen.value = 0; groundMat.uniforms.uTer.value = Q.has('flat') ? 0 : 1; hubGroup.visible = false; hubTrail.visible = false;
+  for (const mm of OPENM) mm.count = 0; OLDM.forEach((m, i) => { m.count = OLDC[i]; }); molMeshes.forEach((m, i) => { m.count = MOLC0[i]; });
+  worldLocked = true; setWorld(P.theme, true);
+  zPos = 0; zPrev = 0; camX = 0; speed = 28; tPlay = 0; steer = 0; steerTarget = 0; lane = 0; HEAD.vx = 0; HEAD.s = 0; HEAD.vv = 0; HEAD.acc = 0; Object.assign(ST, { boost: 0, shield: 0, mult: 0, y: 0, vy: 0, air: 0, chainT: 0, chain: 0 });
+  G.score = 0; G.combo = 0; G.best = 0; G.hit = 0; G.got = 0; SLM.left = 0; SLM.brk = 6; MOL.since = 0; MOL.nextGap = 400;
+  rows.forEach((r, i) => setRow(r, -50 - i * ROW_GAP)); setHelp(HELP_RUN); worldT = 0;
+}
+function finishRun() {
+  if (RUN.done) return; RUN.done = true; const tm = tPlay, sc = G.score, b = HUBBEST[RUN.id], nb = !b || tm < b.t;
+  HUBBEST[RUN.id] = { t: b ? Math.min(b.t, tm) : tm, s: Math.max(b ? b.s : 0, sc) }; try { localStorage.setItem('hub_best', JSON.stringify(HUBBEST)); } catch (e) { /* */ }
+  bannerShow('FINISH  ' + fmtT(tm) + '   ' + sc + (nb ? '   NEW BEST' : ''), true); flash(1, 0.9, 0.3, 0.6); beep(660, 0.3, 0.1); setTimeout(() => beep(880, 0.3, 0.1), 120); setTimeout(() => beep(1320, 0.5, 0.1), 260);
+  setTimeout(() => { TR.on = true; TR.t = 0; TR.kind = 'out'; TR.dur = 1.3; }, 2600);
+}
+function exitRun() {
+  inHub = true; RUN.active = false; groundMat.uniforms.uOpen.value = 1; groundMat.uniforms.uTer.value = 0; hubGroup.visible = true; hubTrail.visible = true;
+  OLDM.forEach((m) => { m.count = 0; }); molMeshes.forEach((m) => { m.count = 0; }); worldLocked = true; setWorld(0, true);
+  OW.x = 0; OW.z = 0; OW.th = 0; OW.vx = 0; OW.vz = -24; OW.om = 0; OW.rampY = 0; zPos = 0; zPrev = 0; speed = 24; HEAD.vx = 0; HEAD.s = 0; Object.assign(ST, { boost: 0, y: 0, vy: 0, air: 0 });
+  PORTALS.forEach(signDraw); setHelp(HELP_HUB);
+}
+if (OPEN) { OW.rampY = 0; worldLocked = true; setHelp(HELP_HUB); }
 // THE SIX, along the top: each slot a molecule turning in it (an outline until it is found), a ring round it for how much of it is felt, its name and what it does beneath.
 const molHud = DR ? document.createElement('canvas') : null;
 if (molHud) { molHud.width = 6 * 76; molHud.height = 96; molHud.style.cssText = 'position:fixed;left:50%;top:50px;margin-left:' + (-3 * 76) + 'px;width:' + 6 * 76 + 'px;height:96px;z-index:6;pointer-events:none'; document.body.appendChild(molHud); }
@@ -1396,7 +1510,7 @@ function frame(now) {
   telTick(now, dt);
   logSample(now);
   if (molHud && now - (molHud._t || 0) > 90) { molHud._t = now; molHudDraw(now / 1000); }
-  if (OPEN) openFrame(dt); else {
+  if (inHub) openFrame(dt); else {
   if (HEAD.on) {          // SNOWBOARD PHYSICS: the head says where to go, the board does not jump there. A damped spring pulls it toward the target with a limited sideways acceleration and speed, so it eases into a turn, carries it
     // through and settles (a correction is an arc, not a snap), and a hard turn costs a little speed.
     const xT = steerTarget * LANE_W, a = Math.max(-HEAD.amax, Math.min(HEAD.amax, HEAD.w * HEAD.w * (xT - camX) - 2 * HEAD.z * HEAD.w * HEAD.vx));
@@ -1410,7 +1524,7 @@ function frame(now) {
     steer = camX / LANE_W;
     if (playing && ctrlReady()) speed = Math.max(14, speed - Math.abs(a) * dt * HEAD.carve);
   } else steer += (steerTarget - steer) * (1 - Math.exp(-TUNE.steerK * dt));
-  if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
+  if (playing && ctrlReady()) { tPlay += dt; worldT += dt; if (!worldQ && !worldLocked && worldT > WORLD_SECS) { worldT = 0; setWorld(worldIdx + 1); } stepAir(dt); }
   worldBlend(dt); if (DR) molTick(dt);
   if (HEAD.on) {          // HEAD mode: the speed is the PLAYER'S. The base pace still climbs with progress (28 up to 80), a lean forward adds up to half as much again, pulling back takes off up to half, boost and the slope still count
     const base = Math.min(80, 28 + tPlay * 0.45) * (1 + 0.15 * perk(5)), f = 1 + (HEAD.u >= 0 ? HEAD.uup : HEAD.udn) * HEAD.u, tgt = Math.max(12, base * f) + (ST.boost > 0 ? 22 : 0) + (TERRAIN ? GR(zPos) * 45 : 0);
@@ -1419,9 +1533,11 @@ function frame(now) {
   if (playing && ctrlReady()) chaseUpdate(dt);
   zPrev = zPos;
   if (playing && ctrlReady()) zPos -= speed * dt;
+  if (RUN.active && !RUN.done && -zPos > RUN.len) finishRun();
+  if (OPEN) trTick(dt);
   if (!HEAD.on) camX += (steer * LANE_W - camX) * (1 - Math.exp(-TUNE.camK * dt));
   camera.position.set(camX, 3.2 + ST.y + TY(zPos, camX) + (HEAD.on ? HEAD.vy * 1.6 : 0), zPos);
-  camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0);
+  camera.fov = 85 + (speed - 28) * 0.2 + (ST.boost > 0 ? 8 : 0) + TR.tun * 35;
   camera.rotation.set(-0.08 + (HEAD.on ? HEAD.vy * 0.12 : 0) - (TERRAIN ? Math.atan(GR(zPos - 30)) * 0.55 : 0), HEAD.on ? -HEAD.vx * 0.0035 : -steer * 0.08, HEAD.on ? -HEAD.vx * 0.0065 - (HEAD.acc || 0) * 0.0006 : -steer * 0.12, 'YXZ');          // (the board leans into a turn by how fast it is sliding and how hard it is accelerating)          // the view tips down a falling slope and up a rise
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
@@ -1467,7 +1583,7 @@ function frame(now) {
       const lv = (i) => MOL.lv[i];
       compMat.material.uniforms.uMA.value.set(lv(0), lv(1), lv(2)); compMat.material.uniforms.uMB.value.set(lv(3), lv(4), lv(5)); compMat.material.uniforms.uDmt.value = molDmt();
     }
-    compMat.material.uniforms.uTime.value = t;
+    compMat.material.uniforms.uTime.value = t; compMat.material.uniforms.uTun.value = TR.tun; if (TR.p) compMat.material.uniforms.uTunC.value.set(TR.p.col[0], TR.p.col[1], TR.p.col[2]);
     renderer.setRenderTarget(null);
     renderer.render(compScene, quadCam);
   } else {
@@ -1487,4 +1603,4 @@ function frame(now) {
 }
 setWorld(worldQ ? Math.max(0, THEMES.findIndex((x) => x.id === worldQ)) : 0, true);
 requestAnimationFrame(frame);
-window.__dh = { OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
+window.__dh = { TR, RUN, PORTALS, enterRun, exitRun, finishRun, inHubF: () => inHub, OW, OPEN, MOL, DR, molEat, CH, MF, HEAD, KIT, renderer, scene, camera, groundMat, skyMat, TH, frame, ST, G, dbg: () => ({ steer, steerTarget, camX, lane, TUNE, speed, zPos }) };
