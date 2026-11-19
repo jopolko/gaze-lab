@@ -8,7 +8,7 @@
 // the enter / leave lines are 0.35 / 0.2 (Godot 0.5 / 0.3), and each side also learns from the player's own glances in both directions. The lane IS the zone and the board slides there.
 import * as THREE from 'three';
 import { Tracker } from '../stargaze/tracker.js';
-import { EyeModel } from './eyemodel.js?v=1795098946';
+import { EyeModel } from './eyemodel.js?v=1795099085';
 
 const Q = new URLSearchParams(location.search);
 const EYE_PICK = Q.get('eye') || '';
@@ -256,7 +256,7 @@ const rampMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(LANE_W - 6, 0.7, 
 const rockMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff }), N_RING * 6);
 if (LINE) for (const mm of [ringMesh, orbMesh, beamMesh, padMesh, rampMesh, rockMesh]) mm.material.wireframe = true;
 const allMeshes = [pylMesh, ringMesh, orbMesh, wallMesh, beamMesh, padMesh, pickMesh, pickWire, rampMesh, rockMesh];
-wallMesh.count = 0;          // (walls are gone: there is nothing to be walled off from, the middle is open)
+wallMesh.count = Q.has('head') ? N_RING * 2 : 0;          // (eye mode: no walls, the middle is open. Head mode uses two wall pieces per row for CARVE GATES)
 for (const mm of allMeshes) { mm.frustumCulled = false; scene.add(mm); }
 const PICKS = [          // kind: what it does (Godot: CRYSTAL a longer boost, CAGE a shield, RINGS double points, CLUSTER a lump of points)
   { name: 'BOOST', col: [1.0, 0.55, 0.1] }, { name: 'SHIELD', col: [0.3, 0.85, 1.0] }, { name: 'x2', col: [0.95, 0.4, 1.0] }, { name: 'POINTS', col: [1.0, 0.85, 0.35] },
@@ -282,6 +282,20 @@ const GUIDE = { on: !Q.has('noguide') && !Q.has('mouse') && !Q.has('head'), visi
 GUIDE.first = GUIDE.on && GUIDE.visible; GUIDE.bSize = GUIDE.first ? GUIDE.max : 0;          // 3 rows by default (one look at each lane, shuffled): the rings are SHOWN only on the first run on a device (or ?guide), and for a tune-up; every other session starts with 3 normal-looking rows, each with one obviously better prize (hidden warm-up)
 for (let k = 0; k < Math.ceil(GUIDE.max / 3); k++) GUIDE.seq.push(...[-1, 0, 1].sort(() => Math.random() - 0.5));
 const VAL = { 0: 1, 1: 2, 2: 3, 3: 2.5, 4: -5 };          // what a thing is worth to someone choosing: used to see which lane of a row is clearly the best one (an inferred label for the eyes)
+// CARVE GATES (head mode): a wall across the whole slope with ONE opening, anywhere and of any width. They come in runs of five to seven, each opening a smooth step sideways from the last (8 to 16 units, bouncing
+// off the sides), so the way through is an S-curve to carve, with a string of orbs down the middle of each opening; the openings narrow with time (22 units wide to 9). Touching a wall is a crash (a jump clears it).
+const SLM = { left: 0, brk: 0, c: 0, dir: 1 };
+function gateRow(r) {
+  if (SLM.left <= 0) {
+    if (SLM.brk > 0) { SLM.brk--; return false; }
+    if (Math.random() > 0.45) return false;
+    SLM.left = 5 + Math.floor(Math.random() * 3); SLM.c = 0; SLM.dir = Math.random() < 0.5 ? -1 : 1;
+  }
+  SLM.left--; if (SLM.left <= 0) SLM.brk = 2 + Math.floor(Math.random() * 2);
+  SLM.c += SLM.dir * (8 + Math.random() * 8); if (Math.abs(SLM.c) > 18) { SLM.dir = -Math.sign(SLM.c); SLM.c = Math.max(-24, Math.min(24, SLM.c)); }
+  r.s = [null, null, null]; r.gap = { c: SLM.c, w: Math.max(9, 22 - (tPlay - 12) * 0.09), orbs: [true, true, true, true, true, true] };
+  return true;
+}
 function setRow(r, z) {
   r.z = z; r.passed = false; r.guide = 9; r.lab = 9; r.lw = 0; r.votes = [0, 0, 0];
   const orbs = () => ({ type: 0, pick: 0, orbs: [true, true, true, true, true, true], done: false });
@@ -294,6 +308,8 @@ function setRow(r, z) {
     else { r.lw = 0.6; r.s = [orbs(), orbs(), orbs()]; r.s[g + 1] = { type: 2, pick: Math.floor(Math.random() * 4), orbs: [], done: false }; }          // hidden: three normal lanes, one clearly better (a pickup against orbs)
     return;
   }
+  r.gap = null; r.gapDone = false;
+  if (Q.has('head') && tPlay > 12 && gateRow(r)) return;
   const calm = tPlay < 20;          // the first 20 seconds: no hazards
   const hzK = calm ? 0 : Math.min(0.7, 0.25 + tPlay * 0.002);          // how often something nasty is put in
   const roll = Math.random(), flip = Math.random() < 0.5 ? 1 : -1;
@@ -330,7 +346,7 @@ function setWorld(i, instant) {
   worldIdx = i % THEMES.length;
   TH.idx = worldIdx; TH.mode = th.mode; TH.wire = th.wire; TH.rainbow = th.rainbow; TH.sun = th.sun;
   groundMat.uniforms.uMode.value = th.mode;
-  pylMat.wireframe = th.wire || LINE; wallMesh.material.wireframe = th.wire;
+  pylMat.wireframe = th.wire || LINE; wallMesh.material.wireframe = th.wire || LINE;
   TH.tgt = th;
   if (instant) { TH.top.setRGB(...th.top); TH.hor.setRGB(...th.hor); TH.c1.setRGB(...th.c1); TH.c2.setRGB(...th.c2); TH.trace = th.trace; TH.split = th.split; }
   else { G.flash = 1.0; G.fr = th.c1[0]; G.fg = th.c1[1]; G.fb = th.c1[2]; bannerShow(th.name); }
@@ -906,6 +922,23 @@ function stepRows(dt) {
         for (let n = 0; n < 2; n++) { m4.compose(v3.set(lx + (n ? 4.5 : -4.5), (2.4) + TY(r.z, lx + (n ? 4.5 : -4.5)), r.z), q4.identity(), s3.set(2.6, 1.8, 2.6)); rockMesh.setMatrixAt(i * 6 + sd * 2 + n, m4); rockMesh.setColorAt(i * 6 + sd * 2 + n, colr.setRGB(1, 0.25 + 0.15 * Math.sin(t * 5), 0.15)); }
         m4.compose(v3.set(lx, (45) + TY(r.z, lx), r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(si, m4); beamMesh.setColorAt(si, colr.setRGB(1, 0.2, 0.1));
         if (crossing(r.z)) { o.done = true; if ((HEAD.on ? (Math.abs(camX - lx - 4.5) < 6.5 || Math.abs(camX - lx + 4.5) < 6.5) : mine) && ST.y < 3) crash('ROCK'); }
+      }
+    }
+    hz(wallMesh, i * 2); hz(wallMesh, i * 2 + 1);
+    if (r.gap) {          // a carve gate: two wall pieces either side of the opening, a beam over its middle, six orbs down it
+      const g = r.gap, edge = LANE_W * 1.6 + 12, gl = g.c - g.w / 2, gr = g.c + g.w / 2, ty = TY(r.z, g.c);
+      const piece = (k, x0, x1) => { const len = x1 - x0; if (len < 0.5) return; m4.compose(v3.set((x0 + x1) / 2, 4.5 + ty, r.z), q4.identity(), s3.set(len / (LANE_W - 2), 1.3, 1.6)); wallMesh.setMatrixAt(i * 2 + k, m4); wallMesh.setColorAt(i * 2 + k, colr.setRGB(1, 0.2 + 0.15 * Math.sin(t * 5), 0.35)); };
+      piece(0, -edge, gl); piece(1, gr, edge);
+      m4.compose(v3.set(g.c, 45, r.z), q4.identity(), s3.setScalar(1)); beamMesh.setMatrixAt(i * 3, m4); beamMesh.setColorAt(i * 3, colr.setRGB(0.3, 1, 0.8));
+      for (let k = 0; k < 6; k++) {
+        const oz = r.z - k * 5, oc = g.orbs[k] && oz <= zPrev && oz > zPos - 1 && Math.abs(camX - g.c) < 4.8 + g.w * 0.12;
+        if (oc) { g.orbs[k] = false; G.combo++; G.best = Math.max(G.best, G.combo); award(15 * (1 + Math.floor(G.combo / 8))); G.got++; beep(520 + Math.min(G.combo, 14) * 40, 0.1, 0.07); }
+        if (g.orbs[k]) { m4.compose(v3.set(g.c, 2.6 + TY(oz, g.c), oz), q4.identity(), s3.setScalar(1)); orbMesh.setMatrixAt(i * 18 + k, m4); orbMesh.setColorAt(i * 18 + k, themeCol(t * 0.3 + k * 0.06 + i * 0.1, colr)); }
+      }
+      if (!r.gapDone && r.z <= zPrev && r.z > zPos - 1) {
+        r.gapDone = true;
+        if ((camX < gl + 1.9 || camX > gr - 1.9) && ST.y < 3) crash('GATE');
+        else { award(Math.round(30 + (22 - g.w) * 6)); G.combo += 2; G.best = Math.max(G.best, G.combo); G.got++; flash(0.3, 1, 0.8, 0.25); }
       }
     }
   }
