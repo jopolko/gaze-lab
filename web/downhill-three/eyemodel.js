@@ -23,7 +23,7 @@ export class EyeModel {
     this.S = [3.0e-5, 3.0e-5, 1.0e-5];          // (measured from the stare each time: a saved one once carried an inflated value from a bad run into the next)          // [varA, varB, covAB]
     this.post = [0, 1, 0]; this.state = 1; this.ready = false; this.init = [];
     this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.lastFix = 0; this.fixes = 0;
-    this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.04; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45; this.CLIP = 0.012; this.SIDEW = 0.5; this.SMAX = 7.0e-5;          // (tuned by simulation on eyes like the logged ones)
+    this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.04; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45; this.CLIP = 0.012; this.SUP = 0.03; this.SIDEW = 0.5; this.SMAX = 7.0e-5;          // (tuned by simulation on eyes like the logged ones)
   }
   inv() { const [a, b, c] = this.S, det = Math.max(a * b - c * c, 1e-12); return [b / det, a / det, -c / det]; }          // inverse of [[a,c],[c,b]] as [ia, ib, ic]
   q(x, k) {          // squared Mahalanobis distance of x from state k's mean
@@ -94,7 +94,8 @@ export class EyeModel {
   get zone() { return this.state - 1; }          // -1 left, 0 middle, +1 right
   supervise(x, k) {          // a look whose TRUE lane is known (k = -1 / 0 / +1: the guided rows): learn from it directly and quickly, and put the filter on that state
     if (!this.ready) return;
-    const e = 0.06;
+    const e = this.SUP;          // gentle: three looks are only a start, and one odd look (the move itself, a blink, a wandering eye) must not set a side (it once taught a right look of A -0.044 / B -0.010 when play showed -0.020 / -0.020)
+    if (k !== 0 && Math.abs((x[0] - this.m[0]) - (x[1] - this.m[1])) > 0.04) return;          // the two eyes disagree strongly: not a clean look
     if (k === 0) { this.m[0] += e * (x[0] - this.m[0]); this.m[1] += e * (x[1] - this.m[1]); }
     else {
       const r0 = x[0] - this.m[0], r1 = x[1] - this.m[1];

@@ -457,7 +457,7 @@ if (eyeMode) {
           EM.step([ha, hb]);
           KIT.gl = 9; KIT.gp = 9;
           const gr = EM.ready && wasReady ? guideRow() : null;
-          if (gr) { const tt = (zPos - gr.z) / Math.max(speed, 14); if (tt < 1.8 && tt > 0.25) { KIT.gl = gr.guide; KIT.gp = EM.zone; gr.votes[EM.zone + 1]++; EM.supervise([ha, hb], gr.guide); } }
+          if (gr) { const tt = (zPos - gr.z) / Math.max(speed, 14); if (tt < 1.4 && tt > 0.25) { KIT.gl = gr.guide; KIT.gp = EM.zone; gr.votes[EM.zone + 1]++; EM.supervise([ha, hb], gr.guide); } }
           if (EM.ready && KIT.zones) { if (KIT.zone !== EM.zone) KIT.zone_t = t; KIT.zone = EM.zone; KIT.zn = EM.zn; }
           if (EM.n % 150 === 0) { try { localStorage.setItem('spike_em2', JSON.stringify(EM.save())); } catch (e) { /* */ } }
         }
