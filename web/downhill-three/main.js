@@ -25,21 +25,21 @@ function profSave() { try { localStorage.setItem('spike_profiles', JSON.stringif
 if (!Q.has('nomodel')) {
   try { PROF.list = JSON.parse(localStorage.getItem('spike_profiles') || '[]'); } catch (e) { PROF.list = []; }
   let pr = null;
-  if (PROF.list.length) { PROF.cur = PROF.list.reduce((b, p, i) => (p.t > PROF.list[b].t ? i : b), 0); pr = { dL: PROF.list[PROF.cur].dL, dR: PROF.list[PROF.cur].dR }; }
+  if (PROF.list.length) { PROF.cur = PROF.list.reduce((b, p, i) => (p.t > PROF.list[b].t ? i : b), 0); pr = { dL: PROF.list[PROF.cur].dL, dR: PROF.list[PROF.cur].dR, B: PROF.list[PROF.cur].B }; }
   EM = new EyeModel(pr); EM.hold = PROF.list.length > 1;          // with several profiles the first labelled looks choose one before any learning
 }
 function profChoose() {
   const dflt = EM.fit([0.02, 0.02], [0.02, 0.02], EM.labeled); let best = -1, bs = 1e9;
   PROF.list.forEach((p, i) => { const sc = EM.fit(p.dL, p.dR, EM.labeled); if (sc < bs) { bs = sc; best = i; } });
   EM.hold = false; PROF.chosen = true;
-  if (best >= 0 && bs < dflt * 1.2) { EM.dL = PROF.list[best].dL.slice(); EM.dR = PROF.list[best].dR.slice(); PROF.cur = best; }
+  if (best >= 0 && bs < dflt * 1.2) { EM.dL = PROF.list[best].dL.slice(); EM.dR = PROF.list[best].dR.slice(); if (PROF.list[best].B) EM.B = PROF.list[best].B.map((r) => r.slice()); PROF.cur = best; }
   else {          // none fits: a new person (or new glasses). A new profile is made when saving, the sizes start from the defaults, and the LOOK HERE rings are shown once for them
-    PROF.cur = -1; EM.dL = [0.02, 0.02]; EM.dR = [0.02, 0.02];
+    PROF.cur = -1; EM.dL = [0.02, 0.02]; EM.dR = [0.02, 0.02]; EM.B = [[0, 0, 0], [0, 0, 0]];
     if (GUIDE.on && GUIDE.pending === 0) { GUIDE.pending = 3; GUIDE.bSize = 3; GUIDE.bTried = 0; GUIDE.bHits = 0; bannerShow('NEW PLAYER: LOOK AT THE RINGS', true); }
   }
 }
 function profStore() {
-  const p = { dL: EM.dL.slice(), dR: EM.dR.slice(), t: Date.now() };
+  const p = { dL: EM.dL.slice(), dR: EM.dR.slice(), B: EM.B.map((r) => r.slice()), t: Date.now() };
   const rel = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) / Math.max(Math.hypot(b[0], b[1]), 0.02);
   if (PROF.cur >= 0 && (rel(p.dL, PROF.list[PROF.cur].dL) > 0.7 || rel(p.dR, PROF.list[PROF.cur].dR) > 0.7)) PROF.cur = -1;          // it has drifted far from this profile: it is probably someone else, so it does not overwrite it
   if (PROF.cur >= 0) PROF.list[PROF.cur] = p; else { PROF.list.push(p); if (PROF.list.length > 3) PROF.list.shift(); PROF.cur = PROF.list.length - 1; }
@@ -493,7 +493,7 @@ if (eyeMode) {
         const pick = EYE.sel === 'A' && Number.isFinite(ha) ? ha : EYE.sel === 'B' && Number.isFinite(hb) ? hb : hx;
         KIT.add(pick, 0, 0, t);
         if (EM && Number.isFinite(ha) && Number.isFinite(hb)) {          // the model decides the zone once the middle is learned (KIT still runs, for the setup bar, blinks and the logs)
-          EM.step([ha, hb]);
+          EM.step([ha, hb], [KIT.roll || 0, KIT.pitch || 0, KIT.yaw || 0]);          // the head's roll, pitch and yaw (degrees) are used to correct the reading for a tilted or leaning head
           KIT.gl = 9; KIT.gp = 9; KIT.gw = 0;
           const gr = EM.ready && wasReady ? labRow() : null;
           if (gr) {
@@ -501,7 +501,7 @@ if (eyeMode) {
             if (tt < 1.0 && tt > 0.2) {          // (the eyes need about half a second to find a ring: only the last second counts)
               KIT.gl = gr.lab; KIT.gp = EM.zone; KIT.gw = gr.lw; if (gr.guide !== 9) gr.votes[EM.zone + 1]++;
               if (EM.hold && EM.labeled.length >= 25) profChoose();
-              if (gr.lw >= 0.99 || EM.post[gr.lab + 1] >= 0.12 || EM.labeled.length < 30) EM.supervise([ha, hb], gr.lab, gr.lw);          // an inferred label only counts when the model does not flatly disagree with it (a player who ignored the prize must not retrain it)
+              if (gr.lw >= 0.99 || EM.post[gr.lab + 1] >= 0.12 || EM.labeled.length < 30) EM.supervise(EM.xc || [ha, hb], gr.lab, gr.lw);          // an inferred label only counts when the model does not flatly disagree with it (a player who ignored the prize must not retrain it)
             }
           }
           if (EM.ready && wasReady) { CONF.push(Math.max(EM.post[0], EM.post[1], EM.post[2])); if (CONF.length > 300) CONF.shift(); tuneCheck(); }
@@ -865,12 +865,12 @@ function logSample(now) {
   LOG.last = now;
   let open = 9, dist = -1, bz = -1e9;
   for (const r of rows) if (!r.passed && r.z < zPos && r.z > bz) { bz = r.z; open = r.s.reduce((a, o) => a * 10 + (o ? o.type + 1 : 0), 0); dist = zPos - r.z; }          // the nearest row's three kinds as one number (left, middle, right; 0 = nothing there, else type + 1): there is no right answer, the log shows what was offered and what the eyes picked
-  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw]);
+  LOG.buf.push([+(now / 1000).toFixed(2), +KIT.lastHx.toFixed(4), +KIT.zn.toFixed(2), KIT.zone, LOCK.lane, +camX.toFixed(1), open, +dist.toFixed(0), +speed.toFixed(0), KIT.held ? 1 : 0, +LOCK.want[-1].toFixed(2), +LOCK.want[0].toFixed(2), +LOCK.want[1].toFixed(2), +(Number.isFinite(KIT.ha) ? KIT.ha : 0).toFixed(4), +(Number.isFinite(KIT.hb) ? KIT.hb : 0).toFixed(4), +(KIT.yaw || 0).toFixed(1), +(KIT.pitch || 0).toFixed(1), +(KIT.roll || 0).toFixed(1), +(KIT.fx || 0).toFixed(4), +(KIT.fy || 0).toFixed(4), +(KIT.fsz || 0).toFixed(4), +((KIT.lids || [0, 0])[0]).toFixed(4), +((KIT.lids || [0, 0])[1]).toFixed(4), +(EM ? EM.m[0] : 0).toFixed(4), +(EM ? EM.m[1] : 0).toFixed(4), +(EM ? EM.post[0] : 0).toFixed(2), +(EM ? EM.post[1] : 0).toFixed(2), +(EM ? EM.post[2] : 0).toFixed(2), +(EM ? Math.sqrt(EM.S[0]) : 0).toFixed(4), +(EM ? Math.sqrt(EM.S[1]) : 0).toFixed(4), KIT.gl === undefined ? 9 : KIT.gl, KIT.gp === undefined ? 9 : KIT.gp, (KIT.gl === undefined || KIT.gl === 9) ? 0 : GX[KIT.gl], KIT.gw === undefined ? 0 : KIT.gw, +(EM ? EM.corr[0] : 0).toFixed(4), +(EM ? EM.corr[1] : 0).toFixed(4)]);
   if (LOG.buf.length >= 50) flushLog();
 }
 function flushLog() {
   if (!LOG.buf.length) return;
-  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
+  const body = JSON.stringify({ sid: LOG.sid, app: 'downhill-three', cols: 't,hx,zn,zone,lock,camX,open,dist,speed,held,wL,wM,wR,ha,hb,yaw,pitch,roll,fx,fy,fsz,lA,lB,mA,mB,pL,pM,pR,sA2,sB2,gl,gp,gx,gw,cA,cB', tv: TUNE.v, eye: EYE.sel, sA: +EYE.sA.toFixed(2), sB: +EYE.sB.toFixed(2), gfps: (window.__spike || {}).fps || 0, mms: Math.round((window.__gazeStats || {}).inf || 0), zd: +KIT.zdrift.toFixed(4), m: KIT.zones ? KIT.zones.m : 0, dl: KIT.zones ? KIT.zones.dl : 0, dr: KIT.zones ? KIT.zones.dr : 0, s: LOG.buf });
   LOG.buf = [];
   try { fetch('/spike/log', { method: 'POST', body, keepalive: true }); } catch (e) { /* no server */ }
 }

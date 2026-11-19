@@ -22,7 +22,7 @@ export class EyeModel {
     this.dR = prior && prior.dR ? prior.dR.slice() : [0.02, 0.02];          // right = middle - dR
     this.S = [3.0e-5, 3.0e-5, 1.0e-5];          // (measured from the stare each time: a saved one once carried an inflated value from a bad run into the next)          // [varA, varB, covAB]
     this.post = [0, 1, 0]; this.state = 1; this.ready = false; this.init = [];
-    this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.labeled = []; this.hold = false; this.lastFix = 0; this.fixes = 0;
+    this.B = prior && prior.B ? prior.B.map((r) => r.slice()) : [[0, 0, 0], [0, 0, 0]]; this.fbar = null; this.ETA_B = 0.02; this.BMAX = 0.01; this.corr = [0, 0]; this.runState = 1; this.runLen = 0; this.n = 0; this.zn = 0; this.xs = []; this.ss = []; this.labeled = []; this.hold = false; this.lastFix = 0; this.fixes = 0;
     this.STAY = 0.94; this.TEMP = 1.0; this.ETA_M = 0.04; this.ETA_S = 0.01; this.ETA_C = 0.01; this.MIN_SEP = 2.5; this.DECIDE = 0.8; this.NEED = 45; this.CLIP = 0.012; this.SUP = 0.03; this.SIDEW = 0.5; this.SMAX = 7.0e-5;          // (tuned by simulation on eyes like the logged ones)
   }
   inv() { const [a, b, c] = this.S, det = Math.max(a * b - c * c, 1e-12); return [b / det, a / det, -c / det]; }          // inverse of [[a,c],[c,b]] as [ia, ib, ic]
@@ -36,8 +36,18 @@ export class EyeModel {
     const s = this.sepOf(d); if (s > 1e-9 && s < this.MIN_SEP) { const f = this.MIN_SEP / s; d[0] *= f; d[1] *= f; }
     d[0] = Math.max(-0.08, Math.min(0.08, d[0])); d[1] = Math.max(-0.08, Math.min(0.08, d[1]));
   }
-  step(x) {
-    this.n++;
+  // HEAD COMPENSATION: the head's roll, pitch and yaw (degrees) move the iris reading (a tilted head, a phone held on the lap or on a bus, glasses sliding). Each eye's reading is corrected by B . (f - fbar) where f is
+  // [roll, pitch, yaw] and fbar its slow average (about 16 s): a steady lean is the floating middle's job, a tilt that comes and goes is this. B (2 eyes x 3 angles, at most 0.01 per degree) is learned while playing from the
+  // part of each confident reading that is left over after the state's own mean (normalised least mean squares, only while the head is moving by a degree or more), so it learns each person's own relationship.
+  step(x0, f) {
+    let x = x0;
+    if (f) {
+      if (!this.fbar) this.fbar = f.slice(); else for (let i = 0; i < 3; i++) this.fbar[i] += 0.004 * (f[i] - this.fbar[i]);
+      this.fp = [f[0] - this.fbar[0], f[1] - this.fbar[1], f[2] - this.fbar[2]];
+      this.corr = [this.B[0][0] * this.fp[0] + this.B[0][1] * this.fp[1] + this.B[0][2] * this.fp[2], this.B[1][0] * this.fp[0] + this.B[1][1] * this.fp[1] + this.B[1][2] * this.fp[2]];
+      x = [x0[0] - this.corr[0], x0[1] - this.corr[1]];
+    }
+    this.xc = x; this.n++;
     if (!this.ready) {          // the first readings (the stare at the centre) set the middle and the noise
       this.init.push(x);
       if (this.init.length >= this.NEED) {
@@ -73,6 +83,15 @@ export class EyeModel {
       this.S[0] = Math.max((1 - e) * this.S[0] + e * r0 * r0, 1.2e-5); this.S[1] = Math.max((1 - e) * this.S[1] + e * r1 * r1, 1.2e-5);
       this.S[0] = Math.min(this.S[0], this.SMAX); this.S[1] = Math.min(this.S[1], this.SMAX);
       this.S[2] = Math.max(Math.min((1 - e) * this.S[2] + e * r0 * r1, 0.8 * Math.sqrt(this.S[0] * this.S[1])), 0);
+    }
+    const bs = np[0] > np[2] ? (np[0] > np[1] ? 0 : 1) : (np[2] > np[1] ? 2 : 1);
+    if (bs === this.runState) this.runLen++; else { this.runState = bs; this.runLen = 0; }
+    if (f && this.fp && this.runLen >= 20 && Math.max(np[0], np[1], np[2]) > 0.7) {          // LEARN the head effect only inside a steady run (about 1.3 s) of one state
+      const n2 = this.fp[0] ** 2 + this.fp[1] ** 2 + this.fp[2] ** 2;
+      if (n2 > 1.0) {
+        const mean = [this.m[0] + np[0] * this.dL[0] - np[2] * this.dR[0], this.m[1] + np[0] * this.dL[1] - np[2] * this.dR[1]], e = [x[0] - mean[0], x[1] - mean[1]], nrm = 4 + n2;
+        for (let i = 0; i < 2; i++) for (let j = 0; j < 3; j++) this.B[i][j] = Math.max(-this.BMAX, Math.min(this.BMAX, this.B[i][j] + this.ETA_B * e[i] * this.fp[j] / nrm));
+      }
     }
     // SANITY (the middle is the most common state: people mostly look ahead). The three places can slide together by one place (everything read as RIGHT while the middle drifts to sit above the
     // readings: the centre follows what it believes, so a wrong belief holds itself up). If the filter has spent less than 30% of the last 10 s in the MIDDLE, the middle is put back on the median
@@ -118,5 +137,5 @@ export class EyeModel {
     const w = this.xs.slice(-60), med = (k) => { const v = w.map((q) => q[k]).sort((p, q) => p - q); return v[v.length >> 1]; };
     this.m = [med(0), med(1)]; this.post = [0.05, 0.9, 0.05]; this.state = 1; this.ss = this.ss.map(() => 1); return true;
   }
-  save() { return { dL: this.dL, dR: this.dR, S: this.S }; }
+  save() { return { dL: this.dL, dR: this.dR, S: this.S, B: this.B }; }
 }
