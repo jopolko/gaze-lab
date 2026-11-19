@@ -281,15 +281,20 @@ function readTracker(now) {
 // (0.35 s), then 0.14 s once the commitment is over. The board slides to the locked lane, so one glance starts a move that finishes by itself.
 const LOCK = { want: { '-1': 0, '0': 0, '1': 0 }, lane: 0, age: 9 };
 function lockStep(zone, dt) {
+  // RunRig._trail_pick, the stepping rule. The eyes do not name a lane: they MOVE ONE STEP from the lane already locked. A look left chooses the lane just left of it, a look right the lane just
+  // right, and a look at the middle chooses nothing: what is locked stays locked (resting eyes go to the middle, so it must never take the lane). At the end of the row (no lane further that way)
+  // a look to that side changes nothing. A look held on keeps stepping. Fill / drain and the commitment times are Godot's.
   const qk = 0.7;          // at speed everything about choosing is quicker (Godot: qk 0.6 flat out)
+  const L = LOCK.lane, tl = zone < 0 ? L - 1 : zone > 0 ? L + 1 : L, ok = tl >= -1 && tl <= 1;
   for (const l of [-1, 0, 1]) {
-    if (zone === l) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (l === 0 ? 0.35 : 1.0), 0.5);
+    if (ok && l === tl) LOCK.want[l] = Math.min(LOCK.want[l] + dt * (zone === 0 ? 0.35 / qk : 1.0), 0.5);
     else LOCK.want[l] = Math.max(LOCK.want[l] - dt * (zone !== 0 ? 3.0 : 0.6), 0);
   }
   LOCK.age += dt;
-  const need = (LOCK.age >= 0.8 * qk ? 0.16 : 0.45) * qk;          // (Godot: committed 0.5 s, then 0.14 / 0.35. Stickier here: the lane still changed 10 to 18 times in 10 s, about twice what the gates ask for)
-  // a side lane is held until the eyes clearly go somewhere else: returning to the MIDDLE needs a steady look there (about 0.8 s), because following a target that moves inward as it nears reads as 'middle' for a moment
-  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > (l === 0 && LOCK.lane !== 0 ? 0.28 : need)) { LOCK.lane = l; LOCK.age = 0; break; }
+  let need = (LOCK.age >= 0.5 * qk ? 0.14 : 0.35) * qk;          // just locked: committed for half a second, a change of mind then needs a longer, steadier look
+  const ng = nextGate();
+  if (ng && ng.dist / Math.max(speed, 14) < 0.25) need = 9;          // no change of mind in the last quarter second before the board reaches the thing
+  for (const l of [-1, 0, 1]) if (l !== LOCK.lane && LOCK.want[l] > need) { LOCK.lane = l; LOCK.age = 0; break; }
   return LOCK.lane;
 }
 function nextGate() {          // the open lane of the nearest gate still ahead (within 220 m), or null
