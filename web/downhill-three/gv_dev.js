@@ -35,7 +35,7 @@ import { createToys } from './toys.js';
 import { createPsyFx } from './psyfx.js';
 import { createPostFx } from './postfx.js';
 import { createHeightfield } from './heightfield.js';
-import { createTiers, detectWeakGpu } from './tiers.js';
+import { createTiers, detectWeakGpu, pixelBudget } from './tiers.js';
 import { createCamRig } from './camrig.js';
 import { createAudioWire } from './audiowire.js';
 import { createSfx } from './sfxset.js';
@@ -371,9 +371,8 @@ window.__zoneRow = (rr, j) => {
   const dens = z === 'content' ? Math.max(0, Math.min(1, sp('density', .5))) : 0, keep = (i, salt) => (((i * 2654435761 + j * 40503 + salt * 977) >>> 0) % 1000) / 1000 < dens;
   try {
     const prevR = lvl.rows[String(j - 1)] || {}, ap = (rr.pads || []).concat(prevR.pads || []), follows = (b) => ap.some((q) => !q.zoneHid && q.z - b.z > 25 && q.z - b.z < 120 && Math.abs(q.x - b.x) < 45);
-    (rr.pads || []).forEach((q, i) => { if (q.lk && !q.used) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; }          /* the old spring + ring tube + rail chain is gone everywhere: it was always the same */
-      if (z === 'slalom' && !q.lk && !q.used) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; } });          // boost pads: kept everywhere except inside a slalom
-    (rr.buffs || []).forEach((b, i) => { if (!b.taken && !(follows(b) || (z === 'content' && keep(i, 2)))) { if (!window.__hideWhole(b)) hideTarget(b); for (const o of (b.orbs || [])) hideNode(o.n); b.thin = true; b.taken = true; } });          // powerups: the ones just after a boost, plus a share in the content stretches
+    (rr.pads || []).forEach((q) => { if (!q.used) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; } });          // the course's own pads: all hidden (the phrase deck places boosts on purpose)
+    (rr.buffs || []).forEach((b) => { if (!b.taken) { if (!window.__hideWhole(b)) hideTarget(b); for (const o of (b.orbs || [])) hideNode(o.n); b.thin = true; b.taken = true; } });          // the course's own powerups: all hidden (the deck places them after the boosts)
     for (const t of (rr.toys || [])) if (t.kind !== 'pill' && !t.gone && (z === 'slalom' || z === 'clear' || t.kind === 'sling' || !keep((t.x * 7 + t.z) | 0, 3))) { if (!window.__hideWhole(t)) hideNode(t.n); t.done = true; t.t = 1e15; t.gone = true; }          // bumps, colour gates and slingshots: gone from clear and slalom stretches, thinned in the content ones (molecules stay)
     window.__ZD.add(j);
   } catch (e) { /* the world is not ready yet: the per-frame tick tries again */ }
@@ -510,8 +509,17 @@ const VM = { mode: 0, names: ['NORMAL', 'VECTOR', 'ASCII'] };
 postM.uniforms.vmode = { value: 0 }; postM.uniforms.uCell = { value: 9 }; postM.uniforms.uRes = { value: new THREE.Vector2(960, 540) };
 { const cv = document.createElement('canvas'); cv.width = 160; cv.height = 24; const cx = cv.getContext('2d'); cx.fillStyle = '#000'; cx.fillRect(0, 0, 160, 24); cx.fillStyle = '#fff'; cx.font = '700 20px ui-monospace,Consolas,monospace'; cx.textAlign = 'center'; cx.textBaseline = 'middle'; ' .:-=+*#%@'.split('').forEach((ch, i) => { cx.fillText(ch, i * 16 + 8, 13); }); const gt = new THREE.CanvasTexture(cv); gt.minFilter = THREE.LinearFilter; gt.magFilter = THREE.LinearFilter; gt.generateMipmaps = false; postM.uniforms.glyphs = { value: gt }; }
 function setVMode(m) { VM.mode = ((m % 3) + 3) % 3; postM.uniforms.vmode.value = VM.mode; if (window.__vbtn) window.__vbtn.textContent = VM.names[VM.mode]; }
-function sizePost(w, h) { postM.uniforms.uRes.value.set(w, h); postM.uniforms.uCell.value = Math.max(6, Math.round(w / 110)); rtScene.setSize(w, h); rtA.setSize(w >> 1, h >> 1); rtB.setSize(w >> 1, h >> 1); rtG4.setSize(Math.max(2, w >> 2), Math.max(2, h >> 2)); rtG8.setSize(Math.max(2, w >> 3), Math.max(2, h >> 3)); rtG16.setSize(Math.max(2, w >> 4), Math.max(2, h >> 4)); PW = w; PHt = h; }
+function sizePost(w, h) { postM.uniforms.uRes.value.set(w, h); postM.uniforms.uCell.value = Math.max(6, Math.round(w / 110)); rtScene.setSize(w, h); rtSharp.setSize(w, h); rtA.setSize(w >> 1, h >> 1); rtB.setSize(w >> 1, h >> 1); rtG4.setSize(Math.max(2, w >> 2), Math.max(2, h >> 2)); rtG8.setSize(Math.max(2, w >> 3), Math.max(2, h >> 3)); rtG16.setSize(Math.max(2, w >> 4), Math.max(2, h >> 4)); PW = w; PHt = h; }
 let PW = 4, PHt = 4;
+// SHARPENING (&sharpen=1, 0 turns it off): a smaller picture is stretched to the screen, which softens it; this adds the edge contrast back with an unsharp mask limited to the neighbouring values (so no halos),
+// stronger the fewer pixels the dynamic resolution is drawing. Five texture reads a pixel: cheap beside the scene.
+const rtSharp = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: false });
+const sharpM = new THREE.ShaderMaterial({ uniforms: { uSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uAmt: { value: 0 } }, vertexShader: QV, depthTest: false, depthWrite: false,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uAmt;
+  void main() { vec3 c = texture2D(uSrc, vUv).rgb, n = texture2D(uSrc, vUv + vec2(0., uTexel.y)).rgb, s = texture2D(uSrc, vUv - vec2(0., uTexel.y)).rgb, e = texture2D(uSrc, vUv + vec2(uTexel.x, 0.)).rgb, w = texture2D(uSrc, vUv - vec2(uTexel.x, 0.)).rgb;
+    vec3 lo = min(min(n, s), min(e, w)), hi = max(max(n, s), max(e, w)), blur = (n + s + e + w) * .25, sh = c + (c - blur) * uAmt; sh = clamp(sh, min(lo, c) * .9, max(hi, c) * 1.1); gl_FragColor = vec4(sh, 1.0); }
+  ` + TAIL });
+const sharpAmt = () => { const d = Math.min(1, (PW * PHt) / 1.2e6);          /* the fewer pixels the picture has, the more it is sharpened */ return Math.max(0, sp('sharpen', 0)) * Math.min(1.6, .3 + 1.4 * (1 - Math.min(1, d))); };
 // HEAD-COUPLED VIEW (&hcp): the screen is a window. Where your head is (sideways and up/down in the camera picture) moves the camera a little the same way and skews the view so a plane
 // at hcpz metres stays put: things nearer than that shift against you, things farther shift with you (parallax), the way a real window does. &hcpk = how many metres of camera per full camera-picture
 // width of head movement (default 8), &hcpz = the distance that stays still (default 10), &hcpy = up/down strength (default 0.6), &hcpflip=1 reverses left/right if it feels wrong.
@@ -544,24 +552,40 @@ function renderPost() {
     postM.uniforms.gA.value = rtG4.texture; postM.uniforms.gB.value = rtG8.texture; postM.uniforms.gC.value = rtG16.texture;
   }
   postM.uniforms.glowI.value = useGlow ? GL.intensity : 0; postM.uniforms.exposure.value = renderer.toneMappingExposure;
-  qMesh.material = postM; postM.uniforms.screen_tex.value = rtScene.texture; postM.uniforms.trail.value = dst.texture; renderer.setRenderTarget(null); renderer.render(qScene, qCam);
+  qMesh.material = postM; postM.uniforms.screen_tex.value = rtScene.texture; postM.uniforms.trail.value = dst.texture; const shAmt = sharpAmt();
+ if (shAmt > .03) { renderer.setRenderTarget(rtSharp); renderer.render(qScene, qCam); qMesh.material = sharpM; sharpM.uniforms.uSrc.value = rtSharp.texture; sharpM.uniforms.uTexel.value.set(1 / PW, 1 / PHt); sharpM.uniforms.uAmt.value = Q.has('sharpdbg') ? 0 : shAmt; renderer.setRenderTarget(null); renderer.render(qScene, qCam); }
+ else { renderer.setRenderTarget(null); renderer.render(qScene, qCam); }
 }
 // QUALITY GOVERNOR: the picture steps down by itself, one notch at a time, whenever the frame time stays over ~21 ms (below 48 fps): glow off, then fewer MSAA samples, then a lower render resolution. (Godot's own tiers do the same, Lighting.gd: glow off at tier 2, the colour adjustment at tier 1.) ?nogov turns it off.
 const GOV = { on: !Q.has('nogov') && !Q.has('shot'), ema: 16.7, lastNow: 0, since: performance.now() + 2500, step: 0, log: [] };
 function setSamples(n) { if (!MSAA_OK) return; rtScene.samples = n; GLOWQ.samples = n; rtScene.dispose(); }
 function setDpr(r) { renderer.setPixelRatio(Math.min(r, window.devicePixelRatio || 1)); resize(); }          // never above the screen's own resolution: rendering at 1.5x (2.25x the pixels) stalled integrated graphics and lost the graphics context
 const GOV_STEPS = [['glow off', () => { GLOWQ.on = false; }], ['msaa 2', () => setSamples(2)], ['dpr 1.25', () => setDpr(1.25)], ['msaa off', () => setSamples(0)], ['dpr 1.0', () => setDpr(1.0)], ['dpr 0.85', () => setDpr(.85)]];
-const TIERS = (!Q.has('oldgov') && !Q.has('nogov') && !Q.has('shot')) ? createTiers({ isTouch: matchMedia('(pointer:coarse)').matches, weakGpu: detectWeakGpu(_gl), isWeb: true, pin: Q.has('tier') ? +Q.get('tier') : null, dpr: () => window.devicePixelRatio || 1, cssSize: () => [innerWidth, innerHeight],
+if (Q.has('px')) window.__PXB = parseFloat(Q.get('px')) * 1e6;          /* &px=0.6: the picture is drawn with at most 0.6 million pixels (the game's quality control stays under it) */
+const TIERS = (!Q.has('oldgov') && !Q.has('nogov') && !Q.has('shot')) ? createTiers({ allowDown: () => !window.__DRS || !window.__DRS.on || window.__DRS.atFloor(), isTouch: matchMedia('(pointer:coarse)').matches, weakGpu: detectWeakGpu(_gl), isWeb: true, pin: Q.has('tier') ? +Q.get('tier') : null, dpr: () => window.devicePixelRatio || 1, cssSize: () => [innerWidth, innerHeight],
   hooks: { setGlow: (on) => { window.__dm && window.__dm('TIER hook: glow ' + on); GLOWQ.on = on; }, setSamples: (n) => { window.__dm && window.__dm('TIER hook: msaa samples ' + n); setSamples(n); }, setPixelRatio: (r) => { window.__dm && window.__dm('TIER hook: pixel ratio ' + r); setDpr(r); }, setStreamWindow: (a, b) => { RS.ahead = a; RS.behind = b; } } }) : null;
 if (TIERS) GOV.on = false; window.__tiers = TIERS;          // Lighting.gd's tiers and speed governor (tiers.js): checked every 2 s, down after 3 s under 50 fps, up after 16 s over 55; ?tier=N pins, ?oldgov the earlier stepper
 let tLast = 0;
 function govTick(now) {
-  if (TIERS) { if (!document.hidden && tLast && now - tLast < 200) TIERS.frame((now - tLast) / 1000); tLast = now; return; }
+  if (TIERS) { if (!document.hidden && tLast && now - tLast < 200) { TIERS.frame((now - tLast) / 1000); drsFrame((now - tLast) / 1000); } tLast = now; return; }
   if (!GOV.on || document.hidden) { GOV.lastNow = now; return; } const d = GOV.lastNow ? now - GOV.lastNow : 16.7; GOV.lastNow = now; if (d > 200) return;
   GOV.ema += (Math.min(d, 60) - GOV.ema) * .04; if (now < GOV.since || GOV.step >= GOV_STEPS.length) return;
   if (GOV.ema > 21) { const st2 = GOV_STEPS[GOV.step++]; st2[1](); GOV.log.push(st2[0] + ' @' + Math.round(GOV.ema) + 'ms'); GOV.since = now + 3000; GOV.ema = 16.7; }
 }
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); sizePost(Math.floor(w * renderer.getPixelRatio()), Math.floor(h * renderer.getPixelRatio())); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+// DYNAMIC RESOLUTION (&nodrs turns it off; &px=N fixes it): the game keeps itself at 60 fps by changing how many pixels it draws, on any device. Every second it looks at the frame rate:
+// under 55 fps it draws fewer pixels at once (by how far it is under), at a steady 60 for six seconds it tries a few percent more (never more than it just failed at, for 20 s), and only when it is
+// already at the smallest picture does the old quality control start switching effects off. It starts a little under the device's ceiling (a phone about 1 million pixels, a weak laptop 1.2 million, a
+// good one 2.1 million) and finds its own level, so a ten-year-old phone ends up with a smaller, softer picture and a smooth game instead of a sharp slideshow.
+const DRS = window.__DRS = { on: !!TIERS && !Q.has('nodrs') && !Q.has('px'), px: 0, max: 0, floor: .22e6, lim: 1e12, t: 0, f: 0, good: 0, hold: 0, changes: 0, atFloor: () => DRS.px <= DRS.floor * 1.08 };
+if (DRS.on) { const o0 = window.__PXB; window.__PXB = 0; DRS.max = pixelBudget(matchMedia('(pointer:coarse)').matches, detectWeakGpu(_gl)); window.__PXB = o0; DRS.px = DRS.max * .75; window.__PXB = DRS.px; }
+function drsFrame(dt) {
+  if (!DRS.on || document.hidden) return; if (dt > .004) DRS.minDt = Math.min(DRS.minDt || 1, dt); DRS.age = (DRS.age || 0) + dt; DRS.t += dt; DRS.f++; if (DRS.t < 1) return; const fps = DRS.f / DRS.t; DRS.t = 0; DRS.f = 0; const TG = Math.max(24, Math.min(75, sp('fpstarget', 60), DRS.age > 4 && DRS.minDt ? (1 / DRS.minDt) * .98 : 75));          /* never aim above what the screen can show: a display that only refreshes 30 or 45 times a second is not a reason to blur the picture */
+  const apply = (why) => { window.__PXB = DRS.px; DRS.changes++; try { TIERS.apply(); } catch (e) { } try { window.__dm && window.__dm('drs ' + why + ' ' + (DRS.px / 1e6).toFixed(2) + 'M px at ' + Math.round(fps) + ' fps'); } catch (e) { } };
+  if (fps < TG - 5) { DRS.good = 0; const nx = Math.max(DRS.floor, DRS.px * Math.max(.72, Math.min(.93, fps / TG))); if (nx < DRS.px * .995) { DRS.lim = DRS.px; DRS.px = nx; DRS.hold = 20; apply('down'); } }
+  else if (fps >= TG - 1.5) { DRS.good++; DRS.hold = Math.max(0, DRS.hold - 1); DRS.lim *= 1.02; if (DRS.good >= 6 && DRS.hold <= 0 && DRS.px < DRS.max * .995) { const nx = Math.min(DRS.max, DRS.px * 1.07); DRS.good = 0; if (nx < DRS.lim * .97) { DRS.px = nx; apply('up'); } } }
+  else DRS.good = 0;
+}
 addEventListener('resize', resize); resize(); if (TIERS) { TIERS.apply(); if (Q.has('tier')) TIERS.setTier(+Q.get('tier')); if (Q.has('msaa')) setSamples(+Q.get('msaa')); }          // (a pinned tier or ?msaa=N is applied before the first draw too)          // the quality tier is applied once, here, before anything is drawn (it used to be applied during the first frames, while the shaders were still compiling)
 let last = performance.now(), fps = 0, acc = 0, frames = 0;
 const SHOT = Q.has('shot') ? lvl.shots[parseInt(Q.get('shot'), 10) || 0] : null;
@@ -610,8 +634,9 @@ function headStep(dt, now) {
   {          /* RE-CENTRING: the middle is not fixed, it follows where your head rests. When the head has been still for a moment and is near the middle, the middle slides to where it is: slowly in normal riding (a few seconds), quickly while the board is held by a ramp, rail or arc or in the air, and for a second and a half after one of those ends (landing, rail end, lip). A head deliberately held well off to one side is never absorbed. &recentre=0 turns it off. */
     const nowT = performance.now(), locked = !!(PH.rail || PH.vlock !== null || !PH.grounded || (typeof toys !== 'undefined' && toys && toys.active && toys.active())), still = Math.abs(HD.pvel || 0) < .3 && !HD.lost && (window.__rot || 0) < 25;
     if (HD._free === false && !locked) HD.recentreUntil = nowT + 1500; HD._free = !locked; HD.stillT = still ? (HD.stillT || 0) + dt : 0;
-    if (sp('recentre', 1) > 0 && HD.frozen && HD.cal && HD.stillT > .6) {
-      const fast = locked || nowT < (HD.recentreUntil || 0), tc = fast ? .5 : 3, lim = fast ? .55 : .3, a = 1 - Math.exp(-dt / tc);
+    const coast = !locked && PH.grounded && Math.abs(PH.x - trailX(PH.z)) < 3.5 && Math.abs(PH.vx) < 2.5;          /* the ROAD tells the middle: the board is on the paved line, going straight, nothing holding it. A head that is still and nearly centred then IS straight, so the middle is pulled to it quickly (and the meter goes back to zero). */
+    if (sp('recentre', 1) > 0 && HD.frozen && HD.cal && HD.stillT > (coast ? .4 : .6)) {
+      const fast = locked || nowT < (HD.recentreUntil || 0), tc = fast ? .5 : (coast ? 1.1 : 3), lim = fast ? .55 : (coast ? .4 : .3), a = 1 - Math.exp(-dt / tc);
       if (sp('splitmix', MIXS ? 1 : 0) > 0 && HD.nT !== undefined) { const sT = -(HD.cur[0] - HD.nT) / sp('turnfull', 10) * .5, sL = -(HD.cur[2] - HD.nL) / Math.max(.5, sp('leanfull', 8)) * .8; if (Math.abs(sT + sL) < lim) { HD.nT += (HD.cur[0] - HD.nT) * a; HD.nL += (HD.cur[2] - HD.nL) * a; } }
       else { const raw = hproj(nv); if (Math.abs((raw - HD.neu) * HD.k) < lim) HD.neu += (raw - HD.neu) * a; }
     }
@@ -907,9 +932,9 @@ function railStep(dt, sIn) {
   }
   for (const f of RAILS) {
     if (f.done) continue; if (PH.z < f.zb + 5) { f.done = true; continue; }
-    if (PH.grounded && PH.z < f.za + 6) { const wdx = featX(f, Math.max(f.zb, Math.min(f.za, PH.z))) - PH.x; if (Math.abs(wdx) < 7 && Math.abs(wdx) > .3) PH.x += Math.sign(wdx) * Math.min(Math.abs(wdx), (2.5 + 9 * (1 - Math.abs(wdx) / 7)) * dt * 2); }
+    if (PH.grounded && PH.z < f.za + 6) { const wdx = featX(f, Math.max(f.zb, Math.min(f.za, PH.z))) - PH.x; if (sp('railpull', 0) > 0 && Math.abs(wdx) < 7 && Math.abs(wdx) > .3) PH.x += Math.sign(wdx) * Math.min(Math.abs(wdx), (2.5 + 9 * (1 - Math.abs(wdx) / 7)) * dt * 2); }          /* no pull toward a rail: you have to line up on it yourself (&railpull=1 for the old pull) */
     if (PH.hurt > 0 || PH.z > f.za + .5) continue; const nt = PH.z > f.za - 10;
-    if (Math.abs(PH.x - featX(f, PH.z)) < (nt ? 2.6 : 1.3) && PH.y - railY(f, PH.z) < 2) { PH.rail = f; PH.rail_z0 = PH.z; PH.rail_dx = PH.x - featX(f, PH.z); PH.slide = PH.vx; PH.rail_ok = false; PH.rail_out = 0; SFX.grindOn(); toast({ glass: 'GLASS RAIL: FAST', wood: 'WOODEN RAIL: SLOW AND LONG', neon: 'NEON RAIL: DOUBLE POINTS', rust: 'RUSTY RAIL: ROUGH' }[f.mat] || 'GRIND', f.col ? '#' + f.col.map((c) => Math.round(Math.min(1, c) * 15).toString(16)).join('') : '#7ef'); break; }
+    if (sp('railgrab', 1) > 0 && Math.abs(PH.x - featX(f, PH.z)) < (nt ? 1.5 : .9) * sp('railgrab', 1) && PH.y - railY(f, PH.z) < 2) { PH.rail = f; PH.rail_z0 = PH.z; PH.rail_dx = PH.x - featX(f, PH.z); PH.slide = PH.vx; PH.rail_ok = false; PH.rail_out = 0; SFX.grindOn(); toast({ glass: 'GLASS RAIL: FAST', wood: 'WOODEN RAIL: SLOW AND LONG', neon: 'NEON RAIL: DOUBLE POINTS', rust: 'RUSTY RAIL: ROUGH' }[f.mat] || 'GRIND', f.col ? '#' + f.col.map((c) => Math.round(Math.min(1, c) * 15).toString(16)).join('') : '#7ef'); break; }
   }
 }
 function vortexStep(dt, steerIn) {
@@ -923,7 +948,7 @@ function vortexStep(dt, steerIn) {
       const fsp = -PH.vz; if (fsp < C.VX_TRAIL) PH.vz -= Math.min(C.VX_ACCEL * (PH.z < kz ? .9 : .6) * dt, C.VX_TRAIL - fsp);
     }
     if (PH.prevZ > lipz && PH.z <= lipz && Math.abs(PH.x - kx) < half) {          // the lip: the swirl lets go (RunRig._update_ramps, crossed): a hard blast off it
-      { let hv = 0; for (let q = 0; q < 8; q++) hv = (hv * 31 + Math.floor(Math.abs(k.z) * 7 + q)) % 1000; k.hv = .7 + .9 * (hv / 1000); PH.vy += C.JUMP_BLAST * (k.super ? 1 : k.hv); if (!k.super) toast(k.hv > 1.25 ? 'BIG AIR' : k.hv < .9 ? 'SMALL HOP' : 'AIR', '#fc8'); } PH.boost_t = Math.max(PH.boost_t, 1.2);          /* each ramp throws a different height (0.7x to 1.6x), keyed to where it stands */ PH.jumps++; PH.score += 150; chainHit(); try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } toast(k.super ? 'SUPER AIR!' : 'BLAST!', '#f8f'); VFX.blast(); FX.E.blast([PH.x, PH.y, PH.z]); if (AWON) AW.onRampBlast(); else SFX.blast(); if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } PH.vxa = Math.max(PH.vxa, .45);
+      PH.vy += C.JUMP_BLAST; PH.boost_t = Math.max(PH.boost_t, 1.2);          /* the natural ramps: exactly Godot's launch */          /* each ramp throws a different height (0.7x to 1.6x), keyed to where it stands */ PH.jumps++; PH.score += 150; chainHit(); try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } toast(k.super ? 'SUPER AIR!' : 'BLAST!', '#f8f'); VFX.blast(); FX.E.blast([PH.x, PH.y, PH.z]); if (AWON) AW.onRampBlast(); else SFX.blast(); if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } PH.vxa = Math.max(PH.vxa, .45);
     }
   }
   PH.vlock = lockX; if (active) PH.vxa = Math.max(PH.vxa, .45); else { if (PH.grounded) PH.vxa = Math.max(PH.vxa - dt, 0); PH.vsnd = false; }
@@ -1173,7 +1198,7 @@ function frame(now) {
   if (PLAY && CAMD.mode === 'old') { if (SHUD.a > .002) { const tt = performance.now(); camera.position.y += Math.sin(tt * .09) * SHUD.a; camera.position.x += Math.sin(tt * .071 + 1.3) * SHUD.a * .6; } SHUD.a *= Math.exp(-dt * 13); }
   if (!PLAY || CAMD.mode === 'old') { camera.rotation.set(-0.06 + pitch * 0.8, 0, 0, 'YXZ'); U.uBoard.value.set(st.x, st.z); sky.position.copy(camera.position); }
   const T3 = performance.now(); WEATHER.tick(dt, camera.position, Math.hypot(PH.vx, PH.vz) / SPK, renderer.domElement.height); caveTick(dt);
-  const T4 = performance.now(); renderPost(); if (window.__snapWant) window.__snapDo(); const T5 = performance.now(); goalTick(now); beaconTick(now); govTick(now); { const T6 = performance.now(); if (window.__dm && T6 - T0 > 250) window.__dm('SLOW FRAME ' + Math.round(T6 - T0) + 'ms: anim/mae/trail ' + Math.round(T1 - T0) + ' | physics ' + Math.round(T2 - T1) + ' | camera ' + Math.round(T3 - T2) + ' | weather/cave ' + Math.round(T4 - T3) + ' | renderPost ' + Math.round(T5 - T4) + ' | goal/beacon/gov ' + Math.round(T6 - T5) + ' | paused ' + st.paused); }
+  const T4 = performance.now(); renderPost(); if (window.__snapWant) window.__snapDo(); const T5 = performance.now(); goalTick(now); beaconTick(now); govTick(now); { const T6 = performance.now(); { const A = window.__FT || (window.__FT = { n: 0, a: 0, p: 0, c: 0, w: 0, r: 0, g: 0, tot: 0 }); A.n++; A.a += T1 - T0; A.p += T2 - T1; A.c += T3 - T2; A.w += T4 - T3; A.r += T5 - T4; A.g += T6 - T5; A.tot += T6 - T0; } if (window.__dm && T6 - T0 > 250) window.__dm('SLOW FRAME ' + Math.round(T6 - T0) + 'ms: anim/mae/trail ' + Math.round(T1 - T0) + ' | physics ' + Math.round(T2 - T1) + ' | camera ' + Math.round(T3 - T2) + ' | weather/cave ' + Math.round(T4 - T3) + ' | renderPost ' + Math.round(T5 - T4) + ' | goal/beacon/gov ' + Math.round(T6 - T5) + ' | paused ' + st.paused); }
   frames++; acc += dt; if (acc > 0.5) { fps = frames / acc; frames = 0; acc = 0; hud.textContent = LVL + '  seed ' + lvl.seed + '  ' + lvl.theme + '\n' + nMesh + ' meshes, ' + nInst + ' instances, ' + Object.keys(lvl.meshes).length + ' unique meshes\nz ' + st.z.toFixed(0) + '  speed ' + (PLAY ? (Math.hypot(PH.vx, PH.vz) * 3.6).toFixed(0) + 'km/h  hits ' + PH.hits + '  score ' + Math.floor(PH.score) + (PH.shield ? '  SHIELD' : '') + (PH.boost_t > 0 ? '  BOOST' : '') : st.speed.toFixed(0)) + '  ' + fps.toFixed(0) + ' fps'; if (MINUP) MINUP(fps); }
 }
 const VB = document.createElement('div'); VB.textContent = 'NORMAL'; VB.style.cssText = 'position:fixed;right:10px;top:60px;min-width:44px;padding:0 10px;height:30px;line-height:30px;text-align:center;border:2px solid #fff9;border-radius:15px;color:#fff;font:700 11px ui-monospace,Consolas,monospace;background:#0006;z-index:9;cursor:pointer;user-select:none'; document.body.appendChild(VB); window.__vbtn = VB; VB.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); setVMode(VM.mode + 1); });
@@ -1341,7 +1366,7 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
   setInterval(() => {
     const trk = window.__trk, hz = trk && trk.fps ? trk.fps : 0, lat = trk && trk.lat && Number.isFinite(trk.lat.total) ? trk.lat.total : null, g = HD.gain;
     const tips = []; if (lock > .25) tips.push('at the edge ' + Math.round(lock * 100) + '% of the time: lower Sensitivity'); if (jit > .35 && mid > .3) tips.push('jittery near the middle: raise Smoothness or Calm centre'); if (hz && hz < 10) tips.push('the tracker is slow (' + hz.toFixed(0) + '/s): not a setting problem'); if (!HD.cal) tips.push('not calibrated: look straight ahead');
-    hl.textContent = 'fps ' + Math.round(typeof fps === 'number' ? fps : 0) + '  tracker ' + (hz ? hz.toFixed(0) : '-') + '/s' + (lat !== null ? '  delay ~' + Math.round(lat + 40) + 'ms' : '') + '  sens ' + (+g).toFixed(2) + '\nedge ' + Math.round(lock * 100) + '%  centre ' + Math.round(mid * 100) + '%  jitter ' + Math.round(jit * 100) + '%' + (tips.length ? '\n! ' + tips.join('\n! ') : '\nlooks fine');
+    hl.textContent = 'fps ' + Math.round(typeof fps === 'number' ? fps : 0) + (window.__DRS && window.__DRS.on ? '  draws ' + (window.__DRS.px / 1e6).toFixed(2) + 'M px' : '') + '  tracker ' + (hz ? hz.toFixed(0) : '-') + '/s' + (lat !== null ? '  delay ~' + Math.round(lat + 40) + 'ms' : '') + '  sens ' + (+g).toFixed(2) + '\nedge ' + Math.round(lock * 100) + '%  centre ' + Math.round(mid * 100) + '%  jitter ' + Math.round(jit * 100) + '%' + (tips.length ? '\n! ' + tips.join('\n! ') : '\nlooks fine');
   }, 500);
 }
 
@@ -1372,7 +1397,7 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
     const ib = new THREE.InstancedMesh(geoB, matB, B.length); B.forEach(([x, z], i) => { const y = groundY(x, z); m.makeScale(1, 1, 1).setPosition(x, y === null ? th(x, z) : y, z); ib.setMatrixAt(i, m); addOb(x, z, .5); });
     ib.frustumCulled = false; scene.add(ib);
   };
-  const KIT = createKit({ scene, th, groundY, trailX, PH, C, SPK, RAILS, toast, hooks: {} }); window.__kitStep = (dt) => KIT.step(dt);          /* custom ramps, rails and hoops in five cheap materials (kit.js) */
+  const KIT = createKit({ scene, th, groundY, trailX, PH, C, SPK, RAILS, toast, hooks: {}, PADS, BUFFS, nrows: lvl.nrows || 43, hooks: { cheer: (p, c, s) => { try { FX.E.cheer(p, c, s); } catch (e) { } }, sfx: () => { try { SFX.pick(); SFX.snap(); } catch (e) { } }, chain: () => { try { chainHit(); } catch (e) { } } }, zoneOf: (j) => window.__zoneOf(j), seed: sp('seed', lvl.seed || 7), onTarget: (o, kind) => { if (kind === 'pad') mkBeacon(o, o.x, o.z, th(o.x, o.z), 'pad', 3, 38); else mkBeacon(o, o.x, o.z, o.y - 2.4, kind, 3.2, 48); } }); KIT.setVxRows((lvl.vx || []).map((k) => Math.floor(-k.z / 180))); window.__kitStep = (dt) => KIT.step(dt);          /* custom ramps, rails and hoops in five cheap materials (kit.js) */
   const spansOf = (j, rr) => { const sp0 = []; for (const q of [lvl.rows[String(j - 1)], rr, lvl.rows[String(j + 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) sp0.push([Math.min(...zs) - 6, Math.max(...zs) + (f.kind === 'jump' ? 140 : 8)]); } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) sp0.push([t.z - 25, t.z + 25]); } return sp0; };
   const singles = (j, rr, z0) => {
     const spans = []; for (const q of [lvl.rows[String(j - 1)], rr, lvl.rows[String(j + 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) spans.push([Math.min(...zs) - 6, Math.max(...zs) + (f.kind === 'jump' ? 140 : 8)]); } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) spans.push([t.z - 25, t.z + 25]); }
@@ -1382,12 +1407,12 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
     im.frustumCulled = false; ib.frustumCulled = false; scene.add(im); scene.add(ib);
   };
   window.__slalomTick = () => {
-    { const j1 = Math.max(1, Math.floor(-PH.z / 180) - 1); for (let j = j1; j <= j1 + 3; j++) { const zn = window.__zoneOf(j), rr = lvl.rows[String(j)]; if (!rr || zn === 'slalom' || zn === 'off') continue; const z0 = -180 * j; if (groundY(trailX(z0 - 90), z0 - 90) === null) continue; try { const n0 = KIT.ramps.length, r0 = RAILS.length; KIT.buildRow(j, rr, z0, spansOf(j, rr)); if (KIT.ramps.length + RAILS.length !== n0 + r0) window.__dm && window.__dm('kit row ' + j + ': +' + (KIT.ramps.length - n0) + ' ramps, +' + (RAILS.length - r0) + ' rails, rings ' + KIT.rings.length); } catch (e) { window.__dm && window.__dm('kit build failed: ' + (e && e.message)); } } }
-    if (!window.__railMats) { window.__railMats = true; const MT = [['steel', [.35, .95, 1]], ['steel', [.35, .95, 1]], ['glass', [.85, .95, 1]], ['wood', [1, .62, .25]], ['neon', [1, .3, .9]], ['rust', [1, .5, .2]]]; for (const f of RAILS) if (!f.mat) { const h = Math.abs(Math.floor(f.za * 13)) % 6; f.mat = MT[h][0]; f.col = MT[h][1]; } }
+    { const j1 = Math.max(1, Math.floor(-PH.z / 180) - 1); for (let j = j1; j <= j1 + 3; j++) { const zn = window.__zoneOf(j), rr = lvl.rows[String(j)]; if (!rr || zn === 'slalom' || zn === 'off') continue; const z0 = -180 * j; if (groundY(trailX(z0 - 90), z0 - 90) === null) continue; try { const n0 = KIT.ramps.length, r0 = RAILS.length; KIT.buildRow(j, rr, z0, spansOf(j, rr)); for (const k of (lvl.vx || [])) { if (k.kb || !(k.z <= z0 && k.z > z0 - 180)) continue; k.kb = true; KIT.buildAfterRamp(k, spansOf(j, rr)); } if (KIT.ramps.length + RAILS.length !== n0 + r0) window.__dm && window.__dm('kit row ' + j + ': +' + (KIT.ramps.length - n0) + ' ramps, +' + (RAILS.length - r0) + ' rails, rings ' + KIT.rings.length); } catch (e) { window.__dm && window.__dm('kit build failed: ' + (e && e.message)); } } }
+    if (!window.__railMats) { window.__railMats = true; const MT = [['steel', [.35, .95, 1]], ['steel', [.35, .95, 1]], ['glass', [.85, .95, 1]], ['wood', [1, .62, .25]], ['neon', [1, .3, .9]], ['rust', [1, .5, .2]]]; for (const f of RAILS) if (!f.mat) { f.mat = 'steel'; }          /* one material: chrome, one way of riding */ }
     if (!PLAY || sp('zones', 1) <= 0) return; const j0 = Math.max(0, Math.floor(-PH.z / 180) - 1);
     for (let j = j0; j <= j0 + 4; j++) { const rr = lvl.rows[String(j)]; if (rr && !window.__ZD.has(j)) window.__zoneRow(rr, j); }
     for (let j = j0; j <= j0 + 3; j++) {
-      const zn = window.__zoneOf(j); if (SLN.done.has(j) || (zn !== 'slalom' && zn !== 'clear') || j < 1) continue; const rr = lvl.rows[String(j)]; if (!rr) continue;
+      const zn = window.__zoneOf(j) === 'slalom' ? 'slalom' : (KIT.phraseOf(j) === 'warm' ? 'clear' : 'none'); if (SLN.done.has(j) || (zn !== 'slalom' && zn !== 'clear') || j < 1) continue; const rr = lvl.rows[String(j)]; if (!rr) continue;
       const z0 = -180 * j; if (groundY(trailX(z0 - 90), z0 - 90) === null) continue;          // the ground of that row is not there yet: try again next frame
       SLN.done.add(j); try { if (zn === 'slalom') build(j, rr, z0); else singles(j, rr, z0); } catch (e) { window.__dm && window.__dm('slalom build failed: ' + (e && e.message)); }
     }
@@ -1412,7 +1437,7 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
 }
 
 // SPEED LOG (&diag): every 2 s, the speed, what limits it and the boost state, so a slow start can be explained with numbers
-setInterval(() => { try { if (!window.__dm || !PLAY) return; const sp0 = Math.hypot(PH.vx, PH.vz); window.__dm('speed ' + sp0.toFixed(1) + ' m/s z ' + PH.z.toFixed(0) + ' boost ' + PH.boost_t.toFixed(2) + ' vxa ' + PH.vxa.toFixed(2) + ' ramp ' + ramp().toFixed(2) + ' grade ' + PH.grade.toFixed(2) + ' hurt ' + PH.hurt.toFixed(1) + ' ready ' + PH.ready + ' perk ' + PSY.perks().speedK.toFixed(2) + ' VMAX ' + (C.TRAIL_VMAX * ramp()).toFixed(1) + ' SPD ' + (C.TRAIL_SPEED * ramp()).toFixed(1) + ' rot ' + (window.__rotRms || 0).toFixed(1)); } catch (e) { } }, 2000);
+setInterval(() => { try { if (!window.__dm || !PLAY) return; const sp0 = Math.hypot(PH.vx, PH.vz); window.__dm('speed ' + sp0.toFixed(1) + ' m/s z ' + PH.z.toFixed(0) + ' boost ' + PH.boost_t.toFixed(2) + ' vxa ' + PH.vxa.toFixed(2) + ' ramp ' + ramp().toFixed(2) + ' grade ' + PH.grade.toFixed(2) + ' hurt ' + PH.hurt.toFixed(1) + ' ready ' + PH.ready + ' perk ' + PSY.perks().speedK.toFixed(2) + ' VMAX ' + (C.TRAIL_VMAX * ramp()).toFixed(1) + ' SPD ' + (C.TRAIL_SPEED * ramp()).toFixed(1) + ' rot ' + (window.__rotRms || 0).toFixed(1) + (() => { const A = window.__FT; if (!A || !A.n) return ''; const f = (v) => (v / A.n).toFixed(1), o = ' | cpu ms per frame: anim ' + f(A.a) + ' physics ' + f(A.p) + ' camera ' + f(A.c) + ' weather ' + f(A.w) + ' renderPost ' + f(A.r) + ' other ' + f(A.g) + ' total ' + f(A.tot) + ' (' + A.n + ' frames, period ' + (2000 / A.n).toFixed(1) + ' ms)'; window.__FT = null; return o; })()); } catch (e) { } }, 2000);
 
 
 // CENTRE NOW: re-measure the middle from where the head is this instant (the R key, or the Centre button in the settings sheet)

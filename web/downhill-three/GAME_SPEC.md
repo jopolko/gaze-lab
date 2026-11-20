@@ -538,3 +538,34 @@ A section is a short script: a theme, a length, a difficulty level (0-1) and a l
 
 ### Not done / not verified
 Nothing in this section is built. Barriers exist only in the `bar_*` courses (Godot layouts); moving obstacles, rotating platforms and the maze generator do not exist yet. The three.js build would start from the barrier objects in the dump and the buff bank already in `gv.js`.
+
+
+## 19. Course grammar: everything has a reason (owner, 2026-11-20)
+
+**Owner's rules.** One material per kind of object: the natural earth-and-grass ramps stay exactly as Godot made them, every rail is shiny chrome. Nothing is strewn at random: a rail, hoop or pad is there because of something near it. Everything is optional (a player can speed past without tripping on it), and a one-hour session must not repeat the same arrangement (the owner's examples of what bores: ramps on either side with a rail in the middle; ramp, same rail, same loop).
+
+### Phrases, not objects
+The unit of content is a **phrase**: a short chain of two to four pieces (150-450 m) where each piece leads to the next and ends in a reward. The generator places phrases, never loose objects.
+| Phrase | The chain | Why it makes sense |
+|---|---|---|
+| **Launch and land** | natural ramp -> hoops along the real flight -> a chrome rail where the flight comes down | the hoops show the flight, the rail is the landing |
+| **Boost and grind** (built) | boost pad -> a chrome rail starting just past it -> hoops at its end | the boost carries you onto the rail |
+| **Boost run** | two or three pads in a line -> a powerup 25-120 m after the last one (built) | steer after speed |
+| **Gate field** | slalom with wide openings, a single pylon field before it as a warm-up | tests steering, never blocks |
+| **Over-the-top** (planned) | a long rail running above a gate field or a cluster of pylons | the rail is the bypass: fast and safe, but only if you line up |
+| **Molecule approach** | the existing Godot approach (spec section 5) | the goal of the run |
+| **Open blast** | nothing but road | rest, speed |
+No curved rails unless a curve avoids something (a rail may bend around a pylon cluster, never an S for its own sake).
+
+### Against repetition (one hour)
+1. A **phrase deck**: shuffled like cards, a phrase may not follow itself or repeat within five, and its lane (left, middle, right, diagonal) must differ from the last two.
+2. **Variants inside a phrase**: rail length (28-72 m), design (pipe, bar, twin), hoop arrangement (parabola, spiral, ladder, sweep, low), where on the ramp's line the rail starts.
+3. **Chapters change the deck** (spec section 4): chapter 1 has Launch and land and Open blast only; each chapter adds one phrase; the last mixes all, back to back.
+4. **Rhythm**: tension and rest on a wave (a busy phrase, then an open blast), longer rests early, shorter later.
+5. **Callbacks and surprises**: a signature object per region (spec section 18) and a rare set-piece (tornado, carnival, mall) roughly every 10-15 minutes.
+6. **Variable rewards**: hoops, powerups and points differ per phrase; some phrases pay for risk (a tight line) and some for skill (a rail held to its end).
+
+### Built so far (test copy)
+Chrome rails only (pipe, bar, twin), straight, from a boost pad (Boost and grind) and after each natural ramp (Launch and land: hoops plus a rail); kit ramps and multi-material looks are off; natural ramps are unmodified; the old spring-and-ring-tube chain is removed.
+### Next
+Phrase deck and lanes (items 1 and 2), Over-the-top, and a seed so a run can be replayed and shared.

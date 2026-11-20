@@ -31,7 +31,7 @@ const SCALE_TOUCH = [1.0, 1.0, 0.88, 0.76], SCALE_DESK = [1.0, 1.0, 0.92, 0.82],
 const MSAA_TOUCH = [2, 0, 0, 0], MSAA_DESK = [4, 2, 0, 0], FX_SCALE = [1, 1, 0.6, 0.35], AHEAD = [5, 5, 4, 3], BEHIND = [2, 2, 1, 1];
 
 // the pixel budget (RScale / Lighting._apply_tier 236-238): a phone about a million pixels, a laptop up to full HD, a weak integrated GPU a little over a phone
-export function pixelBudget(isTouch, weakGpu) { return isTouch ? 0.95e6 : (weakGpu ? 1.2e6 : 2.1e6); }
+export function pixelBudget(isTouch, weakGpu) { if (typeof window !== 'undefined' && window.__PXB > 0) return window.__PXB; return isTouch ? 0.95e6 : (weakGpu ? 1.2e6 : 2.1e6); }          // (window.__PXB: the test copy's &px=0.6 sets the budget in millions of pixels)
 // _weak_gpu: an Intel UHD / HD / Iris chip has about a fifth of the pixel speed of a gaming card
 export function detectWeakGpu(gl) { try { const ext = gl.getExtension('WEBGL_debug_renderer_info'); const g = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '').toLowerCase(); return g.includes('intel') && (g.includes('uhd') || g.includes('hd graphics') || g.includes('iris')); } catch (e) { return false; } }
 
@@ -55,8 +55,8 @@ export function createTiers(o = {}) {
   const call = (n, ...a) => { try { if (H[n]) H[n](...a); } catch (e) { } };
   function pixelRatioFor(f) {          // RScale: the canvas is made smaller (a render scale of 1 = the page's own pixel ratio), never bigger than the pixel budget allows
     const dpr = o.dpr ? o.dpr() : 1, [w, h] = o.cssSize ? o.cssSize() : [1280, 720], px = Math.max(1, w * h * dpr * dpr);
-    const cap = isWeb ? Math.max(0.5, Math.min(1, Math.sqrt(pixelBudget(isTouch, weak) / px))) : 1;          // (Godot's cap formula, relative to the full-size canvas)
-    const s = Math.max(0.4, Math.min(1, Math.min(f.scale, cap))); return dpr * s;
+    const cap = isWeb ? Math.max((typeof window !== 'undefined' && window.__PXB > 0) ? 0.25 : 0.5, Math.min(1, Math.sqrt(pixelBudget(isTouch, weak) / px))) : 1;          // (Godot's cap formula, relative to the full-size canvas)
+    const s = Math.max((typeof window !== 'undefined' && window.__PXB > 0) ? 0.25 : 0.4, Math.min(1, Math.min(f.scale, cap))); return dpr * s;
   }
   function apply() {
     flags = tierFlags(S.tier, isTouch); S.applied = true;
@@ -70,7 +70,7 @@ export function createTiers(o = {}) {
     S.cool = Math.max(S.cool - dt, 0); const pressure = fps < GAME_FPS_MIN || (camOn && trkFps < TRACKER_FPS_MIN);
     if (pressure) {
       S.good = 0; S.bad += dt; const need = (camOn && trkFps < TRACKER_FPS_MIN) ? DOWN_NEED_TRACKER_S : DOWN_NEED_S;          // a starving tracker is answered twice as fast
-      if (S.bad >= need && S.tier < 3 && S.cool <= 0) { S.tier++; S.changes++; S.bad = 0; S.cool = COOL_S; log.push('tier ' + S.tier + ' (down) @' + Math.round(fps) + ' fps'); return true; }
+      if (S.bad >= need && S.tier < 3 && S.cool <= 0 && (!o.allowDown || o.allowDown())) { /* allowDown: while the game can still draw fewer pixels it does that first, and only then drops effects */ S.tier++; S.changes++; S.bad = 0; S.cool = COOL_S; log.push('tier ' + S.tier + ' (down) @' + Math.round(fps) + ' fps'); return true; }
     } else {
       S.bad = Math.max(S.bad - dt, 0); S.good += dt;
       if (S.good >= UP_NEED_S && S.tier > S.floorTier && fps >= UP_FPS && (!camOn || trkFps >= UP_TRACKER_FPS)) { S.tier--; S.changes++; S.good = 0; S.cool = COOL_S; log.push('tier ' + S.tier + ' (up) @' + Math.round(fps) + ' fps'); return true; }          // (as in step_governor: the cool-down is tested only on the way DOWN; the 16 s counter restarting after every step is what spaces the steps up)
