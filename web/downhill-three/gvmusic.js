@@ -308,8 +308,8 @@ export function createGvMusic(opts = {}) {
   function tick(dt, st) {
     if (!started || !M || failed) return; D.age += dt; D.dwell += dt; D.bump = Math.max(D.bump - dt * 0.8, 0); if (paused) return;
     st = Object.assign({}, st, { _dt: dt }); const holds = holdsOf(st), avg = st.avg !== undefined ? st.avg : holds.reduce((a, b) => a + b, 0) / 6, exc = clamp(st.excitement || 0, 0, 1);
-    if (A.preBar0 === null) { A.preBar0 = Math.ceil(barsNow() + LOOK); A.lastCommit = A.preBar0 - 1; D.mode = 'stems'; D.stemG = 1; D.stemWant = 1; if (log) log({ stage: 'pre', at: now(), bar: A.preBar0 });
-      if (AU.lp) AU.lp.plan(now(), [{ to: LP_SHUT, at: now(), dur: 0.01, kind: 'now' }], 'now'); stemsPlan(preValues(0), now(), 1.5, 'now'); }
+    if (A.preBar0 === null) { const skip = opts.introSkip || 0; A.lastCommit = Math.ceil(barsNow() + LOOK) - 1; A.preBar0 = A.lastCommit + 1 - skip;          /* introSkip: begin the pre-trip build this many bars in, so the pulse and the swell are heard at once instead of a quiet, dull ambience */ D.mode = 'stems'; D.stemG = 1; D.stemWant = 1; if (log) log({ stage: 'pre', at: now(), bar: A.preBar0 });
+      if (AU.lp) AU.lp.plan(now(), [{ to: skip ? lpPre(skip) : LP_SHUT, at: now(), dur: 0.01, kind: 'now' }], 'now'); stemsPlan(preValues(skip), now(), 1.5, 'now'); }
     if (D.age > stemAfter) { ensure('fx'); ensure('pulse'); ensure('bass'); }
     if (D.age > 15 || st.tripOn || avg >= 0.03) for (const n of ['drums', 'synth', 'acid', 'piano', 'guitar']) ensure(n);          // the rest of the stems come down in the background
     if (D.age > 3 && !D.wantKey && A.stage !== 'chill') { D.wantKey = nextIn(bandFor(exc)); askTrack(D.wantKey); }          // the funk is fetched long before it is needed

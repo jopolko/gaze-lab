@@ -32,6 +32,7 @@
   <button id="bStart" class="primary">Start camera</button>
   <button id="bCenter">Recentre (look straight ahead)</button>
   <label>Style <select id="mode"><option value="direct">Direct: the ship is exactly where your head points (perfect 1:1)</option><option value="aim">Aim: the board goes where you point (with the board's physics)</option><option value="steer">Steer: your head turns the board</option></select></label>
+  <label>Signal <select id="mix"><option value="auto">Auto: turn + tilt + sideways position (what the game uses)</option><option value="turn">Turn only: just rotating your head</option><option value="tilt">Tilt only: just tilting your head</option><option value="lean">Lean only: just moving your head sideways</option><option value="turnlean">Turn + lean (mixed into one)</option><option value="split">Split: turn for gentle correction, lean for the far reaches</option></select></label>
   <label>Preset <select id="preset"></select></label>
   <button id="bPure" class="primary">Pure 1:1</button>
   <button id="bReset">Reset to optimized</button>
@@ -74,6 +75,11 @@ const PARAMS = [
   { g: 'Delay compensation', open: true, items: [
     { n: 'pred', t: 'Prediction (milliseconds ahead)', d: 0, min: 0, max: 200, step: 5, h: 'The camera reading is already about 100 ms old when it reaches the ship. This moves the ship to where your head is probably NOW, using how fast it was moving. It also fills the gaps between readings (the camera gives about 20 a second).', up: 'Feels more immediate. Too much overshoots when you stop or reverse.', down: 'Steadier, a little behind your head.' },
   ] },
+  { g: 'Split signal (turn for fine, lean for far)', open: true, items: [
+    { n: 'turnfull', t: 'Turn: degrees for half the reach', d: 10, min: 4, max: 30, step: .5, h: 'Only used by the Split signal. Rotating your head this many degrees moves the ship halfway to the side. Turning is for gentle, precise corrections.', up: 'Needs more head turn: calmer, finer.', down: 'Less head turn: quicker.' },
+    { n: 'leanfull', t: 'Lean: how far to reach the far side (% of the camera picture)', d: 8, min: 3, max: 20, step: .5, h: 'Only used by the Split signal. How far you slide your head sideways (as a share of the camera picture width) to reach the far side of the course, together with a full turn.', up: 'Needs a bigger lean.', down: 'A small lean goes a long way.' },
+    { n: 'leandz', t: 'Lean: ignore small slides (% of the picture)', d: 1.2, min: 0, max: 5, step: .1, h: 'Only used by the Split signal. Sliding less than this does nothing, so a resting head does not drift the ship and turning stays in charge of the fine work.', up: 'Lean only works for deliberate slides.', down: 'Lean also adds to small corrections.' },
+  ] },
   { g: 'Aim style only (the board goes where you point)', open: true, items: [
     { n: 'reach', t: 'Reach at full head turn (metres)', d: 28, min: 8, max: 30, step: .5, h: 'In Aim style, how far to the side the board goes when your head is at full turn. A head halfway there puts the board about halfway.', up: 'Bigger sideways range from the same head turn.', down: 'A smaller range, for finer control.' },
     { n: 'aimtau', t: 'Aim follow time (seconds)', d: .1, min: .02, max: .6, step: .01, h: 'How quickly the aim point follows your head in Aim style.', up: 'Softer and slower, with a gentle lag.', down: 'Snappier, closer to exactly 1:1.' },
@@ -109,14 +115,18 @@ let HAD_SAVED = false; try { HAD_SAVED = !!localStorage.getItem('steerlab'); con
 
 // ---------------------------------------------------------------- the head pipeline (the same maths as headStep in gv.js)
 const HN3 = [8, 5, 3.5], clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const H = { cur: null, fb: [], ax: [.577, -.577, .577], ax0: [.577, -.577, .577], neu: 0, k: .9, cal: false, lastFit: 0, vs: 0, vel: 0, s: 0, hold: undefined, frozen: false, lost: true, t: 0, calUntil: 0 };
+const H = { nT: 0, nL: 0, cur: null, fb: [], ax: [.577, -.577, .577], ax0: [.577, -.577, .577], neu: 0, k: .9, cal: false, lastFit: 0, vs: 0, vel: 0, s: 0, hold: undefined, frozen: false, lost: true, t: 0, calUntil: 0 };
+let MIX = 'auto'; try { MIX = localStorage.getItem('steerlab_mix') || 'auto'; } catch (e) { }
+const MIXES = { turn: [1, 0, 0], tilt: [0, -1, 0], lean: [0, 0, 1], turnlean: [.7071, 0, .7071] };          // the three head signals are [turn, tilt, sideways position]; Auto learns the mix from how you move
 const hproj = (v, ax = H.ax) => (v[0] * ax[0] + v[1] * ax[1] + v[2] * ax[2]) / (Math.abs(ax[0]) + Math.abs(ax[1]) + Math.abs(ax[2]));
 function hfit() {
-  const fb = H.fb, n = fb.length; if (n < 20) return; const mean = [0, 0, 0]; for (const v of fb) for (let i = 0; i < 3; i++) mean[i] += v[i] / n; let ax = H.ax0.slice();
+  const fb = H.fb, n = fb.length; if (n < 20) return;
+  if (MIX === 'split') { const med = (i) => { const a = fb.map((v) => v[i] * HN3[i]).sort((x, y) => x - y); return a[Math.floor(a.length / 2)]; }, mT = med(0), mL = med(2); if (H.frozen) { if (Math.abs(H.s) < .1) { H.nT += (mT - H.nT) * .03; H.nL += (mL - H.nL) * .03; } } else { H.nT = n < 40 ? mT : H.nT + (mT - H.nT) * .25; H.nL = n < 40 ? mL : H.nL + (mL - H.nL) * .25; } H.cal = true; return; }          // the split signal: the neutral of the turn and of the lean are measured separately
+ const mean = [0, 0, 0]; for (const v of fb) for (let i = 0; i < 3; i++) mean[i] += v[i] / n; let ax = H.ax0.slice();
   if (n >= 150) { const Cv = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (const v of fb) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) Cv[i][j] += (v[i] - mean[i]) * (v[j] - mean[j]) / n;
     let a = [1, 1, 1]; for (let it = 0; it < 14; it++) { const b = [0, 1, 2].map((i) => Cv[i][0] * a[0] + Cv[i][1] * a[1] + Cv[i][2] * a[2]); const m = Math.hypot(...b) || 1; a = b.map((x) => x / m); }
     let d = a[0] * H.ax0[0] + a[1] * H.ax0[1] + a[2] * H.ax0[2]; if (d < 0) { a = a.map((x) => -x); d = -d; } if (d > .5) ax = a; }
-  H.ax = H.ax.map((x, i) => x * .7 + ax[i] * .3); const m = Math.hypot(...H.ax); H.ax = H.ax.map((x) => x / m);
+  H.ax = H.ax.map((x, i) => x * .7 + ax[i] * .3); const m = Math.hypot(...H.ax); H.ax = H.ax.map((x) => x / m); if (MIX !== 'auto' && MIXES[MIX]) H.ax = MIXES[MIX].slice();
   const pr = fb.map((v) => hproj(v)).sort((x, y) => x - y), med = pr[Math.floor(pr.length / 2)], dev = pr.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * .9)];
   if (H.frozen) { if (Math.abs(H.s) < .1) H.neu += (med - H.neu) * .03; } else { H.neu = n < 40 ? med : H.neu + (med - H.neu) * .25; H.k = H.k + (.9 / Math.max(.3, Math.min(2.5, q90)) - H.k) * (n < 40 ? 1 : .25); } H.cal = true;
 }
@@ -138,6 +148,7 @@ function headStep(dt, speed) {
   if (H.cur && H.fb.length >= 12 && performance.now() - H.lastFit > 500) { H.lastFit = performance.now(); hfit(); }
   if (!H.cur || H.fb.length < 12 || !H.cal) return { u: 0, o: 0 };
   const nv = [H.cur[0] / HN3[0], H.cur[1] / HN3[1], H.cur[2] / HN3[2]], K = H.frozen ? clamp(H.k, .5, P.kmax) : Math.min(H.k, P.kmax); let pr = hproj(nv); if (H.pv === undefined || H.pT !== H.t) { predUpdate(pr); } if (P.pred > 0 && !H.lost) pr += clamp(H.pvel, -3, 3) * Math.min(.25, (performance.now() - H.t + P.pred) / 1000); let sv = H.lost ? 0 : -(pr - H.neu) * K; sv = clamp(sv, -1.3, 1.3);
+  if (MIX === 'split') { let tp = -(H.cur[0] - H.nT) / P.turnfull * .5; tp = clamp(tp, -.55, .55); const lr = -(H.cur[2] - H.nL), la = Math.max(0, Math.abs(lr) - P.leandz), lp = Math.sign(lr) * la / Math.max(.5, P.leanfull) * .8; sv = H.lost ? 0 : clamp((tp + lp) / (P.gain * spdK(speed)), -1.3, 1.3); }          // split: the turn does the first half of the reach (gentle, precise), the lean adds the far reaches; sensitivity is set by the two sliders, not by the Sensitivity slider
   { const a0 = Math.abs(sv), dz = P.dz; sv = a0 < dz ? 0 : Math.sign(sv) * (a0 - dz) / (1 - dz) * (1 + dz * .5); }
   { const a1 = Math.abs(sv); if (a1 < .1) sv *= (1 - P.sticky) + P.sticky * a1 / .1; }
   { const bw = P.hyst; if (H.hold === undefined || H.lost) H.hold = sv; const df = sv - H.hold; if (Math.abs(df) > bw) H.hold = sv - Math.sign(df) * bw; sv = H.hold; }
@@ -185,7 +196,7 @@ function latText() {
   return '<br><b>Delay (ms):</b> camera to browser <b>' + f(L.cam) + '</b> + waiting to be read <b>' + f(L.wait) + '</b> + face model <b>' + f(L.model) + '</b> + its trip back <b>' + f(L.rt - L.model) + '</b> = <b>' + f(L.total) + '</b> from the light hitting the camera to a reading. Add the picture refresh and the reading\'s age: your head to the screen is about <b>' + f(head) + '</b>. One reading every <b>' + f(1000 / Math.max(1, trkFps)) + '</b>.';
 }
 const LSID = Math.random().toString(36).slice(2, 8);
-setInterval(() => { const L = tr && tr.lat; if (!L || L.n < 10) return; const r = (x) => Number.isFinite(x) ? Math.round(x) : null; try { fetch('log.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app: 'steerlab', kind: 'latency', sid: LSID, cam: tr.camLabel || '?', hz: Math.round(trkFps), camToBrowser: r(L.cam), wait: r(L.wait), model: r(L.model), back: r(L.rt - L.model), total: r(L.total), age: H.t ? r(performance.now() - H.t) : null, mode: MODE, pred: P.pred, inw: +new URLSearchParams(location.search).get('inw') || 400, cpu: new URLSearchParams(location.search).has('cpu'), e0: PS.n > 20 ? +(Math.sqrt(PS.e0) * 100).toFixed(2) : null, e1: PS.n > 20 ? +(Math.sqrt(PS.e1) * 100).toFixed(2) : null, stalls: PS.gaps, maxgap: Math.round(PS.maxgap), ua: navigator.userAgent.slice(0, 80) }), keepalive: true }).catch(() => { }); } catch (e) { } }, 5000);          // numbers only, every 5 s while the camera runs
+setInterval(() => { const L = tr && tr.lat; if (!L || L.n < 10) return; const r = (x) => Number.isFinite(x) ? Math.round(x) : null; try { fetch('log.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app: 'steerlab', kind: 'latency', sid: LSID, cam: tr.camLabel || '?', hz: Math.round(trkFps), camToBrowser: r(L.cam), wait: r(L.wait), model: r(L.model), back: r(L.rt - L.model), total: r(L.total), age: H.t ? r(performance.now() - H.t) : null, mode: MODE, mix: MIX, pred: P.pred, inw: +new URLSearchParams(location.search).get('inw') || 400, cpu: new URLSearchParams(location.search).has('cpu'), e0: PS.n > 20 ? +(Math.sqrt(PS.e0) * 100).toFixed(2) : null, e1: PS.n > 20 ? +(Math.sqrt(PS.e1) * 100).toFixed(2) : null, stalls: PS.gaps, maxgap: Math.round(PS.maxgap), ua: navigator.userAgent.slice(0, 80) }), keepalive: true }).catch(() => { }); } catch (e) { } }, 5000);          // numbers only, every 5 s while the camera runs
 function recentre() { H.fb = []; H.frozen = false; H.cal = false; H.calUntil = performance.now() + 1700; status('look straight ahead for a moment...'); }
 addEventListener('keydown', (e) => { if (e.key === 'c' || e.key === 'C') { if (tr && tr.switchCamera) tr.switchCamera().then((l) => status('camera: ' + l)); } else if (e.key === 'r' || e.key === 'R') recentre(); else if (e.key === ' ') { SIM.paused = !SIM.paused; e.preventDefault(); } });
 
@@ -217,6 +228,7 @@ for (const g of PARAMS) {
 }
 function syncPanel() { if (FD.row) { const dg = degFullNow(); FD.row.querySelector('input').value = clamp(dg, 6, 45); FD.row.querySelector('.v').textContent = dg.toFixed(1) + ' deg'; } for (const n in rows) { const { inp, v, p } = rows[n]; inp.value = P[n]; v.textContent = (+P[n]).toFixed(p.step < .01 ? 3 : 2); } }
 const sel = $('preset'); for (const k of Object.keys(PRESETS)) { const o = document.createElement('option'); o.textContent = k; sel.appendChild(o); }
+$('mix').value = MIX; $('mix').addEventListener('change', () => { MIX = $('mix').value; try { localStorage.setItem('steerlab_mix', MIX); } catch (e) { } if (MIX !== 'auto') H.ax = MIXES[MIX].slice(); else H.ax = H.ax0.slice(); recentre(); status('signal: ' + $('mix').selectedOptions[0].text + '. Look straight ahead for a moment...'); });
 $('mode').value = MODE; $('mode').addEventListener('change', () => { MODE = $('mode').value; status(MODE === 'aim' ? 'Aim style: the board goes where your head points' : 'Steer style: your head turns the board'); });
 function applyPreset(name) { const pr = PRESETS[name] || {}; Object.assign(P, DEF, Object.fromEntries(Object.entries(pr).filter(([k]) => k[0] !== '_'))); if (pr._mode) { MODE = pr._mode; $('mode').value = MODE; } if (pr._fulldeg) setFullDeg(pr._fulldeg); syncPanel(); }
 sel.addEventListener('change', () => applyPreset(sel.value));

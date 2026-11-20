@@ -130,8 +130,8 @@ export function createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks
     const L = S.lk, d = L.d; L.t += dt; const u = clamp(L.t / Math.max(L.dur, .1), 0, 1), pt = ptAt(d, u), tn = tanAt(d, u), sp = L.sp;
     const nr = d.nring | 0; if (nr > 0) { const ri = Math.floor(u * nr); if (ri > L.ri) { L.ri = ri; snd('orb'); if (hooks.onRing) hooks.onRing(ri); } }
     const fr = frameAt(d, u); S.tube.u = u; S.tube.t = fr[0]; S.tube.up = fr[1];
-    const gh = th(pt[0], pt[2]); PH.x = pt[0]; PH.y = d.cave ? pt[1] : Math.max(pt[1], gh + .8); PH.z = pt[2];
-    PH.vx = tn[0] * sp; PH.vz = tn[2] * sp; PH.vy = tn[1] * sp; PH.heading = Math.atan2(tn[0], -tn[2]); PH.grounded = false; PH.air_t = 0; PH.hurt = 0; PH.slide = 0; PH.gh_prev = gh;
+    const gh = th(pt[0], pt[2]); const free = hooks.lkFree ? hooks.lkFree() : 0; L.off = (L.off || 0) + ((clamp(S.lastS || 0, -1, 1) * free) - (L.off || 0)) * (1 - Math.exp(-dt / .2)); const hz = Math.hypot(tn[0], tn[2]) || 1; PH.x = pt[0] + (-tn[2] / hz) * L.off; PH.y = d.cave ? pt[1] : Math.max(pt[1], gh + .8); PH.z = pt[2];          // free: a small sideways drift inside the tube
+    PH.vx = tn[0] * sp; PH.vz = tn[2] * sp; PH.vy = tn[1] * sp; PH.heading = Math.atan2(tn[0], -tn[2]) + clamp(S.lastS || 0, -1, 1) * (free ? .1 : 0); PH.grounded = false; PH.air_t = 0; PH.hurt = 0; PH.slide = 0; PH.gh_prev = gh;
     if (u >= 1) lkEnd(d);
   }
   function lkEnd(d) {

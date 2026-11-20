@@ -13,6 +13,38 @@
 <script type="importmap">
 { "imports": { "three": "../stargaze/vendor/three/three.module.min.js" } }
 </script>
+<!-- every module is fetched in parallel from the first byte (otherwise each import waits for the one that needs it, a chain that cost about 3 seconds) -->
+<link rel="modulepreload" href="../stargaze/vendor/three/three.module.min.js">
+<link rel="modulepreload" href="audiowire.js">
+<link rel="modulepreload" href="biomes.js">
+<link rel="modulepreload" href="camrig.js">
+<link rel="modulepreload" href="carvetrail.js">
+<link rel="modulepreload" href="echoes.js">
+<link rel="modulepreload" href="fx.js">
+<link rel="modulepreload" href="glowify.js">
+<link rel="modulepreload" href="gvmusic.js">
+<link rel="modulepreload" href="heightfield.js">
+<link rel="modulepreload" href="lab.js">
+<link rel="modulepreload" href="molecules.js">
+<link rel="modulepreload" href="molmesh.js">
+<link rel="modulepreload" href="music.js">
+<link rel="modulepreload" href="names.js">
+<link rel="modulepreload" href="pickupmesh.js">
+<link rel="modulepreload" href="postfx.js">
+<link rel="modulepreload" href="profile.js">
+<link rel="modulepreload" href="psyfx.js">
+<link rel="modulepreload" href="realms.js">
+<link rel="modulepreload" href="rings.js">
+<link rel="modulepreload" href="sfxset.js">
+<link rel="modulepreload" href="snowball.js">
+<link rel="modulepreload" href="spawn.js">
+<link rel="modulepreload" href="tiers.js">
+<link rel="modulepreload" href="toys.js">
+<link rel="modulepreload" href="tuning.js">
+<link rel="modulepreload" href="vortexfx.js">
+<link rel="modulepreload" href="weather.js">
+<link rel="modulepreload" href="worldfx.js">
+<link rel="modulepreload" href="worldfx2.js">
 </head>
 <body>
 <canvas id="gl"></canvas>
