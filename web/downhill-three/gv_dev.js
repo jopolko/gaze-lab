@@ -59,6 +59,7 @@ import { createVortexFx } from './vortexfx.js';
 import { createWorldFx, GROUND_PAL, S2L_GLSL, ALPINE } from './worldfx.js';
 import { createFx } from './fx.js';
 import { createLab } from './lab.js';
+import { createKit } from './kit.js';
 const U = { uRegion: { value: (() => { const t = new THREE.DataTexture(new Float32Array(2), 2, 1, THREE.RedFormat, THREE.FloatType); t.needsUpdate = true; return t; })() }, uRegN: { value: 2 }, uTrail: { value: (() => { const t = new THREE.DataTexture(new Float32Array(2), 2, 1, THREE.RedFormat, THREE.FloatType); t.needsUpdate = true; return t; })() }, uTrailN: { value: 2 }, uBeatG: { value: 0 }, uRip: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, -99, 0)) }, uLabA: { value: new THREE.Vector4(1, 1.037, 1, 1) }, uLabB: { value: new THREE.Vector4(1, 1, 1, 1) }, uTime: { value: 0 }, uBoard: { value: new THREE.Vector2() }, fogColor: { value: new THREE.Color(0.35, 0.05, 0.45) }, fogDensity: { value: 0.001 } };          // (Godot's exponential fog, shared with the custom shaders: 1 - exp(-density * distance) toward the fog colour, in linear light, before the tonemap)
 const WFX = createWorldFx({ THREE, scene, camera, U });
 const GROUNDSRC = Q.get('ground') || 'snow';          // DEFAULT back to the natural terrain (the freezes started when Godot's own ground, ?ground=psy, became the default; its graphics cost on integrated chips is not measured yet) (grey road, grass, earth) used by the other worlds          // matrix (the default: near-black squares with sharp bright-green lines), pink (the psychedelic world's purple, pink and gold), psy (the old colourful interference field)
@@ -350,14 +351,30 @@ window.__zoneOf = (j) => {
   }
   return window.__zmap[j] || 'content';
 };
+window.__spawnGap = () => Math.max(0, sp('spawngap', 1.3));
+window.__ZD = new Set();
+// hide a whole thing, not just one mesh: a pad, a pickup or a toy is a small tree of nodes (bars, glow pool, gem, halo...), and hiding only the gem left the bars lying there doing nothing.
+// The top-level node under RunRig that holds the referenced node is hidden together with everything inside it (only when it is a small tree, so nothing unrelated can disappear).
+window.__CH = null;
+window.__hideWhole = (o) => {
+  try {
+    const refs = [o.gem, o.n, o.halo, o.spin, o.sp].filter(Boolean); if (!refs.length) return false;
+    if (!window.__CH) { window.__CH = {}; for (const n of lvl.nodes) { const seg = String(n.path).split('/'); if (seg.length >= 4) { const top = seg.slice(0, 4).join('/'); (window.__CH[top] = window.__CH[top] || []).push(n.name); } } }
+    let ok = false; const seen = new Set();
+    for (const r of refs) { const nd = NBN[nameOf(r)]; if (!nd) continue; const seg = String(nd.path).split('/'); if (seg.length < 4) continue; const top = seg.slice(0, 4).join('/'); if (seen.has(top)) continue; seen.add(top); const list = window.__CH[top] || []; if (list.length > 40) { hideNode(r); continue; } for (const nm of list) hideNode(nm); ok = true; }
+    return ok;
+  } catch (e) { return false; }
+};
 window.__ZD = new Set();
 window.__zoneRow = (rr, j) => {
   if (window.__ZD.has(j)) return; const z = window.__zoneOf(j); if (z === 'off') { window.__ZD.add(j); return; }
   const dens = z === 'content' ? Math.max(0, Math.min(1, sp('density', .5))) : 0, keep = (i, salt) => (((i * 2654435761 + j * 40503 + salt * 977) >>> 0) % 1000) / 1000 < dens;
   try {
-    (rr.pads || []).forEach((q, i) => { if (!q.lk && !q.used && !keep(i, 1)) { hideTarget(q); q.used = true; } });
-    (rr.buffs || []).forEach((b, i) => { if (!b.taken && !keep(i, 2)) { hideTarget(b); for (const o of (b.orbs || [])) hideNode(o.n); b.thin = true; b.taken = true; } });
-    if (z === 'slalom') for (const t of (rr.toys || [])) if (t.kind !== 'pill' && !t.gone) { hideNode(t.n); t.done = true; t.t = 1e15; t.gone = true; }          // the slalom needs the room: bumps, colour gates and slingshots go (molecules stay)
+    const prevR = lvl.rows[String(j - 1)] || {}, ap = (rr.pads || []).concat(prevR.pads || []), follows = (b) => ap.some((q) => !q.zoneHid && q.z - b.z > 25 && q.z - b.z < 120 && Math.abs(q.x - b.x) < 45);
+    (rr.pads || []).forEach((q, i) => { if (q.lk && !q.used) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; }          /* the old spring + ring tube + rail chain is gone everywhere: it was always the same */
+      if (z === 'slalom' && !q.lk && !q.used) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; } });          // boost pads: kept everywhere except inside a slalom
+    (rr.buffs || []).forEach((b, i) => { if (!b.taken && !(follows(b) || (z === 'content' && keep(i, 2)))) { if (!window.__hideWhole(b)) hideTarget(b); for (const o of (b.orbs || [])) hideNode(o.n); b.thin = true; b.taken = true; } });          // powerups: the ones just after a boost, plus a share in the content stretches
+    for (const t of (rr.toys || [])) if (t.kind !== 'pill' && !t.gone && (z === 'slalom' || z === 'clear' || t.kind === 'sling' || !keep((t.x * 7 + t.z) | 0, 3))) { if (!window.__hideWhole(t)) hideNode(t.n); t.done = true; t.t = 1e15; t.gone = true; }          // bumps, colour gates and slingshots: gone from clear and slalom stretches, thinned in the content ones (molecules stay)
     window.__ZD.add(j);
   } catch (e) { /* the world is not ready yet: the per-frame tick tries again */ }
 };
@@ -574,7 +591,7 @@ function startHold(dt) {
   rowsUpdate(PH.z); headStep(dt, performance.now()); HD.ramp = 0; if (performance.now() - HD.t > 600) HD.lost = true; pumpBuild(BQ.length > 300 ? 10 : 4);
   const tracking = HD.on && HD.cal && HD.fb.length >= 12 && !HD.lost, centred = Math.abs(HD.s) < .28; START.t += dt;
   if (START.state === 'ready') { STARTUI.show('READY', tracking ? 'tracking ok: hold still, look straight ahead' : 'looking for your face...'); if (tracking && START.t > sp('rdy1', .4)) START.ok += dt; else START.ok = 0; if (START.ok > sp('rdy2', .3)) { START.state = 'set'; START.t = 0; } }
-  else if (START.state === 'set') { STARTUI.show('SET', 'tracking ok'); if (!tracking) { START.state = 'ready'; START.t = 0; START.ok = 0; } else if (START.t > sp('set1', .4) && centred) { START.state = 'go'; START.t = 0; START.hold = false; HD.ramp = 0; HD.frozen = true; HD.k = Math.max(.5, Math.min(sp('kmax', .85), HD.k)) * parseFloat(Q.get('hk') || '1');          /* the log showed k at its old maximum (1.3) and full lock at only 5-9 degrees of head turn: the total sensitivity (k x gain) is now about half */ LANE.x = null; STARTUI.show('GO!', ''); } }
+  else if (START.state === 'set') { STARTUI.show('SET', 'tracking ok'); if (!tracking) { START.state = 'ready'; START.t = 0; START.ok = 0; } else if (START.t > sp('set1', .4) && centred) { START.state = 'go'; START.t = 0; START.hold = false; PH.vz = Math.min(PH.vz, -sp('launch', 36) * SPK); PH.boost_t = Math.max(PH.boost_t, 3); PH.vxa = Math.max(PH.vxa, 1.2); toast('GO!', '#fc8'); HD.ramp = 0; HD.frozen = true; HD.k = Math.max(.5, Math.min(sp('kmax', .85), HD.k)) * parseFloat(Q.get('hk') || '1');          /* the log showed k at its old maximum (1.3) and full lock at only 5-9 degrees of head turn: the total sensitivity (k x gain) is now about half */ LANE.x = null; STARTUI.show('GO!', ''); } }
 }
 let CALMSG = null; function calMsg(on) { if (on && !CALMSG) { CALMSG = document.createElement('div'); CALMSG.style.cssText = 'position:fixed;left:0;right:0;bottom:16%;text-align:center;color:#fff;font:800 18px system-ui,Segoe UI,sans-serif;letter-spacing:.16em;text-transform:uppercase;text-shadow:0 0 10px #000,0 0 3px #000;pointer-events:none;z-index:8'; CALMSG.textContent = 'look straight ahead'; document.body.appendChild(CALMSG); } else if (!on && CALMSG) { CALMSG.remove(); CALMSG = null; } }
 
@@ -590,6 +607,15 @@ function headStep(dt, now) {
   if (HD.wasLost && !HD.lost) { HD.vel = 0; HD.s = 0; HD.vs = 0; HD.ramp = 0; } HD.wasLost = HD.lost;
   HD.ramp = Math.min(1, HD.ramp + dt / (HD.lost ? .5 : .8));
   const nv = [HD.cur[0] / HN3[0], HD.cur[1] / HN3[1], HD.cur[2] / HN3[2]]; let pr = hproj(nv); if (HD.pT !== HD.t) { const t0 = HD.t, dt0 = (t0 - (HD.pT0 || 0)) / 1000; if (HD.pT0 && dt0 > .004) HD.pvel = (HD.pvel || 0) + (Math.max(-6, Math.min(6, (pr - HD.pPr) / dt0)) - (HD.pvel || 0)) * .5; if (HD.pT0 && dt0 > .004 && HD.cur) { HD.vT = (HD.vT || 0) + (Math.max(-200, Math.min(200, (HD.cur[0] - HD.pY) / dt0)) - (HD.vT || 0)) * .5; HD.vL = (HD.vL || 0) + (Math.max(-100, Math.min(100, (HD.cur[2] - HD.pL) / dt0)) - (HD.vL || 0)) * .5; } if (HD.cur) { HD.pY = HD.cur[0]; HD.pL = HD.cur[2]; } HD.pT = t0; HD.pT0 = t0; HD.pPr = pr; } { const PMS = sp('pred', 130); if (PMS > 0 && !HD.lost) pr += Math.max(-3, Math.min(3, HD.pvel || 0)) * Math.min(.25, (performance.now() - HD.t + PMS) / 1000); }          /* prediction: the reading is about 100 ms old; move to where the head probably is now (speed from the readings' own timestamps) */
+  {          /* RE-CENTRING: the middle is not fixed, it follows where your head rests. When the head has been still for a moment and is near the middle, the middle slides to where it is: slowly in normal riding (a few seconds), quickly while the board is held by a ramp, rail or arc or in the air, and for a second and a half after one of those ends (landing, rail end, lip). A head deliberately held well off to one side is never absorbed. &recentre=0 turns it off. */
+    const nowT = performance.now(), locked = !!(PH.rail || PH.vlock !== null || !PH.grounded || (typeof toys !== 'undefined' && toys && toys.active && toys.active())), still = Math.abs(HD.pvel || 0) < .3 && !HD.lost;
+    if (HD._free === false && !locked) HD.recentreUntil = nowT + 1500; HD._free = !locked; HD.stillT = still ? (HD.stillT || 0) + dt : 0;
+    if (sp('recentre', 1) > 0 && HD.frozen && HD.cal && HD.stillT > .6) {
+      const fast = locked || nowT < (HD.recentreUntil || 0), tc = fast ? .5 : 3, lim = fast ? .55 : .3, a = 1 - Math.exp(-dt / tc);
+      if (sp('splitmix', MIXS ? 1 : 0) > 0 && HD.nT !== undefined) { const sT = -(HD.cur[0] - HD.nT) / sp('turnfull', 10) * .5, sL = -(HD.cur[2] - HD.nL) / Math.max(.5, sp('leanfull', 8)) * .8; if (Math.abs(sT + sL) < lim) { HD.nT += (HD.cur[0] - HD.nT) * a; HD.nL += (HD.cur[2] - HD.nL) * a; } }
+      else { const raw = hproj(nv); if (Math.abs((raw - HD.neu) * HD.k) < lim) HD.neu += (raw - HD.neu) * a; }
+    }
+  }
   let sv = HD.lost ? 0 : -HD.flip * (pr - HD.neu) * HD.k; sv = Math.max(-1.3, Math.min(1.3, sv));
   if (sp('splitmix', MIXS ? 1 : 0) > 0 && HD.nT !== undefined) { const PMS2 = sp('pred', 130), pm = PMS2 > 0 && !HD.lost ? Math.min(.25, (performance.now() - HD.t + PMS2) / 1000) : 0, yaw = HD.cur[0] + (HD.vT || 0) * pm, lean = HD.cur[2] + (HD.vL || 0) * pm, tp = Math.max(-.55, Math.min(.55, -HD.flip * (yaw - HD.nT) / sp('turnfull', 10) * .5)), lr = -HD.flip * (lean - HD.nL), la = Math.max(0, Math.abs(lr) - sp('leandz', 1.2)), lp = Math.sign(lr) * la / Math.max(.5, sp('leanfull', 8)) * .8; sv = HD.lost ? 0 : Math.max(-1.3, Math.min(1.3, (tp + lp) / HD.gain)); }          /* split: the turn gives the first half of the reach (gentle, precise), the lean adds the far reaches */ { const a0 = Math.abs(sv), dz = sp('dz', .015); sv = a0 < dz ? 0 : Math.sign(sv) * (a0 - dz) / (1 - dz) * (1 + dz * .5); }          /* soft dead zone: no jump, so a resting head never drifts the board */
   { const a1 = Math.abs(sv); if (a1 < .1) { const st0 = sp('sticky', .2); sv *= (1 - st0) + st0 * a1 / .1; } }          /* a sticky centre: near straight ahead the signal is damped, so a resting head does not wobble the board */
@@ -641,7 +667,7 @@ if (!Q.has('allbuffs')) { let lastZ = 1e9; const sorted = BUFFS.slice().sort((a,
 
 const TX = lvl.trailx || [], FEAT_OFF = lvl.feat_off || 15;
 const trailX = (z) => { const i = Math.max(0, -z) / 6, a = Math.min(TX.length - 1, Math.floor(i)), b = Math.min(TX.length - 1, a + 1); return TX.length ? TX[a] + (TX[b] - TX[a]) * (i - a) : 0; };
-const featX = (f, z) => f.kx !== undefined ? f.kx : trailX(z) + f.sd * FEAT_OFF;
+const featX = (f, z) => f.kx !== undefined ? f.kx + (f.cv ? f.cv(z) : 0) : trailX(z) + f.sd * FEAT_OFF;
 const railY = (f, z) => th(featX(f, z), z) + (.15 + (C.RAIL_H - .15) * sstep(0, 4, f.za - z));
 // ---- the vortex rings (RunRig._vortex_drive): spin about the ring's own axis, faster the nearer the ramp
 const RINGS = []; { const byIid = {}; for (const n of lvl.nodes) byIid[n.iid] = n; for (const v of VXS) for (const r of v.rings) { const nd = byIid[r.iid]; if (!nd) continue; const ms = REGN[nd.name] || []; const e = nd.xf; for (const m of ms) RINGS.push({ m, v, r, p: [e[9], e[10], e[11]] }); } }
@@ -868,11 +894,12 @@ function railStep(dt, sIn) {
     const f = PH.rail; if (PH.hurt > 0) { PH.rail = null; f.done = true; SFX.grindOff(); return; }
     const off = (how) => {
       const m = PH.rail_z0 - PH.z; PH.rail = null; f.done = true; SFX.grindOff(); if (how !== 'drop') { PH.grounded = false; PH.air_t = 0; if (how === 'end') PH.vy += 3.2; }
-      try { FX.E.railEnd([PH.x, PH.y, PH.z]); } catch (e) { } if (m < 6) return; PH.rails++; PH.score += Math.floor(m * 7); chainHit(); try { PSY.events.onRail(m, how, 0, !!f.chain, 1); } catch (e) { } const sl = Math.max(0, Math.min(1, m / 36)); toast('RAIL  ' + Math.floor(m) + ' m', '#7ef'); SFX.pick();
+      try { FX.E.railEnd([PH.x, PH.y, PH.z]); } catch (e) { } if (m < 6) return; PH.rails++; PH.score += Math.floor(m * 7) * (f.mat === 'neon' ? 2 : 1); chainHit(); try { PSY.events.onRail(m, how, 0, !!f.chain, 1); } catch (e) { } const sl = Math.max(0, Math.min(1, m / 36)); toast('RAIL  ' + Math.floor(m) + ' m', '#7ef'); SFX.pick();
       if (sl > .2 && how !== 'drop') { PH.vz -= (3 + 13 * sl) * SPK * .6; PH.boost_t = Math.max(PH.boost_t, .7 + 1.8 * sl); PH.vxa = .7; SFX.snap(); if (sl > .5) toast('SLINGSHOT!', '#7ef'); }
     };
     if (PH.z <= f.zb) { if (f.chain) toys.payoff(); off('end'); return; }
     PH.rail_out = (sIn * f.sd < -.8) ? PH.rail_out + dt : 0; if (PH.rail_out > .3) { off('drop'); return; }
+    if (f.mat === 'glass') PH.vz -= 11 * SPK * dt; else if (f.mat === 'wood') PH.vz *= Math.exp(-.35 * dt); else if (f.mat === 'rust') PH.vz *= Math.exp(-.2 * dt);          /* the material decides how it rides: glass is fast, wood slow, rust a little rough */
     const slope = (featX(f, PH.z - 1) - featX(f, PH.z + 1)) * .5; PH.rail_dx += PH.slide * dt; PH.slide *= Math.exp(-dt / .1); { const tgtR = Math.max(-1, Math.min(1, sIn)) * sp('railfree', 1.6); PH.rail_dx += (tgtR - PH.rail_dx) * (1 - Math.exp(-dt / .18)); }          /* free to move a little with the head: the rail pulls you back toward its line only as far as your steering lets it */
     PH.x = featX(f, PH.z) + PH.rail_dx; const ry = railY(f, PH.z); PH.vy = PH.rail_ok ? Math.max(-40, Math.min(10, (ry - PH.rail_py) / Math.max(dt, 1e-4))) : PH.vy; PH.rail_py = ry; PH.rail_ok = true; PH.y = ry;
     PH.vx = slope * -PH.vz; PH.heading = Math.atan(slope) + Math.max(-1, Math.min(1, sIn)) * .1; PH.steer = Math.max(-1, Math.min(1, PH.heading / C.THETA_MAX)); PH.sv = 0; PH.grounded = true;
@@ -882,7 +909,7 @@ function railStep(dt, sIn) {
     if (f.done) continue; if (PH.z < f.zb + 5) { f.done = true; continue; }
     if (PH.grounded && PH.z < f.za + 6) { const wdx = featX(f, Math.max(f.zb, Math.min(f.za, PH.z))) - PH.x; if (Math.abs(wdx) < 7 && Math.abs(wdx) > .3) PH.x += Math.sign(wdx) * Math.min(Math.abs(wdx), (2.5 + 9 * (1 - Math.abs(wdx) / 7)) * dt * 2); }
     if (PH.hurt > 0 || PH.z > f.za + .5) continue; const nt = PH.z > f.za - 10;
-    if (Math.abs(PH.x - featX(f, PH.z)) < (nt ? 2.6 : 1.3) && PH.y - railY(f, PH.z) < 2) { PH.rail = f; PH.rail_z0 = PH.z; PH.rail_dx = PH.x - featX(f, PH.z); PH.slide = PH.vx; PH.rail_ok = false; PH.rail_out = 0; SFX.grindOn(); toast('GRIND', '#7ef'); break; }
+    if (Math.abs(PH.x - featX(f, PH.z)) < (nt ? 2.6 : 1.3) && PH.y - railY(f, PH.z) < 2) { PH.rail = f; PH.rail_z0 = PH.z; PH.rail_dx = PH.x - featX(f, PH.z); PH.slide = PH.vx; PH.rail_ok = false; PH.rail_out = 0; SFX.grindOn(); toast({ glass: 'GLASS RAIL: FAST', wood: 'WOODEN RAIL: SLOW AND LONG', neon: 'NEON RAIL: DOUBLE POINTS', rust: 'RUSTY RAIL: ROUGH' }[f.mat] || 'GRIND', f.col ? '#' + f.col.map((c) => Math.round(Math.min(1, c) * 15).toString(16)).join('') : '#7ef'); break; }
   }
 }
 function vortexStep(dt, steerIn) {
@@ -890,18 +917,18 @@ function vortexStep(dt, steerIn) {
   for (const k of VXS) {
     if (!k.trail) continue; const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5, dxk = kx - PH.x, onIt = PH.z < kz + 4 && Math.abs(dxk) < half + 1.5;
     const wantSide = Math.sign(steerIn) === Math.sign(dxk) && Math.abs(steerIn) > .15;
-    if (PH.grounded && !PH.rail && PH.z < kz + C.VX_REACH + 14 && PH.z > lipz + 1 && (onIt || Math.abs(dxk) < half + 16 || (wantSide && Math.abs(dxk) < half + 80))) {
+    if (PH.grounded && !PH.rail && PH.z < kz + C.VX_REACH + 14 && PH.z > lipz + 1 && (onIt || Math.abs(dxk) < half + sp('vxcatch', 3) || (wantSide && Math.abs(dxk) < half + sp('vxwant', 12)))) {
       lockX = kx; active = true; if (!PH.vsnd) { PH.vsnd = true; SFX.stretch(); }
-      const t = Math.max(0, Math.min(1, (kz + C.VX_REACH - PH.z) / (C.VX_REACH + k.len))); { const side = Math.max(0, Math.abs(dxk) - half), gentle = 1 + sp('vxcap', .1) * Math.abs(PH.vz), ahead = Math.max(0, PH.z - kz), wMouth = (1 - sstep(0, sp('vxmouth', 30), ahead)) * Math.max(0, 1 - side / 16), wSide = PH.z < kz + 6 ? Math.max(0, 1 - side / sp('vxside', 10)) : 0, cap = gentle + (34 - gentle) * Math.max(wMouth, wSide); PH.x += Math.max(-cap, Math.min(cap, dxk * 7)) * dt * sstep(0, .12, t); }          /* the ramp's pull: full strength (34 m/s) at the mouth (the last 30 m before it, &vxmouth) and all along its sides (up to 10 m out, fading, &vxside) so a board going up the side is caught; further out only a gentle pull (about 8 degrees of slant at 30 m/s, &vxcap) so approaching a ramp never looks like a slide */ VFX.setPull(t);
+      const t = Math.max(0, Math.min(1, (kz + C.VX_REACH - PH.z) / (C.VX_REACH + k.len))); { const side = Math.max(0, Math.abs(dxk) - half), gentle = 1 + sp('vxcap', .1) * Math.abs(PH.vz), ahead = Math.max(0, PH.z - kz), wMouth = (1 - sstep(0, sp('vxmouth', 30), ahead)) * Math.max(0, 1 - side / Math.max(4, sp('vxcatch', 3) + 8)), wSide = PH.z < kz + 6 ? Math.max(0, 1 - side / sp('vxside', 5)) : 0, cap = gentle + (34 - gentle) * Math.max(wMouth, wSide); PH.x += Math.max(-cap, Math.min(cap, dxk * 7)) * dt * sstep(0, .12, t); }          /* the ramp's pull: full strength (34 m/s) at the mouth (the last 30 m before it, &vxmouth) and all along its sides (up to 10 m out, fading, &vxside) so a board going up the side is caught; further out only a gentle pull (about 8 degrees of slant at 30 m/s, &vxcap) so approaching a ramp never looks like a slide */ VFX.setPull(t);
       const fsp = -PH.vz; if (fsp < C.VX_TRAIL) PH.vz -= Math.min(C.VX_ACCEL * (PH.z < kz ? .9 : .6) * dt, C.VX_TRAIL - fsp);
     }
     if (PH.prevZ > lipz && PH.z <= lipz && Math.abs(PH.x - kx) < half) {          // the lip: the swirl lets go (RunRig._update_ramps, crossed): a hard blast off it
-      PH.vy += C.JUMP_BLAST; PH.boost_t = Math.max(PH.boost_t, 1.2); PH.jumps++; PH.score += 150; chainHit(); try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } toast(k.super ? 'SUPER AIR!' : 'BLAST!', '#f8f'); VFX.blast(); FX.E.blast([PH.x, PH.y, PH.z]); if (AWON) AW.onRampBlast(); else SFX.blast(); if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } PH.vxa = Math.max(PH.vxa, .45);
+      { let hv = 0; for (let q = 0; q < 8; q++) hv = (hv * 31 + Math.floor(Math.abs(k.z) * 7 + q)) % 1000; k.hv = .7 + .9 * (hv / 1000); PH.vy += C.JUMP_BLAST * (k.super ? 1 : k.hv); if (!k.super) toast(k.hv > 1.25 ? 'BIG AIR' : k.hv < .9 ? 'SMALL HOP' : 'AIR', '#fc8'); } PH.boost_t = Math.max(PH.boost_t, 1.2);          /* each ramp throws a different height (0.7x to 1.6x), keyed to where it stands */ PH.jumps++; PH.score += 150; chainHit(); try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } toast(k.super ? 'SUPER AIR!' : 'BLAST!', '#f8f'); VFX.blast(); FX.E.blast([PH.x, PH.y, PH.z]); if (AWON) AW.onRampBlast(); else SFX.blast(); if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } PH.vxa = Math.max(PH.vxa, .45);
     }
   }
   PH.vlock = lockX; if (active) PH.vxa = Math.max(PH.vxa, .45); else { if (PH.grounded) PH.vxa = Math.max(PH.vxa - dt, 0); PH.vsnd = false; }
 }
-const ramp = () => .5 + .5 * sstep(0, 1500, -PH.z) + .12 * Math.min(PH.lap || 0, 4);
+const ramp = () => sp('rampbase', 1.15) + (1 - sp('rampbase', 1.15)) * sstep(0, 1000, -PH.z) + .12 * Math.min(PH.lap || 0, 4);
 const MS = { buf: [], t0: performance.now(), q: [], last: 0, flips: 0, lastSign: 0, lagMs: 0, sw: 0, ll: 0 };
 const scope = document.createElement('canvas'); scope.width = 360; scope.height = 120; scope.style.cssText = 'position:fixed;left:8px;bottom:36px;width:300px;height:100px;background:#0008;border:1px solid #fff4;z-index:8;pointer-events:none'; if (Q.has('meter')) document.body.appendChild(scope);          /* the steering meter is a tuning tool: hidden unless &meter */
 const sgx = scope.getContext('2d'); const txt = document.createElement('div'); txt.style.cssText = 'position:fixed;left:8px;bottom:140px;color:#cfe;font:11px/1.35 ui-monospace,Consolas,monospace;z-index:8;pointer-events:none;white-space:pre;text-shadow:0 0 3px #000'; if (Q.has('meter')) document.body.appendChild(txt);
@@ -1076,6 +1103,7 @@ function playStep(dt, first = true, frameDt = dt) {          // dt is one physic
   { const cap = PSY.perks().speedK * (C.TRAIL_SPEED * ramp() + 6 * SPK * prog + (PH.boost_t > 0 ? 4 * SPK : 0) + (PH.vxa > 0 ? 9 * SPK : 0)) * (1 + .28 * PH.grade), spn = Math.hypot(PH.vx, PH.vz); if (spn > cap) { const k = 1 - Math.exp(-(PH.mom > 0 ? .1 : .5) * dt); PH.vx -= PH.vx * k * (1 - cap / spn); PH.vz -= PH.vz * k * (1 - cap / spn); } { const hard = Math.min(cap * (PH.mom > 0 ? 1.5 : 1.25), C.SPEED_CAP), sp3 = Math.hypot(PH.vx, PH.vz); if (sp3 > hard) { const k3 = 1 - Math.exp(-3 * dt); PH.vx -= PH.vx * k3 * (1 - hard / sp3); PH.vz -= PH.vz * k3 * (1 - hard / sp3); } }          // (momentum may carry you well past the cap, but never without limit)
   PH.mom = Math.max(PH.mom - dt, 0); }
   if (PH.latch && PH.grounded && PH.latchDist < 28 && PH.latchDist > 0) { const tug = 10 * SPK * dt * PH.latch.w * (1 - PH.latchDist / 28); PH.vx += fx * tug; PH.vz += fz * tug; PH.vxa = Math.max(PH.vxa, .25); }
+  if (PH.ready && !st.paused && -PH.z < sp('launchzone', 450) && PH.hurt <= 0) PH.boost_t = Math.max(PH.boost_t, .4);          /* the launch zone */
   if (PH.vxa > 0 || PH.boost_t > 0) PH.mom = Math.max(PH.mom, 1.2);
   PH.vz = Math.min(PH.vz, -3); PH.x += PH.vx * dt; PH.z = Math.min(PH.z + PH.vz * dt, 0);
   if (Math.abs(PH.x) >= C.W_HALF - 2.5) { PH.x = Math.max(-(C.W_HALF - 2.5), Math.min(C.W_HALF - 2.5, PH.x)); PH.vx *= -.2; }
@@ -1088,7 +1116,7 @@ function playStep(dt, first = true, frameDt = dt) {          // dt is one physic
   }
   PH.gh_prev = gh;
   if (PH.z < WORLD_END) { PH.lap++; toast('LAP ' + PH.lap + ' DONE  score ' + Math.floor(PH.score), '#ff6'); buildWorld(); for (const r of ROWS) { for (const b of (r.buffs || [])) b.taken = false; for (const pd of (r.pads || [])) pd.used = false; for (const f of (r.feats || [])) f.done = false; for (const t of (r.toys || [])) { t.used = false; if (t.t > 1e14) t.t = 0; } } PH.z = -2; PH.x = 0; PH.vx = 0; PH.vz = -20; PH.y = th(0, -2); PH.gh_prev = PH.y; PH.vy = 0; PH.grounded = true; PH.prevZ = -2; PH.rail = null; SFX.grindOff(); }
-  railStep(dt, sIn); vortexStep(dt, sIn); toys.tick(dt, sIn); collectStep(); if (!toys.active()) obstacleStep(ox0, oz0); PH.prevZ = PH.z; VFX.tick(dt, clock.t);
+  railStep(dt, sIn); vortexStep(dt, sIn); if (window.__kitStep) window.__kitStep(dt); toys.tick(dt, sIn); collectStep(); if (!toys.active()) obstacleStep(ox0, oz0); PH.prevZ = PH.z; VFX.tick(dt, clock.t);
   if (PH.mult > 0) PH.mult -= dt; if (PH.wings > 0) PH.wings -= dt; PH.score += dt * Math.hypot(PH.vx, PH.vz) * .02 * (PH.mult > 0 ? 2 : 1);
   GSPEED += (Math.min(1, Math.max(0, Math.hypot(PH.vx, PH.vz) / SPK / 45)) - GSPEED) * Math.min(1, dt * 2); { const bp = gmOn ? GM.beatPos() : 0; if (gmOn && bp > 0 && BEATFX.k > 0) { const ph = bp - Math.floor(bp), bar = (Math.floor(bp) % 4 === 0) ? 1 : .55; const chillNow = CHILL || (GM.arc && GM.arc.stage === 'chill'); const kick = chillNow ? .5 + .5 * Math.sin(bp * Math.PI / 4) : Math.exp(-ph * 7) * bar;          /* (Moodless Refrain is not on the 128 BPM grid: in the chill-out the picture breathes slowly instead of kicking) */ BEATFX.pulse += (kick - BEATFX.pulse) * Math.min(1, dt * 40); } else BEATFX.pulse *= Math.exp(-dt * 6);
   const bk = BEATFX.pulse * BEATFX.k; U.uBeatG.value = bk; BEATFX.fov = 1 + .018 * bk; renderer.toneMappingExposure = BEATFX.exp * (1 + .07 * bk) * CAVE.mul; for (const gm of GMATS) gm.uniforms.speed.value = Math.min(1.3, GSPEED + .22 * bk); }
@@ -1101,7 +1129,7 @@ function playStep(dt, first = true, frameDt = dt) {          // dt is one physic
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.style.opacity = 0; }
   st.x = PH.x; st.z = PH.z;
 }
-const RIG = createCamRig({ THREE, scene, camera, th: (x, z) => { const g = groundY(x, z); return g === null ? PH.y : g; }, trailX, PH, SPK, PSY, touch: TOUCHLOOK, fovMul: () => (LABV.fovMul || 1) * BEATFX.fov * (() => { const base = Math.max(78, Math.min(108, 80 + (Math.hypot(PH.vx, PH.vz) / SPK - 18) * .6)), cap = parseFloat(Q.get('fovcap') || '88'); return base > cap ? cap / base : 1; })() });          /* (Godot widens the view to 108 degrees at speed, which shrinks everything in the distance: capped at 88, ?fovcap=108 for the original) */
+const RIG = createCamRig({ THREE, scene, camera, th: (x, z) => { const g = groundY(x, z); return g === null ? PH.y : g; }, trailX, PH, SPK, PSY, touch: TOUCHLOOK, lookDown: () => sp('camdown', .38), fovMul: () => (LABV.fovMul || 1) * BEATFX.fov * (() => { const base = Math.max(78, Math.min(108, 80 + (Math.hypot(PH.vx, PH.vz) / SPK - 18) * .6)), cap = parseFloat(Q.get('fovcap') || '88'); return base > cap ? cap / base : 1; })() });          /* (Godot widens the view to 108 degrees at speed, which shrinks everything in the distance: capped at 88, ?fovcap=108 for the original) */
 const MAE = { adapt: 0, v: 0 };
 function maeTick(dt) {          // adaptation fills while you ride fast (about 6 s) and drains slowly (about 12 s); the drift shows when the flow stops: a crash, the pause, the comedown
   if (Q.has('nomae')) { postM.uniforms.mae.value = 0; return; }
@@ -1145,7 +1173,7 @@ function frame(now) {
   if (PLAY && CAMD.mode === 'old') { if (SHUD.a > .002) { const tt = performance.now(); camera.position.y += Math.sin(tt * .09) * SHUD.a; camera.position.x += Math.sin(tt * .071 + 1.3) * SHUD.a * .6; } SHUD.a *= Math.exp(-dt * 13); }
   if (!PLAY || CAMD.mode === 'old') { camera.rotation.set(-0.06 + pitch * 0.8, 0, 0, 'YXZ'); U.uBoard.value.set(st.x, st.z); sky.position.copy(camera.position); }
   const T3 = performance.now(); WEATHER.tick(dt, camera.position, Math.hypot(PH.vx, PH.vz) / SPK, renderer.domElement.height); caveTick(dt);
-  const T4 = performance.now(); renderPost(); const T5 = performance.now(); goalTick(now); beaconTick(now); govTick(now); { const T6 = performance.now(); if (window.__dm && T6 - T0 > 250) window.__dm('SLOW FRAME ' + Math.round(T6 - T0) + 'ms: anim/mae/trail ' + Math.round(T1 - T0) + ' | physics ' + Math.round(T2 - T1) + ' | camera ' + Math.round(T3 - T2) + ' | weather/cave ' + Math.round(T4 - T3) + ' | renderPost ' + Math.round(T5 - T4) + ' | goal/beacon/gov ' + Math.round(T6 - T5) + ' | paused ' + st.paused); }
+  const T4 = performance.now(); renderPost(); if (window.__snapWant) window.__snapDo(); const T5 = performance.now(); goalTick(now); beaconTick(now); govTick(now); { const T6 = performance.now(); if (window.__dm && T6 - T0 > 250) window.__dm('SLOW FRAME ' + Math.round(T6 - T0) + 'ms: anim/mae/trail ' + Math.round(T1 - T0) + ' | physics ' + Math.round(T2 - T1) + ' | camera ' + Math.round(T3 - T2) + ' | weather/cave ' + Math.round(T4 - T3) + ' | renderPost ' + Math.round(T5 - T4) + ' | goal/beacon/gov ' + Math.round(T6 - T5) + ' | paused ' + st.paused); }
   frames++; acc += dt; if (acc > 0.5) { fps = frames / acc; frames = 0; acc = 0; hud.textContent = LVL + '  seed ' + lvl.seed + '  ' + lvl.theme + '\n' + nMesh + ' meshes, ' + nInst + ' instances, ' + Object.keys(lvl.meshes).length + ' unique meshes\nz ' + st.z.toFixed(0) + '  speed ' + (PLAY ? (Math.hypot(PH.vx, PH.vz) * 3.6).toFixed(0) + 'km/h  hits ' + PH.hits + '  score ' + Math.floor(PH.score) + (PH.shield ? '  SHIELD' : '') + (PH.boost_t > 0 ? '  BOOST' : '') : st.speed.toFixed(0)) + '  ' + fps.toFixed(0) + ' fps'; if (MINUP) MINUP(fps); }
 }
 const VB = document.createElement('div'); VB.textContent = 'NORMAL'; VB.style.cssText = 'position:fixed;right:10px;top:60px;min-width:44px;padding:0 10px;height:30px;line-height:30px;text-align:center;border:2px solid #fff9;border-radius:15px;color:#fff;font:700 11px ui-monospace,Consolas,monospace;background:#0006;z-index:9;cursor:pointer;user-select:none'; document.body.appendChild(VB); window.__vbtn = VB; VB.addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); setVMode(VM.mode + 1); });
@@ -1301,9 +1329,10 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
   }
   const bar = css(document.createElement('div'), 'display:flex;gap:8px;margin-top:6px;flex:none');
   const mk = (txt, fn) => { const b = css(document.createElement('button'), 'flex:1;height:48px;border-radius:12px;border:1px solid #fff6;background:#ffffff22;color:#fff;font:700 15px system-ui;touch-action:manipulation'); b.textContent = txt; b.onclick = fn; bar.appendChild(b); return b; };
-  mk('Reset all', () => { for (const k of Object.keys(LIVE)) delete LIVE[k]; for (const name of Object.keys(SET)) apply(name, SET[name][5]); for (const name in els) els[name].refresh(); });
-  const cp = mk('Copy', () => { const txt = Object.entries(LIVE).map(([k, v]) => k + '=' + String(Math.round(v * 1000) / 1000)).join('&'); try { navigator.clipboard.writeText('&' + txt); } catch (e) { } cp.textContent = 'Copied'; setTimeout(() => { cp.textContent = 'Copy'; }, 1200); });
-  mk('Close', () => { sheet.style.display = 'none'; btn.style.display = 'block'; });
+  const rsAll = () => { for (const k of Object.keys(LIVE)) delete LIVE[k]; for (const name of Object.keys(SET)) apply(name, SET[name][5]); for (const name in els) els[name].refresh(); };
+  const sv = mk('Save', () => { save(); try { localStorage.setItem('gvtune_saved', JSON.stringify({ t: Date.now(), v: LIVE })); } catch (e) { } toast('SETTINGS SAVED ON THIS DEVICE', '#6df'); sv.textContent = 'Saved ✓'; setTimeout(() => { sv.textContent = 'Save'; }, 1500); });          /* every setting stays on this device and is applied each time the game opens */
+  const sh = mk('Share', () => { const u = new URL(location.href); for (const k of ['resettune']) u.searchParams.delete(k); for (const [k, v] of Object.entries(LIVE)) u.searchParams.set(k, String(Math.round(v * 1000) / 1000)); const url = u.toString(); const done = () => { sh.textContent = 'Copied'; setTimeout(() => { sh.textContent = 'Share'; }, 1500); }; if (navigator.share) navigator.share({ title: 'Downhill settings', url }).catch(() => { }); else { try { navigator.clipboard.writeText(url).then(done, done); } catch (e) { done(); } } });          /* a link that opens the game with every setting applied: for another phone */
+  mk('Centre', () => { if (window.__recentreNow) window.__recentreNow(); }); mk('Reset', rsAll); mk('Close', () => { sheet.style.display = 'none'; btn.style.display = 'block'; });
   sheet.appendChild(bar);
   btn.onclick = () => { layout(); sheet.style.display = 'flex'; btn.style.display = 'none'; };          /* the round button hides while the sheet is open (Close brings it back), so nothing overlaps */
   // the health line: what is going on, in plain words, updated twice a second
@@ -1315,3 +1344,77 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
     hl.textContent = 'fps ' + Math.round(typeof fps === 'number' ? fps : 0) + '  tracker ' + (hz ? hz.toFixed(0) : '-') + '/s' + (lat !== null ? '  delay ~' + Math.round(lat + 40) + 'ms' : '') + '  sens ' + (+g).toFixed(2) + '\nedge ' + Math.round(lock * 100) + '%  centre ' + Math.round(mid * 100) + '%  jitter ' + Math.round(jit * 100) + '%' + (tips.length ? '\n! ' + tips.join('\n! ') : '\nlooks fine');
   }, 500);
 }
+
+// SLALOM STRETCHES: walls of striped pylons across the open ground, each with an opening that swings from side to side, so the board swerves back and forth. The openings are marked
+// with tall glowing beacons. Hitting a pylon is the gentle crash (speed x 0.3 and about a second of grace). Gates get a little tighter and swing a little wider with distance.
+// &gate=N metres between gates (default 34).
+{
+  const SLN = { done: new Set() };
+  const tex = (() => { const c = document.createElement('canvas'); c.width = 32; c.height = 128; const g = c.getContext('2d'); for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffd23a' : '#26202e'; g.fillRect(0, i * 16, 32, 16); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const geoP = new THREE.CylinderGeometry(.75, .9, 4.4, 10); geoP.translate(0, 2.2, 0);
+  const matP = new THREE.MeshStandardMaterial({ map: tex, roughness: .65, emissive: 0x332211, emissiveIntensity: .6 });
+  const geoB = new THREE.CylinderGeometry(.3, .5, 10, 8); geoB.translate(0, 5, 0);
+  const matB = new THREE.MeshBasicMaterial({ color: 0x55ffee, fog: false });
+  const addOb = (x, z, r) => { const ob = { x, z, r, k: .7, label: 'PYLON!' }; const key = Math.floor(x / 8) + ',' + Math.floor(z / 8); (OGRID.get(key) || OGRID.set(key, []).get(key)).push(ob); };
+  const build = (j, rr, z0) => {
+    const gap = sp('gate', 52), gates = Math.max(1, Math.floor(150 / gap)), spans = []; for (const f of (rr.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) spans.push([Math.min(...zs), Math.max(...zs)]); } for (const t of (rr.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) spans.push([t.z - 6, t.z + 6]);
+    const P = [], B = [];
+    for (let k = 0; k < gates; k++) {
+      const z = z0 - 30 - k * gap, g = j * 6 + k; if (spans.some((q) => z > q[0] - 14 && z < q[1] + 14)) continue;
+      const pr = Math.min(1, -z / 5000), amp = sp('gateamp', 6) * (.85 + .35 * pr), hw = sp('gatew', 9.5) - 2.5 * pr, side = g % 2 ? 1 : -1, tx = trailX(z), oc = tx + side * amp, L = Math.min(25, C.W_HALF - 6);
+      for (let x = tx - L; x <= tx + L; x += 2.6) { if (Math.abs(x - oc) < hw) continue; P.push([x, z]); }
+      B.push([oc - hw, z], [oc + hw, z]);
+    }
+    window.__dm && window.__dm('slalom row ' + j + ': ' + P.length + ' pylons, ' + B.length / 2 + ' gates (of ' + gates + ')');
+    if (!P.length) return;
+    const im = new THREE.InstancedMesh(geoP, matP, P.length), m = new THREE.Matrix4(); P.forEach(([x, z], i) => { const y = groundY(x, z); m.makeScale(1, .9 + ((i * 37) % 7) / 35, 1).setPosition(x, y === null ? th(x, z) : y, z); im.setMatrixAt(i, m); addOb(x, z, .95); });
+    im.frustumCulled = false; scene.add(im);
+    const ib = new THREE.InstancedMesh(geoB, matB, B.length); B.forEach(([x, z], i) => { const y = groundY(x, z); m.makeScale(1, 1, 1).setPosition(x, y === null ? th(x, z) : y, z); ib.setMatrixAt(i, m); addOb(x, z, .5); });
+    ib.frustumCulled = false; scene.add(ib);
+  };
+  const KIT = createKit({ scene, th, groundY, trailX, PH, C, SPK, RAILS, toast, hooks: {} }); window.__kitStep = (dt) => KIT.step(dt);          /* custom ramps, rails and hoops in five cheap materials (kit.js) */
+  const spansOf = (j, rr) => { const sp0 = []; for (const q of [lvl.rows[String(j - 1)], rr, lvl.rows[String(j + 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) sp0.push([Math.min(...zs) - 6, Math.max(...zs) + (f.kind === 'jump' ? 140 : 8)]); } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) sp0.push([t.z - 25, t.z + 25]); } return sp0; };
+  const singles = (j, rr, z0) => {
+    const spans = []; for (const q of [lvl.rows[String(j - 1)], rr, lvl.rows[String(j + 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) spans.push([Math.min(...zs) - 6, Math.max(...zs) + (f.kind === 'jump' ? 140 : 8)]); } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) spans.push([t.z - 25, t.z + 25]); }
+    const P = [], lanes = [-9, 8, 0, 10, -8]; for (let k = 0; k < 3; k++) { const z = z0 - 35 - k * 55, x = trailX(z) + lanes[(j * 3 + k) % lanes.length]; if (spans.some((q) => z > q[0] && z < q[1])) continue; P.push([x, z]); }
+    if (!P.length) return; const m = new THREE.Matrix4(), im = new THREE.InstancedMesh(geoP, matP, P.length), ib = new THREE.InstancedMesh(geoB, matB, P.length);
+    P.forEach(([x, z], i) => { const y = groundY(x, z), yy = y === null ? th(x, z) : y; m.makeScale(1.3, 1.2, 1.3).setPosition(x, yy, z); im.setMatrixAt(i, m); m.makeScale(1, .55, 1).setPosition(x, yy, z); ib.setMatrixAt(i, m); addOb(x, z, 1.2); });
+    im.frustumCulled = false; ib.frustumCulled = false; scene.add(im); scene.add(ib);
+  };
+  window.__slalomTick = () => {
+    { const j1 = Math.max(1, Math.floor(-PH.z / 180) - 1); for (let j = j1; j <= j1 + 3; j++) { const zn = window.__zoneOf(j), rr = lvl.rows[String(j)]; if (!rr || zn === 'slalom' || zn === 'off') continue; const z0 = -180 * j; if (groundY(trailX(z0 - 90), z0 - 90) === null) continue; try { const n0 = KIT.ramps.length, r0 = RAILS.length; KIT.buildRow(j, rr, z0, spansOf(j, rr)); if (KIT.ramps.length + RAILS.length !== n0 + r0) window.__dm && window.__dm('kit row ' + j + ': +' + (KIT.ramps.length - n0) + ' ramps, +' + (RAILS.length - r0) + ' rails, rings ' + KIT.rings.length); } catch (e) { window.__dm && window.__dm('kit build failed: ' + (e && e.message)); } } }
+    if (!window.__railMats) { window.__railMats = true; const MT = [['steel', [.35, .95, 1]], ['steel', [.35, .95, 1]], ['glass', [.85, .95, 1]], ['wood', [1, .62, .25]], ['neon', [1, .3, .9]], ['rust', [1, .5, .2]]]; for (const f of RAILS) if (!f.mat) { const h = Math.abs(Math.floor(f.za * 13)) % 6; f.mat = MT[h][0]; f.col = MT[h][1]; } }
+    if (!PLAY || sp('zones', 1) <= 0) return; const j0 = Math.max(0, Math.floor(-PH.z / 180) - 1);
+    for (let j = j0; j <= j0 + 4; j++) { const rr = lvl.rows[String(j)]; if (rr && !window.__ZD.has(j)) window.__zoneRow(rr, j); }
+    for (let j = j0; j <= j0 + 3; j++) {
+      const zn = window.__zoneOf(j); if (SLN.done.has(j) || (zn !== 'slalom' && zn !== 'clear') || j < 1) continue; const rr = lvl.rows[String(j)]; if (!rr) continue;
+      const z0 = -180 * j; if (groundY(trailX(z0 - 90), z0 - 90) === null) continue;          // the ground of that row is not there yet: try again next frame
+      SLN.done.add(j); try { if (zn === 'slalom') build(j, rr, z0); else singles(j, rr, z0); } catch (e) { window.__dm && window.__dm('slalom build failed: ' + (e && e.message)); }
+    }
+  };
+}
+
+// GENTLER PICKUP PUNCH: a pickup or a pad used to kick the field of view by up to 9 degrees, shake and flash the picture for an instant, which felt like the view locking as you passed
+// through it. Now scaled by &punch (default 0.3; 1 = the old kick, 0 = none).
+{
+  const K = () => Math.max(0, Math.min(1, sp('punch', .3)));
+  for (const ev of ['onBuff', 'onPad']) { const f = PSY.events[ev]; if (typeof f === 'function') PSY.events[ev] = function () { const r = f.apply(PSY.events, arguments); try { const c = PSY.camera; if (c) { c.fov_punch *= K(); c.shake *= K(); c.flash *= K(); } } catch (e) { } return r; }; }
+}
+
+
+// SNAPSHOT (&tune): a round camera button under the gear. It saves the picture of the game (no buttons or text over it) as a PNG: on a phone it opens the share sheet (save to photos, send), elsewhere it downloads.
+if (Q.has('tune') && Q.get('tune') !== 'all') {
+  const cam = document.createElement('button'); cam.textContent = '📷'; cam.setAttribute('aria-label', 'Snapshot'); cam.style.cssText = 'position:fixed;right:max(8px,env(safe-area-inset-right));top:calc(40% + 64px);width:52px;height:52px;border-radius:26px;border:2px solid #fff8;background:#000c;color:#fff;font:22px system-ui;z-index:30;touch-action:manipulation;padding:0';
+  for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'click', 'mousedown']) cam.addEventListener(ev, (e) => e.stopPropagation());
+  document.body.appendChild(cam);
+  window.__snapDo = () => { window.__snapWant = false; try { canvas.toBlob((b) => { if (!b) return; const name = 'downhill-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.png', file = new File([b], name, { type: 'image/png' }); if (navigator.canShare && navigator.canShare({ files: [file] })) navigator.share({ files: [file], title: 'Downhill' }).catch(() => { }); else { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); } toast('SNAPSHOT SAVED', '#6df'); }, 'image/png'); } catch (e) { toast('SNAPSHOT FAILED', '#f88'); } };
+  cam.onclick = () => { window.__snapWant = true; };
+}
+
+// SPEED LOG (&diag): every 2 s, the speed, what limits it and the boost state, so a slow start can be explained with numbers
+setInterval(() => { try { if (!window.__dm || !PLAY) return; const sp0 = Math.hypot(PH.vx, PH.vz); window.__dm('speed ' + sp0.toFixed(1) + ' m/s z ' + PH.z.toFixed(0) + ' boost ' + PH.boost_t.toFixed(2) + ' vxa ' + PH.vxa.toFixed(2) + ' ramp ' + ramp().toFixed(2) + ' grade ' + PH.grade.toFixed(2) + ' hurt ' + PH.hurt.toFixed(1) + ' ready ' + PH.ready + ' perk ' + PSY.perks().speedK.toFixed(2) + ' VMAX ' + (C.TRAIL_VMAX * ramp()).toFixed(1) + ' SPD ' + (C.TRAIL_SPEED * ramp()).toFixed(1)); } catch (e) { } }, 2000);
+
+
+// CENTRE NOW: re-measure the middle from where the head is this instant (the R key, or the Centre button in the settings sheet)
+window.__recentreNow = () => { try { if (!HD.cur) return; const nv = [HD.cur[0] / HN3[0], HD.cur[1] / HN3[1], HD.cur[2] / HN3[2]]; HD.neu = hproj(nv); HD.nT = HD.cur[0]; HD.nL = HD.cur[2]; toast('CENTRED', '#6df'); } catch (e) { } };
+addEventListener('keydown', (e) => { if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey) window.__recentreNow(); });

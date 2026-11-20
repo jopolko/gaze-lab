@@ -57,6 +57,7 @@ export function createSpawn(o) {
     const weighted = () => { const r = R(); return r < .36 ? 'boost' : r < .5 ? 'shield' : r < .72 ? 'mult' : 'donut'; };
     let z = -150, molIdx = Math.floor(R() * 6), nextMol = -330, side = R() < .5 ? 1 : -1;
     while (z > zEnd) {
+      { const zj = Math.floor(-z / 180), zn = (typeof window !== 'undefined' && window.__zoneOf) ? window.__zoneOf(zj) : 'off'; if (zn === 'clear' || zn === 'slalom') { z = -(zj + 1) * 180 - 3; continue; } }          // clear and slalom stretches: nothing here (the game decides which rows)
       const cx = trailX(z), kind = R();
       if (z < nextMol) {          // a molecule, far to one side, with a trail of orbs that leads there from the middle of the course
         const id = MOL_ORDER[molIdx++ % 6], mx = side * rr(55, halfW - 12), mz = z - 20; side = -side; nextMol -= rr(170, 230);
@@ -75,13 +76,13 @@ export function createSpawn(o) {
         const x0 = rr(-halfW + 10, halfW - 10); addPad(x0, z); if (R() < .6) addPad(x0 + rr(-10, 10), z - 28); addBuff(x0 + rr(-14, 14), z - 55, 'boost'); addBuff(X(x0 + rr(-60, 60)), z - 90, weighted());
         z -= 62;
       } else if (kind < .82) {          // a rail, with a line of orbs to lead you to it
-        const x0 = rr(-halfW + 20, halfW - 20), f = { mine: true, kind: 'rail', kx: x0, sd: 0, za: z, zb: z - rr(26, 46), done: false }; rails.push(f); RAILS.push(f); addOrbs(x0 + rr(-40, 40), z + 70, x0, z + 8, 7);
+        const x0 = rr(-halfW + 20, halfW - 20), mt = pick(['steel', 'steel', 'glass', 'wood', 'neon', 'rust']), RM = { steel: [[.35, .95, 1], 1], glass: [[.85, .95, 1], .85], wood: [[1, .62, .25], 1.5], neon: [[1, .3, .9], 1], rust: [[1, .5, .2], 1.2] }[mt], f = { mine: true, kind: 'rail', mat: mt, col: RM[0], kx: x0, sd: 0, za: z, zb: z - rr(26, 46) * RM[1], done: false };          // materials: each rail has a colour and a way of riding (see railStep in the game) rails.push(f); RAILS.push(f); addOrbs(x0 + rr(-40, 40), z + 70, x0, z + 8, 7);
         z -= 70;
       } else {          // trees to avoid in the open middle
         const n = Math.floor(rr(6, 15)), x0 = rr(-halfW + 20, halfW - 20); for (let i = 0; i < n; i++) trees.push({ x: X(x0 + rr(-26, 26)), z: z - rr(0, 44), s: rr(.9, 1.6) });
         addBuff(X(x0 + rr(-40, 40)), z - 52, weighted()); z -= 56;
       }
-      z -= rr(2, 9);
+      z -= rr(2, 9) + (typeof window !== 'undefined' && window.__spawnGap ? rr(30, 90) * window.__spawnGap() : 0);          // spread out: more open ground between the things you go after (&spawngap, default 1.3)
     }
     // ---- instanced meshes, from Godot's own recipes (pickupmesh.js: RunRig._make_item / _make_pad / _build_rail / _spawn_orb; molmesh.js: the molecule mesh and pill)
     const add = (mesh, shared) => { mesh.frustumCulled = false; mesh.userData.shared = shared; scene.add(mesh); live.push(mesh); return mesh; };

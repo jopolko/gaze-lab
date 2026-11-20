@@ -520,6 +520,13 @@ Rails and ramps get boring when they are the same piece over and over. Rules:
 - **Buffs live in the wreckage** (a boost on a car roof, a shield in a vending machine, a magnet in a radio tower), so hunting a buff is also exploring.
 Build order for objects: define a small shared kit first (chunks of metal, concrete, glass, signs, vehicles in a few textured shapes) and assemble many variants from it; hand-made hero objects only for the signature pieces. Every surface textured or psychedelic (no flat single colour).
 
+### Materials and shapes change how things ride (owner, 2026-11-20)
+Same kind of object, different material or shape, different behaviour, readable at a glance by colour and silhouette:
+- **Rails (built in the test copy, colours and ride only):** steel (cyan, normal), glass (pale, fast, shorter), wood (amber, slow and long), neon (magenta, double points), rust (orange, a little rough, longer). A toast names it on contact.
+- **Ramps (built in the test copy, throw height only):** each ramp throws 0.7x to 1.6x (SMALL HOP / AIR / BIG AIR). Real shape variety (a short steep kicker, a long low roller, a wrecked-bus ramp, a collapsed slab) needs new geometry: the object kit in the variety rules above.
+- **Arcs and tubes:** same idea (a material and a shape per tube: glass tube fast and thin, wooden tube slow and wide).
+- **Rules:** four or five materials at most, each with one clear effect; the effect is shown by colour and sound before you touch it; no hidden penalties (gentle stakes, section 17); regions bias which materials appear (a glass-and-neon city, a wood-and-rust farm).
+
 ### Authoring approach (so many can be made cheaply)
 A section is a short script: a theme, a length, a difficulty level (0-1) and a list of moves. The generator lays the moves on the course by the placement language above, using only the moves that chapter allows. The seeded generator and the buff-thinning rule (section 17) stay; a section replaces the repeated toy / ramp / rail placement in its stretch. Props are instanced meshes (cheap); obstacles that move are a short list updated per frame.
 

@@ -132,7 +132,7 @@ export function createPickupMesh(THREE) {
   // ---- RAIL (_build_rail). f: { za, zb }.  xAt(z), yAt(z): the rail's line (RunRig._feat_x, _rail_y).  Godot: n = ceil((za - zb) / 8) segments, each a box .36 x .2 x length (solid, energy 1.8, cyan (.35,.95,1));
   //  a post (r .09 top .12 bottom, 5 sides, RAIL_H high, solid (.86,.88,.95) energy .5) and a glossy atom (kit ball, scale .34, ends .55) at every second joint and the last; a spiral of glints round it; a tall thin light at the way on.
   function rail(f, xAt, yAt, groundAt) {
-    const col = [.35, .95, 1], n = Math.max(1, Math.ceil((f.za - f.zb) / 8)), P = [], boxes = [], posts = [], balls = [];
+    const col = f.col || [.35, .95, 1], n = Math.max(1, Math.ceil((f.za - f.zb) / 8)), P = [], boxes = [], posts = [], balls = [];
     for (let i = 0; i <= n; i++) { const z = f.za + (f.zb - f.za) * (i / n); P.push(new THREE.Vector3(xAt(z), yAt(z), z)); }
     const up = new THREE.Vector3(0, 1, 0), pc = [.86 * 1.5, .88 * 1.5, .95 * 1.5], bc = col.map((x) => x * 2.8);
     for (let i = 1; i <= n; i++) {
