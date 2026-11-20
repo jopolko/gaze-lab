@@ -608,7 +608,7 @@ function headStep(dt, now) {
   HD.ramp = Math.min(1, HD.ramp + dt / (HD.lost ? .5 : .8));
   const nv = [HD.cur[0] / HN3[0], HD.cur[1] / HN3[1], HD.cur[2] / HN3[2]]; let pr = hproj(nv); if (HD.pT !== HD.t) { const t0 = HD.t, dt0 = (t0 - (HD.pT0 || 0)) / 1000; if (HD.pT0 && dt0 > .004) HD.pvel = (HD.pvel || 0) + (Math.max(-6, Math.min(6, (pr - HD.pPr) / dt0)) - (HD.pvel || 0)) * .5; if (HD.pT0 && dt0 > .004 && HD.cur) { HD.vT = (HD.vT || 0) + (Math.max(-200, Math.min(200, (HD.cur[0] - HD.pY) / dt0)) - (HD.vT || 0)) * .5; HD.vL = (HD.vL || 0) + (Math.max(-100, Math.min(100, (HD.cur[2] - HD.pL) / dt0)) - (HD.vL || 0)) * .5; } if (HD.cur) { HD.pY = HD.cur[0]; HD.pL = HD.cur[2]; } HD.pT = t0; HD.pT0 = t0; HD.pPr = pr; } { const PMS = sp('pred', 130); if (PMS > 0 && !HD.lost) pr += Math.max(-3, Math.min(3, HD.pvel || 0)) * Math.min(.25, (performance.now() - HD.t + PMS) / 1000); }          /* prediction: the reading is about 100 ms old; move to where the head probably is now (speed from the readings' own timestamps) */
   {          /* RE-CENTRING: the middle is not fixed, it follows where your head rests. When the head has been still for a moment and is near the middle, the middle slides to where it is: slowly in normal riding (a few seconds), quickly while the board is held by a ramp, rail or arc or in the air, and for a second and a half after one of those ends (landing, rail end, lip). A head deliberately held well off to one side is never absorbed. &recentre=0 turns it off. */
-    const nowT = performance.now(), locked = !!(PH.rail || PH.vlock !== null || !PH.grounded || (typeof toys !== 'undefined' && toys && toys.active && toys.active())), still = Math.abs(HD.pvel || 0) < .3 && !HD.lost;
+    const nowT = performance.now(), locked = !!(PH.rail || PH.vlock !== null || !PH.grounded || (typeof toys !== 'undefined' && toys && toys.active && toys.active())), still = Math.abs(HD.pvel || 0) < .3 && !HD.lost && (window.__rot || 0) < 25;
     if (HD._free === false && !locked) HD.recentreUntil = nowT + 1500; HD._free = !locked; HD.stillT = still ? (HD.stillT || 0) + dt : 0;
     if (sp('recentre', 1) > 0 && HD.frozen && HD.cal && HD.stillT > .6) {
       const fast = locked || nowT < (HD.recentreUntil || 0), tc = fast ? .5 : 3, lim = fast ? .55 : .3, a = 1 - Math.exp(-dt / tc);
@@ -1412,9 +1412,24 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
 }
 
 // SPEED LOG (&diag): every 2 s, the speed, what limits it and the boost state, so a slow start can be explained with numbers
-setInterval(() => { try { if (!window.__dm || !PLAY) return; const sp0 = Math.hypot(PH.vx, PH.vz); window.__dm('speed ' + sp0.toFixed(1) + ' m/s z ' + PH.z.toFixed(0) + ' boost ' + PH.boost_t.toFixed(2) + ' vxa ' + PH.vxa.toFixed(2) + ' ramp ' + ramp().toFixed(2) + ' grade ' + PH.grade.toFixed(2) + ' hurt ' + PH.hurt.toFixed(1) + ' ready ' + PH.ready + ' perk ' + PSY.perks().speedK.toFixed(2) + ' VMAX ' + (C.TRAIL_VMAX * ramp()).toFixed(1) + ' SPD ' + (C.TRAIL_SPEED * ramp()).toFixed(1)); } catch (e) { } }, 2000);
+setInterval(() => { try { if (!window.__dm || !PLAY) return; const sp0 = Math.hypot(PH.vx, PH.vz); window.__dm('speed ' + sp0.toFixed(1) + ' m/s z ' + PH.z.toFixed(0) + ' boost ' + PH.boost_t.toFixed(2) + ' vxa ' + PH.vxa.toFixed(2) + ' ramp ' + ramp().toFixed(2) + ' grade ' + PH.grade.toFixed(2) + ' hurt ' + PH.hurt.toFixed(1) + ' ready ' + PH.ready + ' perk ' + PSY.perks().speedK.toFixed(2) + ' VMAX ' + (C.TRAIL_VMAX * ramp()).toFixed(1) + ' SPD ' + (C.TRAIL_SPEED * ramp()).toFixed(1) + ' rot ' + (window.__rotRms || 0).toFixed(1)); } catch (e) { } }, 2000);
 
 
 // CENTRE NOW: re-measure the middle from where the head is this instant (the R key, or the Centre button in the settings sheet)
 window.__recentreNow = () => { try { if (!HD.cur) return; const nv = [HD.cur[0] / HN3[0], HD.cur[1] / HN3[1], HD.cur[2] / HN3[2]]; HD.neu = hproj(nv); HD.nT = HD.cur[0]; HD.nL = HD.cur[2]; toast('CENTRED', '#6df'); } catch (e) { } };
 addEventListener('keydown', (e) => { if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey) window.__recentreNow(); });
+
+
+// THE PHONE'S OWN MOVEMENT (gyro): how fast the phone itself is turning, in degrees a second. A phone that moves in the hand makes the face move in the camera picture although the head did not, so the
+// re-centring waits while the phone is moving, and the 2-second RMS goes into the speed log (&diag) so the real size of the effect can be read before anything is compensated.
+window.__rot = 0; window.__rotRms = 0; { let acc = 0, n = 0;
+  addEventListener('devicemotion', (e) => { const r = e.rotationRate; if (!r) return; const m = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0); window.__rot += (m - window.__rot) * .2; acc += m * m; n++; });
+  addEventListener('pointerdown', () => { try { if (typeof DeviceMotionEvent !== 'undefined' && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().catch(() => { }); } catch (e) { } }, { once: true });
+  setInterval(() => { window.__rotRms = n ? Math.sqrt(acc / n) : 0; acc = 0; n = 0; }, 2000); }
+
+// a round CENTRE button (under the camera button) so the middle can be reset with one tap on a phone
+if (Q.has('tune') && Q.get('tune') !== 'all') {
+  const ctr = document.createElement('button'); ctr.textContent = '⌖'; ctr.setAttribute('aria-label', 'Centre'); ctr.style.cssText = 'position:fixed;right:max(8px,env(safe-area-inset-right));top:calc(40% + 128px);width:52px;height:52px;border-radius:26px;border:2px solid #fff8;background:#000c;color:#fff;font:26px system-ui;z-index:30;touch-action:manipulation;padding:0';
+  for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'click', 'mousedown']) ctr.addEventListener(ev, (e) => e.stopPropagation());
+  document.body.appendChild(ctr); ctr.onclick = () => window.__recentreNow && window.__recentreNow();
+}
