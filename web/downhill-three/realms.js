@@ -29,7 +29,7 @@ function common(m, U, F2, vertexHook, fragHook, emisHook = '') {
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uTime: U.uTime, uBeat: U.uBeatG }, F2.VC, F2.fogU(), m.userData.u);
     sh.vertexShader = 'attribute float aW; varying vec3 vWP; uniform float uTime, uBeat, uWob;' + NL + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>' + NL + vertexHook + NL + 'vWP = (modelMatrix * vec4(transformed, 1.)).xyz;');
-    sh.fragmentShader = 'varying vec3 vWP; uniform float uBoost, uFlash, uGlow, uTime, vc_lin, gFogDensity; uniform vec3 gFogColor;' + NL + S2L_GLSL + NL + sh.fragmentShader
+    sh.fragmentShader = 'varying vec3 vWP; uniform float uBoost, uFlash, uGlow, uTime, vc_lin, gFogDensity, uTexK; uniform vec3 gFogColor;' + NL + S2L_GLSL + NL + sh.fragmentShader
       .replace('#include <color_fragment>', '#include <color_fragment>' + NL + 'vec3 vcr_ = ' + F2.vcOf('vColor.rgb') + '; vec3 gEmiV = vec3(0.);' + NL + fragHook)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>' + NL + emisHook + NL + 'totalEmissiveRadiance += gEmiV;')
       .replace('#include <fog_fragment>', GODOT_FOG_LIT);
@@ -38,13 +38,13 @@ function common(m, U, F2, vertexHook, fragHook, emisHook = '') {
 
 function ground(p, U, F2) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .95, metalness: 0, side: THREE.DoubleSide, fog: false });
-  m.userData.u = { uBoost: { value: p.boost === undefined ? 1 : p.boost }, uFlash: { value: p.flash || 0 }, uGlow: { value: 0 }, uWob: { value: 0 } };
+  m.userData.u = { uTexK: { value: /realmtex/.test(location.search) ? 1 : 0 }, uBoost: { value: p.boost === undefined ? 1 : p.boost }, uFlash: { value: p.flash || 0 }, uGlow: { value: 0 }, uWob: { value: 0 } };
   common(m, U, F2, '', `float q_ = vWP.x * .22 + sin(vWP.z * .09 + uTime * .3) * 1.6, r_ = vWP.z * .22 + cos(vWP.x * .07 - uTime * .25) * 1.6;
      float fd_ = 1. - smoothstep(50., 200., length(vViewPosition));
      float ln_ = (pow(abs(sin(q_ * 3.14159)), 22.) + pow(abs(sin(r_ * 3.14159)), 22.)) * fd_;
      float bl_ = .5 + .5 * sin(vWP.x * .045 + uTime * .4) * sin(vWP.z * .05 - uTime * .3), mo_ = .5 + .5 * sin(vWP.x * 1.7 + vWP.z * 1.3 + sin(vWP.z * .4) * 3.) * fd_;
-     vec3 cc_ = vcr_ * vcr_ * (.7 + .45 * bl_ + .15 * mo_);
-     diffuseColor.rgb = s2l(cc_ * .4); gEmiV = cc_ * .7 * uBoost * (1. + uFlash * .8) + mix(vcr_, vec3(1.), .45) * vcr_ * ln_ * .8;`);
+     vec3 cc_ = vcr_ * vcr_ * mix(1., .7 + .45 * bl_ + .15 * mo_, uTexK);
+     diffuseColor.rgb = s2l(cc_ * .4); gEmiV = cc_ * .7 * uBoost * (1. + uFlash * .8) + mix(vcr_, vec3(1.), .45) * vcr_ * ln_ * .8 * uTexK;`);
   m.customProgramCacheKey = () => 'realm-ground'; return m;
 }
 

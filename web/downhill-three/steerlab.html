@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steering lab</title>
+<style>
+  :root { --bg:#0e0b18; --card:#181429; --line:#2c2650; --text:#f1edfb; --muted:#a59cc4; --acc:#5df; --warn:#fb7; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif; }
+  header { padding:10px 14px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:17px; margin:0 8px 0 0; font-weight:600; }
+  button, select { background:#251f42; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 11px; font:inherit; cursor:pointer; }
+  button:hover { border-color:var(--acc); } button.primary { background:#1c4f5c; border-color:var(--acc); }
+  #status { color:var(--muted); font-size:13px; margin-left:auto; }
+  main { display:grid; grid-template-columns: minmax(300px, 380px) 1fr; gap:14px; padding:14px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+  details { margin:0 0 8px; } summary { cursor:pointer; font-weight:600; padding:4px 0; }
+  .row { margin:9px 0 12px; } .row label { display:flex; justify-content:space-between; gap:8px; }
+  .row b { font-weight:600; } .row span.v { color:var(--acc); font-variant-numeric:tabular-nums; } .row small { color:var(--muted); display:block; }
+  .row input[type=range] { width:100%; accent-color:#5df; }
+  canvas { width:100%; display:block; background:#0a0814; border-radius:8px; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap:14px; } @media (max-width: 1100px) { .grid2 { grid-template-columns: 1fr; } }
+  .note { color:var(--muted); font-size:13px; } .hl { color:var(--warn); }
+  #out { white-space:pre-wrap; font:12px/1.4 ui-monospace,Consolas,monospace; color:#9fe; background:#07120f; padding:8px; border-radius:8px; display:none; margin-top:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Steering lab</h1>
+  <button id="bStart" class="primary">Start camera</button>
+  <button id="bCenter">Recentre (look straight ahead)</button>
+  <label>Style <select id="mode"><option value="direct">Direct: the ship is exactly where your head points (perfect 1:1)</option><option value="aim">Aim: the board goes where you point (with the board's physics)</option><option value="steer">Steer: your head turns the board</option></select></label>
+  <label>Preset <select id="preset"></select></label>
+  <button id="bPure" class="primary">Pure 1:1</button>
+  <button id="bReset">Reset to optimized</button>
+  <button id="bSave">Save for the game</button>
+  <button id="bCopy">Copy settings</button>
+  <button id="bUrl">Copy as address parameters</button>
+  <button id="bGame">Open the game with these</button>
+  <span id="status">camera off</span>
+</header>
+<main>
+  <div class="card" id="panel"></div>
+  <div>
+    <div class="card">
+      <div class="note">Live: raw head yaw <span class="hl">(white)</span>, conditioned head signal (cyan), steering command (orange), board position on the test track (green). The grey band is the fine zone.</div>
+      <canvas id="scope" width="900" height="230"></canvas>
+    </div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="card">
+        <div class="note">Response curve: head turn (degrees of yaw) to steering. The cyan dot is where your head is now.</div>
+        <canvas id="curve" width="440" height="280"></canvas>
+        <div id="lockinfo" class="note"></div>
+      </div>
+      <div class="card">
+        <div class="note">Test track, seen from above. Catch the targets: <b>small ones</b> are near the line (fine-tuning), <b>big glowing ones</b> are far to the side (reach). <span id="score"></span></div>
+        <canvas id="track" width="440" height="280"></canvas>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px"><span class="note">Keys: <b>C</b> switch camera, <b>R</b> recentre, <b>space</b> pause the test track. The settings are the game's own steering code, so what feels right here feels the same there once you press <b>Save for the game</b>. The game reads them automatically (add <b>&amp;nolab</b> to ignore them).</span><pre id="out"></pre></div>
+  </div>
+</main>
+<script type="module">
+// ---------------------------------------------------------------- parameters (name = the game's address-bar name)
+const PARAMS = [
+  { g: 'Main controls (start here)', open: true, items: [
+    { n: 'gain', t: 'Sensitivity', d: 1.18, min: .2, max: 8, step: .01, h: 'How much the board steers for each degree you turn your head.', up: 'Smaller head turns steer more. Too high and it snaps to full left or right.', down: 'You must turn your head further. Too low and it feels dead.' },
+    { n: 'fine', t: 'Gentleness in the middle', d: .9, min: .2, max: 1.5, step: .01, h: 'How strongly small head movements steer, in the gentle middle zone.', up: 'Small corrections are stronger.', down: 'Small corrections are gentler and more precise, but need more head movement.' },
+    { n: 'band', t: 'Size of the gentle middle zone', d: .3, min: .08, max: .7, step: .01, h: 'How much of your head range counts as "fine-tuning" before the steering speeds up for wide turns.', up: 'A bigger gentle zone: more precise, but wide turns need more head movement.', down: 'A smaller gentle zone: wide turns come sooner.' },
+    { n: 'smooth', t: 'Board smoothness', d: 15, min: 6, max: 40, step: .5, h: 'How softly the board follows small changes (big turns are still quick).', up: 'Crisper: follows every little movement, so it can feel waggly.', down: 'Smoother and calmer, with a little delay on tiny corrections.' },
+  ] },
+  { g: 'Delay compensation', open: true, items: [
+    { n: 'pred', t: 'Prediction (milliseconds ahead)', d: 0, min: 0, max: 200, step: 5, h: 'The camera reading is already about 100 ms old when it reaches the ship. This moves the ship to where your head is probably NOW, using how fast it was moving. It also fills the gaps between readings (the camera gives about 20 a second).', up: 'Feels more immediate. Too much overshoots when you stop or reverse.', down: 'Steadier, a little behind your head.' },
+  ] },
+  { g: 'Aim style only (the board goes where you point)', open: true, items: [
+    { n: 'reach', t: 'Reach at full head turn (metres)', d: 28, min: 8, max: 30, step: .5, h: 'In Aim style, how far to the side the board goes when your head is at full turn. A head halfway there puts the board about halfway.', up: 'Bigger sideways range from the same head turn.', down: 'A smaller range, for finer control.' },
+    { n: 'aimtau', t: 'Aim follow time (seconds)', d: .1, min: .02, max: .6, step: .01, h: 'How quickly the aim point follows your head in Aim style.', up: 'Softer and slower, with a gentle lag.', down: 'Snappier, closer to exactly 1:1.' },
+  ] },
+  { g: 'More controls', items: [
+    { n: 'fc', t: 'Steadiness of your head reading', d: 1.1, min: .3, max: 6, step: .05, h: 'How much your head signal is smoothed before it is used.', up: 'Faster but jittery.', down: 'Steadier but slower to react.' },
+    { n: 'dz', t: 'Ignore tiny movements', d: .015, min: 0, max: .08, step: .001, h: 'Head movement smaller than this does nothing at all.', up: 'Calmer when you sit still, but a slight turn does nothing.', down: 'Even the smallest movement steers.' },
+    { n: 'hyst', t: 'Tremor filter', d: .012, min: 0, max: .06, step: .001, h: 'Levels out tiny shakes. A real turn goes straight through.', up: 'Steadier on bumpy rides, but small deliberate turns need a little more push.', down: 'Every tremor shows up.' },
+    { n: 'sticky', t: 'Calm the exact middle', d: .2, min: 0, max: .8, step: .01, h: 'Extra calming right at straight ahead.', up: 'Rock-steady straight, slower to leave the middle.', down: 'Leaves the middle instantly.' },
+    { n: 'turn', t: 'Big-turn quickness', d: 4.2, min: 1, max: 8, step: .1, h: 'How quickly the board follows a big, deliberate head turn.', up: 'Snappier wide turns.', down: 'Lazier wide turns.' },
+    { n: 'lead', t: 'Anticipation', d: .03, min: 0, max: .2, step: .005, h: 'Reacts slightly before your head arrives.', up: 'Feels quicker, but jumps if the camera hiccups.', down: 'Steadier but a touch behind your head.' },
+    { n: 'spdadapt', t: 'Calmer when fast', d: 1, min: 0, max: 2, step: .05, h: 'Like a modern car: more sensitive when slow, calmer when fast.', up: 'The speed makes more difference.', down: '0 turns it off.' },
+    { n: 'theta', t: 'How sharply the board can turn', d: .62, min: .3, max: 1, step: .01, h: 'The sharpest turn the board makes at full lock.', up: 'Sharper wide turns, better reach.', down: 'Gentler wide turns.' },
+  ] },
+  { g: 'Advanced (rarely needed)', items: [
+    { n: 'kmax', t: 'Calibration ceiling', d: .85, min: .3, max: 1.5, step: .01, h: 'The most the automatic start-up calibration may add. It used to reach 1.3, which made everything twitchy.', up: 'Allows more sensitivity.', down: 'Caps it.' },
+    { n: 'beta', t: 'Reading opens up when you move fast', d: 6, min: 0, max: 14, step: .1, h: 'How much the smoothing relaxes when your head moves quickly.', up: 'Fast moves feel more direct.', down: 'Fast moves are smoothed too.' },
+    { n: 'swerve', t: 'Fast-swerve boost', d: .2, min: 0, max: .6, step: .01, h: 'Extra steering when you whip your head quickly.', up: 'Quick whips steer harder.', down: 'No extra.' },
+  ] },
+];
+const ALL = PARAMS.flatMap((g) => g.items), DEF = Object.fromEntries(ALL.map((p) => [p.n, p.d]));
+const PURE = { dz: 0, hyst: 0, sticky: 0, fine: 1, band: .3, spdadapt: 0, swerve: 0, lead: 0, fc: 6, beta: 0, smooth: 40, turn: 8, aimtau: .02, reach: 28, kmax: .85, theta: .62, _mode: 'direct', _fulldeg: 20 };
+const PRESETS = {
+  'Pure 1:1 (start here)': PURE,
+  'Optimized (recommended)': { _mode: 'aim' },
+  'Smooth and steady': { fc: .8, smooth: 10, hyst: .02, fine: .7, lead: 0, sticky: .3 },
+  'Quick and sharp': { smooth: 24, fc: 2.2, fine: 1.1, band: .22, gain: 1.5, hyst: .006, sticky: .1 },
+  'Precise (wide fine zone)': { band: .45, fine: .6, gain: 1.3, smooth: 13 },
+  'Long reach (small head turns)': { gain: 1.7, kmax: 1, band: .25, fine: .8 },
+};
+let MODE = 'direct'; const P = { ...DEF, ...Object.fromEntries(Object.entries(PURE).filter(([k]) => k[0] !== '_')) };          // the lab starts as pure 1:1: every filter off, the ship exactly where your head points
+let HAD_SAVED = false; try { HAD_SAVED = !!localStorage.getItem('steerlab'); const sv0 = JSON.parse(localStorage.getItem('steerlab') || '{}'); if (sv0.lab_mode === 'aim' || sv0.lab_mode === 'steer' || sv0.lab_mode === 'direct') MODE = sv0.lab_mode; delete sv0.assist; delete sv0.lab_mode; Object.assign(P, sv0); } catch (e) { }
+
+// ---------------------------------------------------------------- the head pipeline (the same maths as headStep in gv.js)
+const HN3 = [8, 5, 3.5], clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const H = { cur: null, fb: [], ax: [.577, -.577, .577], ax0: [.577, -.577, .577], neu: 0, k: .9, cal: false, lastFit: 0, vs: 0, vel: 0, s: 0, hold: undefined, frozen: false, lost: true, t: 0, calUntil: 0 };
+const hproj = (v, ax = H.ax) => (v[0] * ax[0] + v[1] * ax[1] + v[2] * ax[2]) / (Math.abs(ax[0]) + Math.abs(ax[1]) + Math.abs(ax[2]));
+function hfit() {
+  const fb = H.fb, n = fb.length; if (n < 20) return; const mean = [0, 0, 0]; for (const v of fb) for (let i = 0; i < 3; i++) mean[i] += v[i] / n; let ax = H.ax0.slice();
+  if (n >= 150) { const Cv = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]; for (const v of fb) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) Cv[i][j] += (v[i] - mean[i]) * (v[j] - mean[j]) / n;
+    let a = [1, 1, 1]; for (let it = 0; it < 14; it++) { const b = [0, 1, 2].map((i) => Cv[i][0] * a[0] + Cv[i][1] * a[1] + Cv[i][2] * a[2]); const m = Math.hypot(...b) || 1; a = b.map((x) => x / m); }
+    let d = a[0] * H.ax0[0] + a[1] * H.ax0[1] + a[2] * H.ax0[2]; if (d < 0) { a = a.map((x) => -x); d = -d; } if (d > .5) ax = a; }
+  H.ax = H.ax.map((x, i) => x * .7 + ax[i] * .3); const m = Math.hypot(...H.ax); H.ax = H.ax.map((x) => x / m);
+  const pr = fb.map((v) => hproj(v)).sort((x, y) => x - y), med = pr[Math.floor(pr.length / 2)], dev = pr.map((x) => Math.abs(x - med)).sort((x, y) => x - y), q90 = dev[Math.floor(dev.length * .9)];
+  if (H.frozen) { if (Math.abs(H.s) < .1) H.neu += (med - H.neu) * .03; } else { H.neu = n < 40 ? med : H.neu + (med - H.neu) * .25; H.k = H.k + (.9 / Math.max(.3, Math.min(2.5, q90)) - H.k) * (n < 40 ? 1 : .25); } H.cal = true;
+}
+function curveOut(u) { const au = Math.abs(u), sF = P.fine, bd = P.band, aa = Math.max(.05, Math.min(1.5, sF * (1 - bd) / (1 - sF * bd))), tt = Math.max(0, (au - bd) / (1 - bd)), o = au <= bd ? sF * au : sF * bd + (1 - sF * bd) * (aa * tt + (1 - aa) * tt * tt); return Math.sign(u) * Math.min(1, o); }
+const spdK = (speed) => 1 + P.spdadapt * (.12 - .27 * clamp((speed - 14) / 40, 0, 1));
+// prediction: speed of the head from the last readings (their own timestamps, not the screen's), then extrapolated across the delay.
+// predUpdate also scores it: how far off would a prediction made D ms ago have been, against no prediction (the same readings, so the comparison is fair).
+const PH = [], PS = { n: 0, e0: 0, e1: 0, gaps: 0, maxgap: 0 };
+function predUpdate(pr) {
+  const t = H.t; H.pT = t; if (H.pv === undefined) { H.pv = pr; H.pvel = 0; }
+  const last = PH[PH.length - 1];
+  if (last) { const dt = (t - last.t) / 1000; if (dt > .004) { const v = (pr - last.x) / dt; H.pvel += (clamp(v, -6, 6) - H.pvel) * .5; if (dt > .15) { PS.gaps++; PS.maxgap = Math.max(PS.maxgap, dt * 1000); } } }
+  PH.push({ t, x: pr, v: H.pvel }); while (PH.length > 120) PH.shift(); H.pv = pr;
+  const D = Math.max(50, P.pred || 100); let m = -1; for (let i = PH.length - 2; i >= 0; i--) if (t - PH[i].t >= D) { m = i; break; }
+  if (m >= 0) { const q = PH[m], h = (t - q.t) / 1000, e0 = pr - q.x, e1 = pr - (q.x + clamp(q.v, -3, 3) * Math.min(.25, h)); PS.n++; PS.e0 += (e0 * e0 - PS.e0) * .05; PS.e1 += (e1 * e1 - PS.e1) * .05; }
+}
+function predText() { if (PS.n < 20) return ''; const full = Math.max(1e-6, degFullNow()), r0 = Math.sqrt(PS.e0), r1 = Math.sqrt(PS.e1); return '<br><b>Prediction score</b> (a guess made ' + Math.max(50, P.pred || 100) + ' ms earlier): off by <b>' + (r0 * 100).toFixed(1) + '%</b> of the sideways range with no prediction, <b>' + (r1 * 100).toFixed(1) + '%</b> with it (' + (r1 < r0 ? 'better by ' + ((1 - r1 / r0) * 100).toFixed(0) + '%' : 'worse by ' + ((r1 / r0 - 1) * 100).toFixed(0) + '%') + '). Stalls over 150 ms: ' + PS.gaps + ' (longest ' + Math.round(PS.maxgap) + ' ms).'; }
+function headStep(dt, speed) {
+  if (H.cur && H.fb.length >= 12 && performance.now() - H.lastFit > 500) { H.lastFit = performance.now(); hfit(); }
+  if (!H.cur || H.fb.length < 12 || !H.cal) return { u: 0, o: 0 };
+  const nv = [H.cur[0] / HN3[0], H.cur[1] / HN3[1], H.cur[2] / HN3[2]], K = H.frozen ? clamp(H.k, .5, P.kmax) : Math.min(H.k, P.kmax); let pr = hproj(nv); if (H.pv === undefined || H.pT !== H.t) { predUpdate(pr); } if (P.pred > 0 && !H.lost) pr += clamp(H.pvel, -3, 3) * Math.min(.25, (performance.now() - H.t + P.pred) / 1000); let sv = H.lost ? 0 : -(pr - H.neu) * K; sv = clamp(sv, -1.3, 1.3);
+  { const a0 = Math.abs(sv), dz = P.dz; sv = a0 < dz ? 0 : Math.sign(sv) * (a0 - dz) / (1 - dz) * (1 + dz * .5); }
+  { const a1 = Math.abs(sv); if (a1 < .1) sv *= (1 - P.sticky) + P.sticky * a1 / .1; }
+  { const bw = P.hyst; if (H.hold === undefined || H.lost) H.hold = sv; const df = sv - H.hold; if (Math.abs(df) > bw) H.hold = sv - Math.sign(df) * bw; sv = H.hold; }
+  const dv = (sv - H.vs) / Math.max(dt, .001); H.vel += (clamp(dv, -2, 2) - H.vel) * .3; H.vs = sv; const fc = P.fc + P.beta * Math.abs(H.vel), a = 1 / (1 + 1 / (2 * Math.PI * fc * Math.max(dt, .001))); H.s += (sv - H.s) * a;
+  const sw0 = clamp((Math.abs(H.s) - .12) / .25, 0, 1), swerve = 1 + P.swerve * sw0 * Math.min(1, Math.abs(H.vel) / 2.5), u = clamp((H.s * swerve + H.vel * P.lead) * P.gain * spdK(speed), -1, 1);
+  return { u, o: curveOut(u), K };
+}
+
+// ---------------------------------------------------------------- the test board (a simple model of the game's lateral movement)
+const SIM = { x: 0, vx: 0, st: 0, sv: 0, speed: 25, targets: [], nextZ: 60, n: 0, caught: 0, missed: 0, streak: 0, paused: false };
+let LANEX = 0;
+function simStep(dt, o0) {
+  let o = o0;
+  if (MODE === 'direct' || MODE === 'aim') { const la = Math.abs(o0), aimd = Math.sign(o0) * Math.max(0, la - .015) / .985, lx = clamp(aimd * P.reach, -30, 30); LANEX += (lx - LANEX) * (1 - Math.exp(-dt / Math.max(.015, P.aimtau))); o = clamp((LANEX - (SIM.x + SIM.vx * .45)) / 10, -1, 1);
+    if (MODE === 'direct') { SIM.x = LANEX; SIM.vx = 0; SIM.st = 0; SIM.sv = 0; for (const t of SIM.targets) t.z -= SIM.speed * dt; scoreTargets(); fillTargets(dt); return; } }          // the game's aim mode: the head picks a place, the board carves there
+  const wFast = 13 * P.turn, dSt = Math.abs(o - SIM.st), kSt = clamp((dSt - .05) / .3, 0, 1), w = P.smooth + (wFast - P.smooth) * kSt, ns = Math.max(1, Math.ceil(w * dt / .25)), h = dt / ns;
+  for (let q = 0; q < ns; q++) { const acc = w * w * (o - SIM.st) - 2 * w * SIM.sv; SIM.sv += acc * h; SIM.st += SIM.sv * h; }
+  const target = SIM.speed * Math.sin(clamp(SIM.st, -1, 1) * P.theta); SIM.vx += (target - SIM.vx) * (1 - Math.exp(-9 * dt)); SIM.x = clamp(SIM.x + SIM.vx * dt, -30, 30);
+  for (const t of SIM.targets) t.z -= SIM.speed * dt; scoreTargets(); fillTargets(dt);
+}
+function scoreTargets() {
+  for (const t of SIM.targets) if (!t.done && t.z < 0) { t.done = true; if (Math.abs(t.x - SIM.x) < (t.reach ? 3.4 : 2.6)) { SIM.caught++; SIM.streak++; t.hit = true; } else { SIM.missed++; SIM.streak = 0; } }
+  SIM.targets = SIM.targets.filter((t) => t.z > -12);
+}
+function fillTargets(dt) {
+  while (SIM.nextZ < 150) { const reach = SIM.n % 3 === 2, side = SIM.n % 2 ? 1 : -1, fr = ((SIM.n * 7919) % 100) / 100; SIM.targets.push({ x: reach ? side * (14 + fr * 11) : (fr - .5) * 11, z: SIM.nextZ, reach, done: false }); SIM.nextZ += 24; SIM.n++; } SIM.nextZ -= SIM.speed * dt;
+}
+
+// ---------------------------------------------------------------- camera
+const $ = (id) => document.getElementById(id), status = (t) => { $('status').textContent = t; };
+let tr = null, trkN = 0, trkT0 = performance.now(), trkFps = 0;
+async function startCamera() {
+  status('starting the camera...'); $('bStart').disabled = true;
+  try {
+    const video = document.createElement('video'); video.playsInline = true; video.muted = true; video.autoplay = true; video.style.cssText = 'position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none'; document.body.appendChild(video);
+    const { Tracker } = await import('../stargaze/tracker.js?' + Date.now()); tr = new Tracker(video); tr.camW = 640; tr.camH = 480; tr.fullRes = false; tr.useWorker = true;
+    tr.onSteady = () => { const f = [tr.head ? tr.head.yaw * 57.2958 : 0, tr.head ? tr.head.roll * 57.2958 : 0, (tr.feat ? tr.feat[5] : 0) * 100]; H.lost = false; H.t = performance.now(); H.cur = H.cur ? H.cur.map((c, i) => c + (f[i] - c) * .7) : f; H.fb.push([f[0] / HN3[0], f[1] / HN3[1], f[2] / HN3[2]]); if (H.fb.length > 900) H.fb.shift(); trkN++; };
+    await tr.start((m) => status('camera: ' + m + '...'));
+    status('camera on: ' + (tr.camLabel || 'camera')); recentre();
+  } catch (e) { status('camera problem: ' + String((e && e.message) || e).slice(0, 90)); $('bStart').disabled = false; }
+}
+function latText() {
+  const L = tr && tr.lat; if (!L || L.n < 10) return ''; const f = (x) => Number.isFinite(x) ? Math.round(x) : '?';
+  const age = H.t ? performance.now() - H.t : NaN, head = Number.isFinite(L.total) ? L.total + (Number.isFinite(age) ? age : 0) + 8 : NaN;
+  return '<br><b>Delay (ms):</b> camera to browser <b>' + f(L.cam) + '</b> + waiting to be read <b>' + f(L.wait) + '</b> + face model <b>' + f(L.model) + '</b> + its trip back <b>' + f(L.rt - L.model) + '</b> = <b>' + f(L.total) + '</b> from the light hitting the camera to a reading. Add the picture refresh and the reading\'s age: your head to the screen is about <b>' + f(head) + '</b>. One reading every <b>' + f(1000 / Math.max(1, trkFps)) + '</b>.';
+}
+const LSID = Math.random().toString(36).slice(2, 8);
+setInterval(() => { const L = tr && tr.lat; if (!L || L.n < 10) return; const r = (x) => Number.isFinite(x) ? Math.round(x) : null; try { fetch('log.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ app: 'steerlab', kind: 'latency', sid: LSID, cam: tr.camLabel || '?', hz: Math.round(trkFps), camToBrowser: r(L.cam), wait: r(L.wait), model: r(L.model), back: r(L.rt - L.model), total: r(L.total), age: H.t ? r(performance.now() - H.t) : null, mode: MODE, pred: P.pred, inw: +new URLSearchParams(location.search).get('inw') || 400, cpu: new URLSearchParams(location.search).has('cpu'), e0: PS.n > 20 ? +(Math.sqrt(PS.e0) * 100).toFixed(2) : null, e1: PS.n > 20 ? +(Math.sqrt(PS.e1) * 100).toFixed(2) : null, stalls: PS.gaps, maxgap: Math.round(PS.maxgap), ua: navigator.userAgent.slice(0, 80) }), keepalive: true }).catch(() => { }); } catch (e) { } }, 5000);          // numbers only, every 5 s while the camera runs
+function recentre() { H.fb = []; H.frozen = false; H.cal = false; H.calUntil = performance.now() + 1700; status('look straight ahead for a moment...'); }
+addEventListener('keydown', (e) => { if (e.key === 'c' || e.key === 'C') { if (tr && tr.switchCamera) tr.switchCamera().then((l) => status('camera: ' + l)); } else if (e.key === 'r' || e.key === 'R') recentre(); else if (e.key === ' ') { SIM.paused = !SIM.paused; e.preventDefault(); } });
+
+// ---------------------------------------------------------------- the panel
+const panel = $('panel'); const rows = {};
+const FIXES = [
+  ['It is twitchy or jerky', { gain: -.1, smooth: -3, fc: -.2, hyst: .005 }, 'Less sensitive, smoother board, steadier head reading, more tremor filtering.'],
+  ['It jumps to full left or right', { gain: -.18, kmax: -.1, lead: -.02 }, 'Much less sensitive, lower calibration ceiling, less anticipation.'],
+  ['I have to move my head too far', { gain: .12, smooth: 2, fc: .2 }, 'More sensitive, a little crisper.'],
+  ['It is wobbly going straight', { hyst: .006, sticky: .1, smooth: -2, fine: -.08 }, 'More tremor filtering, calmer middle, smoother board, gentler corrections.'],
+  ['Small corrections are too strong', { fine: -.12, band: .03 }, 'Gentler middle zone, a little larger.'],
+  ['Small corrections are too weak', { fine: .12, dz: -.004, band: -.03 }, 'Stronger middle zone, smaller dead zone.'],
+  ['I cannot reach far-off things', { gain: .1, theta: .05, band: -.03, turn: .4 }, 'More sensitive, sharper wide turns, gentle zone a bit smaller.'],
+];
+{ const c = document.createElement('div'); c.style.cssText = 'margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)'; c.innerHTML = '<b>Something feels wrong?</b><div class="note">Tap what you feel. It nudges the right sliders for you (you can undo with Reset), and says what it changed.</div>'; const box = document.createElement('div'); box.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-top:8px';
+  for (const [label, delta, why] of FIXES) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { const ch = []; for (const k in delta) { const p = rows[k].p, old = P[k]; P[k] = Math.max(p.min, Math.min(p.max, +(P[k] + delta[k]).toFixed(4))); if (P[k] !== old) ch.push(p.t + ' ' + (P[k] > old ? 'up' : 'down')); rows[k].r.style.outline = '2px solid #5df'; setTimeout(() => { rows[k].r.style.outline = ''; }, 2500); } syncPanel(); status(label + ': ' + (ch.join(', ') || 'already at its limit') + '. ' + why); }; box.appendChild(b); }
+  c.appendChild(box); panel.appendChild(c); }
+const FD = { row: null };
+function degFullNow() { const k = (H.frozen ? clamp(H.k, .5, P.kmax) : Math.min(H.k, P.kmax)) || .85, ppd = Math.max(1e-6, hproj([1 / HN3[0], 0, 0])); return 1 / Math.max(1e-6, ppd * k * P.gain * spdK(SIM.speed)); }
+function setFullDeg(deg) { const k = (H.frozen ? clamp(H.k, .5, P.kmax) : Math.min(H.k, P.kmax)) || .85, ppd = Math.max(1e-6, hproj([1 / HN3[0], 0, 0])); P.gain = clamp(1 / (ppd * k * spdK(SIM.speed) * deg), .2, 8); syncPanel(); }
+{ const r = document.createElement('div'); r.className = 'row'; r.style.cssText = 'padding:8px;border:1px solid var(--line);border-radius:10px'; r.innerHTML = '<label><b>Head turn for full reach (degrees)</b><span class="v"></span></label><input type="range" min="6" max="45" step="0.5"><small>The easiest way to set the sensitivity: how many degrees of head yaw take the ship all the way to the side. It sets the Sensitivity slider for you.</small>'; FD.row = r; const inp = r.querySelector('input'); inp.addEventListener('input', () => setFullDeg(+inp.value)); panel.appendChild(r); }
+for (const g of PARAMS) {
+  const d = document.createElement('details'); d.open = !!g.open; const sm = document.createElement('summary'); sm.textContent = g.g; d.appendChild(sm);
+  for (const p of g.items) {
+    const r = document.createElement('div'); r.className = 'row'; r.innerHTML = '<label><b>' + p.t + '</b><span class="v"></span></label><input type="range" min="' + p.min + '" max="' + p.max + '" step="' + p.step + '"><small>' + p.h + '</small><small><b>Higher:</b> ' + p.up + ' <b>Lower:</b> ' + p.down + ' <code>&amp;' + p.n + '=</code></small>';
+    const inp = r.querySelector('input'), v = r.querySelector('.v'); inp.addEventListener('input', () => { P[p.n] = +inp.value; v.textContent = (+inp.value).toFixed(p.step < .01 ? 3 : 2); }); rows[p.n] = { inp, v, p, r }; d.appendChild(r);
+  }
+  panel.appendChild(d);
+}
+function syncPanel() { if (FD.row) { const dg = degFullNow(); FD.row.querySelector('input').value = clamp(dg, 6, 45); FD.row.querySelector('.v').textContent = dg.toFixed(1) + ' deg'; } for (const n in rows) { const { inp, v, p } = rows[n]; inp.value = P[n]; v.textContent = (+P[n]).toFixed(p.step < .01 ? 3 : 2); } }
+const sel = $('preset'); for (const k of Object.keys(PRESETS)) { const o = document.createElement('option'); o.textContent = k; sel.appendChild(o); }
+$('mode').value = MODE; $('mode').addEventListener('change', () => { MODE = $('mode').value; status(MODE === 'aim' ? 'Aim style: the board goes where your head points' : 'Steer style: your head turns the board'); });
+function applyPreset(name) { const pr = PRESETS[name] || {}; Object.assign(P, DEF, Object.fromEntries(Object.entries(pr).filter(([k]) => k[0] !== '_'))); if (pr._mode) { MODE = pr._mode; $('mode').value = MODE; } if (pr._fulldeg) setFullDeg(pr._fulldeg); syncPanel(); }
+sel.addEventListener('change', () => applyPreset(sel.value));
+$('bPure').onclick = () => { sel.value = 'Pure 1:1 (start here)'; applyPreset(sel.value); status('pure 1:1: every filter is off and the ship is exactly where your head points. Add softening one slider at a time.'); };
+$('bReset').onclick = () => { sel.value = 'Optimized (recommended)'; applyPreset(sel.value); status('reset to the optimized settings'); };
+$('bStart').onclick = startCamera; $('bCenter').onclick = recentre;
+const diff = () => Object.fromEntries(ALL.filter((p) => Math.abs(P[p.n] - DEF[p.n]) > 1e-9).map((p) => [p.n, +(+P[p.n]).toFixed(4)]));
+const show = (t) => { const o = $('out'); o.style.display = 'block'; o.textContent = t; };
+const copy = (t, label) => { const ok = () => { status(label + ' copied: paste it into the chat'); show(t); }; if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(ok, () => show(t)); else show(t); };
+$('bSave').onclick = () => { try { localStorage.setItem('steerlab', JSON.stringify({ ...P, assist: MODE === 'steer' ? 'free' : 'aim', lab_mode: MODE })); status('saved: the game will use these settings'); } catch (e) { status('could not save in this browser'); } };
+$('bCopy').onclick = () => copy('steering lab settings (style ' + MODE + '; changes from the optimized defaults): ' + JSON.stringify(diff()) + ' | k ' + H.k.toFixed(2) + ' tracker ' + trkFps.toFixed(0) + ' Hz | delay ' + latText().replace(/<[^>]+>/g, '') + ' | camera ' + (tr && tr.camLabel || '?'), 'settings');
+$('bUrl').onclick = () => copy(Object.entries(diff()).map(([k, v]) => '&' + k + '=' + v).join('') || '(no changes: these are the optimized defaults)', 'parameters');
+$('bGame').onclick = () => { try { localStorage.setItem('steerlab', JSON.stringify({ ...P, assist: MODE === 'steer' ? 'free' : 'aim', lab_mode: MODE })); } catch (e) { } window.open('gv.html?play&head&noshare&course=long_s7', '_blank'); };
+
+// ---------------------------------------------------------------- drawing
+const sc = $('scope'), sx = sc.getContext('2d'), cv = $('curve'), cx = cv.getContext('2d'), tk = $('track'), tx = tk.getContext('2d');
+const TR = { n: 0, raw: [], s: [], o: [], x: [] }; const TL = 600;
+function drawScope() {
+  const W = sc.width, Hh = sc.height; sx.clearRect(0, 0, W, Hh); sx.fillStyle = '#0a0814'; sx.fillRect(0, 0, W, Hh); const mid = Hh / 2;
+  sx.fillStyle = '#1d1a33'; const fz = P.band / Math.max(.2, P.gain * 1.0) ; sx.fillRect(0, mid - Hh * .5 * P.band, W, Hh * P.band); sx.strokeStyle = '#2c2650'; sx.beginPath(); sx.moveTo(0, mid); sx.lineTo(W, mid); sx.stroke();
+  const line = (arr, col, k) => { sx.strokeStyle = col; sx.lineWidth = 1.6; sx.beginPath(); arr.forEach((v, i) => { const x = i / TL * W, y = mid - clamp(v * k, -1.05, 1.05) * (mid - 6); i ? sx.lineTo(x, y) : sx.moveTo(x, y); }); sx.stroke(); };
+  line(TR.raw, '#ffffff', 1 / 30); line(TR.s, '#55ddff', 1); line(TR.o, '#ffa04d', 1); line(TR.x, '#7dff7d', 1 / 30);
+  sx.fillStyle = '#a59cc4'; sx.font = '11px system-ui'; sx.fillText('+ right / left -   (white: yaw, 30 deg full scale; board: 30 m full scale)', 8, 14);
+}
+function drawCurve(curU) {
+  const W = cv.width, Hh = cv.height, k = (H.frozen ? clamp(H.k, .5, P.kmax) : Math.min(H.k, P.kmax)) || .85, sK = spdK(SIM.speed); const ppd = Math.max(1e-6, hproj([1 / HN3[0], 0, 0]) ); // hproj per degree of yaw
+  const degFull = 1 / Math.max(1e-6, ppd * k * P.gain * sK), maxDeg = Math.max(30, Math.ceil(degFull * 1.25 / 5) * 5);
+  cx.clearRect(0, 0, W, Hh); cx.fillStyle = '#0a0814'; cx.fillRect(0, 0, W, Hh); const L = 36, B = Hh - 26, T = 10, R = W - 10, X = (d) => L + (R - L) * d / maxDeg, Y = (o) => B - (B - T) * o;
+  cx.fillStyle = '#1d1a33'; const degBand = P.band * degFull; cx.fillRect(X(0), T, X(degBand) - X(0), B - T);
+  cx.strokeStyle = '#2c2650'; cx.strokeRect(L, T, R - L, B - T); cx.fillStyle = '#a59cc4'; cx.font = '11px system-ui'; for (let d = 0; d <= maxDeg; d += 5) { cx.fillText(d + '', X(d) - 6, B + 14); } cx.fillText('head yaw (degrees)', R - 112, B - 6); cx.fillText('1.0', 8, T + 8); cx.fillText('0', 18, B);
+  cx.strokeStyle = '#888'; cx.setLineDash([3, 4]); cx.beginPath(); cx.moveTo(L, B); cx.lineTo(X(Math.min(maxDeg, degFull)), Y(1)); cx.stroke(); cx.setLineDash([]);
+  cx.strokeStyle = '#ffa04d'; cx.lineWidth = 2; cx.beginPath(); for (let d = 0; d <= maxDeg; d += .5) { const u = clamp(d / degFull, 0, 1), o = Math.abs(curveOut(u)); d ? cx.lineTo(X(d), Y(o)) : cx.moveTo(X(d), Y(o)); } cx.stroke();
+  if (H.cur) { const dNow = Math.abs(H.cur[0] - 0), o = Math.abs(curveOut(clamp(Math.abs(curU), 0, 1))); cx.fillStyle = '#5df'; cx.beginPath(); cx.arc(X(clamp(dNow, 0, maxDeg)), Y(o), 5, 0, 7); cx.fill(); }
+  $('lockinfo').innerHTML = 'Full lock at about <b>' + degFull.toFixed(1) + '&deg;</b> of head yaw. Fine zone: the first <b>' + degBand.toFixed(1) + '&deg;</b> either way, response ' + (P.fine * 100).toFixed(0) + '% of a straight line. Tracker: ' + trkFps.toFixed(0) + ' updates a second, calibration gain ' + H.k.toFixed(2) + '.' + latText() + predText();
+}
+function drawTrack() {
+  const W = tk.width, Hh = tk.height, X = (m) => W / 2 + m * (W / 64), Z = (z) => Hh - 24 - z * (Hh - 40) / 150; tx.clearRect(0, 0, W, Hh); tx.fillStyle = '#0a0814'; tx.fillRect(0, 0, W, Hh);
+  tx.fillStyle = '#16122a'; tx.fillRect(X(-31), 0, X(31) - X(-31), Hh); tx.strokeStyle = '#2c2650'; tx.beginPath(); tx.moveTo(X(0), 0); tx.lineTo(X(0), Hh); tx.stroke();
+  for (const t of SIM.targets) { if (t.z < -10) continue; const y = Z(t.z), x = X(t.x); if (t.reach) { tx.fillStyle = t.done ? (t.hit ? '#3a7' : '#733') : '#ff9bd8'; tx.shadowColor = '#ff9bd8'; tx.shadowBlur = t.done ? 0 : 14; tx.beginPath(); tx.arc(x, y, 10, 0, 7); tx.fill(); tx.shadowBlur = 0; } else { tx.fillStyle = t.done ? (t.hit ? '#3a7' : '#733') : '#6fd4ff'; tx.beginPath(); tx.arc(x, y, 5, 0, 7); tx.fill(); } }
+  if (MODE === 'aim' || MODE === 'direct') { tx.strokeStyle = '#ffdd66'; tx.lineWidth = 2; tx.beginPath(); tx.arc(X(LANEX), Z(0) - 2, 11, 0, 7); tx.stroke(); }
+  const bx = X(SIM.x), by = Z(0); tx.fillStyle = '#7dff7d'; tx.beginPath(); tx.moveTo(bx, by - 12); tx.lineTo(bx - 8, by + 8); tx.lineTo(bx + 8, by + 8); tx.fill();
+  $('score').textContent = 'Caught ' + SIM.caught + ', missed ' + SIM.missed + (SIM.streak > 2 ? ', streak ' + SIM.streak : '');
+}
+let last = performance.now(), fpsN = 0, fpsT = last; if (!HAD_SAVED) { sel.value = 'Pure 1:1 (start here)'; setFullDeg(20); } $('mode').value = MODE; syncPanel();
+function loop(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now; requestAnimationFrame(loop);
+  if (performance.now() - trkT0 > 1000) { trkFps = trkN * 1000 / (performance.now() - trkT0); trkN = 0; trkT0 = performance.now(); }
+  if (H.cur && performance.now() - H.t > 600) H.lost = true;
+  if (H.calUntil && performance.now() > H.calUntil) { hfit(); H.frozen = true; H.calUntil = 0; H.hold = undefined; status('calibrated (k ' + H.k.toFixed(2) + ')'); }
+  const r = headStep(dt, SIM.speed); if (!SIM.paused) simStep(dt, r.o);
+  TR.raw.push(H.cur ? H.cur[0] : 0); TR.s.push(H.s); TR.o.push(r.o); TR.x.push(SIM.x); if (TR.raw.length > TL) for (const k of ['raw', 's', 'o', 'x']) TR[k].shift();
+  drawScope(); drawCurve(r.u); drawTrack();
+}
+requestAnimationFrame(loop);
+setTimeout(() => { if (!tr) startCamera(); }, 400);
+</script>
+</body>
+</html>

@@ -248,6 +248,8 @@ export class Tracker {
   _onWorker(m) {
     if (m.type !== 'res') return;
     this.inflight = false; this.modelMs += (m.ms - this.modelMs) * 0.1;
+    { const nw = performance.now(), L = this.lat || (this.lat = { n: 0, cam: NaN, wait: 0, model: 0, total: NaN, rt: 0 }), ea = (a, b) => (Number.isFinite(b) ? (Number.isFinite(a) ? a + (b - a) * .15 : b) : a);          // latency breakdown (ms): camera -> browser, waiting to be sent, model, whole way from the light hitting the sensor to a reading
+      L.n++; L.cam = ea(L.cam, this._sentRecv != null && this._sentCap != null ? this._sentRecv - this._sentCap : NaN); L.wait = ea(L.wait, this._sentRecv != null ? this._sentAt - this._sentRecv : NaN); L.model = ea(L.model, m.ms); L.rt = ea(L.rt, nw - this._sentAt); L.total = ea(L.total, this._sentCap != null ? nw - this._sentCap : NaN); }
     const v = this.video, W = v.videoWidth, H = v.videoHeight, roi = m.roi;
     if (!m.res) { this.roi = null; this._lostN = (this._lostN || 0) + 1; this._process(null, performance.now() / 1000); return; }
     this._lostN = 0;
@@ -276,9 +278,11 @@ export class Tracker {
     if (this.inflight && performance.now() - (this._sentAt || 0) > 1500) this.inflight = false;          // a frame that never came back (a lost graphics context) must not stall the tracker for good
     if (this.inflight || !v.videoWidth || v.readyState < 2 || v.currentTime === this._lastVT) return;
     this._lastVT = v.currentTime; this.inflight = true; this._sentAt = performance.now();
+    { const md = this._vmd; this._sentCap = md && md.captureTime ? md.captureTime : null; this._sentRecv = md && md.receiveTime ? md.receiveTime : (md ? md.presentationTime : null); }
     const roi = this.roi ? { ...this.roi } : null;
+    const IW = this.inW || +new URLSearchParams(location.search).get('inw') || 400;          // ?inw=256: a smaller picture to the model (for timing tests)
     const p = roi ? createImageBitmap(v, roi.x, roi.y, roi.w, roi.h, { resizeWidth: 320, resizeHeight: 320, resizeQuality: 'medium' })
-      : (this.fullRes ? createImageBitmap(v) : createImageBitmap(v, { resizeWidth: 400, resizeHeight: Math.round(400 * v.videoHeight / v.videoWidth), resizeQuality: 'low' }));          // fullRes: the model gets the camera's own pixels (the eye crops it takes are only a few dozen pixels wide: shrinking the frame first throws away exactly what the iris reading needs)
+      : (this.fullRes ? createImageBitmap(v) : createImageBitmap(v, { resizeWidth: IW, resizeHeight: Math.round(IW * v.videoHeight / v.videoWidth), resizeQuality: 'low' }));          // fullRes: the model gets the camera's own pixels (the eye crops it takes are only a few dozen pixels wide: shrinking the frame first throws away exactly what the iris reading needs)
     p.then((bmp) => {
       this._ts = Math.max(this._ts + 1, performance.now());
       this.worker.postMessage({ type: 'frame', bmp, ts: this._ts, roi }, [bmp]);
@@ -298,7 +302,7 @@ export class Tracker {
         this._process(res, now / 1000);
       }
     };
-    const step = () => { work(); next(); };
+    const step = (now, md) => { if (md) this._vmd = md; work(); next(); };
     const next = v.requestVideoFrameCallback ? () => v.requestVideoFrameCallback(step) : () => requestAnimationFrame(step);
     next();
     // a browser may hold back video-frame callbacks for a video it thinks nobody can see (it started only after an alt-tab): a timer does the same work, and the work only runs

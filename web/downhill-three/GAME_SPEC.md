@@ -411,3 +411,42 @@ Source: a pasted answer from another AI (its citations were social-media posts; 
 | Recursive feedback, vertex displacement, chromatic split, hue cycling | already in the catalogue or live | see section 15 | |
 
 Comfort rule: nothing flashes faster than 3 Hz by default; strobe is off until the player turns it on.
+
+
+## 17. Buff scarcity and gentle stakes (2026-11-20; reconciles sections 0, 2, 6 with Godot's actual rules and the three.js port)
+
+Principle (owner): consider the whole vision for every decision; mistakes cost something gentle: no hard stop, no huge loss, but enough that a player retries a thing a couple of times. Buffs exist to serve the hunt for the six pieces and to protect the trip, never as a separate pickup game.
+
+### What Godot already does (kept as it is, do not invent over it)
+- **A crash** (`RunRig._crash`): speed x 0.3, put back on the line, chain and groove reset, 1.1 s of grace (nothing hurts during it), nothing kills you.
+- **A shield** absorbs one crash completely (0.8 s grace, "SHIELD BROKE").
+- **A found molecule is never lost** (`_mol_hurt`): the one hit dims (felt level -2 for a while) and comes back ("a setback in the trip, not in the collection"). This is the gentle penalty the owner asked for; no extra layer-loss rule is added.
+- **A missed or unfound molecule turns up again** (`_pick_molecule` weights unfound ones 4.0): the retry.
+- Spec section 6: one **held slot** (pick up, tap to use, a second pickup swaps or is ignored), buffs placed **100-250 m before the piece they are meant for**, rarity per km: boost 3-4, magnet 1 per approach, saw 1 per hedge section, wings 1-2 near ramps.
+
+### Where the three.js port differs (the work)
+1. **Too many buffs.** The dumped courses have about 12 buffs per km (36 in 3 km), because Godot's generator offers one at nearly every opening. The spec rarity is about 3-4 boosts per km, and the other kinds only where they answer something. Fix without regenerating: a rule in the loader keeps a buff only if it answers a nearby need (a molecule site, a hedge, a ramp/gap) and drops the rest, to the spec rarity.
+2. **No held slot.** Pickups apply at once. Add the slot: held item shown at the bottom, tap (or a head nod) to use, swap or ignore on a second pickup.
+3. **Saw is not built.**
+4. **Pickups themselves score nothing.** Points come from effective use (the shield absorbing a hit, the magnet pulling a molecule, wings over a gap).
+5. **Gaze orbs** (Godot's "look at it" prizes, three per station at 2.6 and 5.6 m up) were built for left / middle / right control. With analog steering they cannot be collected sensibly. Decision open: make them touchable at 1.3 m in their three lanes (a small streak currency) or remove them. A gaze-dwell port is currently deployed, untested, and should be replaced by whichever is chosen.
+
+### Open decisions
+- One held slot or two? (spec says one)
+- Use by tap / head nod, or automatic when needed? (spec says tap; boost stays automatic)
+- Gaze orbs: touchable currency or remove?
+
+### Not done / not verified
+Nothing here is built yet. The loader thinning rule needs the buff-to-need mapping defined from the dump data before coding.
+
+### Decision update (2026-11-20, later): a BANK, not a held slot; nothing to touch, no gesture needed
+Owner: use must be hands-free. Instead of one held item with a gesture, the player carries a small **bank** of each buff (cap 2 per type, shown as icons with counts at the bottom). Each is **spent automatically when the situation it is for happens**:
+- shield: a crash spends one (that crash is absorbed; Godot's rule: 0.8 s grace, "SHIELD BROKE");
+- saw: hitting a hedge spends one and cuts through it instead of crashing (needs a "cuttable" tag on barrier trees in the course data; only the barrier-mode courses have hedges);
+- magnet: spent when a piece the player still lacks is close ahead and the board is off its line (needs a tuned rule);
+- wings: spent on leaving a ramp toward something in the air (needs a tuned rule);
+- boost: stays automatic on pads.
+An empty bank means the normal gentle crash (speed x 0.3, about 1 s grace, one found layer dims and comes back, the missed piece turns up again). Hitting something costs a buff, never progress. Scarcity comes from the cap and the spec's rarity; "I am out of shields" tells the player what to hunt for. Rule: a buff is only spent when the need is real (no wasted use). An optional deliberate "use now" (nod, tilt-and-nod for a second choice) can be added later; it is not needed for the first version. Open: the exact trigger rules for magnet and wings; the cap per type; whether gaze orbs become touchable lane orbs or go.
+
+### Level layout decision (owner, 2026-11-20)
+The wide open course is the layout: about 25 m of open ground either side of the line (feat_off 15; board limit 31.5 m, 58 m with ?wide=2.4), trees streaming past beyond it. Enough lateral range for fine-tuning toward targets in the path and for wide reach to off-line targets, with the immersion of trees flying by. The narrow winding trail (feat_off 6.5, about 13 m open; long_w11 and the seven biome courses) is not the target: regenerate the biome courses wide (dump_long.gd without WINDING=1) when agreed. Off-line targets belong within about 12-23 m of the line.

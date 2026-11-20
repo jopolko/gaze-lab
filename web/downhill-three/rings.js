@@ -29,6 +29,10 @@ const BODY = {
   matrix: `float ang = atan(vP.z, vP.x), cl = floor(ang * 60.), spd = .2 + h21(vec2(cl, 1.)) * .5, t = fract(h21(vec2(cl, 5.)) - uTime * spd * .25 + floor(vP.y * .09) * .11);
     float streak = pow(1. - t, 4.) * (1. - smoothstep(0., .25, abs(fract(ang * 60.) - .5) - .15)); float scan = 1. - smoothstep(0., .08, abs(fract(vP.y * .04) - .5) * 2. - .85);
     vec3 col = vec3(0., .02, .01) + vec3(.1, 1., .3) * (streak * .6 + scan * .25);`,
+  psychedelic: `float ang = atan(vP.z, vP.x), h = vP.y;
+    float bands = .5 + .5 * sin(h * .11 + sin(ang * 9. + uTime * .25) * 2.2), rid = .5 + .5 * sin(ang * 40. + h * .06 + uTime * .2), mo = .5 + .5 * sin(h * 1.1 + ang * 120.) * sin(h * .9 - ang * 95.);
+    vec3 hue = hsv(fract(ang * .318 + h * .0022 + bands * .18 + uTime * .015), .9, .95), hue2 = hsv(fract(ang * .318 + h * .0022 + .45 + uTime * .015), .85, .7);
+    vec3 col = mix(hue2, hue, bands) * (.55 + .5 * mo * (.5 + .5 * rid)); col = mix(col, vC * 1.2, .15);          // no flat fill anywhere: banded hue that drifts with angle and height, a moire hatch, a slow shimmer`,
   tunnel: `float b = floor(vP.y * .03), f = fract(vP.y * .03); vec3 neon = hsv(fract(b * .23 + .55), .9, 1.); float line = smoothstep(0., .05, f) * (1. - smoothstep(.08, .16, f));
     vec3 col = vec3(.02, 0., .06) * (.6 + dot(vC, vec3(.34))) + neon * line * .9;`,
 };

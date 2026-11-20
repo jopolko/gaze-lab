@@ -87,3 +87,14 @@ Mandala Drop: Godot's own default zone weight for it is 0.0 (`DEFAULT_ZONE_WEIGH
 Bug fixed (22:30): `?row=N` spawned the board at y=0 because the ground under the start row had not loaded, so it fell ~1,300 m through the realm. The start now waits for the ground, and the row loader follows the start position until the board is placed. Lava Tube seen by eye after the fix: red glowing floor, dark red roof, exposure 0.55.
 
 Walk of the other barrier worlds (22:45), each started with `?row=` and ridden a few seconds, on the ground, no shader errors: egypt (Glow Grotto), matrix (canyon, code sky, pale posts), synthwave (Crystal Vault), desert (interzone, swirled red sky), tunnel (mammoth garden, neon rings), alpine (Jelly Abyss under snowfall). Realms look the same in every world, as in Godot (they have their own shaders); only the sky, horizon, weather and road change. Not judged: whether the pale realm props suit matrix and synthwave.
+
+## Render modes (owner decision, 2026-11-20)
+- Base look: generally realistic. Every surface gets cheap procedural surface detail (noise variation, bump, roughness) or a psychedelic treatment; no flat fills.
+- Two complementary psychedelic modes that kick in at the craziest moments of the dose arc: (1) 3D line/vector (edges from depth and normals, glowing, dark fill), (2) ASCII (the picture quantised into character cells by brightness).
+- Godot already has post modes for this family (`Themes.post_mode`: matrix = 2, synthwave = 3, in `ThemePost.gd`); port those first rather than inventing new ones.
+- Cost: each is a full-screen pass, so they replace the other passes while active instead of stacking. Measure with `tools/perf_run.mjs` before adding.
+
+## Direction change (owner, 2026-11-20): parity with Godot first
+The owner loves the Godot-dev psychedelic look and handling; only its web performance was a problem. three.js stays (light, instant), but the first goal is the SAME visuals as Godot, measured with the parity harness (`web/docs/PARITY_REPORT.md`, run with `python web/tools/parity.py serve` then `parity.html?all=1&post=1`; needs `data/level_parity_s7.json`, kept in `gaze-lab-backups/legacy-level-dumps`). No new look is added to the psychedelic world until its numbers are close; then extend from there.
+- Baseline 2026-11-20, before the picture pass: lf error 39.9 (it was 64.4 with the natural-terrain ground as default; the default is now Godot's own ground, `?ground=snow` for the natural one).
+- With the picture pass: lf 67.4; Godot's picture has chroma 190, ours 77. The picture pass is the biggest visible gap.
