@@ -63,3 +63,8 @@ Your reaction to the panel is a strong signal: sliders that change the game live
 - **Guard rails:** a "safe" range by default (the nauseating extremes behind an Advanced toggle); the story progression unaffected (sandbox runs are marked so they don't unlock the six pieces unless the player chooses to); a one-tap "back to the designed look".
 - **Why it is cheap:** the effect knobs already exist in the Godot post pass and the three.js port (the spec's effects catalogue, section 15, lists them). The panel code is built and works with any numeric setting.
 - **Open decisions for you:** does sandbox unlock anything? Do we show it on phones (a smaller version)? Is it available from the start or only after the first molecule?
+
+## 9. Added after the touch-panel complaint (2026-11-20)
+- I knew the target was a phone and still built the tuning panel with desktop sizes (18 px sliders, 20 px reset arrows, vertical scrolling that fought the slider drag). A phone-first rule was in the project from the start (memory: phone-first). A rule I know but do not apply at the moment of building is the same failure as one I never heard.
+- Fix applied: every control on a phone-facing screen is at least 44-48 px, nothing needs scrolling, sliders have big minus/plus/reset beside them, the panel opens from a thumb-reachable round button and works in both orientations.
+- Rule for me from now: before showing any phone-facing control I check size (44 px), reach (thumb), scrolling conflicts, both orientations, and that touching it cannot reach the game.

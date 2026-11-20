@@ -503,7 +503,10 @@ const HCP = { on: false, k: parseFloat(Q.get('hcpk') || '8'), z: parseFloat(Q.ge
 function hcpApply() {
   HCP.k = sp('hcpk', HCPK0); HCP.z = sp('hcpz', 10); HCP.y = sp('hcpy', .6); HCP.sx = sp('hcpflip', 0) ? -1 : 1;
   const trk = window.__trk, now = performance.now(), dt = Math.min(.1, (now - (HCP.t || now)) / 1000); HCP.t = now;
-  if (trk && trk.face && HD.cur && !HD.lost) { const vx = HD.cur[2] / 100, vy = trk.feat ? trk.feat[6] : 0; if (HCP.rx === null) { HCP.rx = vx; HCP.ry = vy; } const a = 1 - Math.exp(-dt / 8); HCP.rx += (vx - HCP.rx) * a; HCP.ry += (vy - HCP.ry) * a; const tx = -(vx - HCP.rx) * HCP.k * HCP.sx, ty = -(vy - HCP.ry) * HCP.k * HCP.y, b = 1 - Math.exp(-dt / .07); HCP.x += (tx - HCP.x) * b; HCP.yv += (ty - HCP.yv) * b; }
+  if (trk && trk.face && HD.cur && !HD.lost) { const vx = HD.cur[2] / 100, vy = trk.feat ? trk.feat[6] : 0; if (HCP.rx === null) { HCP.rx = vx; HCP.ry = vy; } const a = 1 - Math.exp(-dt / 8); HCP.rx += (vx - HCP.rx) * a; HCP.ry += (vy - HCP.ry) * a; const tx = -(vx - HCP.rx) * HCP.k * HCP.sx, ty = -(vy - HCP.ry) * HCP.k * HCP.y;
+    if (HCP.lt !== HD.t) { const dtr = Math.max(.01, (HD.t - (HCP.lt || HD.t - 60)) / 1000); HCP.evx = (HCP.evx || 0) + (((tx - (HCP.ltx === undefined ? tx : HCP.ltx)) / dtr) - (HCP.evx || 0)) * .5; HCP.evy = (HCP.evy || 0) + (((ty - (HCP.lty === undefined ? ty : HCP.lty)) / dtr) - (HCP.evy || 0)) * .5; HCP.ltx = tx; HCP.lty = ty; HCP.lt = HD.t; }
+    const calm = Math.max(0, Math.min(1, sp('m_calm', .4))), fc0 = sp('hcpfc', 1.2 - .95 * calm), bt = sp('hcpbeta', 18), ax = 1 / (1 + 1 / (2 * Math.PI * (fc0 + bt * Math.abs(HCP.evx || 0)) * Math.max(dt, .001))), ay = 1 / (1 + 1 / (2 * Math.PI * (fc0 + bt * Math.abs(HCP.evy || 0)) * Math.max(dt, .001)));
+    HCP.x += (tx - HCP.x) * ax; HCP.yv += (ty - HCP.yv) * ay; }
   else { const b = 1 - Math.exp(-dt / .3); HCP.x += (0 - HCP.x) * b; HCP.yv += (0 - HCP.yv) * b; }
   const e = camera.projectionMatrix.elements; HCP.saved = { px: camera.position.x, py: camera.position.y, pz: camera.position.z, e8: e[8], e9: e[9] };
   camera.updateMatrixWorld(); camera.translateX(HCP.x); camera.translateY(HCP.yv);
@@ -1252,98 +1255,63 @@ if (Q.get('tune') === 'all') {
   btn.onclick = () => { const on = pl.style.display === 'none'; pl.style.display = pr.style.display = on ? 'block' : 'none'; };
 }
 
-// SIMPLE TUNING PANEL (&tune): five sliders, each one combining the settings that belong together, and a live health line that says what is going wrong. (&tune=all is the full list of every setting.)
-// Underlying settings: Sensitivity = gain. Smoothness = smoothpath + aimtau. Anticipation = pred. Calm centre = dz + sticky + hyst. Window = hcp + hcpk.
+// SIMPLE TUNING PANEL (&tune), built for a phone held in either direction: one round button at the edge of the screen (reachable with a thumb) opens a sheet of five settings. Every control is at least
+// 44 px: the slider is tall, drags in any direction without scrolling the page, and has a big minus and plus beside it for exact steps, and a big reset arrow. Touching the sheet never reaches the game
+// (no steering, no pause). In landscape the five settings sit in two columns so nothing needs scrolling. (&tune=all is the long developer list of every setting.)
+// Underlying settings: Sensitivity = gain. Smoothness = smoothpath + aimtau. Anticipation = pred. Calm centre = dz + sticky + hyst (+ the window's still-smoothing). Window = hcp + hcpk.
 if (Q.has('tune') && Q.get('tune') !== 'all') {
-  const COARSE = true;
   const lerp2 = (a, b, t) => a + (b - a) * t;
   const SET = {          // key, label, min, max, step, default, help, what it sets
     gain: ['gain', 'Sensitivity', .3, 2.5, .05, .7, 'How far the board goes for a head move. Too high = it jumps to the edges.', (v) => ({ gain: v })],
     smooth: ['m_smooth', 'Smoothness', 0, 1, .05, 1, 'Higher = a softer glide (also slower). Lower = crisp, quick.', (v) => ({ smoothpath: v, aimtau: lerp2(.05, .14, v) })],
-    ahead: ['pred', 'Anticipation (ms)', 0, 250, 5, 130, 'Reacts ahead of the camera delay. Higher = quicker, can overshoot.', (v) => ({ pred: v })],
-    calm: ['m_calm', 'Calm centre', 0, 1, .05, .4, 'Ignores tiny head movements near the middle so a resting head does not wobble the board.', (v) => ({ dz: .04 * v, sticky: .5 * v, hyst: .03 * v })],
-    win: ['m_win', 'Window view', 0, 1, .05, 0, 'The screen as a window: 0 off; higher = the picture shifts more as your head moves.', (v) => ({ hcp: v > 0 ? 1 : 0, hcpk: v * (COARSE ? 6 : 16) })],
+    ahead: ['pred', 'Anticipation (ms)', 0, 250, 10, 130, 'Reacts ahead of the camera delay. Higher = quicker, can overshoot.', (v) => ({ pred: v })],
+    calm: ['m_calm', 'Calm centre', 0, 1, .05, .4, 'Ignores tiny head movements near the middle (and steadies the window view).', (v) => ({ dz: .04 * v, sticky: .5 * v, hyst: .03 * v })],
+    win: ['m_win', 'Window view', 0, 1, .05, 0, 'The screen as a window: 0 off; higher = the picture shifts more as your head moves.', (v) => ({ hcp: v > 0 ? 1 : 0, hcpk: v * 6 })],
   };
-  const wrap = document.createElement('div'); wrap.style.cssText = 'position:fixed;left:6px;top:34px;z-index:30;font:12px/1.25 system-ui,sans-serif;color:#fff;max-width:min(330px,70vw);pointer-events:none';
-  const btn = document.createElement('button'); btn.textContent = 'TUNE'; btn.style.cssText = 'pointer-events:auto;padding:5px 12px;border-radius:14px;border:1px solid #fff6;background:#000a;color:#fff;font:600 12px system-ui;touch-action:manipulation';
-  const hl = document.createElement('div'); hl.style.cssText = 'margin-top:4px;padding:3px 7px;background:#000b;border-radius:8px;font:11px/1.3 ui-monospace,Consolas,monospace;white-space:pre-wrap'; hl.textContent = '...';
-  const panel = document.createElement('div'); panel.style.cssText = 'display:none;margin-top:4px;padding:6px 8px;background:#000c;border:1px solid #fff4;border-radius:10px;pointer-events:auto';
-  wrap.appendChild(btn); wrap.appendChild(hl); wrap.appendChild(panel); document.body.appendChild(wrap);
+  const css = (el, t) => { el.style.cssText = t; return el; };
+  const wrap = css(document.createElement('div'), 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:30;pointer-events:none;font:14px/1.2 system-ui,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent');
+  const stop = (el) => { for (const ev of ['pointerdown', 'pointerup', 'touchstart', 'touchmove', 'click', 'mousedown']) el.addEventListener(ev, (e) => e.stopPropagation()); return el; };
+  // the health line sits under the fps readout, top left (read only, never in the way)
+  const hl = css(document.createElement('div'), 'position:absolute;left:6px;top:34px;max-width:min(300px,60vw);padding:3px 7px;background:#000b;border-radius:8px;font:11px/1.3 ui-monospace,Consolas,monospace;white-space:pre-wrap;pointer-events:none'); hl.textContent = '...';
+  // the round button: 52 px, at the right edge, a little above the middle (a thumb in landscape reaches it)
+  const btn = stop(css(document.createElement('button'), 'position:absolute;right:max(8px,env(safe-area-inset-right));top:40%;width:52px;height:52px;border-radius:26px;border:2px solid #fff8;background:#000c;color:#fff;font:700 22px system-ui;pointer-events:auto;touch-action:manipulation;padding:0')); btn.textContent = '\u2699'; btn.setAttribute('aria-label', 'Tune');
+  const sheet = stop(css(document.createElement('div'), 'display:none;position:absolute;right:max(68px,calc(env(safe-area-inset-right) + 68px));top:max(6px,env(safe-area-inset-top));bottom:max(6px,env(safe-area-inset-bottom));width:min(70vw,420px);padding:8px;box-sizing:border-box;background:#000d;border:1px solid #fff5;border-radius:16px;pointer-events:auto;touch-action:none;overflow:hidden;flex-direction:column'));
+  const grid = css(document.createElement('div'), 'flex:1;display:grid;grid-template-columns:1fr;gap:6px;align-content:start;min-height:0'); sheet.appendChild(grid);
+  wrap.appendChild(hl); wrap.appendChild(sheet); wrap.appendChild(btn); document.body.appendChild(wrap);
+  const NOTES = []; const layout = () => { const land = innerWidth > innerHeight * 1.15; for (const n of NOTES) n.style.display = land ? 'none' : 'block'; grid.style.gridTemplateColumns = land ? '1fr 1fr' : '1fr'; sheet.style.width = land ? 'min(76vw,640px)' : 'min(92vw,420px)'; if (!land) { sheet.style.right = '8px'; sheet.style.left = 'auto'; sheet.style.top = 'auto'; sheet.style.bottom = '8px'; sheet.style.height = 'auto'; } else { sheet.style.right = '68px'; sheet.style.top = '6px'; sheet.style.bottom = '6px'; sheet.style.height = 'auto'; } };
+  addEventListener('resize', layout); layout();
   const save = () => { try { localStorage.setItem('gvtune', JSON.stringify(LIVE)); } catch (e) { } };
   const apply = (name, v) => { const k = SET[name][0]; LIVE[k] = v; Object.assign(LIVE, SET[name][7](v)); if (name === 'gain') HD.gain = v; save(); };
   const els = {};
+  const bigBtn = (txt, label) => { const b = css(document.createElement('button'), 'width:48px;height:48px;flex:none;border-radius:12px;border:1px solid #fff6;background:#ffffff22;color:#fff;font:700 24px system-ui;padding:0;touch-action:manipulation'); b.textContent = txt; b.setAttribute('aria-label', label); return b; };
   for (const name of Object.keys(SET)) {
     const [k, t, lo, hi, st, d, h] = SET[name];
-    const r = document.createElement('div'); r.style.cssText = 'margin:4px 0';
-    const top = document.createElement('div'); top.style.cssText = 'display:flex;align-items:center;gap:6px';
-    const tt = document.createElement('b'); tt.textContent = t; tt.style.flex = '1'; const v = document.createElement('span'); v.style.cssText = 'min-width:2.6em;text-align:right';
-    const rb = document.createElement('button'); rb.textContent = '\u21BA'; rb.style.cssText = 'padding:0 7px;border-radius:6px;border:1px solid #fff5;background:#fff2;color:#fff;font:600 13px system-ui;touch-action:manipulation';
-    const inp = document.createElement('input'); inp.type = 'range'; inp.min = lo; inp.max = hi; inp.step = st; inp.style.cssText = 'width:100%;height:18px;margin:0;touch-action:pan-y';
-    const note = document.createElement('div'); note.textContent = h; note.style.cssText = 'opacity:.65;font-size:10px;line-height:1.2';
+    const row = css(document.createElement('div'), 'padding:4px 6px 6px;border-radius:12px;background:#ffffff0d');
+    const top = css(document.createElement('div'), 'display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px'); const tt = css(document.createElement('b'), 'font-size:15px'); tt.textContent = t; const v = css(document.createElement('span'), 'font:700 16px ui-monospace,Consolas,monospace');
+    const ctl = css(document.createElement('div'), 'display:flex;align-items:center;gap:6px');
+    const minus = bigBtn('\u2212', 'less'), plus = bigBtn('+', 'more'), rb = bigBtn('\u21BA', 'reset to default');
+    const inp = css(document.createElement('input'), 'flex:1;min-width:0;height:48px;margin:0;touch-action:none;accent-color:#6df'); inp.type = 'range'; inp.min = lo; inp.max = hi; inp.step = st;
+    const note = css(document.createElement('div'), 'opacity:.6;font-size:11px;margin-top:1px'); note.textContent = h; NOTES.push(note);
     const cur = () => (LIVE[k] !== undefined ? LIVE[k] : sp(k, d));
     const refresh = () => { const val = cur(), ch = Math.abs(val - d) > 1e-9; inp.value = val; v.textContent = String(Math.round(val * 100) / 100); v.style.color = ch ? '#fc6' : ''; rb.style.opacity = ch ? 1 : .35; };
     inp.addEventListener('input', () => { apply(name, +inp.value); refresh(); });
-    rb.onclick = () => { apply(name, d); refresh(); };
-    top.appendChild(tt); top.appendChild(v); top.appendChild(rb); r.appendChild(top); r.appendChild(inp); r.appendChild(note); panel.appendChild(r); els[name] = { refresh, d }; refresh();
+    const nudge = (dir) => { const val = Math.max(lo, Math.min(hi, Math.round((cur() + dir * st) / st) * st)); apply(name, val); refresh(); };
+    minus.onclick = () => nudge(-1); plus.onclick = () => nudge(1); rb.onclick = () => { apply(name, d); refresh(); };
+    top.appendChild(tt); top.appendChild(v); ctl.appendChild(minus); ctl.appendChild(inp); ctl.appendChild(plus); ctl.appendChild(rb); row.appendChild(top); row.appendChild(ctl); row.appendChild(note); grid.appendChild(row); els[name] = { refresh, d }; refresh();
   }
-  const bar = document.createElement('div'); bar.style.cssText = 'display:flex;gap:6px;margin-top:6px';
-  const mk = (txt, fn) => { const b = document.createElement('button'); b.textContent = txt; b.style.cssText = 'flex:1;padding:6px;border-radius:8px;border:1px solid #fff5;background:#fff2;color:#fff;font:600 12px system-ui;touch-action:manipulation'; b.onclick = fn; bar.appendChild(b); return b; };
+  const bar = css(document.createElement('div'), 'display:flex;gap:8px;margin-top:6px;flex:none');
+  const mk = (txt, fn) => { const b = css(document.createElement('button'), 'flex:1;height:48px;border-radius:12px;border:1px solid #fff6;background:#ffffff22;color:#fff;font:700 15px system-ui;touch-action:manipulation'); b.textContent = txt; b.onclick = fn; bar.appendChild(b); return b; };
   mk('Reset all', () => { for (const k of Object.keys(LIVE)) delete LIVE[k]; for (const name of Object.keys(SET)) apply(name, SET[name][5]); for (const name in els) els[name].refresh(); });
   const cp = mk('Copy', () => { const txt = Object.entries(LIVE).map(([k, v]) => k + '=' + String(Math.round(v * 1000) / 1000)).join('&'); try { navigator.clipboard.writeText('&' + txt); } catch (e) { } cp.textContent = 'Copied'; setTimeout(() => { cp.textContent = 'Copy'; }, 1200); });
-  panel.appendChild(bar);
-  btn.onclick = () => { panel.style.display = panel.style.display === 'none' ? 'block' : 'none'; };
+  mk('Close', () => { sheet.style.display = 'none'; btn.style.display = 'block'; });
+  sheet.appendChild(bar);
+  btn.onclick = () => { layout(); sheet.style.display = 'flex'; btn.style.display = 'none'; };          /* the round button hides while the sheet is open (Close brings it back), so nothing overlaps */
   // the health line: what is going on, in plain words, updated twice a second
-  let lock = 0, mid = 0, jit = 0, last = 0, n = 0;
-  setInterval(() => { const s2 = window.__steer || 0, a = Math.abs(s2); lock += ((a > .95 ? 1 : 0) - lock) * .04; mid += ((a < .1 ? 1 : 0) - mid) * .04; jit += (Math.min(1, Math.abs(s2 - last) * 6) - jit) * .04; last = s2; n++; }, 50);
+  let lock = 0, mid = 0, jit = 0, last = 0;
+  setInterval(() => { const s2 = window.__steer || 0, a = Math.abs(s2); lock += ((a > .95 ? 1 : 0) - lock) * .04; mid += ((a < .1 ? 1 : 0) - mid) * .04; jit += (Math.min(1, Math.abs(s2 - last) * 6) - jit) * .04; last = s2; }, 50);
   setInterval(() => {
     const trk = window.__trk, hz = trk && trk.fps ? trk.fps : 0, lat = trk && trk.lat && Number.isFinite(trk.lat.total) ? trk.lat.total : null, g = HD.gain;
     const tips = []; if (lock > .25) tips.push('at the edge ' + Math.round(lock * 100) + '% of the time: lower Sensitivity'); if (jit > .35 && mid > .3) tips.push('jittery near the middle: raise Smoothness or Calm centre'); if (hz && hz < 10) tips.push('the tracker is slow (' + hz.toFixed(0) + '/s): not a setting problem'); if (!HD.cal) tips.push('not calibrated: look straight ahead');
     hl.textContent = 'fps ' + Math.round(typeof fps === 'number' ? fps : 0) + '  tracker ' + (hz ? hz.toFixed(0) : '-') + '/s' + (lat !== null ? '  delay ~' + Math.round(lat + 40) + 'ms' : '') + '  sens ' + (+g).toFixed(2) + '\nedge ' + Math.round(lock * 100) + '%  centre ' + Math.round(mid * 100) + '%  jitter ' + Math.round(jit * 100) + '%' + (tips.length ? '\n! ' + tips.join('\n! ') : '\nlooks fine');
   }, 500);
-}
-
-
-// SLALOM STRETCHES: walls of striped pylons across the open ground, each with an opening that swings from side to side, so the board swerves back and forth. The openings are marked
-// with tall glowing beacons. Hitting a pylon is the gentle crash (speed x 0.3 and about a second of grace). Gates get a little tighter and swing a little wider with distance.
-// &gate=N metres between gates (default 34).
-{
-  const SLN = { done: new Set() };
-  const tex = (() => { const c = document.createElement('canvas'); c.width = 32; c.height = 128; const g = c.getContext('2d'); for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#ffd23a' : '#26202e'; g.fillRect(0, i * 16, 32, 16); } const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; return t; })();
-  const geoP = new THREE.CylinderGeometry(.75, .9, 4.4, 10); geoP.translate(0, 2.2, 0);
-  const matP = new THREE.MeshStandardMaterial({ map: tex, roughness: .65, emissive: 0x332211, emissiveIntensity: .6 });
-  const geoB = new THREE.CylinderGeometry(.3, .5, 10, 8); geoB.translate(0, 5, 0);
-  const matB = new THREE.MeshBasicMaterial({ color: 0x55ffee, fog: false });
-  const addOb = (x, z, r) => { const ob = { x, z, r, k: .7, label: 'PYLON!' }; const key = Math.floor(x / 8) + ',' + Math.floor(z / 8); (OGRID.get(key) || OGRID.set(key, []).get(key)).push(ob); };
-  const build = (j, rr, z0) => {
-    const gap = sp('gate', 34), gates = Math.floor(150 / gap), spans = []; for (const f of (rr.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) spans.push([Math.min(...zs), Math.max(...zs)]); } for (const t of (rr.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) spans.push([t.z - 6, t.z + 6]);
-    const P = [], B = [];
-    for (let k = 0; k < gates; k++) {
-      const z = z0 - 24 - k * gap, g = j * 6 + k; if (spans.some((q) => z > q[0] - 14 && z < q[1] + 14)) continue;
-      const pr = Math.min(1, -z / 4500), amp = 6 + 5 * pr, hw = 5.8 - 1.8 * pr, side = g % 2 ? 1 : -1, tx = trailX(z), oc = tx + side * amp, L = Math.min(25, C.W_HALF - 6);
-      for (let x = tx - L; x <= tx + L; x += 2.6) { if (Math.abs(x - oc) < hw) continue; P.push([x, z]); }
-      B.push([oc - hw, z], [oc + hw, z]);
-    }
-    window.__dm && window.__dm('slalom row ' + j + ': ' + P.length + ' pylons, ' + B.length / 2 + ' gates (of ' + gates + ')');
-    if (!P.length) return;
-    const im = new THREE.InstancedMesh(geoP, matP, P.length), m = new THREE.Matrix4(); P.forEach(([x, z], i) => { const y = groundY(x, z); m.makeScale(1, .9 + ((i * 37) % 7) / 35, 1).setPosition(x, y === null ? th(x, z) : y, z); im.setMatrixAt(i, m); addOb(x, z, .95); });
-    im.frustumCulled = false; scene.add(im);
-    const ib = new THREE.InstancedMesh(geoB, matB, B.length); B.forEach(([x, z], i) => { const y = groundY(x, z); m.makeScale(1, 1, 1).setPosition(x, y === null ? th(x, z) : y, z); ib.setMatrixAt(i, m); addOb(x, z, .5); });
-    ib.frustumCulled = false; scene.add(ib);
-  };
-  window.__slalomTick = () => {
-    if (!PLAY || sp('zones', 1) <= 0) return; const j0 = Math.max(0, Math.floor(-PH.z / 180) - 1);
-    for (let j = j0; j <= j0 + 4; j++) { const rr = lvl.rows[String(j)]; if (rr && !window.__ZD.has(j)) window.__zoneRow(rr, j); }
-    for (let j = j0; j <= j0 + 3; j++) {
-      if (SLN.done.has(j) || window.__zoneOf(j) !== 'slalom') continue; const rr = lvl.rows[String(j)]; if (!rr) continue;
-      const z0 = -180 * j; if (groundY(trailX(z0 - 90), z0 - 90) === null) continue;          // the ground of that row is not there yet: try again next frame
-      SLN.done.add(j); try { build(j, rr, z0); } catch (e) { window.__dm && window.__dm('slalom build failed: ' + (e && e.message)); }
-    }
-  };
-}
-
-// GENTLER PICKUP PUNCH: a pickup or a pad used to kick the field of view by up to 9 degrees, shake and flash the picture for an instant, which felt like the view locking as you passed
-// through it. Now scaled by &punch (default 0.3; 1 = the old kick, 0 = none).
-{
-  const K = () => Math.max(0, Math.min(1, sp('punch', .3)));
-  for (const ev of ['onBuff', 'onPad']) { const f = PSY.events[ev]; if (typeof f === 'function') PSY.events[ev] = function () { const r = f.apply(PSY.events, arguments); try { const c = PSY.camera; if (c) { c.fov_punch *= K(); c.shake *= K(); c.flash *= K(); } } catch (e) { } return r; }; }
 }
