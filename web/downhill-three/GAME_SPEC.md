@@ -450,3 +450,83 @@ An empty bank means the normal gentle crash (speed x 0.3, about 1 s grace, one f
 
 ### Level layout decision (owner, 2026-11-20)
 The wide open course is the layout: about 25 m of open ground either side of the line (feat_off 15; board limit 31.5 m, 58 m with ?wide=2.4), trees streaming past beyond it. Enough lateral range for fine-tuning toward targets in the path and for wide reach to off-line targets, with the immersion of trees flying by. The narrow winding trail (feat_off 6.5, about 13 m open; long_w11 and the seven biome courses) is not the target: regenerate the biome courses wide (dump_long.gd without WINDING=1) when agreed. Off-line targets belong within about 12-23 m of the line.
+
+
+
+## 18. Seek and destroy: the slalom core, progression and set-pieces (2026-11-20, owner direction; nothing here is built yet)
+
+### The core loop (owner)
+The game shines when the player threads a **slalom of obstacles, buffs and hazards** and has to look back and forth and decide at once: like flying through a maze, read which way it goes, follow the opening, be ready for a hazard, spot a buff over to the right and make a big swing to nab it. Today the courses are the open slope with the same ramp, rail, spiral, arc and pickups repeated, with no barriers, forks or hazards to choose between (long_s7 has about 20,000 side trees, 53 rocks, 12 ramps, 21 rails, 230 toys, 78 buffs, 341 pads and no barriers). The fix is a **placement language** on top of the pieces we have, not new physics.
+
+**The skill the game trains:** look ahead (read the next opening before you reach this one), commit with fine steering, and use the wide reach for a bait swing. This is exactly what the head steering now supports: the fine centre for threading, the wide reach for the swing (steering tuning is locked, see memory note steering-locked-20261120).
+
+### The moves a section is built from (all reuse existing pieces)
+| Move | What the player does | Built from |
+|---|---|---|
+| **Gate slalom** | Openings alternate left and right, spacing shrinks along the section | barrier trees/rocks with an opening (the `bar_*` courses, Godot gate layouts) |
+| **Maze corridor** | Walls with one visible way through; the way bends | wall segments from the same barrier objects, a layout generator |
+| **Bait swing** | A buff or piece sits 12-23 m off the line; reaching it means leaving the safe opening for a moment | buffs / pieces placed off line (already tested with `?reachtest`) |
+| **Hazard in the opening** | The opening you aim at has a hazard to dodge or a buff to spend (shield, saw) | rocks, hedges, snowball, sling |
+| **Fork** | Ramp, rail or open ground, each ending on a different line | existing ramp / rail / pad pieces (section 5) |
+| **Chain** | Pads, ramp, rail strung so speed carries through | existing pieces |
+| **Squeeze** | The opening is narrower than the board's wobble: fine steering only | barrier with a tight opening |
+
+### Progression across the whole game (one continuous run)
+One new thing at a time, never two (section 12), and every earlier thing returns in a harder form. It maps onto the six chapters (section 4):
+1. **Chapter 1 (the start):** nearly open snow, one wide gate every ~250 m, ramps only. Learn: steer, look ahead.
+2. **Chapter 2:** gate slalom with wide openings, first rails; first bait buff.
+3. **Chapter 3:** openings alternate faster; boost chains; first hazard in an opening.
+4. **Chapter 4:** maze corridors; magnet appears; baits sit further off line.
+5. **Chapter 5:** hedges and the saw; squeeze gates; forks whose routes cost a buff.
+6. **Chapter 6 (the climax):** all moves mixed at speed, set-pieces back to back, two buffs needed in the right order, then the Finale glide (every layer on, no hazards).
+
+Points reward **risk**: threading a squeeze, a near miss, a long bait swing and then back on line, a chain kept alive. A flat run of gates pays little. Difficulty adapts gently (section 8): a player who keeps failing a section gets wider openings next time, never a hard stop (section 17).
+
+### Continuity once the levels are bolted into one run
+- **Sections are joined at gates:** a themed section ends in a gate that opens into the next; the board's speed, the bank (cap 2 per buff type), the score, the combo and the layers collected carry across.
+- **No resets between themes:** a theme is a stretch of the same run with its own props, music colour and obstacle style, not a new level screen.
+- **Motifs return harder:** the carnival ring in chapter 2 returns as a faster, denser ring in chapter 5. The player recognises it and feels progress.
+- **A set-piece never pauses the run:** it is entered at speed and left at speed.
+
+### Set-piece catalogue (owner's themes first, then ideas)
+Each has the read (what you see far off), the decision, the payoff. Props are boxes, cylinders and cheap textured shapes; flat single-colour surfaces are not acceptable (every surface gets a texture or a psychedelic treatment, section 15). Each theme also has a **dressing** (sky, ground texture, music colour) so it reads at a glance from far away.
+
+| Set-piece | The play | Obstacles / baits | Needs |
+|---|---|---|---|
+| **Roadside carnival** | Slalom through a ring of spinning rides and tent poles, bumper-car lanes, light strings overhead | spinning arms to time, stalls as walls, a prize buff on the far rim | spinning obstacle (rotating bar), tents (boxes), lights (emissive) |
+| **Merry-go-round** | A big slow turntable you ride across; horses move up and down and sweep through your line | rotating horses, a buff on the far edge, a ramp off the rim | rotating platform (moving ground the board inherits), horse props |
+| **Shopping mall interior** | Long hall with pillars, kiosk slalom, glass shopfronts, an escalator ramp, a fountain to swing around | pillars, kiosks, rolling carts, bait buffs in shopfront doors | interior set (lit hall), pillar and kiosk props, escalator = ramp piece |
+| **Mall parking lot** | A grid of parked cars to thread, with cars pulling out and carts rolling | rows of parked cars as gates, moving cars, a cart train, lamp posts | car props (textured boxes), moving obstacle along a path |
+| **Farmer's field (cows)** | Open pasture; cows stand and wander across your line, hay bales, fences with gaps, a barn jump | cows (slow moving obstacles), hay bales, fence lines with openings, a tractor | cow and bale props, simple wander motion |
+| **Corn field** | A true maze: rows of corn with bends; you cannot see far, so you read the next turn only just in time; clearings with a buff | dense walls (instanced stalks), dead ends with baits, a scarecrow | maze generator on the barrier objects, instanced corn |
+| **Superhighway** | Fast, flat, wide: weave through traffic at top speed, trucks as moving walls, overpasses as jumps, lane changes as the swing | moving cars and trucks in lanes, lane gaps, a boost on the shoulder | moving obstacles, lane layout, speed at the top |
+| **Haunted forest** (idea) | Slalom between swaying trunks and low branches | swaying obstacles, fog | sway animation |
+| **Canyon pendulums** (idea) | Timed gaps between swinging blades | swinging obstacle on a timer | pendulum prop |
+| **Drive-in / rooftops** (idea) | Weave between cars; jump between roofs | moving cars, gap jumps | existing ramps |
+
+### Rhythm: slalom is a burst, not the whole game (owner, 2026-11-20)
+Not slalom all the time. The run breathes: **a slalom burst** (hunt a buff, seek an opening, evade a hazard; about 250-400 m), then a **blast-off straightaway** (about 500-900 m of wide road at full speed with the usual wide-road objects: ramps, rails, pad chains, big jumps, wide pickups, scenery flying past) before the next burst. Rough cycle: blast, burst, blast, set-piece, blast, harder burst. The set-piece themes (carnival, mall, corn field, highway) are the longer, stranger bursts. Chapter 1 is mostly blast with one tiny burst; chapter 6 is nearly all burst with short blasts to breathe.
+
+### Variety: custom objects, nothing repeated for miles (owner, 2026-11-20)
+Rails and ramps get boring when they are the same piece over and over. Rules:
+- **A variant pool per piece, per region.** Each region (the post-collapse setting: abandoned everything) has its own 6-8 kinds of ramp, rail and obstacle, and a piece may not repeat within about 600 m. Variants differ in silhouette and in how they play (angle, length, width, where they throw you), not only in colour.
+- **Everything is a recycled-world custom object** (post-apocalyptic, abandoned): a wrecked bus tipped on its side as a ramp, a collapsed overpass slab, a car-carrier trailer, a ski-lift gondola on its cable, a fallen pylon, an escalator, a drained pool bowl, a crashed plane fuselage as a tunnel.
+- **Rails:** a snapped guardrail, a fallen power line, a pipeline, a shopping-cart track, a broken monorail beam, a fire-escape stair rail, a conveyor.
+- **Spirals and arcs:** a parking-garage helix, a ruined bridge span, a ferris wheel rim, a roller-coaster remnant, a broken highway cloverleaf.
+- **Pads and markers:** painted road arrows, hazard stripes, faded lane lines, runway lights.
+- **Hazards and obstacles:** wrecked cars, barricades, tumbleweed, sinkholes, rogue drones, rusted containers, fallen trees; each region adds a few of its own.
+- **One signature object per region** that appears nowhere else (a giant mannequin hand, a derailed train on a bridge, a drained fountain), as the thing the player remembers.
+- **Buffs live in the wreckage** (a boost on a car roof, a shield in a vending machine, a magnet in a radio tower), so hunting a buff is also exploring.
+Build order for objects: define a small shared kit first (chunks of metal, concrete, glass, signs, vehicles in a few textured shapes) and assemble many variants from it; hand-made hero objects only for the signature pieces. Every surface textured or psychedelic (no flat single colour).
+
+### Authoring approach (so many can be made cheaply)
+A section is a short script: a theme, a length, a difficulty level (0-1) and a list of moves. The generator lays the moves on the course by the placement language above, using only the moves that chapter allows. The seeded generator and the buff-thinning rule (section 17) stay; a section replaces the repeated toy / ramp / rail placement in its stretch. Props are instanced meshes (cheap); obstacles that move are a short list updated per frame.
+
+### Open decisions
+- Moving obstacles (cows, cars, rides): how many at once; the collision rule (a simple circle test in the board's frame is enough to start).
+- Interior sets (mall) in the same run: enclosed lighting and a ceiling, or an open-air mall with a roofline?
+- How a mall or carnival connects to the forest slope at both ends (a gate or ramp transition each way).
+- Build one section first as a playable test (recommended: a gate slalom with a bait buff on long_s7) to confirm the look-back-and-forth decision is there before the themed sets.
+
+### Not done / not verified
+Nothing in this section is built. Barriers exist only in the `bar_*` courses (Godot layouts); moving obstacles, rotating platforms and the maze generator do not exist yet. The three.js build would start from the barrier objects in the dump and the buff bank already in `gv.js`.
