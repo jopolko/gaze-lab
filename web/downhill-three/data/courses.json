@@ -1,0 +1,72 @@
+[
+ {
+  "id": "s7",
+  "dir": "long_s7",
+  "seed": 7,
+  "nrows": 43,
+  "lengthM": 7740,
+  "theme": "psychedelic",
+  "note": "the original course, already live (uncompacted); Godot generator output, TRAIL_HALF 32 (path +-32 m, trees at ~31 m and out)",
+  "sizesKB": {
+   "meta": 5331,
+   "physics": 2075,
+   "rows": 18684
+  }
+ },
+ {
+  "id": "s7b",
+  "dir": "long_s7b",
+  "seed": 7,
+  "nrows": 63,
+  "lengthM": 11340,
+  "theme": "psychedelic",
+  "note": "same hill and seed 7, 63 rows; Godot generator output, TRAIL_HALF 32 (path +-32 m, trees at ~31 m and out)",
+  "sizesKB": {
+   "meta": 1987,
+   "physics": 2818,
+   "rows": 21470
+  }
+ },
+ {
+  "id": "s11",
+  "dir": "long_s11",
+  "seed": 11,
+  "nrows": 63,
+  "lengthM": 11340,
+  "theme": "psychedelic",
+  "note": "seed 11; Godot generator output, TRAIL_HALF 32 (path +-32 m, trees at ~31 m and out)",
+  "sizesKB": {
+   "meta": 1838,
+   "physics": 2985,
+   "rows": 21778
+  }
+ },
+ {
+  "id": "s23",
+  "dir": "long_s23",
+  "seed": 23,
+  "nrows": 63,
+  "lengthM": 11340,
+  "theme": "psychedelic",
+  "note": "seed 23; Godot generator output, TRAIL_HALF 32 (path +-32 m, trees at ~31 m and out)",
+  "sizesKB": {
+   "meta": 1973,
+   "physics": 2968,
+   "rows": 21661
+  }
+ },
+ {
+  "id": "s42",
+  "dir": "long_s42",
+  "seed": 42,
+  "nrows": 63,
+  "lengthM": 11340,
+  "theme": "psychedelic",
+  "note": "seed 42; Godot generator output, TRAIL_HALF 32 (path +-32 m, trees at ~31 m and out)",
+  "sizesKB": {
+   "meta": 2148,
+   "physics": 2896,
+   "rows": 21384
+  }
+ }
+]

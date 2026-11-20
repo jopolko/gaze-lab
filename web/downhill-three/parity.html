@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Parity harness</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html, body { margin: 0; background: #111; color: #cfe; font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; left: 8px; top: 6px; white-space: pre; z-index: 5; }
+  #bar { display: none; }
+  #log { position: fixed; left: 8px; bottom: 8px; right: 8px; max-height: 40%; overflow: auto; white-space: pre; background: #000c; padding: 6px; z-index: 9; }
+  iframe { border: 0; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "../stargaze/vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<!--
+PARITY HARNESS: how close is the three.js picture to Godot's, by the numbers.
+  Run all shots (the parent page makes one iframe per shot, collects every result and posts it to the tools server):
+    python web/tools/parity.py serve            (serves web/ on :8073 and writes web/docs/PARITY_REPORT.md when the results arrive)
+    then open  http://localhost:8073/downhill-three/parity.html?all=1&post=1  in a browser (the window should be at least 960x540)
+  One shot only (the child): parity.html?shot=1   (the result is shown in the log and kept in window.__parityResult)
+  Inputs: data/level_parity_s7.json (the level dump, with each shot's sidecar in shots[i].side), shots_parity/godot_NN.png (with the picture pass) and godot_NN_nopost.png (without it).
+-->
+<canvas id="gl"></canvas><div id="hud"></div><div id="bar"></div><div id="log"></div>
+<script type="module">
+const PP = new URLSearchParams(location.search);
+const LOG = document.getElementById('log'), say = (t) => { LOG.textContent += t + '\n'; LOG.scrollTop = 1e9; };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const DIR = './shots_parity/';
+
+// ------------------------------------------------------------------------------------------------ the parent: one iframe per shot, collect, post
+async function parent() {
+  document.getElementById('gl').style.display = 'none';
+  const idx = await (await fetch(DIR + 'index.json')).json(), results = [];
+  say('parity: ' + idx.count + ' shots');
+  for (let i = 0; i < idx.count; i++) {
+    const f = document.createElement('iframe'); f.width = 960; f.height = 540; f.style.cssText = 'position:fixed;left:0;top:0;width:960px;height:540px;opacity:.01'; f.src = 'parity.html?lvl=' + idx.level + '&shot=' + i + '&child=1&nomusic&noshare&nogov';
+    const res = await new Promise((resolve) => { const h = (e) => { if (e.data && e.data.parity === i) { removeEventListener('message', h); resolve(e.data.result); } }; addEventListener('message', h); document.body.appendChild(f); setTimeout(() => resolve({ error: 'timeout' }), 240000); });
+    results.push(res); f.remove(); say('shot ' + i + ' done' + (res.error ? ' ERROR ' + res.error : ''));
+  }
+  const all = { when: new Date().toISOString(), shots: results }; window.__parityResult = all; window.__parityDone = true;
+  if (PP.has('post')) { try { const r = await fetch('/result', { method: 'POST', body: JSON.stringify(all) }); say('posted: ' + r.status); } catch (e) { say('post failed: ' + e); } }
+  say('done. JSON is in window.__parityResult');
+}
+
+// ------------------------------------------------------------------------------------------------ the child: renders one Godot shot in three.js and measures it
+const REG = { sky: [0, .12], mid: [.35, .5], ground: [.7, 1], all: [0, 1] };
+async function loadPNG(url, W, H) { const b = await createImageBitmap(await (await fetch(url)).blob()); const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); x.drawImage(b, 0, 0, W, H); return x.getImageData(0, 0, W, H).data; }
+function hueBins(px, W, y0, y1) { const bins = new Float64Array(12); for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn; if (c < 8) continue; let h; if (mx === r) h = ((g - b) / c + 6) % 6; else if (mx === g) h = (b - r) / c + 2; else h = (r - g) / c + 4; bins[Math.floor(h * 2) % 12] += c; } const s = bins.reduce((a, b) => a + b, 0) || 1; return Array.from(bins, (v) => v / s); }
+function region(px, W, y0, y1) { let L = 0, C = 0, R = 0, G = 0, B = 0, n = 0; for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, r = px[i], g = px[i + 1], b = px[i + 2]; L += .299 * r + .587 * g + .114 * b; C += Math.max(r, g, b) - Math.min(r, g, b); R += r; G += g; B += b; n++; } return { L: L / n, C: C / n, rgb: [R / n, G / n, B / n], hue: hueBins(px, W, y0, y1) }; }
+function lowres(px, W, H, k) { const bw = Math.floor(W / k), bh = Math.floor(H / k), out = new Float32Array(bw * bh * 3); for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) { let r = 0, g = 0, b = 0; for (let y = 0; y < k; y++) for (let x = 0; x < k; x++) { const i = ((by * k + y) * W + bx * k + x) * 4; r += px[i]; g += px[i + 1]; b += px[i + 2]; } const o = (by * bw + bx) * 3, n = k * k; out[o] = r / n; out[o + 1] = g / n; out[o + 2] = b / n; } return { d: out, bw, bh }; }
+function compare(A, Bg, W, H, gp) {          // A = ours, Bg = godot (both top-down RGBA), gp = prepared godot info
+  const res = {}, la = lowres(A, W, H, 8);
+  for (const [name, [f0, f1]] of Object.entries(REG)) {
+    const y0 = Math.floor(H * f0), y1 = Math.floor(H * f1); let mae = 0, n = 0, sr = 0, sg = 0, sb = 0;
+    for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, dr = A[i] - Bg[i], dg = A[i + 1] - Bg[i + 1], db = A[i + 2] - Bg[i + 2]; mae += Math.abs(dr) + Math.abs(dg) + Math.abs(db); sr += dr; sg += dg; sb += db; n++; }
+    const b0 = Math.floor(y0 / 8), b1 = Math.min(Math.floor(y1 / 8), la.bh); let lf = 0, m = 0; for (let by = b0; by < b1; by++) for (let bx = 0; bx < la.bw; bx++) { const o = (by * la.bw + bx) * 3; lf += Math.abs(la.d[o] - gp.lo.d[o]) + Math.abs(la.d[o + 1] - gp.lo.d[o + 1]) + Math.abs(la.d[o + 2] - gp.lo.d[o + 2]); m++; }
+    const ours = region(A, W, y0, y1), g = gp.reg[name]; let hl1 = 0; for (let k = 0; k < 12; k++) hl1 += Math.abs(ours.hue[k] - g.hue[k]);
+    res[name] = { mae: +(mae / n / 3).toFixed(2), lf: +(lf / m / 3).toFixed(2), dRGB: [sr / n, sg / n, sb / n].map((v) => +v.toFixed(1)), L: +ours.L.toFixed(1), gL: +g.L.toFixed(1), C: +ours.C.toFixed(1), gC: +g.C.toFixed(1), hueL1: +hl1.toFixed(3), hue: ours.hue.map((v) => +v.toFixed(3)) };
+  }
+  return res;
+}
+
+async function child() {
+  const idx = +PP.get('shot') || 0, W = 960, H = 540;
+  try {
+    await import('./gv.js?' + Date.now());
+    let g; for (let i = 0; i < 1200 && !(g = window.__gv); i++) await sleep(100); if (!g) throw new Error('gv.js did not start');
+    const lvl = g.lvl, side = lvl.shots[idx].side, THREE_ = g; g.renderer.setPixelRatio(1); window.dispatchEvent(new Event('resize'));
+    const cv = g.renderer.domElement, gl = g.renderer.getContext(); const cw = cv.width, ch = cv.height; if (cw !== W || ch !== H) say('NOTE canvas is ' + cw + 'x' + ch + ' (godot is ' + W + 'x' + H + '): godot is resampled');
+    const WW = cw, HH = ch;
+    const godotPost = await loadPNG(DIR + 'godot_' + String(idx).padStart(2, '0') + '.png', WW, HH), godotNo = await loadPNG(DIR + 'godot_' + String(idx).padStart(2, '0') + '_nopost.png', WW, HH);
+    const prep = (px) => { const reg = {}; for (const [n, [f0, f1]] of Object.entries(REG)) reg[n] = region(px, WW, Math.floor(HH * f0), Math.floor(HH * f1)); return { reg, lo: lowres(px, WW, HH, 8) }; };
+    const gpPost = prep(godotPost), gpNo = prep(godotNo);
+    // freeze the field of view to Godot's (the viewer's still-frame mode otherwise uses 78 degrees)
+    const FOV = side.cam.fov; Object.defineProperty(g.camera, 'fov', { get() { return FOV; }, set() { } }); g.camera.updateProjectionMatrix();
+    // handles
+    const U_ = g.post.u, lights = []; g.scene.traverse((o) => { if (o.isLight) lights.push(o); }); const grounds = []; g.scene.traverse((o) => { const m = o.material; if (m && m.uniforms && m.uniforms.speed && m.uniforms.gcen) grounds.push(m); });
+    const env = side.env, P = (side.post[0] || {}).params || {};
+    const setV = (name, v) => { const u = U_[name]; if (!u) return false; if (Array.isArray(v) && u.value && u.value.set) u.value.set(...v); else u.value = v; return true; };
+    const snap = () => ({ exp: g.renderer.toneMappingExposure, fog: g.U.fogDensity.value, gi: g.post.glow.intensity, gb: g.post.glow.bloom, bcs: U_.bcs.value.toArray(), lights: lights.map((l) => l.intensity), post: ['amount', 'breathe', 'trip', 'dmt', 'buzz', 'sharp', 'k_warp', 'k_pulse', 'k_chroma', 'k_trace', 'k_punch', 'k_wash', 'use_trail'].map((n) => [n, U_[n] ? U_[n].value : null]), mA: U_.mA.value.toArray(), mB: U_.mB.value.toArray(), gs: grounds.map((m) => m.uniforms.speed.value), vmode: U_.vmode.value, t: g.clock.t });
+    const base0 = snap(), restore = (s) => { g.renderer.toneMappingExposure = s.exp; g.U.fogDensity.value = s.fog; g.post.glow.intensity = s.gi; g.post.glow.bloom = s.gb; U_.bcs.value.fromArray(s.bcs); lights.forEach((l, i) => { l.intensity = s.lights[i]; }); for (const [n, v] of s.post) if (U_[n]) U_[n].value = v; U_.mA.value.fromArray(s.mA); U_.mB.value.fromArray(s.mB); grounds.forEach((m, i) => { m.uniforms.speed.value = s.gs[i]; }); };
+    // Godot's own state at the capture (the sidecar): environment, picture-pass uniforms, ground speed
+    const applyGodot = () => { g.renderer.toneMappingExposure = env.tonemap_exposure; g.U.fogDensity.value = env.fog_enabled ? env.fog_density : 0; g.post.glow.intensity = env.glow_enabled ? env.glow_intensity : 0; g.post.glow.bloom = env.glow_bloom; U_.bcs.value.set(env.adjustment_enabled ? env.adjustment_brightness : 1, env.adjustment_enabled ? env.adjustment_contrast : 1, env.adjustment_enabled ? env.adjustment_saturation : 1);
+      for (const n of ['amount', 'breathe', 'trip', 'dmt', 'buzz', 'sharp', 'k_warp', 'k_pulse', 'k_chroma', 'k_trace', 'k_punch', 'k_wash', 'use_trail']) if (P[n] !== undefined && U_[n]) U_[n].value = P[n]; for (const n of ['dmt', 'k_wash']) if (P[n] === undefined && U_[n]) U_[n].value = n === 'k_wash' ? 0 : 0;
+      if (P.mA) U_.mA.value.set(...P.mA); if (P.mB) U_.mB.value.set(...P.mB); grounds.forEach((m) => { m.uniforms.speed.value = (side.ground && side.ground.speed) || 0; }); };
+    const renderRead = (T, mode) => { U_.vmode.value = mode; const n = performance.now(); g.frame(n); g.clock.t = T; g.frame(n); const buf = new Uint8Array(cw * ch * 4); gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, buf); const out = new Uint8ClampedArray(cw * ch * 4); for (let y = 0; y < ch; y++) out.set(buf.subarray((ch - 1 - y) * cw * 4, (ch - y) * cw * 4), y * cw * 4); return out; };
+    const T0 = side.time; const results = { shot: idx, godot: { time: side.time, fov: FOV, trip: P.trip, breathe: P.breathe, sharp: P.sharp, tube: P.tube, horizon: P.horizon, buzz: P.buzz, exposure: env.tonemap_exposure, fog: env.fog_density, glow: env.glow_intensity, gspeed: side.ground && side.ground.speed, viewport: side.viewport, renderer: side.renderer, msaa: side.viewport && side.viewport.msaa_3d }, variants: [], unportedPost: {} };
+    for (const k of Object.keys(P)) if (!(k in U_) && P[k] && P[k] !== 0 && typeof P[k] !== 'string') results.unportedPost[k] = P[k];
+    for (const l of lights) results.godot.lights = (results.godot.lights || []); results.ours = { lights: lights.map((l) => ({ type: l.type, color: l.color ? l.color.getHex() : null, intensity: +l.intensity.toFixed(3) })), fogDensity: base0.fog, exposure: base0.exp, glow: base0.gi, bcs: base0.bcs };
+    const run = (name, domain, fn, T) => { restore(base0); const undo = fn ? fn() : null; const px = renderRead(T === undefined ? T0 : T, domain === 'post' ? 0 : 3); const r = compare(px, domain === 'post' ? godotPost : godotNo, cw, ch, domain === 'post' ? gpPost : gpNo); if (undo) undo(); results.variants.push({ name, domain, r }); return r; };
+    const vcolSrgb = () => { const store = []; g.scene.traverse((o) => { const gm = o.geometry; if (o.isMesh && gm && gm.attributes && gm.attributes.color && !gm.userData.__vc) { const a = gm.attributes.color; store.push([a, a.array.slice()]); gm.userData.__vc = 1; for (let i = 0; i < a.array.length; i++) { const c = a.array[i]; a.array[i] = c <= .04045 ? c / 12.92 : Math.pow((c + .055) / 1.055, 2.4); } a.needsUpdate = true; } }); return () => { for (const [a, arr] of store) { a.array.set(arr); a.needsUpdate = true; } g.scene.traverse((o) => { if (o.geometry && o.geometry.userData) delete o.geometry.userData.__vc; }); }; };
+    const light = (type, k) => () => { const old = lights.filter((l) => l[type]).map((l) => [l, l.intensity]); old.forEach(([l, v]) => { l.intensity = v * k; }); return () => old.forEach(([l, v]) => { l.intensity = v; }); };
+    // 0. what the viewer does today (its own defaults, but at Godot's time and fov) and Godot's own numbers in the viewer's pipeline
+    for (const dom of ['bypass', 'post']) {
+      run('shipped (gv defaults)', dom, null);
+      run('godot state (sidecar)', dom, () => { applyGodot(); });
+      for (const e of [.4, .5, .6, .8, 1.05, 1.4]) run('godot state, exposure ' + e, dom, () => { applyGodot(); g.renderer.toneMappingExposure = e; });
+    }
+    // 1. one factor at a time, from Godot's state at the calibrated exposure (0.6), against the picture before the pass
+    const G = (f) => () => { applyGodot(); g.renderer.toneMappingExposure = .6; return f ? f() : null; };
+    run('base (godot state, exp .6)', 'bypass', G());
+    run('no fog', 'bypass', G(() => { g.U.fogDensity.value = 0; })); run('fog x2', 'bypass', G(() => { g.U.fogDensity.value *= 2; })); run('fog x0.5', 'bypass', G(() => { g.U.fogDensity.value *= .5; }));
+    run('no glow', 'bypass', G(() => { g.post.glow.intensity = 0; })); run('glow x2', 'bypass', G(() => { g.post.glow.intensity *= 2; }));
+    run('no grade', 'bypass', G(() => { U_.bcs.value.set(1, 1, 1); })); run('saturation 0.8', 'bypass', G(() => { U_.bcs.value.z = .8; }));
+    run('no ambient', 'bypass', G(() => light('isHemisphereLight', 0)())); run('ambient x0.5', 'bypass', G(() => light('isHemisphereLight', .5)())); run('ambient x2', 'bypass', G(() => light('isHemisphereLight', 2)()));
+    run('no sun', 'bypass', G(() => light('isDirectionalLight', 0)())); run('sun x0.5', 'bypass', G(() => light('isDirectionalLight', .5)())); run('sun x2', 'bypass', G(() => light('isDirectionalLight', 2)()));
+    run('vertex colours sRGB->linear', 'bypass', G(() => vcolSrgb()));
+    run('ground speed 0', 'bypass', G(() => { grounds.forEach((m) => { m.uniforms.speed.value = 0; }); })); run('ground speed 1', 'bypass', G(() => { grounds.forEach((m) => { m.uniforms.speed.value = 1; }); }));
+    // 2. the picture pass, from Godot's state at exposure 0.6, against the picture with the pass
+    const GP = (f) => () => { applyGodot(); g.renderer.toneMappingExposure = .6; return f ? f() : null; };
+    run('post base (godot state, exp .6)', 'post', GP());
+    run('post: trip 0', 'post', GP(() => { U_.trip.value = 0; })); run('post: trip 1', 'post', GP(() => { U_.trip.value = 1; })); run('post: no trail', 'post', GP(() => { U_.use_trail.value = 0; })); run('post: amount 0', 'post', GP(() => { U_.amount.value = 0; })); run('post: amount 1.2', 'post', GP(() => { U_.amount.value = 1.2; }));
+    run('post: k_punch 1.6', 'post', GP(() => { U_.k_punch.value = 1.6; })); run('post: no glow', 'post', GP(() => { g.post.glow.intensity = 0; })); run('post: no grade', 'post', GP(() => { U_.bcs.value.set(1, 1, 1); })); run('post: no fog', 'post', GP(() => { g.U.fogDensity.value = 0; }));
+    // 3. fits: the exposure that minimises the low-frequency error, and the TIME offset that does (the hue cycles depend on it)
+    const fitExp = (dom) => { let best = [1e9, 0]; for (let e = .25; e <= 1.45; e += .05) { restore(base0); applyGodot(); g.renderer.toneMappingExposure = e; const px = renderRead(T0, dom === 'post' ? 0 : 3); const r = compare(px, dom === 'post' ? godotPost : godotNo, cw, ch, dom === 'post' ? gpPost : gpNo); if (r.all.lf < best[0]) best = [r.all.lf, +e.toFixed(2), r.all.L, r.all.gL]; } return best; };
+    results.fit = { exposureBypass: fitExp('bypass'), exposurePost: fitExp('post') };
+    const fitTime = () => { const out = []; for (let d = -6; d <= 6.01; d += .5) { restore(base0); applyGodot(); g.renderer.toneMappingExposure = .6; const px = renderRead(T0 + d, 3); const r = compare(px, godotNo, cw, ch, gpNo); out.push([d, r.ground.lf, r.sky.lf, r.all.lf]); } out.sort((a, b) => a[3] - b[3]); return out.slice(0, 3); };
+    results.fit.timeOffsetTop3 = fitTime();
+    restore(base0); results.ok = true; return results;
+  } catch (e) { return { shot: idx, error: String(e && e.stack || e) }; }
+}
+
+if (PP.has('child')) { child().then((r) => { window.__parityResult = r; say(JSON.stringify(r).slice(0, 600)); parent_ = window.parent; if (parent_ && parent_ !== window) parent_.postMessage({ parity: +PP.get('shot'), result: r }, '*'); }); }
+else if (PP.has('all')) parent();
+else if (PP.has('shot')) child().then((r) => { window.__parityResult = r; say('done: window.__parityResult'); });
+else say('open with ?all=1&post=1 (all shots) or ?shot=N (one shot)');
+let parent_;
+</script>
+</body>
+</html>

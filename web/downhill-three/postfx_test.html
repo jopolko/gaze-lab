@@ -1,0 +1,30 @@
+<!doctype html><meta charset=utf-8><title>postfx test</title>
+<script type="importmap">{"imports":{"three":"../stargaze/vendor/three/three.module.min.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { createPostFx } from './postfx.js';
+const out = { errors: [] };
+const r = new THREE.WebGLRenderer({ preserveDrawingBuffer: true }); r.setSize(256, 144); document.body.appendChild(r.domElement);
+const gl = r.getContext(); const oe = console.error; console.error = (...a) => { out.errors.push(a.join(' ').slice(0, 600)); };
+function grad() { const w = 64, h = 36, d = new Float32Array(w * h * 4); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; d[i] = x / w * .6; d[i + 1] = y / h * .5 + .05 * Math.sin(y * .9); d[i + 2] = .15 + .1 * Math.sin(x * .7); d[i + 3] = 1; } const t = new THREE.DataTexture(d, w, h, THREE.RGBAFormat, THREE.FloatType); t.minFilter = t.magFilter = THREE.LinearFilter; t.needsUpdate = true; return t; }
+const T = grad(); const PF = createPostFx({ THREE });
+const u = PF.uniforms; for (const k of ['screen_tex', 'trail', 'gA', 'gB', 'gC', 'glyphs']) u[k].value = T; u.uRes.value.set(256, 144);
+const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1); const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), PF.material); scene.add(quad);
+function px() { const b = new Uint8Array(256 * 144 * 4); gl.readPixels(0, 0, 256, 144, gl.RGBA, gl.UNSIGNED_BYTE, b); let s = 0, nan = 0, mx = 0; for (let i = 0; i < b.length; i += 4) { s += b[i] + b[i + 1] + b[i + 2]; mx = Math.max(mx, b[i], b[i + 1], b[i + 2]); } return { mean: +(s / (256 * 144 * 3)).toFixed(2), max: mx, center: [...b.slice((72 * 256 + 128) * 4, (72 * 256 + 128) * 4 + 3)] }; }
+const base = { mode: 0, amount: 1, breathe: 0, onset: 1, use_trail: 0, trip: 1, dmt: 0, buzz: 0, sharp: 0, tube: 0, smear: 0, rewind: 0, mA: [0,0,0], mB: [0,0,0] };
+const cases = { off_layer0: { layerVisible: false, mode: 1 }, mode0: { ...base, mode: 0, layerVisible: true }, psy: { ...base, mode: 1, layerVisible: true, trip: 1, breathe: .5, dmt: .5, buzz: .6, sharp: .5, mA: [.6,.3,.2], mB: [.2,.6,.4] },
+  psy_trail: { ...base, mode: 1, use_trail: 1, layerVisible: true, trip: 1 }, tube: { ...base, mode: 1, tube: 1, layerVisible: true }, matrix: { ...base, mode: 2, layerVisible: true }, synth: { ...base, mode: 3, layerVisible: true },
+  smear: { ...base, mode: 1, smear: 1, layerVisible: true }, rewind: { ...base, mode: 1, rewind: 1, layerVisible: true }, edge: { ...base, mode: 1, k_edge: 1, edge_hue: 1, layerVisible: true }, cel: { ...base, mode: 1, k_cel: 1, layerVisible: true }, onset: { ...base, mode: 1, onset: .5, layerVisible: true } };
+out.res = {};
+for (const [n, p] of Object.entries(cases)) { PF.setUniformsFrom(p, { face: n === 'face' ? 1 : 0, horizon: .4 }); u.TIME.value = 3.3; r.render(scene, cam); out.res[n] = px(); }
+PF.setUniformsFrom({ ...base, mode: 1, layerVisible: true }, { face: 1 }); r.render(scene, cam); out.res.face = px();
+PF.setUniformsFrom({ ...base, mode: 0, layerVisible: true }, { cueColor: [1, .9, .5], cueT: 1, flash: 1, hurtT: 1, sbClose: 1 }); r.render(scene, cam); out.res.hud = px();
+// numeric check, mode 0 + layer 1 (identity apart from hud): GPU vs CPU port of the grade chain
+PF.setUniformsFrom({ ...base, mode: 0, layerVisible: true }, {}); u.glowI.value = 0; r.render(scene, cam); out.identity = px();
+const hable = (x) => ((x * (.88 * x + .06) + .04) / (x * (.88 * x + .6) + .06)) - .01 / .3; const cpu = (c) => { const w = hable(1); let v = hable(Math.max(c, 0)) / w; v = Math.min(1, v); v = v <= .0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - .055; return v; };
+// center texel ~ (x=.5,y=.5): r=1.0 -> 0.5*2
+const rc = 0.5 * 2 * 1.05, gc = 0.5 * 1.5 * 1.05; let R = cpu(rc), G = cpu(gc); const bcsf = (c, m) => { c = c * 1; return c; };
+out.cpu_center_approx = [Math.round(R * 255), Math.round(G * 255)];
+out.programs = r.info.programs.map((p) => p.diagnostics ? JSON.stringify(p.diagnostics).slice(0, 800) : 'ok');
+document.title = 'done'; window.OUT = out;
+</script>

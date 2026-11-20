@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Eye tracking kit: minimal example</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #07060d; color: #e9e6ff; overflow: hidden; font: 15px system-ui, sans-serif; touch-action: none; user-select: none; }
+  video { position: fixed; right: 8px; bottom: 8px; width: 96px; opacity: .8; transform: scaleX(-1); border-radius: 8px; }
+  #dot { position: fixed; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; background: #fff; box-shadow: 0 0 24px 8px #a48cff; display: none; will-change: transform; }
+  #ui { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; padding: 24px; pointer-events: none; }
+  #ui.top { justify-content: flex-start; padding-top: 14vh; }
+  button { font: inherit; color: inherit; padding: 14px 34px; border-radius: 999px; border: 1px solid #a48cff; background: rgba(164,140,255,.18); pointer-events: auto; }
+  #stats { position: fixed; left: 8px; bottom: 8px; font: 11px/1.5 ui-monospace, Consolas, monospace; color: #9f9; white-space: pre; }
+</style>
+</head>
+<body>
+<video id="cam" playsinline muted autoplay></video>
+<div id="dot"></div>
+<div id="ui"><div id="say">Minimal eye-tracking example</div><button id="go">Begin</button></div>
+<div id="stats"></div>
+
+<script type="module">
+import { Tracker } from './tracker.js';
+
+const $ = (s) => document.querySelector(s);
+const now = () => performance.now() / 1000;          // the tracker's clock
+const tracker = new Tracker($('#cam'));
+const say = (text, button) => { $('#say').textContent = text; $('#go').style.display = button ? '' : 'none'; if (button) $('#go').textContent = button; };
+
+// screen position from gaze coordinates (-1..1, x right, y up)
+const place = (x, y) => { $('#dot').style.transform = `translate(${(x * .5 + .5) * innerWidth}px, ${(1 - (y * .5 + .5)) * innerHeight}px)`; };
+
+// Calibration path: the dot glides between these points and pauses on each. It must move smoothly, never jump.
+const PTS = [[0, 0], [-.8, .8], [.8, .8], [-.8, 0], [.8, 0], [-.8, -.8], [.8, -.8], [0, 0]];
+const LEG = 1.15, HOLD = 0.4, LEAD = 1.3;            // seconds: glide, pause, wait before starting
+const ease = (u) => u * u * (3 - 2 * u);
+
+let mode = 'idle', t0 = 0, targets = [], blinks = 0;
+
+$('#go').onclick = async () => {
+  if (mode === 'idle') {
+    say('Opening the camera and loading the face model…');
+    try { await tracker.start(null, new URLSearchParams(location.search).get('fakecam')); }
+    catch (e) { say('Camera failed: ' + e.message, 'Begin'); return; }
+  }
+  startCalibration();
+};
+
+function startCalibration() {
+  mode = 'calib'; t0 = now(); targets = [];
+  $('#ui').classList.add('top'); say('Follow the dot with your eyes. Keep your head still.');
+  $('#dot').style.display = 'block'; place(0, 0);
+}
+
+tracker.onBlink = () => { blinks++; };
+
+function frame() {
+  requestAnimationFrame(frame);
+  if (mode === 'calib') {
+    const t = now() - t0 - LEAD, seg = LEG + HOLD, total = (PTS.length - 1) * seg;
+    if (t < 0) { if (t > -0.5 && !tracker._rec) tracker.beginCalibration(); }   // start recording just before the dot moves
+    else if (t < total) {
+      const i = Math.min(PTS.length - 2, Math.floor(t / seg)), u = ease(Math.min(1, (t - i * seg) / LEG));
+      const x = PTS[i][0] + (PTS[i + 1][0] - PTS[i][0]) * u, y = PTS[i][1] + (PTS[i + 1][1] - PTS[i][1]) * u;
+      place(x, y); targets.push({ t: now(), x, y });                           // log where the dot really was, and when
+    } else {
+      const r = tracker.finishCalibration(targets);
+      console.log('calibration', r);
+      mode = 'track';
+      say(r.ok ? `Locked (${Math.round(r.quality * 100)}%). The dot now follows your eyes.`
+               : r.why ? 'No face seen during calibration. Face a light, hold the phone at eye level, and try again.'
+               : `Weak lock (r2 ${r.r2x.toFixed(2)} / ${r.r2y.toFixed(2)}). Face a light and try again.`, 'Recalibrate');
+      if (!tracker.model) $('#dot').style.display = 'none';
+    }
+  } else if (mode === 'track' && tracker.model) {
+    place(tracker.gaze.x, tracker.gaze.y);
+    $('#dot').style.opacity = tracker.closed ? .25 : tracker.face ? 1 : .5;
+  }
+  $('#stats').textContent = mode === 'idle' ? '' :
+    `tracker ${tracker.fps.toFixed(0)}/s ${tracker.delegate}  face ${tracker.face ? 1 : 0}\n` +
+    `gaze ${tracker.gaze.x.toFixed(2)} ${tracker.gaze.y.toFixed(2)}  raw ${tracker.raw.x.toFixed(2)} ${tracker.raw.y.toFixed(2)}\n` +
+    `blinks ${blinks}  closed ${tracker.closed ? tracker.closedFor.toFixed(1) + 's' : 'no'}${tracker.err ? '\n' + tracker.err : ''}`;
+}
+frame();
+</script>
+</body>
+</html>

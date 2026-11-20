@@ -1,0 +1,35 @@
+<!doctype html><meta charset=utf-8><title>wfx test</title>
+<script type="importmap">{ "imports": { "three": "../stargaze/vendor/three/three.module.min.js" } }</script>
+<body style="background:#222;color:#ddd;font:12px monospace"><pre id=o></pre>
+<script type="module">
+import * as THREE from 'three';
+import { createWorldFx } from './worldfx.js';
+const out = []; const log = (...a) => { out.push(a.join(' ')); document.getElementById('o').textContent = out.join('\n'); };
+let errs = 0; const oe = console.error; console.error = (...a) => { errs++; log('ERR', String(a[0]).slice(0, 1500)); };
+try {
+const r = new THREE.WebGLRenderer({ antialias: false }); r.setSize(320, 180); document.body.appendChild(r.domElement);
+const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(70, 16 / 9, .1, 3000); cam.position.set(0, 2, 0); scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1)); scene.add(new THREE.DirectionalLight(0xffffff, 1));
+const U = { uTime: { value: 0 }, fogColor: { value: new THREE.Color(.35, .05, .45) }, fogDensity: { value: .002 } };
+const W = createWorldFx({ THREE, scene, camera: cam, U });
+const g = new THREE.PlaneGeometry(200, 200, 8, 8); g.rotateX(-Math.PI / 2); g.translate(0, 0, -60);
+g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(.9), 3));
+const tg = new THREE.ConeGeometry(2, 6, 6); tg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(tg.attributes.position.count * 3).fill(.6), 3));
+const im = new THREE.InstancedMesh(tg, W.vegLive(), 4); const m4 = new THREE.Matrix4(); for (let i = 0; i < 4; i++) { m4.makeTranslation(i * 8 - 12, 3, -20); im.setMatrixAt(i, m4); } scene.add(im);
+const ring = new THREE.Mesh(new THREE.SphereGeometry(400, 24, 12), new THREE.MeshBasicMaterial({ visible: false })); scene.add(ring);
+W.attachMountainSkin(ring); const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 16, 8), W.skyAlpine()); scene.add(sky);
+W.registerSky(sky, sky.material); W.registerTrees([im], im.material);
+scene.add(new THREE.Mesh(g, W.ground()));
+scene.add(new THREE.Mesh(g.clone().translate(0, 0, -100), W.groundPsy()));
+const vp = new THREE.Mesh(tg, W.vegPsy()); vp.position.set(5, 3, -15); scene.add(vp);
+const Wd = { moire: { cell: 6, ang: 0.3, ratio: 1.037, depth: .12, sat: .8, hue: 0, tri: .3, drift: [1, 2], rad: .4, warp: .4 }, groundGrid: 1, groundGlow: 1, skyK: .5, skyPolar: .5, skyTunnel: .5, vegWob: .5, vegBreathe: .5, treeMoire: 1, wanderDrift: [1, 2], mtnMoire: 1, mtnBreathe: 1, mtnPolar: 1, faceK: 1, godK: 1, faceLift: 0 };
+for (const stage of [false, true]) {
+  W.onStage('ground', stage); W.onStage('veg', stage); W.onStage('skymat', stage);
+  W.tick(.016, 1.5, Wd, { camera: cam, speed01: .5, board: { x: 0, z: 0 }, travZ: 10, heading: 0 }); W.ringBell(3, 0, -10, 2, tg);
+  U.uTime.value += 1; r.render(scene, cam);
+}
+const prog = r.info.programs || []; log('programs', prog.length);
+for (const p of prog) { if (p.diagnostics && !p.diagnostics.runnable) log('NOT RUNNABLE', p.name, JSON.stringify(p.diagnostics).slice(0, 1500)); }
+const gl = r.getContext(); const px = new Uint8Array(4); gl.readPixels(160, 90, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); log('centre px', px.join(','));
+} catch (e) { errs++; log('EXC', e.stack || e); }
+log(errs ? 'FAIL errors=' + errs : 'OK no shader errors'); window.__done = errs ? 'FAIL' : 'OK';
+</script>

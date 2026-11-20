@@ -113,13 +113,49 @@ export class Tracker {
     this.feat = new Array(NF).fill(0);
   }
 
+  // CAMERA CHOICE. The default is an external (USB) camera if one is plugged in, else the built-in one. ?cam=usb|builtin|<part of a camera name> overrides it, and a camera you pick with C is remembered (opening the game never changes it). switchCamera() cycles through the cameras (the game binds it to the C key).
+  _constraints(deviceId) { return { audio: false, video: { ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'user' }), width: { ideal: this.camW || 640 }, height: { ideal: this.camH || 480 }, frameRate: { ideal: 30, max: 30 } } }; }
+  static _isBuiltIn(label) { return /integrated|built-?in|internal|facetime|truevision|hd webcam|laptop|ir camera|windows hello|infrared/i.test(label || ''); }
+  async _openCamera(preferId) {
+    const md = navigator.mediaDevices; let stream = null, want = null;
+    // 1. if the browser already knows the cameras (permission was granted before), try them in order of preference, so a built-in camera that is busy or broken cannot block a USB one that works
+    if (!preferId) {
+      let pre = []; try { pre = (await md.enumerateDevices()).filter((d) => d.kind === 'videoinput' && d.deviceId); } catch (e) { }
+      if (pre.length) {
+        const q0 = new URLSearchParams(location.search).get('cam'); let sv = null; try { sv = localStorage.getItem('gazeCamPick'); } catch (e) { }
+        const rank = (d) => (q0 === 'builtin' ? (Tracker._isBuiltIn(d.label) ? 0 : 2) : q0 && q0 !== 'usb' ? (new RegExp(q0.replace(/[^\w ]/g, ''), 'i').test(d.label) ? 0 : 2) : sv && d.deviceId === sv ? 0 : /usb/i.test(d.label) ? 1 : Tracker._isBuiltIn(d.label) ? 3 : 2);
+        for (const d of pre.slice().sort((x, y) => rank(x) - rank(y))) { try { stream = await md.getUserMedia(this._constraints(d.deviceId)); break; } catch (e) { console.warn('camera failed:', d.label, e && e.name); } }
+      }
+    }
+    if (!stream) { try { stream = await md.getUserMedia(this._constraints(preferId || null)); } catch (e) { if (preferId) stream = await md.getUserMedia(this._constraints(null)); else { try { stream = await md.getUserMedia({ audio: false, video: true }); } catch (e2) { throw e; } } } }          // (the first open also grants permission, which is what makes the camera names readable)
+    let devs = []; try { devs = (await md.enumerateDevices()).filter((d) => d.kind === 'videoinput'); } catch (e) { }
+    this.cams = devs.map((d) => ({ id: d.deviceId, label: d.label || 'camera' }));
+    const q = new URLSearchParams(location.search).get('cam'); let saved = null; try { saved = localStorage.getItem('gazeCamPick'); } catch (e) { }
+    if (!preferId && this.cams.length > 1) {
+      const pick = (pat) => this.cams.find((c) => pat.test(c.label));
+      if (q === 'builtin') want = this.cams.find((c) => Tracker._isBuiltIn(c.label)); else if (q === 'usb') want = pick(/usb/i) || this.cams.find((c) => !Tracker._isBuiltIn(c.label));
+      else if (q) want = pick(new RegExp(q.replace(/[^\w ]/g, ''), 'i'));
+      else if (saved) want = this.cams.find((c) => c.id === saved);
+      else want = pick(/usb/i) || this.cams.find((c) => !Tracker._isBuiltIn(c.label));
+    }
+    const cur = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
+    if (want && want.id !== cur) { try { const s2 = await md.getUserMedia(this._constraints(want.id)); stream.getTracks().forEach((t) => t.stop()); stream = s2; } catch (e) { console.warn('preferred camera failed, keeping the default:', e); } }
+    this.stream = stream; this.video.srcObject = stream; this.camLabel = stream.getVideoTracks()[0]?.label || 'camera';
+  }
+  async switchCamera() {
+    if (!this.cams || this.cams.length < 2) return this.camLabel;
+    const cur = this.stream?.getVideoTracks()[0]?.getSettings?.().deviceId, i = this.cams.findIndex((c) => c.id === cur), nx = this.cams[(i + 1) % this.cams.length];
+    this.stream?.getTracks().forEach((t) => t.stop());
+    const s2 = await navigator.mediaDevices.getUserMedia(this._constraints(nx.id)); this.stream = s2; this.video.srcObject = s2; await this.video.play().catch(() => {});
+    this.camLabel = s2.getVideoTracks()[0]?.label || nx.label; try { localStorage.setItem('gazeCamPick', nx.id); } catch (e) { } return this.camLabel;
+  }
+
   async start(onStage, fakeUrl) {
     onStage?.('camera');
     if (fakeUrl) await this._fakeCamera(fakeUrl);
     else {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser cannot open the camera (needs HTTPS).');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: this.camW || 640 }, height: { ideal: this.camH || 480 }, frameRate: { ideal: 30, max: 30 } } });
-      this.stream = stream; this.video.srcObject = stream;
+      await this._openCamera();
     }
     await this.video.play().catch(() => {});
     onStage?.('model');

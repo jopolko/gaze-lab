@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downhill worlds</title>
+<style>
+  :root { --bg:#0d0b16; --card:#17142a; --text:#f2eefc; --muted:#a79fc4; --line:#2a2548; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,Segoe UI,Roboto,sans-serif; padding:20px 16px 48px; }
+  .wrap { max-width:720px; margin:0 auto; }
+  h1 { font-size:24px; margin:0 0 4px; font-weight:600; }
+  p.sub { color:var(--muted); margin:0 0 18px; }
+  .opts { display:flex; gap:14px; flex-wrap:wrap; margin:0 0 20px; padding:12px 14px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+  .opts label { display:flex; align-items:center; gap:8px; font-size:15px; }
+  .opts input { width:20px; height:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:12px; }
+  a.card { display:block; text-decoration:none; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  a.card:active { transform:scale(.98); }
+  .sw { height:56px; display:flex; }
+  .sw i { flex:1; }
+  .body { padding:10px 12px 12px; }
+  .body b { display:block; font-size:17px; font-weight:600; }
+  .body span { color:var(--muted); font-size:14px; }
+  h2 { font-size:15px; font-weight:600; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; margin:26px 0 10px; }
+  .note { color:var(--muted); font-size:14px; margin-top:22px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Downhill worlds</h1>
+  <p class="sub">Tap a world to ride it. Each one is its own place: sky, ground, road, trees, horizon and weather.</p>
+  <div class="opts">
+    <label><input type="checkbox" id="head"> Steer with my head (camera)</label>
+    <label><input type="checkbox" id="noshare" checked> Don't send telemetry</label>
+  </div>
+
+  <h2>Worlds (winding trail, 3.2 km)</h2>
+  <div class="grid" id="worlds"></div>
+
+  <h2>Forks and caverns (Godot's barrier course, 7 km, one per world)</h2>
+  <div class="grid" id="barrier"></div>
+
+  <h2>Realm tour (jump straight in)</h2>
+  <div class="grid" id="realms"></div>
+
+  <h2>Longer courses (psychedelic, wide)</h2>
+  <div class="grid" id="long"></div>
+
+  <p class="note">On a phone, turn on head steering and allow the camera when asked. On a computer without it, the arrow keys steer. The first load downloads a few MB of course data.</p>
+</div>
+<script>
+  const WORLDS = [
+    { id:'long_w11', name:'Psychedelic', blurb:'The look you know, on a winding road.', c:['#2a0a5e','#c030c0','#ff70c0','#ffd060'] },
+    { id:'long_alpine', name:'Alpine', blurb:'Crisp snow, dark pine, a low sun. Light snowfall.', c:['#2e6ad8','#fbd7b8','#e8eefc','#4a5a70'] },
+    { id:'long_candy', name:'Candy', blurb:'Frosting hills, sprinkles in the air, a pale sun.', c:['#9e7df5','#ffc7c7','#ff9fcc','#85f0cc'] },
+    { id:'long_egypt', name:'Egypt', blurb:'Dunes and pyramids. A sandstorm rolls in every minute.', c:['#1a4cc7','#f99e52','#eab060','#14a095'] },
+    { id:'long_desert', name:'Desert sun', blurb:'A giant red sun, striped mesas, drifting dust.', c:['#ee4752','#ffb86b','#a8381f','#38706b'] },
+    { id:'long_tunnel', name:'Tunnel road', blurb:'A neon tunnel. Light streaks rush toward you.', c:['#0a0020','#c020ff','#20e6ff','#ff40c0'] },
+    { id:'long_matrix', name:'Digital', blurb:'Green code falls through the air and down the sky.', c:['#000000','#05200a','#1aff4d','#0a3a14'] },
+    { id:'long_synthwave', name:'Synthwave', blurb:'A striped sun that never sets over a neon grid.', c:['#0a0030','#ff3c8c','#ffd034','#26d8ff'] },
+  ];
+  const BARRIER = [
+    { id:'bar_psy', name:'Psychedelic: gates and caverns', blurb:'Barriers with 2 or 3 gates that lead to different places: caverns, corridors, canyons, drops. 16 zones.', c:['#1a0a40','#3a2a9a','#ff7a1f','#2ad8c0'] },
+    { id:'bar_psy77', name:'Psychedelic: lava and melt', blurb:'A different seed with the Lava Tube and The Melt, plus the orchard of eyes.', c:['#3a0a0a','#ff3a1a','#ffb02a','#a020ff'] },
+    { id:'bar_alpine', name:'Alpine: gates and caverns', blurb:'The same forks and realms in a snowy world.', c:['#2e6ad8','#fbd7b8','#e8eefc','#4a5a70'] },
+    { id:'bar_candy', name:'Candy: gates and caverns', blurb:'Forks and realms, frosting ground and sprinkles.', c:['#9e7df5','#ffc7c7','#ff9fcc','#85f0cc'] },
+    { id:'bar_egypt', name:'Egypt: gates and caverns', blurb:'Forks and realms under a pyramid horizon.', c:['#1a4cc7','#f99e52','#eab060','#14a095'] },
+    { id:'bar_desert', name:'Desert: gates and caverns', blurb:'Forks and realms under a giant red sun.', c:['#ee4752','#ffb86b','#a8381f','#38706b'] },
+    { id:'bar_tunnel', name:'Tunnel: gates and caverns', blurb:'Forks and realms in neon.', c:['#0a0020','#c020ff','#20e6ff','#ff40c0'] },
+    { id:'bar_matrix', name:'Digital: gates and caverns', blurb:'Forks and realms in green code.', c:['#000000','#05200a','#1aff4d','#0a3a14'] },
+    { id:'bar_synthwave', name:'Synthwave: gates and caverns', blurb:'Forks and realms under the striped sun.', c:['#0a0030','#ff3c8c','#ffd034','#26d8ff'] },
+  ];
+  const REALMS = [
+    { id:'bar_psy', row:5, name:'Glow Grotto', blurb:'A dark roofed cavern, giant glowing mushrooms.', c:['#12081f','#d03aa8','#3ad8b0','#ff9a2a'] },
+    { id:'bar_psy', row:6, name:'Jelly Abyss', blurb:'Deep blue dark, drifting jellyfish and coral.', c:['#03081a','#0a2a6a','#3ad8e0','#ff7ac8'] },
+    { id:'bar_psy', row:9, name:'Crystal Vault', blurb:'Cold blue vault of glowing crystal clusters.', c:['#08101e','#2a5ac8','#ff7ac8','#f0e070'] },
+    { id:'bar_psy', row:12, name:'The Hive', blurb:'A walled, ribbed corridor.', c:['#2a0a20','#d02a6a','#ff9a2a','#f0d0a0'] },
+    { id:'bar_psy', row:13, name:'Red Canyon', blurb:'Orange canyon floor with posts and arches.', c:['#3a1000','#ff7a1f','#f0c090','#a03030'] },
+    { id:'bar_psy', row:14, name:'Interzone', blurb:'A bazaar of pale arches and pillars.', c:['#1a1a30','#e8e0d0','#f0c040','#c03060'] },
+    { id:'bar_psy', row:16, name:'Mammoth Garden', blurb:'Bright green ground, giant plants.', c:['#102a10','#40d040','#f0f0e0','#e080a0'] },
+    { id:'bar_psy', row:3, name:'Desert Highway', blurb:'A flat neon floor under three giant gates.', c:['#10c0a0','#ff7a1f','#e08090','#8040c0'] },
+    { id:'bar_psy', row:38, name:'Orchard of Eyes', blurb:'Eyes on stalks line the road.', c:['#d09080','#f0e0d0','#6a2a8a','#2ad8c0'] },
+    { id:'bar_psy77', row:15, name:'Lava Tube', blurb:'A red floor, glowing growth.', c:['#2a0505','#e02a10','#ffb02a','#a0f040'] },
+    { id:'bar_psy77', row:5, name:'The Melt', blurb:'Swirling liquid ground in hot colours.', c:['#ff3ac0','#ffb02a','#a0f040','#8a20e0'] },
+  ];
+  const LONG = [
+    { id:'long_s7', name:'Course A, 7.7 km', blurb:'The original wide course (the default).', c:['#2a0a5e','#9a3fc4','#7fe3ff','#ff70c0'] },
+    { id:'long_s7b', name:'Course B, 11 km', blurb:'Longer, six molecule types.', c:['#2a0a5e','#c030c0','#ffb03b','#3fd68f'] },
+    { id:'long_s11', name:'Course C, 11 km', blurb:'Seed 11.', c:['#2a0a5e','#9a3fc4','#ff4d5e','#4fd8ff'] },
+    { id:'long_s23', name:'Course D, 11 km', blurb:'Seed 23.', c:['#2a0a5e','#b060ff','#ffe08a','#3fd68f'] },
+    { id:'long_s42', name:'Course E, 11 km', blurb:'Seed 42.', c:['#2a0a5e','#c06bff','#ffb03b','#4fd8ff'] },
+  ];
+  const head = document.getElementById('head'), noshare = document.getElementById('noshare');
+  try { head.checked = matchMedia('(pointer: coarse)').matches; } catch (e) { }
+  function href(w) { return 'gv.html?play' + (head.checked ? '&head' : '') + (noshare.checked ? '&noshare' : '') + '&course=' + w.id + (w.row ? '&row=' + w.row : ''); }
+  function build(list, el) {
+    el.innerHTML = '';
+    for (const w of list) {
+      const a = document.createElement('a'); a.className = 'card'; a.href = href(w);
+      a.innerHTML = '<div class="sw">' + w.c.map(c => '<i style="background:' + c + '"></i>').join('') + '</div><div class="body"><b></b><span></span></div>';
+      a.querySelector('b').textContent = w.name; a.querySelector('span').textContent = w.blurb; el.appendChild(a);
+    }
+  }
+  function all() { build(WORLDS, document.getElementById('worlds')); build(BARRIER, document.getElementById('barrier')); build(REALMS, document.getElementById('realms')); build(LONG, document.getElementById('long')); }
+  head.onchange = noshare.onchange = all; all();
+</script>
+</body>
+</html>

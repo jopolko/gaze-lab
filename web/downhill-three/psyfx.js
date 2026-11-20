@@ -29,9 +29,21 @@
 //     postM.uniforms.k_warp.value = U.k_warp; postM.uniforms.k_pulse.value = U.k_pulse; postM.uniforms.k_chroma.value = U.k_chroma; postM.uniforms.k_trace.value = U.k_trace; postM.uniforms.k_punch.value = U.k_punch; postM.uniforms.k_wash.value = U.k_wash;
 //     postM.uniforms.amount.value = U.amount; postM.uniforms.breathe.value = U.breathe; (and onset, tube, smear, rewind, k_edge, k_cel, k_fold, k_rings, k_dmtr, use_trail, layerVisible when the shader has them)
 //     // bloom and haze (multipliers on the base values of the scene): glowIntensity = base * U.glowIntensityMul; glowBloom = baseBloom * U.glowBloomMul + U.glowBloomAdd; fogDensity = base * U.fogDensityMul
+//     // THE EVENTS INTERFACE (PSY.events.*, each does what the Godot code does at that moment and returns what the physics should do about it, in Godot's own m/s: scale by your speed factor):
+//     //   onMolecule(id, name)           a molecule collected: dose, flash, sharpen 0.7, trip +0.25, score 120*n (x3 the first time), flow level, shake
+//     //   onChain(depth)                 a chain payoff (spring tube or chain rail): sharpen, a gift molecule, 500*groove*depth points, sugar rush, trip, flash, cheer  -> {gift, boostT, vxActiveT}
+//     //   onPad(epic)                    a boost pad: fov punch 7, shake .25                                    -> {boostT: 1.8, kickMps: 7*padPerk, vxActiveT: 1.4, capOver: 6}
+//     //   onBlast({crossedMid, superRamp, charge})   the lip of a ramp: flow, fov 12 shake 1.4, 'BLAST!' cheer, chain step 'ramp'  -> {vyAdd, boostT, vxBlast}
+//     //   onRail(m, how, glRun, isChain, depth)       leaving a rail after m metres: points m*7*groove, flow +1/+2, slingshot, glint rush     -> {sling, boostT, vyAdd, vxActiveT}
+//     //   onBuff(type)                   boost / shield / mult / donut: flow, 60 points, trip table, four-step chain, buff pop kicks          -> {boostT, kickMps, shield, multT}
+//     //   onCrash(kind, {shield, mol})   a hit: shield absorbs (flash .35 shake .5), else the flow and groove reset, a molecule dims, shake .9     -> {absorbed, speedK}
+//     //   onPop(), onGlint(), onOrb(big, streak), onFinish(), onCheer(text, size), onSnowball(kind, closeness)
+//     // GETTERS: uniforms()  (the picture pass, bloom and haze)   perks() (glintK, pointsK, padK, jumpChanceK, springK, speedK)   world() (per-molecule reveal 0..1 and every ground / sky / tree / mountain strength)
+//     //   biomeApply(biome, k, diff)  (the ride's modifiers incl. perks)   cameraFov(speedMps, firstPerson)   shakeOffset(r1, r2)   camera {fov_punch, shake, flash}   flow {chain, groove, chain_lvl, chain_step, chain_t, mult_t, score, ...}
 //     // events:  PSY.pillEat('2cb') (collecting a molecule), PSY.molGift(), PSY.molHurt(i), PSY.tripAdd(a), PSY.sharpen(k), PSY.chainPayoff()
 //     // callbacks (optional opts): onCheer(text), onToast(text), onApex(), onPhase(name), onStage(part, world), onBiome(world, k, difficulty), onMusic(kind, seq), onDmt()
 
+const RN = (id) => (globalThis.__relicName ? globalThis.__relicName(id) : id);          // the on-screen name of a relic (gv.js sets it; ?realnames keeps the original)
 export const MOL_ORDER = ['mescaline', 'dom', '2cb', '2ce', '2ct2', '2ct7'];
 export const FX_DEFAULTS = { x_level: 0, x_pieces: 1, x_sharp: 0, x_clear: 1, x_wander: .6, g_sq: 1, g_shape: 1, g_col: 1, g_tri: 1, g_rad: 1, g_warp: 1, g_glow: 1, r_edge: 1, r_apron: 1, w_caves: 0, w_backdrop: 0, w_bend: 0, t_sway: 1, t_breathe: .6, t_moire: 0, m_moire: 1, m_breathe: .5, m_polar: 0, s_bands: 1, s_polar: .45, s_tunnel: .6, p_wash: 0, p_face: 0, p_face_auto: 1, p_god: 0, p_god_auto: 1, w_moguls: 0, w_echo: 0, w_carve: 0, p_rewind: 0, p_smear: 0, p_hueedge: 0, p_edge: 0, p_cel: 0, p_chroma: 1, p_trace: 1, p_punch: 1, p_glow: .35, p_bloom: .4, p_haze: .55, p_tube: 1, p_warp: 1, p_fold: 0, p_pulse: 1, p_rings: 0, p_dmtr: 0 };
 
@@ -329,20 +341,20 @@ export function createPsyFx(opts = {}) {
     const first = !S.mol_got[mi], old = S.mdose[mi];
     if (first) { S.mol_got[mi] = true; S.mdose[mi] = 6; } else S.mdose[mi] = Math.min(S.mdose[mi] + 2, 6);
     S.mflash[mi] = 1; sharpen(.7); S.dose += .30 * (S.mdose[mi] - old); S.mol_seen = true; S.flick = 1; tripAdd(.25);
-    if (first) { const nf = molCount(); cheer((name || MOL_ORDER[mi]).toUpperCase() + ' FOUND  ' + nf + ' OF 6', mi, nf < 5 ? 1.6 : 2); if (nf === 5) cb('onToast', 'ONE MORE!'); } else cb('onToast', (name || MOL_ORDER[mi]) + '  topped up');
+    if (first) { const nf = molCount(); cheer((name || RN(MOL_ORDER[mi])).toUpperCase() + ' FOUND  ' + nf + ' OF 6', mi, nf < 5 ? 1.6 : 2); if (nf === 5) cb('onToast', 'ONE MORE!'); } else cb('onToast', (name || RN(MOL_ORDER[mi])) + '  topped up');
     if (S.pill_n === 3) cheer('TRIPPING', -1, 1.2);
     return { first, mi };
   }
   function molGift() {
     let pick = -1; for (let q = 0; q < 6; q++) if (!S.mol_got[q]) { pick = q; break; }
-    if (pick >= 0) { S.mol_got[pick] = true; S.mdose[pick] = 6; S.dose += .30 * 6; S.flick = 1; S.mol_seen = true; return '  FOUND ' + MOL_ORDER[pick].toUpperCase(); }
+    if (pick >= 0) { S.mol_got[pick] = true; S.mdose[pick] = 6; S.dose += .30 * 6; S.flick = 1; S.mol_seen = true; return '  FOUND ' + RN(MOL_ORDER[pick]).toUpperCase(); }
     let lo = 0; for (let m2 = 0; m2 < 6; m2++) if (S.mdose[m2] < S.mdose[lo]) lo = m2;
-    if (S.mdose[lo] < 6) { S.mdose[lo] = Math.min(S.mdose[lo] + 2, 6); S.dose += .30 * 2; S.flick = 1; return '  +' + MOL_ORDER[lo].toUpperCase(); }
+    if (S.mdose[lo] < 6) { S.mdose[lo] = Math.min(S.mdose[lo] + 2, 6); S.dose += .30 * 2; S.flick = 1; return '  +' + RN(MOL_ORDER[lo]).toUpperCase(); }
     return '';
   }
   function molHurt(mol) {
     let i = mol; if (i < 0) { const held = []; for (let k = 0; k < 6; k++) if (S.mdose[k] >= .5) held.push(k); if (!held.length) return; i = held[Math.floor(rand(0, held.length, 'hurt'))]; }
-    if (S.mbody[i] < .5) return; S.mbody[i] = Math.max(S.mbody[i] - 2, 0); S.mol_hurt_t = 1; S.mol_hurt_i = i; cb('onToast', MOL_ORDER[i] + '  dimmed');
+    if (S.mbody[i] < .5) return; S.mbody[i] = Math.max(S.mbody[i] - 2, 0); S.mol_hurt_t = 1; S.mol_hurt_i = i; cb('onToast', RN(MOL_ORDER[i]) + '  dimmed');
   }
 
   // ---- _clarity_tick(delta)  (6969)
@@ -406,13 +418,13 @@ export function createPsyFx(opts = {}) {
     if (pacer) pacer.tick(delta);
     S.mol_hurt_t = Math.max(S.mol_hurt_t - delta * 1.5, 0);
     let wear = 1; if (pacer) wear = 1 + 12 * Math.max(molAvg() - pacer.target() - .05, 0);
-    for (let i = 0; i < 6; i++) { S.mdose[i] = Math.max(S.mdose[i] - (i === 1 ? .004 : .008) * wear * delta, 0); const rate = S.mdose[i] > S.mbody[i] ? 25 : 8; S.mbody[i] += (S.mdose[i] - S.mbody[i]) * (1 - Math.exp(-delta / rate)); }
+    for (let i = 0; i < 6; i++) { S.mdose[i] = Math.max(S.mdose[i] - (i === 1 ? .004 : .008) * wear * delta, 0); const rate = S.mdose[i] > S.mbody[i] ? 25 : 8; S.mbody[i] = Math.max(0, S.mbody[i] + (S.mdose[i] - S.mbody[i]) * (1 - Math.exp(-delta / rate))); }
     const dm = molDmt(); if (dm > .5 && !S.dmt_on) { S.dmt_on = true; cheer('ALL SIX', -1, 2.2); cb('onDmt'); } else if (dm < .3) S.dmt_on = false;
     {          // the picture-pass block
       let wk = 1; if (O.dir) wk = .7 + .6 * (ctx.wave !== undefined ? ctx.wave : .5);          // the effects breathe with the music's wave (0.5 when the stems are not playing)
       let ma = [S.mbody[0] / 6, S.mbody[1] / 6, S.mbody[2] / 6], mb = [S.mbody[3] / 6, S.mbody[4] / 6, S.mbody[5] / 6];
       wk *= S.stage_post;
-      ma = ma.map((v) => Math.pow(v, 1.15) * wk); mb = mb.map((v) => Math.pow(v, 1.15) * wk);
+      ma = ma.map((v) => Math.pow(Math.max(v, 0), 1.15) * wk); mb = mb.map((v) => Math.pow(Math.max(v, 0), 1.15) * wk);
       const fl = fxLevel() * wk; ma = ma.map((v) => Math.max(v, fl)); mb = mb.map((v) => Math.max(v, fl));
       ma = ma.map((v, i) => v + S.mflash[i] * .9); mb = mb.map((v, i) => v + S.mflash[3 + i] * .9);
       ma = ma.map((v) => v * S.clr_k); mb = mb.map((v) => v * S.clr_k); S.mA = ma; S.mB = mb; S.dmt = dm * S.clr_k;

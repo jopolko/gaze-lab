@@ -298,6 +298,8 @@ func _ready() -> void:
 	var theme := OS.get_environment("THEME") if OS.get_environment("THEME") != "" else "psychedelic"
 	var segs := int(OS.get_environment("SEGS")) if OS.get_environment("SEGS") != "" else 12
 	rig.apply_menu({"journey": OS.get_environment("JOURNEY") != "", "seed": seed_v, "theme": theme, "mus": "off", "session": 10, "trip": 0 if OS.get_environment("JOURNEY") == "" else 1}, level)
+	if OS.get_environment("NOGRADE") != "":
+		level.world_env.environment.adjustment_enabled = false
 	await get_tree().process_frame
 	var dt := 1.0 / 60.0
 	GazeProvider.set_scripted(Vector2(0.5, 0.45))
@@ -329,6 +331,17 @@ func _ready() -> void:
 			var img := get_viewport().get_texture().get_image()
 			var idx := shots.size()
 			img.save_png(OS.get_environment("SHOTS") + "/godot_%02d.png" % idx)
+			# the same frame again with the full-screen picture pass hidden: what the scene looks like before the pass (lighting, fog, tonemap, glow, colour grade only)
+			var cr: Array = []
+			for cn in get_tree().root.find_children("*", "ColorRect", true, false):
+				if (cn as ColorRect).material is ShaderMaterial and (cn as ColorRect).visible:
+					cr.append(cn)
+					(cn as ColorRect).visible = false
+			await RenderingServer.frame_post_draw
+			await RenderingServer.frame_post_draw
+			get_viewport().get_texture().get_image().save_png(OS.get_environment("SHOTS") + "/godot_%02d_nopost.png" % idx)
+			for cn in cr:
+				(cn as ColorRect).visible = true
 			shots.append({"i": idx, "z": r3(rig.spos.z), "xf": xf(cam.global_transform), "fov": r3(cam.fov), "w": img.get_width(), "h": img.get_height()})
 	await get_tree().process_frame
 	capture(level)

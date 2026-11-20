@@ -20,6 +20,7 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const lerp = (a, b, t) => a + (b - a) * t;
 
 export function createSnowball(o) {
+  const GLW = o.glow || ((m) => m);          // the glow helper from gv.js: the flat balls get a rim and a beat lift
   const { THREE, scene, th, PH, toast, SFX = {}, onHit, onDodge, onEscape, onWarn, onShake } = o;
   const SPK = o.SPK || 2.2, halfW = o.halfW || 120, WS = halfW / 58;
   const BALL_R = 3.0, rng = o.rng || mulberry(o.seed || 12345);
@@ -32,7 +33,7 @@ export function createSnowball(o) {
 
   const root = new THREE.Group(); root.name = 'snowballs'; scene.add(root);
   const col = (r, g, b, k) => { const c = new THREE.Color(); c.setRGB(r * k, g * k, b * k); return c; };          // "solid": albedo plus emission, so a little over 1
-  const mats = { body: null, bump: new THREE.MeshBasicMaterial({ color: col(.45, .5, .7, 1.4) }), side: new THREE.MeshBasicMaterial({ color: col(.95, .97, 1, 1.9) }), lump: new THREE.MeshBasicMaterial({ color: col(.88, .93, 1, 1.8) }) };
+  const mats = { body: null, bump: GLW(new THREE.MeshBasicMaterial({ color: col(.45, .5, .7, 1.4) })), side: GLW(new THREE.MeshBasicMaterial({ color: col(.95, .97, 1, 1.9) })), lump: GLW(new THREE.MeshBasicMaterial({ color: col(.88, .93, 1, 1.8) })) };
   const sph = (r, ws, hs) => new THREE.SphereGeometry(r, ws, hs);
   const G_BODY = sph(3, 16, 8), G_BUMP = sph(.7, 6, 3), G_LUMP = sph(1.1, 6, 3);
 
@@ -45,7 +46,7 @@ export function createSnowball(o) {
     const g = new THREE.Group(), m = new THREE.Group(); g.add(m);
     const mc = molColors && molColors[S.mol] ? molColors[S.mol] : [.8, .85, 1];
     const base = [.92, .96, 1], c = [lerp(base[0], mc[0], .5), lerp(base[1], mc[1], .5), lerp(base[2], mc[2], .5)];
-    const body = new THREE.Mesh(G_BODY, new THREE.MeshBasicMaterial({ color: col(c[0], c[1], c[2], 1.9) })); m.add(body);
+    const body = new THREE.Mesh(G_BODY, GLW(new THREE.MeshBasicMaterial({ color: col(c[0], c[1], c[2], 1.9) }))); m.add(body);
     for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(G_BUMP, mats.bump); const v = [rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1], l = Math.hypot(v[0], v[1], v[2]) || 1; b.position.set(v[0] / l * 2.9, v[1] / l * 2.9, v[2] / l * 2.9); m.add(b); }
     root.add(g); S.group = g; S.mesh = m;
   }

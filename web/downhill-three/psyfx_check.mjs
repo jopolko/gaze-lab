@@ -25,7 +25,7 @@ for (let f = 0; f < J.ctx.length; f++) {
   if (Math.abs(t - 15) < dt * .5) P.cheer('TEST', 'white', 1.5);
   if (Math.abs(t - 20) < dt * .5) P.camera.shake = .9;
   if (Math.abs(t - 75) < dt * .5) P.sharpen(1);
-  P.tick(dt, { speed: c[0], speedY: c[1], chain: c[2], boosting: !!c[3], links: c[4], alt: c[5], vy: c[6], inAir: !!c[7], hurtT: c[8], rail: !!c[9], tube: !!c[10], wave: c[11] });
+  { const C2 = J.ctx2 ? J.ctx2[f] : c, mk = (r) => ({ speed: r[0], speedY: r[1], chain: r[2], boosting: !!r[3], links: r[4], alt: r[5], vy: r[6], inAir: !!r[7], hurtT: r[8], rail: !!r[9], tube: !!r[10], wave: r[11] }); P.state.age += dt; P.tickPhysics(dt, mk(c)); P.tickProcess(dt, mk(C2)); }
   if (f % 6 === 0) {
     const g = J.frames[f / 6], u = P.uniforms(), S = P.state;
     if (!g || f < 12) continue; const T = g.t;          // (the first frames of the Godot run are the game warming up)
@@ -57,7 +57,7 @@ const bad = rows.filter((r) => r.max > 0.002); bad.sort((a, b) => a.first - b.fi
     for (const et of Object.keys(plan)) if (Math.abs(t - +et) < dt * .5) P2.events.onMolecule(plan[et], NAMES[plan[et]]);
     if (Math.abs(t - 4) < dt * .5) P2.flowUp(1); if (Math.abs(t - 6) < dt * .5) P2.flowUp(2); if (Math.abs(t - 8) < dt * .5) P2.chainHit('mult'); if (Math.abs(t - 9) < dt * .5) P2.chainHit('boost');
     if (Math.abs(t - 15) < dt * .5) P2.cheer('TEST', 'white', 1.5); if (Math.abs(t - 20) < dt * .5) P2.camera.shake = .9; if (Math.abs(t - 75) < dt * .5) P2.sharpen(1);
-    P2.tick(dt, { speed: c[0], speedY: c[1], chain: c[2], boosting: !!c[3], links: c[4], alt: c[5], vy: c[6], inAir: !!c[7], hurtT: c[8], rail: !!c[9], tube: !!c[10], wave: c[11] });
+    { const C2 = J.ctx2 ? J.ctx2[f] : c, mk = (r) => ({ speed: r[0], speedY: r[1], chain: r[2], boosting: !!r[3], links: r[4], alt: r[5], vy: r[6], inAir: !!r[7], hurtT: r[8], rail: !!r[9], tube: !!r[10], wave: r[11] }); P2.tickPhysics(dt, mk(c)); P2.tickProcess(dt, mk(C2)); }
     if (f % 6 === 0 && f >= 12) { const g = J.frames[f / 6], u = P2.uniforms(); if (!g) continue; n++; if (Math.abs(g.glow_base * u.glowIntensityMul - g.glow) < .003) okG++; if (Math.abs(g.fog_base * u.fogDensityMul - g.fog) < .003) okF++; if (Math.abs(g.bloom_base * u.glowBloomMul + u.glowBloomAdd - g.bloom) < .003) okB++; }
   }
   console.log('environment write-back: model matches the sampled value in glow ' + (100 * okG / n).toFixed(1) + '%, fog ' + (100 * okF / n).toFixed(1) + '%, bloom ' + (100 * okB / n).toFixed(1) + '% of samples (the rest are frames where the journey environment blend wrote the base back)');
@@ -67,19 +67,19 @@ const bad = rows.filter((r) => r.max > 0.002); bad.sort((a, b) => a.first - b.fi
 {
   const q2 = { clr: [...J.draws.clr], sharp: [...J.draws.sharp], efc: [...J.draws.efc], efcpeek: [...J.draws.efcpeek], god: [...J.draws.god], calm: J.draws.calm.map((x) => x[1]) };
   const P3 = createPsyFx({ seed: 7, sessionMin: 10, cfgTrip: 1, journey: true, intensity: .8, fx: { x_clear: 2 }, rand: (lo, hi, tag) => { const q = q2[tag]; if (!q || !q.length) return lo; const v = q.shift(); return tag === 'efcpeek' ? (v ? .2 : .8) : v; } });
-  let f = 0; const ctxAt = (i) => { const c = J.ctx[i]; return { speed: c[0], speedY: c[1], chain: c[2], boosting: !!c[3], links: c[4], alt: c[5], vy: c[6], inAir: !!c[7], hurtT: c[8], rail: !!c[9], tube: !!c[10], wave: c[11] }; };
+  let f = 0; const ctxAt = (i, post) => { const c = (post && J.ctx2) ? J.ctx2[i] : J.ctx[i]; return { speed: c[0], speedY: c[1], chain: c[2], boosting: !!c[3], links: c[4], alt: c[5], vy: c[6], inAir: !!c[7], hurtT: c[8], rail: !!c[9], tube: !!c[10], wave: c[11] }; };
   for (; f < 18000; f++) {          // the timeline again (same events)
     const t = f * dt;
     for (const et of Object.keys(plan)) if (Math.abs(t - +et) < dt * .5) P3.events.onMolecule(plan[et], NAMES[plan[et]]);
     if (Math.abs(t - 4) < dt * .5) P3.flowUp(1); if (Math.abs(t - 6) < dt * .5) P3.flowUp(2); if (Math.abs(t - 8) < dt * .5) P3.chainHit('mult'); if (Math.abs(t - 9) < dt * .5) P3.chainHit('boost');
     if (Math.abs(t - 15) < dt * .5) P3.cheer('TEST', 'white', 1.5); if (Math.abs(t - 20) < dt * .5) P3.camera.shake = .9; if (Math.abs(t - 75) < dt * .5) P3.sharpen(1);
-    P3.tick(dt, ctxAt(f));
+    P3.tickPhysics(dt, ctxAt(f)); P3.tickProcess(dt, ctxAt(f, true));
   }
-  const step = (n) => { for (let i = 0; i < n; i++, f++) P3.tick(dt, ctxAt(f)); };
+  const step = (n) => { for (let i = 0; i < n; i++, f++) { P3.tickPhysics(dt, ctxAt(f)); P3.tickProcess(dt, ctxAt(f, true)); } };
   const cmp = (tag, g, u, S) => {
     const row = {}; const d = (k, a, b) => { row[k] = Math.abs(a - b); };
     u.mA.forEach((x, i) => d('mA' + i, x, g.mA[i])); u.mB.forEach((x, i) => d('mB' + i, x, g.mB[i])); d('dmt', u.dmt, g.dmt); d('buzz', u.buzz, g.buzz); d('sharp', u.sharp, g.sharp); d('trip', u.trip, g.trip || 0); d('clr_k', S.clr_k, g.clr_k); d('stage', S.stage_post, g.stage_post);
-    d('bloomAdd', g.bloom_base * u.glowBloomMul + u.glowBloomAdd, g.bloom); const w = Math.max(...Object.values(row)); return { tag, w, worst: Object.entries(row).sort((a, b) => b[1] - a[1])[0] };
+    const w = Math.max(...Object.values(row)); return { tag, w, worst: Object.entries(row).sort((a, b) => b[1] - a[1])[0] };
   };
   const out = [];
   J.shots.forEach((g) => {
@@ -90,7 +90,7 @@ const bad = rows.filter((r) => r.max > 0.002); bad.sort((a, b) => a.first - b.fi
     else { S.clr_t = -1; S.clr_k = 1; P3.sharpen(1); step(2); }
     out.push(cmp('L' + g.lvl + ' ' + g.state, g, P3.uniforms(), S));
   });
-  console.log('forced depths (max abs error across mA, mB, dmt, buzz, sharp, trip, clr_k, stage_post, bloom):');
+  console.log('forced depths (max abs error across mA, mB, dmt, buzz, sharp, trip, clr_k, stage_post; the environment glow is excluded, see above):');
   for (const r of out) console.log(' ', r.tag.padEnd(12), r.w.toExponential(2), r.worst[0]);
   console.log(out.every((r) => r.w < .003) ? 'FORCED DEPTHS: ALL WITHIN 0.003' : 'FORCED DEPTHS: SOME OVER 0.003');
 }

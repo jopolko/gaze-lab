@@ -1,0 +1,413 @@
+# Downhill: the full game spec (v1, 2026-11-19)
+
+One document, top to bottom, so nothing gets bolted on later. Where a decision wasn't made yet I've written a default and marked it **[default]**. Change a default here before building.
+
+Companion: DESIGN_PROGRESSION.md (the data counts and the first ideas).
+
+---
+
+## 0. One sentence
+
+You ride a slope toward six shining molecules. Each catch adds a layer to your trip, and the game is the fastest, most stylish way of getting all six and arriving at the peak.
+
+Controls: your own head steers (left / middle / right). Phone-first. No death.
+
+---
+
+## 1. Vocabulary (the ontology)
+
+| Thing | What it is |
+|---|---|
+| **Trip** | one play session from sober start to comedown. About 60 min for a full one, but can end at any campfire. |
+| **Chapter** | a part of the trip, about 8-10 min, ending at a campfire. Six chapters, one per molecule. |
+| **Descent** | one run down a course (3-4 min). A chapter is 2-3 descents. |
+| **Course** | a stretch of mountain (7.7 km or 11.3 km). Five exist. |
+| **Segment** | a 300-900 m piece of a course with a job (see 4). |
+| **Site** | where one molecule sits, with its approach. |
+| **Molecule** | one of six. Catching one adds its **layer**. |
+| **Layer** | a stackable change to the world (colour, pattern, time, sound, space, mind). |
+| **Depth** | 1-3: how well you caught it. Scales the layer. |
+| **Route piece** | ramp, rail, pad, slingshot, gate, hedge (tree barrier). The jungle gym. |
+| **Buff** | boost, saw, wings, magnet. Timed or counted effects on the player. |
+| **Loadout** | the one buff you're holding, to spend when you choose. |
+| **Campfire** | a calm stop between chapters: pause, journal, loadout, save. |
+
+Rules of the world:
+1. A molecule is **never** blocked, only far. The puzzle is reaching it, never finding it.
+2. Every obstacle has a **visible cost** and a **cheaper way past**.
+3. Nothing kills you. A crash costs speed and your held buff.
+4. Anything that matters to the molecule is lit; scenery is not.
+
+---
+
+## 2. The dose-to-trip arc (the whole shape)
+
+The trip follows the shape of an experience: baseline, onset, come-up, peak, plateau, comedown, afterglow. Each phase has a job in the game.
+
+| Phase | Time | What the player does | World | Music (GM stage) |
+|---|---|---|---|---|
+| **Baseline** | 0-4 | learns steer / jump / rail on a gentle course; sees the first molecule from 450 m | sober: plain snow and trees | pre |
+| **Onset** | 4-14 | chapter 1 (colour). First real approach. Tutorials end. | edges of colour creeping in | pre → funk |
+| **Come-up** | 14-38 | chapters 2-4 (pattern, time, sound). Each chapter adds a layer and a tougher puzzle. | recolour, crawling patterns, trails, music opening | funk |
+| **Build** | 38-52 | chapters 5-6 (space, mind). The hardest approaches. Barriers 3 thick. | horizon bends, faces appear | funk, rising |
+| **Peak** | 52-58 | the Finale on a special descent: all six layers at once, momentum chains with no barriers. Pure flow. | everything | drop |
+| **Comedown** | 58-64 | the chill-out course ("Moodless Refrain"), slow, wide, no hazards, layers fade out one by one | softening | chill |
+| **Afterglow** | 64+ | summary: molecules, depths, time to trip, best chains; unlocks | quiet | chill tail |
+
+Key point: **the player-controlled variable is time to the peak** (see 7). A fast player skips lots of the come-up. The structure still works because every layer lands the moment you catch it.
+
+---
+
+> **2026-11-19 correction: do not build a new generator.** Godot's `RunRig.gd` already is the director and its output is in the dumps. This section describes what Godot does (zones, rows, link chains); it is not a new system. See `web/docs/DIRECTOR_PORT.md` for the source analysis, what is already ported, and how to change rules at the source (edit Godot, regenerate the dump).
+
+## 3. Pacing: peaks and valleys, in numbers
+
+Intensity = number of decisions per km. One decision = a route piece or buff you choose to use or not.
+
+Per descent (about 10 km, 3-4 min), target curve:
+
+```
+decisions/km
+ 10 |            ##        ##          ###
+  8 |          ######    ######      #######
+  6 |       #########  ##########  ##########
+  4 |     ###########################
+  2 |  ####                                  ###
+  0 +----------------------------------------------> km
+     warm  build   SITE1   valley  build SITE2 ...
+```
+
+Segment grammar (every course is a sequence of these, authored by a script, not by hand):
+
+| Segment | Length | Decisions/km | Job |
+|---|---|---|---|
+| **Valley** | 500-900 m | 1-2 | breath: scenery, a pad chain, one easy buff |
+| **Build** | 600-1000 m | 4-6 | introduce this chapter's new piece |
+| **Approach** | 900 m | 8-10 | the jungle gym before the molecule (see 5) |
+| **Catch** | 100 m | 0 | the molecule, nothing else on screen |
+| **Payoff** | 300-500 m | 3-4 | a rewarding chain after the catch: pads, a big ramp, layers settling in |
+| **Campfire** | 400 m | 0 | flat, slow, safe. Chapter ends here. |
+
+Course template for a 11 km descent: Valley, Build, Approach+Catch+Payoff, Valley, Build, Approach+Catch+Payoff, Valley, Build, Approach+Catch+Payoff, final Valley. Three to five sites, matching what the dumps already have.
+
+Rules for peaks and valleys:
+- Never two Approaches in a row.
+- A Valley always follows a Payoff.
+- Every Build adds **one** new thing. Don't teach two at once.
+- The longest valley sits right before the hardest approach.
+
+---
+
+## 4. The six chapters
+
+| # | Molecule | Layer | New piece introduced | Barrier thickness | Approach shape |
+|---|---|---|---|---|---|
+| 1 | mescaline | colour | ramps and air steering | none | one ramp straight to the line |
+| 2 | 2C-B | pattern | rails (they move you sideways) | 1 | rail or ramp, two options |
+| 3 | 2C-E | time | boost + pad chains | 1-2 | speed matters: faster is shorter |
+| 4 | DOM | sound | magnet | 2 | magnet saves a bad line |
+| 5 | 2C-T-2 | space | saw (cut hedges) | 2-3 | cut through or jump over |
+| 6 | 2C-T-7 | mind | wings + everything | 3 | two buffs needed in the right order |
+
+**[default]** Order is fixed on the first trip, to teach well. On later trips the courses are re-seeded and the molecule at each site is shuffled, so the sequence differs.
+
+Per chapter: 2-3 descents. The molecule's site appears once per descent from chapter 2 onward, so a missed one returns in the next descent within a few minutes. Chapter ends when the molecule is caught (or after three descents, then it's offered at campfire to retry).
+
+---
+
+> **Correction:** the approach is Godot's link chain (spring, tube of rings, rail, throw into the opposite lane, then the next chain, molecules or a boost row) plus its prize. Do not invent routes. See `DIRECTOR_PORT.md` section 4.
+
+## 5. Anatomy of an Approach (the puzzle)
+
+The one repeating unit of the game. About 900 m, 18 s at 50 m/s.
+
+1. **Sighting** (900 m): a tall white-prismatic pillar. The HUD shows its name and distance.
+2. **Fork** (800-600 m): 3-5 routes visible, each lit and colour-coded by what it asks for:
+   - ramp (jump), rail (ride), hedge-with-saw (cut), gate/pad chain (speed), open snow (steer)
+3. **Cost board**: any barrier shows thickness by colour ring (green 1, amber 2, red 3); your held saw shows as pips on screen.
+4. **Commit** (400-100 m): routes merge toward the molecule's line.
+5. **Catch**: grab zone ±4.2 m sideways (±8.4 m with magnet).
+
+Every route ends at a different lateral offset. At most **two** routes reach the molecule's exact line, on purpose: the player is choosing between them. One is cheap but demanding (aim and timing), the other costs a buff but is forgiving.
+
+Sonic test: from the Fork you should know in about 2 s what you'd do. If it takes longer, simplify the Approach.
+
+---
+
+## 6. Buffs and held item
+
+| Buff | Verb | Effect | Built |
+|---|---|---|---|
+| Boost | arrive sooner | speed kick, faster for 2-3 s | yes |
+| Saw | cut a shortcut | cuts up to 3 tree blocks; rocks break it | no |
+| Wings | steer in the air | 2x air steering for 8 s | yes (first pass) |
+| Magnet | be forgiven | molecule zone 2x wide, others 1.6x, 10 s | yes |
+
+- Each has a screen-edge fringe (cyan saw, purple magnet, orange boost, pink wings) and a world sign (waves for magnet, blade for saw).
+- **Loadout slot [default]:** pick up one buff, it's held (shown at the bottom of the screen). Tap to use it. A second pickup swaps or is ignored. This is the main source of "managing options". Boost stays automatic (it's a pad-like thing, not a decision).
+- Spawn rules: a buff is placed 100-250 m before the piece it is meant for, so the right tool is always at hand but never spoon-fed.
+- Rarity per km: boost 3-4, magnet 1 per approach, saw 1 per hedge section, wings 1-2 (near ramps).
+
+---
+
+## 7. The metric and the loops
+
+**Time to trip (TTT):** seconds from start to catching the sixth. The single number to optimise.
+- First trip: about 60 min total, about 35-40 min to the sixth.
+- Expert: under 15 min on a daily seed.
+
+**Three loops, each rewarding something different:**
+
+| Loop | Length | Reward |
+|---|---|---|
+| Moment | seconds | chains, multiplier, sounds, near-miss feedback |
+| Descent | 3-4 min | a molecule, descent grade (A-S: cuts, chain, no crash), the next ramp of difficulty |
+| Collection | days | depths, courses, trip themes, journal, daily seed, ghost |
+
+**Depth rules (1-3) [default]:**
+- 1: caught.
+- 2: caught with a clean last 1 km (no crash), or from the air, or on a rail.
+- 3: a mastery condition (hands-off final 200 m, or max speed, or two in a row, or a no-saw route through a hedge).
+
+Finale strength = sum of depths of all six (6 to 18). Layer intensity scales with it.
+
+---
+
+## 8. Persistence and modes
+
+**[default]**
+- **Trip layers reset each trip** (every trip starts sober). Depth, courses, themes and journal persist forever.
+- **Psych mode** = the Finale only, at the strength you've earned, with the sober-to-peak build removed. This is the day-tripper experience and the dev bed. It stays separate until merged.
+- **Flagship** = the full trip above.
+- **Chill-out mode:** the comedown course, playable on its own at any time once the Finale has been done once.
+
+---
+
+## 9. Data model (so the game can be authored by script)
+
+```
+Profile {
+  caught: { molecule: { best_depth, count, best_miss } },
+  courses_unlocked: [id], themes_unlocked: [id],
+  stats: { ttt_best, longest_chain, ... }
+}
+Trip { chapter, layers: [ids by depth], loadout, clock, seed }
+Course { id, length_km, seed, segments: [ {type, z0, z1} ] }
+Segment { type: valley|build|approach|catch|payoff|campfire,
+          pieces: [ {kind, z, x, params} ],      // from the generator
+          site: { molecule, z, x } }              // only on approach/catch
+```
+
+The content generator takes a Course (terrain from the Godot dump) plus the segment list and places everything: the dump's own scattered content is **replaced** on approach stretches. That is the one big build: a director that turns the grammar in 3 into placed objects. Everything else hangs off it.
+
+---
+
+> **Revised build order for the director item:** (a) read the remaining generator functions (`DIRECTOR_PORT.md` section 8), (b) add a `pills_lanes` param and a cuttable-barrier tag in Godot behind params so default output stays frozen, (c) regenerate courses with the real generator, (d) wire `_mol_gap` and the pacer so six sites fit a trip. The hand-built generator idea is dropped.
+
+## 10. Build order (dependency-first)
+
+| # | Build | Why now |
+|---|---|---|
+| 1 | Segment grammar + director (place sites, valleys, approaches) | everything depends on it |
+| 2 | Hedge + saw + pips + cost rings | the main puzzle verb |
+| 3 | Loadout slot | the "managing options" decision |
+| 4 | One molecule per site, six types per trip | removes the trio |
+| 5 | Layers wired to molecule catches (visual + audio) | the reward |
+| 6 | Campfire, chapters, trip clock, TTT | the structure |
+| 7 | Depth rules + journal + profile save | the collection |
+| 8 | Finale and comedown courses | the ending |
+| 9 | Courses unlock, daily seed, ghost | the long tail |
+
+Test gates (so we don't build 9 before 1 works): after 1-2, a tester should be able to see a hedge from 200 m and know its cost; after 4-5, a catch should be audible and visible from across a room.
+
+---
+
+## 11. Decisions still open
+
+1. ~~Layers per-trip or permanent?~~ **DECIDED 2026-11-19: reset each trip.** Depth, courses, themes and journal persist.
+2. Fixed order of molecules on trip 1, or free? Default: fixed.
+3. Should the Finale have any hazards? Default: none.
+4. Do you want to hold one buff, or allow two? Default: one.
+5. Is 60 min the right length for a first trip, or shorter (e.g. 30)? Default: 60 with save points.
+
+---
+
+## 12. Content catalogue: keeping it fresh (added 2026-11-19)
+
+Today the real verbs are steer, jump, grind and speed. Variety comes from changing the ground and the movement, not from more pickups. One new piece per chapter, then mix.
+
+| Piece | What it does for reach | Introduced | Status |
+|---|---|---|---|
+| Ramp / launcher | air, steer in the air | ch 1 | built |
+| Rail | carries you sideways | ch 2 | built |
+| Pad chain / boost | speed | ch 3 | built |
+| Magnet | wider grab | ch 4 | built |
+| Saw + hedge | cut a shortcut | ch 5 | design |
+| Wings | 2x air steering | ch 6 | built |
+| **Banked wall / half-pipe** | free sideways swing | ch 2-3 | new |
+| **Portal pair** | instant 30-40 m sideways move | ch 4 | new |
+| **Wind stream** | lift or cross-push, visible ribbons | ch 3-5 | new |
+| **Ice / powder patch** | grip changes how you aim | ch 2-5 | new |
+| **Beat gate / beat rail** | opens or lights on the music's beat | ch 3+ | new |
+| Spring / cannon | big launch, aimed by head | later | idea |
+| Collapsing bridge | timed shortcut | later | idea |
+| Tunnel / ice cave | fast enclosed route, hidden molecule line | later | idea |
+
+Variations on existing pieces: curved or forking rails, ramps at several angles or with a loop, hedges with gaps or that sway open and shut.
+
+Daily twists (mutators): wings always on, double wind, mirrored slope, fog, reversed gates.
+
+Rule: a new piece is introduced alone in a Build segment, used in an Approach next, then mixed with older pieces from then on. Never introduce two at once.
+
+---
+
+## 13. Do it now or regret it later
+
+| Item | Why it can't wait |
+|---|---|
+| **Fixed-timestep physics (60 Hz)** | ghosts, daily seeds and fair leaderboards need identical results on every device. Retrofitting breaks every tuned value. |
+| **Versioned save format** | profile data (depths, journal, unlocks) must survive updates. Add a version number on day one. |
+| **Naming and rating decision** | the molecules use real controlled-substance names. Stores, ad networks and age ratings treat that differently from fictional names. Decide now whether the public build uses real names, code names or invented ones. |
+| **Music licences** | the current tracks are non-commercial (some no-derivatives). Selling, ads or in-app purchases need a licence or original music. |
+| **Comfort and photosensitivity** | strobing, shake and wide fov can cause harm. Add a reduce-effects switch and a first-run warning before more effects get stacked on. |
+| **Head-tracking fallback and calibration** | keyboard / touch / tilt control for anyone without a camera, and a short calibration step on first launch. |
+| **Tuning in one config file** | reach envelope, grab radii, spawn rates, buff durations as data, so balancing doesn't mean editing code. |
+| **Telemetry for balance** | log approach choices, miss distances, time to trip, where players quit. It exists in part (steer log); extend it. |
+| **Party and shared seeds** | the party-play goal means seeds and ghosts need to be shareable. Keep the course seed the single source. |
+
+
+---
+
+## 14. Status log (2026-11-19, autonomous pass)
+
+Decisions made with the defaults above, no questions asked:
+
+| Item | Done | Notes |
+|---|---|---|
+| Layers reset each trip | decided | depth, courses, journal persist (profile.js) |
+| Effects ripple through the surfaces | built | beat ripple and magnet wave in the ground shader; `?norip` turns off |
+| Cheap-looking effects | fixed | stacked glowing popups, soft pickup rings and bubbles, soft spray, tree foliage flattens at distance, gates/rails/rocks/snowball glow (`?noglow` turns off) |
+| Black-screen bug | fixed | negative-power NaN in psyfx; guard in gv.js |
+| Baseline colour split | reduced | sober split is about a third of before; it grows back to the old strength with the trip |
+| **Physics step** | **changed from the plan** | not a literal fixed 60 Hz: equal sub-steps capped at 1/58 s, head read once per frame. Reason: a fixed step without picture interpolation judders on high-refresh screens and would double-process the head sample on slow frames (more steering lag). Determinism for ghosts is deferred: record inputs and add a true fixed step with interpolation when ghosts are built. |
+| Tuning in one file | built | `tuning.js` (grab zones, magnet, wings, bpm) |
+| Versioned save | built | `profile.js` (v1, migrate hook, guarded localStorage); records catches |
+| Naming | built | `names.js`: public build shows Sunglass / Rootbloom / Driftwater / Chime Spore / Shard / Eyecap; `?realnames` shows the originals. NOTE: the cards are named by order, but each molecule's actual effect in psyfx is the Godot one, so card art and effect still need aligning. |
+| Comfort / photosensitivity switch | not built | next |
+| Camera-free controls + calibration | not built | next |
+| Telemetry for balance | partly exists | steer log only; add approach and catch logs |
+| Shareable seeds | not built | needs the director |
+
+Next in build order: saw + hedges + pips, loadout slot, then the director (section 10).
+
+
+---
+
+## 15. Psychedelic effects catalogue and the card each one belongs to (2026-11-19)
+
+Sources: (A) the owner's page `joshuaopolko.com/psychedelic-vr-visual-effects-meta-quest/` (four techniques; its title says six, only four are on the page), (B) Godot's psychedelic code, `web/docs/PSY_GAP.md`, (C) general technique (the visual-hallucination "form constants": tunnels, spirals, lattices, cobwebs). Cost is for a phone: low, mid or high. Status is from reading the code, not from watching each one run.
+
+**Rule:** the psychedelic look is frozen (see memory). New effects ship behind a URL flag and are off by default until the owner turns them on. Every card is a preview of a real effect, so the card art is made from a screenshot of the effect once it exists.
+
+### The six pieces (what each molecule really drives in Godot)
+
+| Piece (molecule) | Effects | Element | Source | Cost | Status |
+|---|---|---|---|---|---|
+| Ground (mescaline) | moire interference grid | snow | A | low | live (the current ground) |
+| | light waves, shapes in the snow | snow | B | low | missing |
+| | breathing displacement | snow | A | mid | missing |
+| Sky (DOM) | colour bands | sky | B | low | live |
+| | polar sine field (rotating lattice) | sky | A | low | missing |
+| Colour (2C-B) | moire colour on foliage, hue cycling | trees | A, B | low | colour only |
+| Mountains (2C-E) | moire skin creeping with travel, contour bands, breathing | mountains | B | low | skin attached, not driven |
+| Ripples (2C-T-2) | flowing grid, bullseye, third grid | snow | B | low | missing |
+| Pulse (2C-T-7) | infinite tunnel | sky | A | mid | missing |
+| | trees breathe and sway to the beat | trees, rocks | B | mid | missing |
+
+Computed but not drawn: the six "piece" strengths come out of psyfx (`PSY.pieces()`), but nothing in gv.js reads them, so the world runs at one fixed look. Wiring them to the shaders above is the main job.
+
+### Screen-wide effects (Godot post pass)
+
+| Effect | Source | Cost | Status |
+|---|---|---|---|
+| warp, colour split, pulse, tracer ghosts, punch | B | mid | live |
+| buzz swells, sharpen snaps | B | low | computed, partly driving |
+| clarity moments (picture drops, then snaps back stronger) | B | low | computed, not drawn |
+| rays in tubes | B | mid | barely wired |
+| boost smear | B | low | not wired |
+| crash tear (rewind) | B | low | not wired |
+| jump apex swell (rings and burst) | B | low | not wired |
+| mirror fold, cel edges, rings (off by default in Godot) | B | mid | off |
+
+### Faces
+
+| Effect | Element | Source | Cost | Status |
+|---|---|---|---|---|
+| portrait in the mountains | mountains | B | low | code in worldfx2, not wired |
+| portrait on the trees | trees | B | low | same |
+| the god in the sky | sky | B | low | same |
+
+### Candidate additions (not in the Godot list)
+
+| Effect | Looks like | Element | Cost | Fits card |
+|---|---|---|---|---|
+| kaleidoscope / mirror symmetry | view folds into repeating wedges | sky or screen | low | Sky |
+| domain warping | flowing noise bends every pattern | snow, sky | mid | Ground, Ripples |
+| feedback / video echo | each frame redrawn slightly zoomed and rotated, endless spiral trails | screen | high | Pulse |
+| reaction-diffusion | spots and stripes growing and merging | rocks, snow | high | Mountains |
+| Voronoi cells | cracked-glass cells that pulse | snow, mountains | low | Mountains |
+| cosine palette cycling | colours rotate through a gradient | everything | low | Colour |
+| fractal zoom | falling into a Mandelbrot or Julia pattern | sky | high | Sky |
+| sacred-geometry lattice | hexagon / flower-of-life grids | sky, mountains | low | Sky |
+| visual snow and halation | fine grain, halos on bright things | screen | low | any |
+| afterimages | complementary-colour ghost after flashes | screen | low | Colour |
+| pareidolia | faces in textures | trees, mountains | mid | Mind (the Watcher) |
+
+Phone budget: prefer low and mid. Feedback, reaction-diffusion and fractal zoom stay desktop-only or are used in short bursts.
+
+### Cards follow the real pieces
+
+Replace the placeholder card set (Sun, Wheel, Hourglass, Bell, Tower, Watcher) with six cards that name the six pieces above (Ground, Sky, Colour, Mountains, Ripples, Pulse), each drawn from a screenshot of its own effect. `names.js` currently maps the old names by molecule order; update it when the art exists.
+
+### Build order for the effects
+
+1. Wire `PSY.pieces()` into the existing shaders (ground, sky, trees, mountains), behind `?pieces`, so each molecule visibly changes its own element. No new shader math needed for the first pass.
+2. Missing ground effects: light waves, shapes, bullseye, third grid (switch to the Godot ground port in worldfx2 under the flag).
+3. Sky: polar sine field, then the tunnel for Pulse.
+4. Trees and rocks: breathing and sway to the beat.
+5. Screen: clarity moments, apex swell, smear, rewind.
+6. Faces.
+7. Candidate additions, one per card, cheapest first.
+
+
+---
+
+## 16. Steering: assisted lane selection (2026-11-19)
+
+Owner feedback: steering was jittery, and the earlier 3-lane model (the head only selects a target, steering is automatic) felt much better.
+
+Measured (384 steering records from 2026-11-19): the head signal changes only 0.01 to 0.09 per sample, but the steering input after the assists changed 0.12 to 0.26 per sample, 3 to 10 times more. The jitter was added after the head, by the assist terms (lock-on pull, lane hold, edge push) switching on and off. The tracker itself runs at 10 to 13 fps.
+
+Built (default on, `?assist=free` restores direct steering):
+- **Lane assist:** the head or keys only select a lane (left / middle / right, 8 m apart, `?lanew=`). Hysteresis: select at 0.30, return to the middle after 0.30 s below 0.14. The board carves to the lane on Godot's pull rule (`(lane - (x + 0.45 vx)) / 12`) with the lane centre eased over 0.18 s, so tracker noise cannot shake it. Three dots at the bottom show the selected lane.
+- **Assist smoothing (both modes):** lock-on, lane hold, edge push and the rest are low-passed (0.16 s) separately from the head's own response, so they cannot flip the input between frames.
+
+Not verified on a real head: the numbers above are from keyboard-driven tests in the browser. The right-hand lane reached only +1 m in one 3.5 s test (the lane-hold and lock-on assists may have been fighting it), so check it on a phone.
+
+Related memory: an earlier note says "no auto-steer, visible choices". Reconciled: the board still never turns by itself; it only carves toward a lane the player selected.
+
+### 15b. Additions from an outside suggestion list (2026-11-19)
+
+Source: a pasted answer from another AI (its citations were social-media posts; treat it as ideas, not verified facts).
+
+| Idea | Verdict | Element / card | Cost |
+|---|---|---|---|
+| Motion aftereffect (rush, then stop: the still world drifts the other way) | build, best of the list | comedown and afterglow (Moodless Refrain) | low |
+| FFT frequency bands from the music (bass pulses fov, hi-hats fire particles) | build, with the beat clock as the muted fallback | whole screen | low |
+| Beat-snapped gates and pads (extend the quantised sound effects) | build | gates, pads, rails | low |
+| Non-Euclidean space (a room bigger than its doorway) | design with the portal pair | Space card | mid |
+| Raymarched fractal tunnel | sky only, low resolution, or desktop only | Sky or Pulse | high |
+| Stroboscopic flicker | opt-in only, behind a first-run warning, capped at 3 flashes per second | any | low |
+| Recursive feedback, vertex displacement, chromatic split, hue cycling | already in the catalogue or live | see section 15 | |
+
+Comfort rule: nothing flashes faster than 3 Hz by default; strobe is off until the player turns it on.

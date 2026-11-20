@@ -19,3 +19,14 @@ godot/tools/serve-tls.log
 godot/music_web/
 godot/tools/looks/
 godot/tools/face/tone_woman1.png
+
+# generated course data (hundreds of MB, rebuilt from Godot with godot/tests/dump_long.gd + web/tools/split_level.py); kept on the server and locally
+web/downhill-three/data/*
+!web/downhill-three/data/courses.json
+# local snapshots, logs, caches, duplicated vendor binaries
+web/spike-good-*/
+web/spike-before-*/
+web/downhill-three/shots_parity/
+web/spike/logs/
+__pycache__/
+web/eye-tracking-kit/vendor/

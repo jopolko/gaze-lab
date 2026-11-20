@@ -69,7 +69,7 @@ export function createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks
     if (first) { S.gateStreak = 0; S.gateCol = -1; }
     if (hit < 0) { S.gateStreak = 0; S.gateCol = -1; return; }
     if (hit === S.gateCol) S.gateStreak++; else { S.gateCol = hit; S.gateStreak = 1; }
-    const col = GATE_COLS[hit]; gain(60 * S.gateStreak); mixAdd('gate'); snd('blip', 'orb');
+    const col = GATE_COLS[hit]; gain(60 * S.gateStreak); mixAdd('gate'); (hooks && hooks.quant ? hooks.quant : (f) => f())(() => snd('blip', 'orb'));          // the blip lands on the beat
     if (S.gateStreak === 2) toast('MATCH', col);
     else if (S.gateStreak === 3) { flowUp(1); PH.boost_t = Math.max(PH.boost_t, 1.5); cheer('COLOUR CHAIN x3', col); }
     else if (S.gateStreak >= 4) { gain(600); cheer('COLOUR CHAIN x' + S.gateStreak + ' !!', col); surprise(); }
@@ -173,11 +173,12 @@ export function createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks
     for (const t of TOYS) {
       const tz = t.z, kind = t.kind;
       if (kind === 'gates') {
-        if (Math.abs(tz - PH.z) < 90) for (const ln of t.lanes) if (!ln.hid) { const r = rec(ln.n); if (r) pose(ln.n, r.base.clone().multiply(rotZ(.16 * Math.sin(PH.vx_spin * 2.4 + ln.x)))); }
+        if (Math.abs(tz - PH.z) < 90) for (const ln of t.lanes) if (!ln.hid) { const r = rec(ln.n); if (r) { const bs = 1 + .2 * ((hooks && hooks.beatK && hooks.beatK()) || 0); pose(ln.n, r.base.clone().multiply(rotZ(.16 * Math.sin(PH.vx_spin * 2.4 + ln.x))).multiply(new THREE.Matrix4().makeScale(bs, bs, bs))); }          /* the gates swell on every beat */ }
         if (t.done || PH.z > tz) continue;
         t.done = true; if (tz - PH.z > 8) continue;
         let hit = -1; for (const ln of t.lanes) if (Math.abs(ln.x - PH.x) < 3.2) { hit = ln.c; ln.hid = true; hideNode(ln.n); }
-        gateResult(hit, t.r === 0); continue;
+        gateResult(hit, t.r === 0); if (hit >= 0 && hooks && hooks.beatOff && hooks.beatOff() < .09) { gain(120); toast('ON BEAT', GATE_COLS[hit]); }          // through a gate on the beat
+        continue;
       }
       if (kind === 'sling') { slingTick(t, dt); continue; }
       if (Math.abs(tz - PH.z) > 40) continue;

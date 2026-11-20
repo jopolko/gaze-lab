@@ -6,7 +6,7 @@ extends Node
 ##   OUT=C:/.../psy_states.json SHOTS=C:/.../psy_states SEED=7 SECS=240 Godot --rendering-driver opengl3 --resolution 960x540 --path godot res://tests/dump_states.tscn
 ## The scripted events (time in seconds): molecules 0..5 eaten at 3, 12, 22, 32, 42, 52 and the first again at 70, flow and chain events at 4..9, a cheer at 15, a crash-like shake at 20, a sharpen at 75. The lab knob x_clear is 2 (clarity comes twice as soon).
 
-var out := {"frames": [], "ctx": [], "events": [], "draws": {"clr": [], "sharp": [], "efc": [], "efcpeek": [], "god": [], "calm": []}, "shots": [], "levels": []}
+var out := {"frames": [], "ctx": [], "ctx2": [], "events": [], "draws": {"clr": [], "sharp": [], "efc": [], "efcpeek": [], "god": [], "calm": []}, "shots": [], "levels": []}
 var rig_ref: RunRig
 var fxm_ref: ThemeFX
 var env_ref: Environment
@@ -138,6 +138,7 @@ func step(dt: float) -> void:
 	rig.hurt_t = 0.0
 	out["ctx"].append(ctx_row())
 	rig._physics_process(dt)
+	out["ctx2"].append(ctx_row())          # what _process (the trip tick, the excitement) sees: after the physics step
 	rig._process(dt)
 	track_draws()
 

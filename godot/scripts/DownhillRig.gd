@@ -590,6 +590,8 @@ func _behind(p: Vector3) -> bool:
 	return cam.is_position_behind(TrailCurve.w(p))
 
 
+static var keep_dump_data: bool = false          # set by tests/dump_long.gd (BARRIER dumps)
+
 func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedColorArray, mat: Material = null) -> void:
 	if xf.is_empty():
 		return
@@ -598,11 +600,18 @@ func _add_mm(row: Dictionary, mesh: Mesh, xf: Array[Transform3D], cols: PackedCo
 	mm.use_colors = true
 	mm.mesh = mesh
 	mm.instance_count = xf.size()
+	var kept: Array = []
 	for i in xf.size():
-		mm.set_instance_transform(i, TrailCurve.xf(xf[i]))
+		var tx: Transform3D = TrailCurve.xf(xf[i])
+		mm.set_instance_transform(i, tx)
 		mm.set_instance_color(i, cols[i])
+		if keep_dump_data:
+			kept.append(tx)
 	var inst := MultiMeshInstance3D.new()
 	inst.multimesh = mm
+	if keep_dump_data:          # tests only: the headless level dump cannot read a multimesh's instances back, so it reads this copy
+		inst.set_meta("dump_xf", kept)
+		inst.set_meta("dump_cols", cols)
 	inst.material_override = mat if mat != null else (_veg_theme if _veg_theme != null else (_veg_live if _veg_live != null else _m_veg))
 	inst.extra_cull_margin = 40.0
 	if veg_range > 0.0:

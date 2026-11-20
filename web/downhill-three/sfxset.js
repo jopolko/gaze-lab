@@ -86,13 +86,18 @@ MOLN.forEach((f, i) => { R['mol' + i] = () => mixp([tone(f, f, .7, .4, .008, 1.6
 
 export function createSfx(audioCtxProvider, destination, opts = {}) {
   const O = Object.assign({ toon: true, lowpass: 3200, gain: 1 }, opts);
-  const cache = {}; let voices = 0, bus = null, busCtx = null, ladStep = 0, ladT = 0, loopSrc = null, grind = null;
+  const LIS = { set: false, x: 0, y: 0, z: 0, yaw: 0 }; const cache = {}; let voices = 0, bus = null, busCtx = null, ladStep = 0, ladT = 0, loopSrc = null, grind = null;
   const ctx = () => { const a = audioCtxProvider && audioCtxProvider(); if (a && a !== busCtx) { busCtx = a; bus = a.createGain(); bus.gain.value = O.gain * SFX_GAIN; let last = bus; if (O.lowpass) { const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = O.lowpass; bus.connect(lp); last = lp; } last.connect(destination || a.destination); } return a; };
   function buffer(name, a) { if (cache[name]) return cache[name]; const make = R[name]; if (!make) return null; const data = make(), b = a.createBuffer(1, data.length, RATE); b.copyToChannel(data, 0); return (cache[name] = b); }
   function resolve(name) { if (O.toon) name = TOON_MAP[name] || name; else name = FALLBACK[name] || name; return R[name] ? name : null; }
   function play(name, o = {}) {
     const a = ctx(); if (!a) return; const nm = resolve(name); if (!nm || voices >= MAX_VOICES) return; const b = buffer(nm, a); if (!b) return;
-    const s = a.createBufferSource(); s.buffer = b; s.playbackRate.value = (o.pitch || 1) * (.95 + Math.random() * .1); let node = s;
+    let pitchR = .95 + Math.random() * .1; o = Object.assign({}, o);          // 2D: the pitch varies by +-5%
+    if (o.at && LIS.set) {          // AudioHooks._on_sfx with a world position: AudioStreamPlayer3D, unit_size 12, max_distance 90, pitch_scale 0.9..1.15; here a 1/(1+d/12) falloff, nothing past 90 m, and a pan from where it is
+      const dx = o.at[0] - LIS.x, dy = (o.at[1] || 0) - LIS.y, dz = o.at[2] - LIS.z, d = Math.hypot(dx, dy, dz); if (d > 90) return;
+      o.gain = (o.gain === undefined ? 1 : o.gain) / (1 + d / 12); pitchR = .9 + Math.random() * .25; if (o.pan === undefined) o.pan = Math.max(-1, Math.min(1, (dx * Math.cos(LIS.yaw) + dz * Math.sin(LIS.yaw)) / Math.max(d, 1)));
+    }
+    const s = a.createBufferSource(); s.buffer = b; s.playbackRate.value = (o.pitch || 1) * pitchR; let node = s;
     if (o.gain !== undefined && o.gain !== 1) { const g = a.createGain(); g.gain.value = o.gain; node.connect(g); node = g; }
     if (o.pan && a.createStereoPanner) { const p = a.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, o.pan)); node.connect(p); node = p; }
     node.connect(bus); voices++; s.onended = () => { voices = Math.max(0, voices - 1); }; s.start();
@@ -109,6 +114,14 @@ export function createSfx(audioCtxProvider, destination, opts = {}) {
   api.grindOn = () => { const a = ctx(); if (!a || grind) return; const n = a.sampleRate, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const s = a.createBufferSource(); s.buffer = b; s.loop = true; const fl = a.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 2200; fl.Q.value = 3; const g = a.createGain(); g.gain.value = .22; s.connect(fl); fl.connect(g); g.connect(bus); s.start(); grind = { s, g, fl }; };
   api.grindSpeed = (v) => { if (grind) grind.fl.frequency.value = 1800 + v * 14; };
   api.grindOff = () => { if (grind) { try { grind.g.gain.setTargetAtTime(0, busCtx.currentTime, .05); grind.s.stop(busCtx.currentTime + .3); } catch (e) { } grind = null; } };
+  api.listener = (x, y, z, heading) => { LIS.set = true; LIS.x = x; LIS.y = y; LIS.z = z; LIS.yaw = heading || 0; };          // where the player is, so a sound given { at: [x, y, z] } is placed
+  // THE WIND (DhDirector._wind_make / _wind_mix; Godot has it off unless ?wind): a 4 s loop of noise through two gentle low-passes with the rumble taken out and a breathing swell (3 cycles), loudness rising with speed and opening up in the air
+  let wind = null, windG = 0; const windRng = (() => { let a = 4242 >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })();
+  api.windStart = () => { const a = ctx(); if (!a || wind) return; const sr = 22050, N = sr * 4, arr = new Float32Array(N); let lp1 = 0, lp2 = 0, hp = 0; for (let i = 0; i < N; i++) { const w = windRng() * 2 - 1; lp1 += (w - lp1) * .2; lp2 += (lp1 - lp2) * .2; hp += (lp2 - hp) * .03; arr[i] = (lp2 - hp) * (.75 + .25 * Math.sin(TAU * i / N * 3)); }
+    const c = sr / 2; for (let i = 0; i < c; i++) { const k = i / c; arr[i] = arr[i] * k + arr[N - c + i] * (1 - k); } const n = N - c; let pk = .001; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(arr[i]));
+    const buf = a.createBuffer(1, n, sr), d = buf.getChannelData(0); for (let i = 0; i < n; i++) d[i] = arr[i] / pk; const src = a.createBufferSource(); src.buffer = buf; src.loop = true; const g = a.createGain(); g.gain.value = 0; src.connect(g); g.connect(bus); src.start(); wind = { src, g }; };
+  api.windUpdate = (spd01, air, paused, dt) => { if (!wind) return; const want = paused ? 0 : Math.max(0, Math.min(.8, (spd01 - .15) * 1.1)) * (air ? 1.5 : 1), rate = (air ? 1.6 : .6) * dt; windG = windG < want ? Math.min(want, windG + rate) : Math.max(want, windG - rate); wind.g.gain.value = windG < .01 ? 0 : windG * Math.pow(10, -23 / 20); };
+  api.windStop = () => { if (wind) { try { wind.src.stop(); } catch (e) { } wind = null; windG = 0; } };
   api.preload = () => { const a = ctx(); if (!a) return; const list = Object.keys(R); let i = 0; const step = () => { if (i < list.length) { buffer(list[i++], a); setTimeout(step, 0); } }; step(); };          // one buffer a tick, so nothing hitches
   return api;
 }
