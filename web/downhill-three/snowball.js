@@ -21,7 +21,7 @@ const lerp = (a, b, t) => a + (b - a) * t;
 
 export function createSnowball(o) {
   const GLW = o.glow || ((m) => m);          // the glow helper from gv.js: the flat balls get a rim and a beat lift
-  const { THREE, scene, th, PH, toast, SFX = {}, onHit, onDodge, onEscape, onWarn, onShake } = o;
+  const { THREE, scene, th, PH, SFX = {}, onHit, onDodge, onEscape, onWarn, onShake } = o; const toast = (m, c) => o.toast(o.boulders ? String(m).replace(/SNOWBALL/g, 'BOULDER') : m, c);
   const SPK = o.SPK || 2.2, halfW = o.halfW || 120, WS = halfW / 58;
   const BALL_R = 3.0, rng = o.rng || mulberry(o.seed || 12345);
   const molColors = o.molColors || null;
@@ -36,6 +36,16 @@ export function createSnowball(o) {
   const mats = { body: null, bump: GLW(new THREE.MeshBasicMaterial({ color: col(.45, .5, .7, 1.4) })), side: GLW(new THREE.MeshBasicMaterial({ color: col(.95, .97, 1, 1.9) })), lump: GLW(new THREE.MeshBasicMaterial({ color: col(.88, .93, 1, 1.8) })) };
   const sph = (r, ws, hs) => new THREE.SphereGeometry(r, ws, hs);
   const G_BODY = sph(3, 16, 8), G_BUMP = sph(.7, 6, 3), G_LUMP = sph(1.1, 6, 3);
+  // ---- BOULDERS (o.boulders): the rolling balls are rocks, not snowballs. One low-poly lumpy icosphere (flat facets) shared by all, and four cheap procedural rock looks (granite, sandstone, mossy, basalt):
+  // a base and a lighter colour mixed by layered noise, dark hairline cracks, a sun-lit side and a faint rim. One small shader, no texture files; a boulder costs about as much as the old ball.
+  const BOULD = !!o.boulders; const toastO = toast;
+  const rockGeo = BOULD ? (() => { const g = new THREE.IcosahedronGeometry(3, 3).toNonIndexed(), p = g.attributes.position, hh = (x, y, z) => { const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; return s - Math.floor(s); }; for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), k = .8 + .38 * hh(Math.round(x * 20) / 20, Math.round(y * 20) / 20, Math.round(z * 20) / 20); p.setXYZ(i, x * k, y * k * .92, z * k); } g.computeVertexNormals(); return g; })() : null;
+  const ROCKS = [[[.38, .39, .42], [.66, .66, .7]], [[.55, .4, .25], [.88, .7, .46]], [[.28, .34, .22], [.62, .64, .5]], [[.13, .13, .16], [.36, .35, .41]]];
+  const rockMats = BOULD ? ROCKS.map(([a, b]) => new THREE.ShaderMaterial({ uniforms: { uBase: { value: new THREE.Color().setRGB(a[0], a[1], a[2]) }, uAlt: { value: new THREE.Color().setRGB(b[0], b[1], b[2]) }, uSun: { value: new THREE.Vector3(.4, .8, .3) } },
+    vertexShader: 'varying vec3 vN, vW, vL; void main() { vL = position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: 'uniform vec3 uBase, uAlt, uSun; varying vec3 vN, vW, vL; float h(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); } float n(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y), mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); } void main() { vec3 N = normalize(vN); float g = n(vL * 1.6) * 0.6 + n(vL * 5.0) * 0.3 + n(vL * 14.0) * 0.1; float crack = smoothstep(0.0, 0.07, abs(n(vL * 3.2) - 0.5)); vec3 c = mix(uBase, uAlt, g) * (0.7 + 0.3 * crack); float dl = max(dot(N, normalize(uSun)), 0.0), rim = pow(1.0 - max(dot(N, normalize(cameraPosition - vW)), 0.0), 3.0); c *= 0.5 + 0.7 * dl; c += rim * 0.12; gl_FragColor = vec4(c, 1.0); }' })) : null;
+  const rockMesh = (rv) => new THREE.Mesh(rockGeo, rockMats[rv % rockMats.length]);
+  const toastB = (m, c) => toastO(BOULD ? String(m).replace(/SNOWBALL/g, 'BOULDER') : m, c);
 
   // ---- state
   const S = { on: false, z: 0, x: 0, next: .167 * L, close: 0, mol: 0, mesh: null, group: null, rumbleT: 0, spawned: 0, escaped: 0, hit: 0, dodged: 0, shield: 0, age: 0, shake: 0 };
@@ -46,8 +56,8 @@ export function createSnowball(o) {
     const g = new THREE.Group(), m = new THREE.Group(); g.add(m);
     const mc = molColors && molColors[S.mol] ? molColors[S.mol] : [.8, .85, 1];
     const base = [.92, .96, 1], c = [lerp(base[0], mc[0], .5), lerp(base[1], mc[1], .5), lerp(base[2], mc[2], .5)];
-    const body = new THREE.Mesh(G_BODY, GLW(new THREE.MeshBasicMaterial({ color: col(c[0], c[1], c[2], 1.9) }))); m.add(body);
-    for (let i = 0; i < 7; i++) { const b = new THREE.Mesh(G_BUMP, mats.bump); const v = [rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1], l = Math.hypot(v[0], v[1], v[2]) || 1; b.position.set(v[0] / l * 2.9, v[1] / l * 2.9, v[2] / l * 2.9); m.add(b); }
+    const body = BOULD ? rockMesh(Math.floor(rng() * 4)) : new THREE.Mesh(G_BODY, GLW(new THREE.MeshBasicMaterial({ color: col(c[0], c[1], c[2], 1.9) }))); m.add(body);
+    for (let i = 0; i < (BOULD ? 0 : 7); i++) { const b = new THREE.Mesh(G_BUMP, mats.bump); const v = [rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1], l = Math.hypot(v[0], v[1], v[2]) || 1; b.position.set(v[0] / l * 2.9, v[1] / l * 2.9, v[2] / l * 2.9); m.add(b); }
     root.add(g); S.group = g; S.mesh = m;
   }
   function removeBehind() { if (S.group) { root.remove(S.group); S.group = null; S.mesh = null; } }
@@ -94,7 +104,7 @@ export function createSnowball(o) {
     const d = clamp(-PH.z / 3500, 0, 1), T = 2.6, sp = Math.max(-PH.vz, 24 * SPK);
     const lim = 38 * WS, px = clamp(PH.x + PH.vx * T, -lim, lim), pz = PH.z - sp * T, vb = (12 + 6 * d) * SPK, sd = px < 0 ? 1 : -1;
     const sx = clamp(px + sd * 44 * Math.sqrt(WS), -(halfW - 4), halfW - 4), sz = pz + vb * T, vx = (px - sx) / T;
-    const n = new THREE.Group(); n.add(new THREE.Mesh(G_BODY, mats.side)); for (let i = 0; i < 5; i++) { const a = i * 1.7, l = new THREE.Mesh(G_LUMP, mats.lump); l.position.set(Math.cos(a) * 2.4, Math.sin(a * 1.3) * 2.4, Math.sin(a) * 2.4); n.add(l); }
+    const n = new THREE.Group(); n.add(BOULD ? rockMesh(Math.floor(rng() * 4)) : new THREE.Mesh(G_BODY, mats.side)); for (let i = 0; i < (BOULD ? 0 : 5); i++) { const a = i * 1.7, l = new THREE.Mesh(G_LUMP, mats.lump); l.position.set(Math.cos(a) * 2.4, Math.sin(a * 1.3) * 2.4, Math.sin(a) * 2.4); n.add(l); }
     n.position.set(sx, th(sx, sz) + BALL_R, sz); root.add(n); balls.push({ n, x: sx, z: sz, vx, vz: -vb, t: 0, done: false });
     S.spawned++; nextBallZ = PH.z - (150 + rng() * 80) * lerp(1, .7, d) * SPK; toast('SNOWBALL!', '#cdf'); if (SFX.whoosh) SFX.whoosh(); else rumble(.6);
   }

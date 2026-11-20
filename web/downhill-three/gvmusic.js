@@ -116,7 +116,7 @@ export function createGvMusic(opts = {}) {
 
   function ensure(name) {          // load a stem (once) and route it through the stem group's own filters
     if (!M || wired[name]) return; wired[name] = true; M.load(name); const s = M.stems[name]; if (!s) return;
-    if (hp && s.gain && s.gain.disconnect) { try { s.gain.disconnect(); s.gain.connect(hp); } catch (e) { /* */ } }
+    if (hp && s.gain && s.gain.disconnect) { try { s.gain.disconnect(); if (opts.stemsOnly && name === 'drums' && M.ctx.createBiquadFilter) { const hh = M.ctx.createBiquadFilter(); hh.type = 'highpass'; hh.Q.value = 0.7; hh.frequency.value = 7500; s.gain.connect(hh); hh.connect(hp); AU.hat = hh; } else s.gain.connect(hp); } catch (e) { /* */ } }
     AU.stems[name] = new Auto(s.gain.gain, 0, false, 'stem:' + name, log);
   }
   async function start() {
@@ -131,7 +131,7 @@ export function createGvMusic(opts = {}) {
           hp.connect(lp); lp.connect(sm); sm.connect(M.musicBus);
           AU.hp = new Auto(hp.frequency, HP_REST, true, 'hp', log); AU.lp = new Auto(lp.frequency, LP_OPEN, true, 'lp', log); AU.lpStart = true;
         }
-        ensure('ambience'); await M.stems.ambience.ready; M.start(); started = true;          // the ambience is always there: it starts the one clock the other stems join, in step
+        ensure('ambience'); await M.stems.ambience.ready; M.start(); started = true; if (opts.stemsOnly) for (const n of STEMS) ensure(n);          // the ambience is always there: it starts the one clock the other stems join, in step
         M.cutoff(OPEN_CUT, 0.05);
       } catch (e) { failed = true; started = false; }
     })();
@@ -264,6 +264,7 @@ export function createGvMusic(opts = {}) {
     return { stage: D.deep ? 'drop' : (trip || D.down ? 'funk' : 'pre'), trip, phase };
   }
   function arcStep(st, avg) {
+    if (opts.stemsOnly) return { stage: 'pre', phase: 'plateau' };
     const w = wantStage(st, avg), exc = clamp(st.excitement || 0, 0, 1), E = w.phase === 'plateau' ? 0.88 : 1;
     if (w.stage === 'chill') { if (A.stage !== 'chill') startChill(nextBar()); return w; }
     if (A.stage === 'chill') { if (barsNow() >= A.busyUntil - 3 + 0 && !A.pend) { if (w.stage === 'pre') startPre(nextBar()); else if (askTrack(D.wantKey && D.wantKey !== 'moodless' ? D.wantKey : (D.wantKey = nextIn(w.trip ? bandFor(exc) : 'sunny'))).ready) startFunk(bandFor(exc), nextBar()); } return w; }
@@ -308,11 +309,14 @@ export function createGvMusic(opts = {}) {
   function tick(dt, st) {
     if (!started || !M || failed) return; D.age += dt; D.dwell += dt; D.bump = Math.max(D.bump - dt * 0.8, 0); if (paused) return;
     st = Object.assign({}, st, { _dt: dt }); const holds = holdsOf(st), avg = st.avg !== undefined ? st.avg : holds.reduce((a, b) => a + b, 0) / 6, exc = clamp(st.excitement || 0, 0, 1);
-    if (A.preBar0 === null) { const skip = opts.introSkip || 0; A.lastCommit = Math.ceil(barsNow() + LOOK) - 1; A.preBar0 = A.lastCommit + 1 - skip;          /* introSkip: begin the pre-trip build this many bars in, so the pulse and the swell are heard at once instead of a quiet, dull ambience */ D.mode = 'stems'; D.stemG = 1; D.stemWant = 1; if (log) log({ stage: 'pre', at: now(), bar: A.preBar0 });
+    if (opts.stemsOnly && A.preBar0 === null) { A.preBar0 = 0; A.stage = 'stemsonly'; D.mode = 'stems'; D.stemG = 1; D.stemWant = 1; if (AU.lp) AU.lp.plan(now(), [{ to: LP_OPEN, at: now(), dur: 0.05, kind: 'now' }], 'now'); }
+    if (!opts.stemsOnly && A.preBar0 === null) { const skip = opts.introSkip || 0; A.lastCommit = Math.ceil(barsNow() + LOOK) - 1; A.preBar0 = A.lastCommit + 1 - skip;          /* introSkip: begin the pre-trip build this many bars in, so the pulse and the swell are heard at once instead of a quiet, dull ambience */ D.mode = 'stems'; D.stemG = 1; D.stemWant = 1; if (log) log({ stage: 'pre', at: now(), bar: A.preBar0 });
       if (AU.lp) AU.lp.plan(now(), [{ to: skip ? lpPre(skip) : LP_SHUT, at: now(), dur: 0.01, kind: 'now' }], 'now'); stemsPlan(preValues(skip), now(), 1.5, 'now'); }
     if (D.age > stemAfter) { ensure('fx'); ensure('pulse'); ensure('bass'); }
+    if (opts.stemsOnly) { for (const n of STEMS) ensure(n); if (D.age - (D._sp === undefined ? -9 : D._sp) > 1) { D._sp = D.age; const T = D.age + 40 * clamp(st.excitement || 0, 0, 1), ENTRY = [0, 3.7, 5.6, 0, 11, 70, 24, 45, 95], RAMP = [5, 2, 1.5, .4, 8, 12, 10, 12, 12], MAXL = [.6, .7, .85, .85, .7, .65, .75, .6, .5]; stemsPlan(ENTRY.map((e, i) => MAXL[i] * clamp((T - e) / RAMP[i], 0, 1)), now(), 2.5, 'now');
+      if (AU.hat && !D._hat) { D._hat = 1; const f = AU.hat.frequency, t = M.ctx.currentTime; f.cancelScheduledValues(t); f.setValueAtTime(7500, t); f.setValueAtTime(7500, t + 3.6); f.exponentialRampToValueAtTime(25, t + 5.6); } } }
     if (D.age > 15 || st.tripOn || avg >= 0.03) for (const n of ['drums', 'synth', 'acid', 'piano', 'guitar']) ensure(n);          // the rest of the stems come down in the background
-    if (D.age > 3 && !D.wantKey && A.stage !== 'chill') { D.wantKey = nextIn(bandFor(exc)); askTrack(D.wantKey); }          // the funk is fetched long before it is needed
+    if (D.age > 3 && !D.wantKey && A.stage !== 'chill' && !opts.stemsOnly) { D.wantKey = nextIn(bandFor(exc)); askTrack(D.wantKey); }          // the funk is fetched long before it is needed
     if ((typeof st.u === 'number' && st.u > 0.45) || st.phase === 'plateau' || st.phase === 'peak' || st.chill) askTrack('moodless');          // and so is the chill-out
     // the picture's edges
     if (typeof st.clarityK === 'number') { if (st.clarityK < 0.5 && A.prevClarity >= 0.5) clarityDrop(); else if (st.clarityK >= 0.5 && A.prevClarity < 0.5) claritySnap(st, st.phase === 'plateau' ? 0.88 : 1); A.prevClarity = st.clarityK; }

@@ -186,8 +186,8 @@ export function createKit(o) {
   // after a natural ramp: hoops along the flight and a chrome rail to land on, in line with the ramp
   function buildAfterRamp(v, spans) {
     const R = mulberry((Math.abs(Math.floor(v.z)) * 31 + 7) >>> 0), B = GeoBuf(), zLip = v.z - v.len, x = v.x; let made = false;
-    buildRings({ x, z0: v.z, len: v.len }, x, zLip, 'steel', ARCS[Math.floor(R() * ARCS.length)]); buildTarget(x + (R() - .5) * 6, zLip - 74 - R() * 18);          // the landing target
-    const z = zLip - 34 - R() * 10; if (!spans.some((s2) => s2 !== null && z > s2[0] - 12 && z < s2[1] + 4 && !(v.z - 5 <= s2[1] && v.z + 5 >= s2[0]))) { buildRings({ x, z0: z, len: 90 }, x + (R() - .5) * 4, z + 20, 'steel', 'stream'); made = true; }          // where the flight comes down: a ring stream to carry the speed
+    made = true;          // (the hoops, the landing target and the stream are made at the moment of the jump, from the real flight: launch())
+    const z = zLip - 34 - R() * 10;
     if (made) { const mesh = new THREE.Mesh(B.geo(), matO); mesh.frustumCulled = false; scene.add(mesh); if (R() < .6) makeBuff(weighted(R), x + (R() - .5) * 8, z - 70 - R() * 20, R); }
   }
 
@@ -207,8 +207,8 @@ export function createKit(o) {
     for (let i = 0; i < 90; i++) { const dt = .05; vy -= g * dt; x += vx * dt; y += vy * dt; z += vz * dt; const gg = groundY(x, z), gy = gg === null ? th(x, z) : gg; if (y <= gy + .3) return { x, z, y: gy }; }
     return null;
   }
-  function confetti(x, y, z) {
-    const N = 150, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), vel = []; for (let i = 0; i < N; i++) { pos[i * 3] = x; pos[i * 3 + 1] = y + 1; pos[i * 3 + 2] = z; const a = Math.random() * 6.283, up = 8 + Math.random() * 14, sp2 = 2 + Math.random() * 9; vel.push([Math.cos(a) * sp2, up, Math.sin(a) * sp2]); const h = Math.random(); const c = new THREE.Color().setHSL(h, 1, .6); col[i * 3] = c.r * 1.6; col[i * 3 + 1] = c.g * 1.6; col[i * 3 + 2] = c.b * 1.6; }
+  function confetti(x, y, z, count) {
+    const N = count || 150, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), vel = []; for (let i = 0; i < N; i++) { pos[i * 3] = x; pos[i * 3 + 1] = y + 1; pos[i * 3 + 2] = z; const a = Math.random() * 6.283, up = 8 + Math.random() * 14, sp2 = 2 + Math.random() * 9; vel.push([Math.cos(a) * sp2, up, Math.sin(a) * sp2]); const h = Math.random(); const c = new THREE.Color().setHSL(h, 1, .6); col[i * 3] = c.r * 1.6; col[i * 3 + 1] = c.g * 1.6; col[i * 3 + 2] = c.b * 1.6; }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, fog: false })); pts.frustumCulled = false; scene.add(pts); bursts.push({ pts, vel, age: 0, N });
   }
   function hitTarget(t, d) {
@@ -222,6 +222,18 @@ export function createKit(o) {
     if (air && near) { const L = predictLanding(); if (L) { const d = Math.hypot(L.x - near.x, L.z - near.z), on = d < near.r, pulse = 1 + .12 * Math.sin(t0 * 9); reticle.visible = true; reticle.position.set(L.x, L.y + .2, L.z); reticle.scale.setScalar(pulse); reticle.material.color.setRGB(on ? 2 : 1.2, on ? 1.5 : 1.2, on ? .3 : 1.2); } else reticle.visible = false; } else reticle.visible = false;
     for (const t of targets) { if (!t.done) { t.grp.scale.setScalar(1 + .03 * Math.sin(t0 * 4 + t.z)); t.beam.visible = Math.abs(t.z - PH.z) < 260; } else { t.t += dt; const k = Math.max(0, 1 - t.t / 2.5); t.grp.scale.setScalar(1 + (1 - k) * .6); t.beam.material.opacity = .32 * k + .25 * Math.max(0, 1 - t.t * 2); if (t.t > 2.5) { t.grp.visible = false; t.beam.visible = false; } } }
     for (let b = bursts.length - 1; b >= 0; b--) { const B = bursts[b]; B.age += dt; const p = B.pts.geometry.attributes.position; for (let i = 0; i < B.N; i++) { const v = B.vel[i]; v[1] -= 16 * dt; v[0] *= Math.exp(-.6 * dt); v[2] *= Math.exp(-.6 * dt); p.array[i * 3] += v[0] * dt; p.array[i * 3 + 1] += v[1] * dt; p.array[i * 3 + 2] += v[2] * dt; } p.needsUpdate = true; B.pts.material.opacity = Math.max(0, 1 - B.age / 2.8); if (B.age > 2.8) { scene.remove(B.pts); B.pts.geometry.dispose(); B.pts.material.dispose(); bursts.splice(b, 1); } }
+  }
+
+  // ---------------------------------------------------------------- THE FLIGHT IS MEASURED, NOT GUESSED: at the moment a board leaves a natural ramp the game calls launch(). It simulates the flight from the board's real
+  // position and speed (the same air gravity), then puts the hoops ON that path (a few of them, wandering a little), a landing target a few metres off where the board would come down (so a little air steering is
+  // needed to hit it), and a stream of rings carrying on from the landing. Everything is made at that moment, for that jump.
+  const RGEO = new THREE.TorusGeometry(2.7, .3, 10, 28), RMAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.2, .35), fog: false });
+  function addRing(x, y, z, r) { const mesh = new THREE.Mesh(RGEO, RMAT); mesh.position.set(x, y, z); mesh.frustumCulled = false; scene.add(mesh); rings.push({ x, y, z, r: r || 3.1, mesh, taken: false }); }
+  function flightPath() { let x = PH.x, y = PH.y, z = PH.z, vx = PH.vx, vy = PH.vy, vz = PH.vz; const g = (C.GV || 9.8) * (C.AIR_G_K || 2.1), pts = []; for (let i = 0; i < 90; i++) { const dt = .05; vy -= g * dt; x += vx * dt; y += vy * dt; z += vz * dt; const gg = groundY(x, z), gy = gg === null ? th(x, z) : gg; pts.push({ x, y, z, gy }); if (y <= gy + .3) break; } return pts; }
+  function launch() {
+    const pts = flightPath(); if (pts.length < 4) return; const R = mulberry((Math.floor(Math.abs(PH.z) * 13) + 91) >>> 0), L = pts[pts.length - 1], design = ARCS[Math.floor(R() * 4)], n = Math.min(5, Math.max(3, Math.floor(pts.length / 3)));
+    for (let i = 0; i < n; i++) { const p = pts[Math.min(pts.length - 2, Math.floor((i + 1) / (n + 1) * pts.length))]; let dx = 0; if (design === 'spiral') dx = Math.sin(i * 1.3) * 3; else if (design === 'sweep') dx = Math.sin(i * .9) * 5; addRing(p.x + dx, p.y + 1.1, p.z); }
+    const off = (R() < .5 ? -1 : 1) * (4 + R() * 5), tx = L.x + off, tz = L.z - 6 - R() * 10; buildTarget(tx, tz); buildRings({ x: tx, z0: tz, len: 90 }, tx - off * .5, tz + 22, 'steel', 'stream');
   }
 
   // physics: the ramps lift a grounded board along their profile and throw it at the lip; the hoops are collected on the way through
@@ -239,7 +251,10 @@ export function createKit(o) {
       }
     }
     targetsStep(dt);
-    for (const g of rings) { if (g.taken || Math.abs(g.z - PH.z) > 3) continue; if (Math.hypot(PH.x - g.x, (PH.y + 1) - g.y) < g.r) { g.taken = true; g.mesh.visible = false; PH.score += 80; PH.boost_t = Math.max(PH.boost_t, .8); toast('RING', '#fc6'); try { hooks.onRing && hooks.onRing(g); } catch (e) { } } }
+    for (const g of rings) { if (g.taken || Math.abs(g.z - PH.z) > 3) continue; if (Math.hypot(PH.x - g.x, (PH.y + 1) - g.y) < g.r) { g.taken = true; g.mesh.visible = false; PH.score += 80; PH.boost_t = Math.max(PH.boost_t, .8); toast('RING', '#fc6'); confetti(g.x, g.y, g.z, 40); try { hooks.onRing && hooks.onRing(g); } catch (e) { } } }
   }
-  return { buildRow, buildAfterRamp, phraseOf, setVxRows, step, ramps, rings, designs: { RAMPS, RAILD }, MATS };
+  { const warm = new THREE.Group(); const dummy = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.position.set(0, -4000, 0); m.scale.setScalar(.01); m.frustumCulled = false; warm.add(m); };
+    dummy(RGEO, RMAT); dummy(new THREE.CircleGeometry(1, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })); dummy(new THREE.CylinderGeometry(.3, .3, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .3, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false })); dummy(new THREE.RingGeometry(1, 1.5, 8), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false, toneMapped: false, fog: false, side: THREE.DoubleSide }));
+    { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)); g.setAttribute('color', new THREE.Float32BufferAttribute([1, 1, 1], 3)); const pt = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.3, vertexColors: true, transparent: true, depthWrite: false, toneMapped: false, fog: false })); pt.position.set(0, -4000, 0); pt.frustumCulled = false; warm.add(pt); } scene.add(warm); }          // (warm-up copies, see above)
+  return { buildRow, buildAfterRamp, launch, phraseOf, setVxRows, step, ramps, rings, designs: { RAMPS, RAILD }, MATS };
 }
