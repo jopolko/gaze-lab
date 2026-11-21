@@ -196,9 +196,9 @@ export function createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks
         t.s = t.s === undefined ? 1 : 1 + (t.s - 1) * Math.exp(-8 * dt); if (r && t.s > 1.001) pose(t.n, r.base.clone().multiply(scl(t.s))); else if (r && t.sOn) { pose(t.n, r.base); t.sOn = false; }
         if (Math.abs(tz - PH.z) > 3.5 || now < (t.t || 0)) continue;
         const dx = PH.x - t.x, dz = PH.z - tz;
-        if (dx * dx + dz * dz > 5.5 || above > 2.6) continue;
+        if (dx * dx + dz * dz > 10 || above > 3.2) continue;
         t.t = now + 400; const l = Math.hypot(dx, dz), dxn = l > .1 ? dx / l : 1;
-        PH.vx += dxn * 15 * SPK; PH.vz -= 2.5 * SPK; t.s = 1.6; t.sOn = true; gain(80); flowUp(1); mixAdd('bump'); snd('boing');
+        PH.vx += dxn * 15 * SPK; PH.vz -= 2.5 * SPK; t.s = 1.6; t.sOn = true; gain(80); flowUp(1); mixAdd('bump'); snd('boing'); try { hooks && hooks.onBump && hooks.onBump(t.x, t.y, tz, dxn); } catch (e) { }
       }
     }
   }

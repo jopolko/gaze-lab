@@ -120,7 +120,7 @@ export function createCamRig(o) {
     // ---- the look point (10414-10422)
     let ax = PH.x + S.lookX * LOOK_AHEAD, az = PH.z + S.lookZ * LOOK_AHEAD, ay = th(ax, az) + LOOK_Y + S.hopCam * 0.5;
     const flat = Math.hypot(ax - ex, az - ez), lk = o.lookDown ? o.lookDown() : 0.2, wdy = clamp(ay - ey, -flat * (lk + 0.05 * S.crest), flat * 0.1);          // lk: how far the view may tip down (as a slope). Godot allowed 0.2 (11 degrees); the courses here run down 8 to 19 degrees and steeper, so the road ahead dropped out of the picture
-    S.fpDy = snap ? wdy : lerp(S.fpDy, wdy, 1 - Math.exp(-6 * dt)); ay = ey + S.fpDy;
+    S.fpDy = snap ? wdy : lerp(S.fpDy, wdy, 1 - Math.exp(-9 * dt)); ay = ey + S.fpDy;
     // ---- in a tube the camera rides the tube (10423-10429)
     S.lkcBlend = lerp(S.lkcBlend, S.tubeOn ? 1 : 0, 1 - Math.exp(-(S.tubeOn ? 7 : 3) * dt));
     _up.set(0, 1, 0);

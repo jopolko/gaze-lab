@@ -31,6 +31,7 @@ const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(78, 1, 0.2
 const clock = { t: 0 };
 import { MOLS, MOL_ORDER } from './molecules.js';
 import { createSpawn } from './spawn.js';
+import { buildMolGeometry, moleculeMaterial } from './molmesh.js';
 import { createToys } from './toys.js';
 import { createPsyFx } from './psyfx.js';
 import { createPostFx } from './postfx.js';
@@ -208,7 +209,7 @@ function skyMatOld() {          // SKY_PSY
 function backdropMat(params) {          // the distant backdrop with the HORIZON BEND (past 140 m the world curls up with the square of the distance)
   return new THREE.ShaderMaterial({ uniforms: { fogColor: U.fogColor, fogDensity: U.fogDensity, albedo: { value: rgb(params.albedo_color || [1, 1, 1], true) }, bend_k: { value: params.bend_k || 0 } }, side: THREE.DoubleSide,
     vertexShader: 'attribute vec3 color; varying vec3 vC; varying vec3 wp; uniform float bend_k; void main(){ vC = color; vec4 w = modelMatrix * vec4(position, 1.); wp = w.xyz; float bd = max(length(w.xz - cameraPosition.xz) - 140., 0.); w.y += bend_k * bd * bd; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: `uniform vec3 albedo, fogColor; uniform float fogDensity; varying vec3 wp; varying vec3 vC; void main(){ vec3 col = vC * albedo; ${FOGF} gl_FragColor = vec4(col, 1.); ${TAIL} }` });
+    fragmentShader: `uniform vec3 albedo, fogColor; uniform float fogDensity; varying vec3 wp; varying vec3 vC; void main(){ vec3 col = vC * albedo; { float lm = dot(col, vec3(.299, .587, .114)), mx = max(col.r, max(col.g, col.b)), mn = min(col.r, min(col.g, col.b)), sat = (mx - mn) / max(mx, .001); col = mix(col, vec3(.10, .03, .20) + col * .3, smoothstep(.4, .7, lm) * (1. - smoothstep(.3, .65, sat))); }          /* no white: a pale, colourless backdrop is pulled down to the dark purple of the world */ ${FOGF} gl_FragColor = vec4(col, 1.); ${TAIL} }` });
 }
 function quadMat(code, params) {          // the soft additive glow quads and the tint gradient
   const add = code.includes('blend_add');
@@ -316,18 +317,37 @@ function animTick(age) {
 } let ring = null;          // the mountain ring (the 1620-vertex vertex-coloured mesh): Godot moves it with the board so it never moves against the road
 const HF = createHeightfield(), GRIDLESS = [];          // ground height by lookup (a regular grid), the raycast only for meshes that are not one
 let TRK = []; const OBJS = {}, GRPS = {}, ROWREC = {};
+// LIGHT SHAFTS: the level's tall soft glow quads (13 m x 64 m, additive, with a shimmer) are found as the rows build. Each is made a little bigger (&shaftsize, default 1.35 wide, about 1.2 tall, grown about its foot),
+// and hangs a special MOLECULE in its beam: a slowly turning molecule you fly into for a big bonus (not one of the six story molecules). &shaftmol=0 turns the molecules off.
+const SHAFTS = [], SHAFTSEEN = new Set();
+function shaftPrep(g, mat, M) { try {
+  if (!(mat.uniforms && mat.uniforms.dose && mat.blending === THREE.AdditiveBlending)) return; if (!g.boundingBox) g.computeBoundingBox(); const b = g.boundingBox, sz = b.getSize(new THREE.Vector3()); if (sz.y < 40) return;
+  const k = Math.max(.5, Math.min(2.5, sp('shaftsize', 1.35))); if (!M.__grown && k !== 1) { M.__grown = true; const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2, T1 = new THREE.Matrix4().makeTranslation(cx, b.min.y, cz), S = new THREE.Matrix4().makeScale(k, 1 + (k - 1) * .6, k), T2 = new THREE.Matrix4().makeTranslation(-cx, -b.min.y, -cz); M.multiply(T1).multiply(S).multiply(T2); }
+  const c = new THREE.Vector3((b.min.x + b.max.x) / 2, b.min.y, (b.min.z + b.max.z) / 2).applyMatrix4(M), key = Math.round(c.x / 3) + ',' + Math.round(c.z / 3); if (SHAFTSEEN.has(key)) return; SHAFTSEEN.add(key);
+  SHAFTS.push({ x: c.x, y: c.y, z: c.z, h: sz.y, i: SHAFTS.length, taken: false, mesh: null, age: 0 }); } catch (e) { } }
+function shaftStep(dt) {
+  if (sp('shaftmol', 1) <= 0 || !SHAFTS.length) return; const t = performance.now() / 1000;
+  for (const s of SHAFTS) {
+    if (s.i % Math.max(1, Math.round(sp('shaftmolk', 5))) !== 0) continue; if (s.taken || Math.abs(s.z - PH.z) > 520) { if (s.mesh && s.mesh.visible && (s.taken || Math.abs(s.z - PH.z) > 560)) s.mesh.visible = false; continue; }
+    if (!s.mesh) { const id = MOL_ORDER[s.i % MOL_ORDER.length]; s.mesh = new THREE.Mesh(buildMolGeometry(THREE, id), moleculeMaterial(THREE)); s.mesh.scale.setScalar(2.4); s.mesh.frustumCulled = false; s.mesh.renderOrder = 7; scene.add(s.mesh); s.id = id; }
+    s.mesh.visible = true; const gy = groundY(s.x, s.z), base = gy === null ? s.y : gy, y = base + 5 + .5 * Math.sin(t * 2.2 + s.i); s.my = y; s.mesh.position.set(s.x, y, s.z); s.mesh.rotation.set(.5, t * 1.6 + s.i, .3);
+    const dx = PH.x - s.x, dz = PH.z - s.z; if (dx * dx + dz * dz < 20 && Math.abs(PH.y - y) < 6) {
+      s.taken = true; s.mesh.visible = false; PH.score += 1000; PH.boost_t = Math.max(PH.boost_t, 2.4); PH.picks++; chainHit(); chainHit(); toast('LIGHT MOLECULE  +1000', '#8ff'); try { FX.E.pillEat([s.x, y, s.z], MOLS[s.id].c); } catch (e) { } try { SFX.pick(); SFX.snap(); } catch (e) { } try { FX.E.orb([s.x, y, s.z]); } catch (e) { } }
+  }
+}
+
 function buildNode(n, tag) { const a0 = ANIM.length; TRK = OBJS[tag] = OBJS[tag] || []; buildNode0(n); if (ANIM.length > a0) (GRPS[tag] = GRPS[tag] || []).push(...ANIM.slice(a0)); }
 function buildNode0(n) {
   vis[n.path] = n.vis !== false; const parts = n.path.split('/'); let ok = true; for (let k = 2; k < parts.length; k++) if (vis['/' + parts.slice(1, k + 1).join('/')] === false) { ok = false; break; }
   if (!ok || !n.path.startsWith('/MainLevel/RunRig') || n.path.includes('@Camera3D') || n.path.includes('SubViewport')) return;
   if (n.class === 'MeshInstance3D' && n.mesh) {
     const gs = geoOf(n.mesh); const M4 = mat4(n.xf);
-    for (const [g, sm] of gs) { const mat = matOf(n.mat_override || sm); if (!mat) continue; const m = new THREE.Mesh(g, mat); m.matrixAutoUpdate = false; m.matrix.copy(M4); m.frustumCulled = false; const ap = animParent(n.path); if (ap) { m.matrix.copy(ap.userData.base.clone().invert().multiply(M4)); ap.add(m); } else NODE.add(m); TRK.push(m); (REGN[n.name] || (REGN[n.name] = [])).push(m); nMesh++; if (((c) => c.includes('MOIRE') || GROUND_SIGS.some((sg) => c.includes(sg)))(lvl.materials[n.mat_override || sm]?.shader_code || '')) {          /* every world's ground, not only the psychedelic one: the board follows its terrain */ ground.push(m); const e = M4.elements; const plain = Math.abs(e[0] - 1) + Math.abs(e[5] - 1) + Math.abs(e[10] - 1) + Math.abs(e[1]) + Math.abs(e[2]) + Math.abs(e[4]) + Math.abs(e[6]) + Math.abs(e[8]) + Math.abs(e[9]) < 1e-6; if (plain && !Q.has('noheightfield') && HF.addMesh(m.uuid, g.attributes.position.array, g.index ? g.index.array : null, [e[12], e[13], e[14]])) m.userData.hf = true; else GRIDLESS.push(m); } if (!ring && (g.attributes.position.count === 1620 || (n.xf && Math.abs(n.xf[9]) < 1 && Math.abs(n.xf[10] + 160) < 2 && Math.abs(n.xf[11]) < 1))) { ring = m; if (!Q.has('plainring')) { const rb = (WORLD_THEME !== 'psychedelic' || Q.has('newring')) && ringBiome(WORLD_THEME, U); if (rb) m.material = rb; } } else if (((WORLD_THEME !== 'psychedelic' && WORLD_THEME !== 'alpine') || Q.has('newskirt')) && g.attributes.position.count === 4656 && n.xf && Math.abs(n.xf[10]) < 1) m.material = snowMat({ skirt: WORLD_THEME === 'psychedelic' }); }          // the terrain skirt (the sloping sides around the course) wears each world's own ground, not plain white
+    for (const [g, sm] of gs) { const mat = matOf(n.mat_override || sm); if (!mat) continue; shaftPrep(g, mat, M4); const m = new THREE.Mesh(g, mat); m.matrixAutoUpdate = false; m.matrix.copy(M4); m.frustumCulled = false; const ap = animParent(n.path); if (ap) { m.matrix.copy(ap.userData.base.clone().invert().multiply(M4)); ap.add(m); } else NODE.add(m); TRK.push(m); (REGN[n.name] || (REGN[n.name] = [])).push(m); nMesh++; if (((c) => c.includes('MOIRE') || GROUND_SIGS.some((sg) => c.includes(sg)))(lvl.materials[n.mat_override || sm]?.shader_code || '')) {          /* every world's ground, not only the psychedelic one: the board follows its terrain */ ground.push(m); const e = M4.elements; const plain = Math.abs(e[0] - 1) + Math.abs(e[5] - 1) + Math.abs(e[10] - 1) + Math.abs(e[1]) + Math.abs(e[2]) + Math.abs(e[4]) + Math.abs(e[6]) + Math.abs(e[8]) + Math.abs(e[9]) < 1e-6; if (plain && !Q.has('noheightfield') && HF.addMesh(m.uuid, g.attributes.position.array, g.index ? g.index.array : null, [e[12], e[13], e[14]])) m.userData.hf = true; else GRIDLESS.push(m); } if (!ring && (g.attributes.position.count === 1620 || (n.xf && Math.abs(n.xf[9]) < 1 && Math.abs(n.xf[10] + 160) < 2 && Math.abs(n.xf[11]) < 1))) { ring = m; if (!Q.has('plainring')) { const rb = (WORLD_THEME !== 'psychedelic' || Q.has('newring')) && ringBiome(WORLD_THEME, U); if (rb) m.material = rb; } } else if (((WORLD_THEME !== 'psychedelic' && WORLD_THEME !== 'alpine') || Q.has('newskirt')) && g.attributes.position.count === 4656 && n.xf && Math.abs(n.xf[10]) < 1) m.material = snowMat({ skirt: WORLD_THEME === 'psychedelic' }); }          // the terrain skirt (the sloping sides around the course) wears each world's own ground, not plain white
   } else if (n.class === 'MultiMeshInstance3D' && n.mesh && n.count) {
     const gs = geoOf(n.mesh); const NM = mat4(n.xf);
     for (const [g, sm] of gs) {
       const mat = matOf(n.mat_override || sm); if (!mat) continue; const im = new THREE.InstancedMesh(g, mat, n.count); const t = new THREE.Matrix4();
-      for (let i = 0; i < n.count; i++) { t.copy(NM).multiply(mat4(n.xfs[i])); im.setMatrixAt(i, t); if (n.cols) im.setColorAt(i, new THREE.Color().setRGB(n.cols[i][0], n.cols[i][1], n.cols[i][2], THREE.LinearSRGBColorSpace)); }
+      for (let i = 0; i < n.count; i++) { t.copy(NM).multiply(mat4(n.xfs[i])); t.__grown = false; shaftPrep(g, mat, t); im.setMatrixAt(i, t); if (n.cols) im.setColorAt(i, new THREE.Color().setRGB(n.cols[i][0], n.cols[i][1], n.cols[i][2], THREE.LinearSRGBColorSpace)); }
       im.frustumCulled = false; NODE.add(im); TRK.push(im); { g.computeBoundingSphere(); if (g.boundingSphere.radius > 1.2) { VEGIM.push(im); if (window.__clearTrees) window.__clearTrees(im); } } nMesh++; nInst += n.count; if (mat.userData && mat.userData.veg) { g.computeBoundingSphere(); const br = g.boundingSphere.radius; if (br > 2 && br < 9 && (!VEGSRC || n.count > VEGSRC.n)) VEGSRC = { g, mat, n: n.count }; } if (!lvl.stream && mat.userData && mat.userData.veg) for (let i = 0; i < n.count; i++) { t.copy(NM).multiply(mat4(n.xfs[i])); const k = Math.round(t.elements[12]) + ',' + Math.round(t.elements[14]); if (!TREES.has(k)) TREES.set(k, [t.elements[12], t.elements[14]]); }
     }
   }
@@ -343,10 +363,10 @@ window.__zmap = null;
 window.__zoneOf = (j) => {
   if (sp('zones', 1) <= 0) return 'off';
   if (!window.__zmap) {          // decided once, from the course itself: a slalom only goes where there is no ramp, rail or molecule in the row (or within 140 m upstream of one: a ramp pulls the board in from that far)
-    const rows = lvl.rows || {}, n = lvl.nrows || Object.keys(rows).length, busy = (j) => { const rr = rows[String(j)], z0 = -180 * j, lo = z0 - 190, hi = z0 + 10; const hit = (zs, pre) => { const a = Math.min(...zs), b = Math.max(...zs) + pre; return b > lo && a < hi; };
+    const rows = lvl.rows || {}, n = lvl.nrows || Object.keys(rows).length, busy = (j) => { if ([j - 1, j, j + 1].some((k) => ((rows[String(k)] || {}).pads || []).some((p) => p.lk))) return true; /* a spring (pad + tube) is a set piece: no pylons around it, and its pad is never hidden */ const rr = rows[String(j)], z0 = -180 * j, lo = z0 - 190, hi = z0 + 10; const hit = (zs, pre) => { const a = Math.min(...zs), b = Math.max(...zs) + pre; return b > lo && a < hi; };
       for (const q of [rows[String(j)], rows[String(j + 1)], rows[String(j - 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length && hit(zs, f.kind === 'jump' ? 140 : 10)) return true; } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z) && hit([t.z], 20)) return true; }
       return false; };
-    const m = {}; let run = 0, prev = 'clear'; for (let j = 0; j < n; j++) { let z; if (j === 0) z = 'clear'; else if (!busy(j) && run < 2) { z = 'slalom'; run++; } else { run = 0; z = prev === 'slalom' ? 'clear' : (j % 2 ? 'content' : 'clear'); } m[j] = z; prev = z; }
+    const m = {}; let run = 0, prev = 'clear'; for (let j = 0; j < n; j++) { let z; if (j === 0) z = 'clear'; else if (!busy(j) && run < Math.round(sp('slalomrun', 2))) { z = 'slalom'; run++; } else { run = 0; z = prev === 'slalom' ? 'clear' : (j % 2 ? 'content' : 'clear'); } m[j] = z; prev = z; }
     window.__zmap = m; try { window.__dm && window.__dm('zones: ' + Object.values(m).join(',')); } catch (e) { }
   }
   return window.__zmap[j] || 'content';
@@ -371,7 +391,7 @@ window.__zoneRow = (rr, j) => {
   const dens = z === 'content' ? Math.max(0, Math.min(1, sp('density', .5))) : 0, keep = (i, salt) => (((i * 2654435761 + j * 40503 + salt * 977) >>> 0) % 1000) / 1000 < dens;
   try {
     const prevR = lvl.rows[String(j - 1)] || {}, ap = (rr.pads || []).concat(prevR.pads || []), follows = (b) => ap.some((q) => !q.zoneHid && q.z - b.z > 25 && q.z - b.z < 120 && Math.abs(q.x - b.x) < 45);
-    (rr.pads || []).forEach((q) => { if (!q.used) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; } });          // the course's own pads: all hidden (the phrase deck places boosts on purpose)
+    (rr.pads || []).forEach((q) => { if (!q.used && !q.lk) { if (!window.__hideWhole(q)) hideTarget(q); q.used = true; q.zoneHid = true; } });          // the course's own pads: all hidden (the phrase deck places boosts on purpose)
     (rr.buffs || []).forEach((b) => { if (!b.taken) { if (!window.__hideWhole(b)) hideTarget(b); for (const o of (b.orbs || [])) hideNode(o.n); b.thin = true; b.taken = true; } });          // the course's own powerups: all hidden (the deck places them after the boosts)
     for (const t of (rr.toys || [])) if (t.kind !== 'pill' && !t.gone && (z === 'slalom' || z === 'clear' || t.kind === 'sling' || !keep((t.x * 7 + t.z) | 0, 3))) { if (!window.__hideWhole(t)) hideNode(t.n); t.done = true; t.t = 1e15; t.gone = true; }          // bumps, colour gates and slingshots: gone from clear and slalom stretches, thinned in the content ones (molecules stay)
     window.__ZD.add(j);
@@ -517,7 +537,40 @@ const rtSharp = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, d
 const sharpM = new THREE.ShaderMaterial({ uniforms: { uSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uAmt: { value: 0 } }, vertexShader: QV, depthTest: false, depthWrite: false,
   fragmentShader: `varying vec2 vUv; uniform sampler2D uSrc; uniform vec2 uTexel; uniform float uAmt;
   void main() { vec3 c = texture2D(uSrc, vUv).rgb, n = texture2D(uSrc, vUv + vec2(0., uTexel.y)).rgb, s = texture2D(uSrc, vUv - vec2(0., uTexel.y)).rgb, e = texture2D(uSrc, vUv + vec2(uTexel.x, 0.)).rgb, w = texture2D(uSrc, vUv - vec2(uTexel.x, 0.)).rgb;
-    vec3 lo = min(min(n, s), min(e, w)), hi = max(max(n, s), max(e, w)), blur = (n + s + e + w) * .25, sh = c + (c - blur) * uAmt; sh = clamp(sh, min(lo, c) * .9, max(hi, c) * 1.1); gl_FragColor = vec4(sh, 1.0); }` });
+    vec3 lo = min(min(n, s), min(e, w)), hi = max(max(n, s), max(e, w)), blur = (n + s + e + w) * .25, sh = c + (c - blur) * uAmt; sh = clamp(sh, min(lo, c) * .9, max(hi, c) * 1.1); gl_FragColor = vec4(sh, 1.0); ${TAIL} }` });
+
+// LOOKS (vector + ASCII): full-screen passes over the finished picture, switched live and faded in and out (LOOK.vec / LOOK.asc follow the targets 'vector' and 'ascii', 0..1, over about half a second).
+//   vector: edges found in the picture glow in the colour of what they outline, on a near-black ground (a wireframe look). ascii: the picture is cut into character cells (about 110 across); each cell draws a
+//   dot, colon, plus, cross or block by how bright it is, in the colour underneath.
+const LOOK = window.__LOOK = { vec: 0, asc: 0, t: performance.now() };
+const lookM = new THREE.ShaderMaterial({ uniforms: { uSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uRes: { value: new THREE.Vector2(1, 1) }, uCell: { value: 8 }, uVec: { value: 0 }, uAsc: { value: 0 } }, vertexShader: QV, depthTest: false, depthWrite: false,
+  fragmentShader: `varying vec2 vUv; uniform sampler2D uSrc; uniform vec2 uTexel, uRes; uniform float uCell, uVec, uAsc;
+  float lum(vec3 c) { return dot(c, vec3(.299, .587, .114)); }
+  void main() {
+    vec3 c = texture2D(uSrc, vUv).rgb, col = c;
+    if (uVec > .001) {
+      vec2 t = uTexel;
+      float a = lum(texture2D(uSrc, vUv + vec2(-t.x, -t.y)).rgb), b = lum(texture2D(uSrc, vUv + vec2(0., -t.y)).rgb), d = lum(texture2D(uSrc, vUv + vec2(t.x, -t.y)).rgb), e = lum(texture2D(uSrc, vUv + vec2(-t.x, 0.)).rgb), f = lum(texture2D(uSrc, vUv + vec2(t.x, 0.)).rgb), g = lum(texture2D(uSrc, vUv + vec2(-t.x, t.y)).rgb), h = lum(texture2D(uSrc, vUv + vec2(0., t.y)).rgb), i = lum(texture2D(uSrc, vUv + vec2(t.x, t.y)).rgb);
+      float gx = (d + 2. * f + i) - (a + 2. * e + g), gy = (g + 2. * h + i) - (a + 2. * b + d), ed = clamp(length(vec2(gx, gy)) * 3., 0., 1.);
+      vec3 hue = c / max(max(c.r, max(c.g, c.b)), .05);
+      col = mix(c, hue * ed * 2.2 + c * .04, uVec);
+    }
+    if (uAsc > .001) {
+      vec2 px = vUv * uRes, cid = floor(px / uCell), fr = fract(px / uCell), cuv = (cid + .5) * uCell / uRes, o = vec2(.25) * uCell / uRes;
+      vec3 sc = (texture2D(uSrc, cuv - o).rgb + texture2D(uSrc, cuv + o).rgb + texture2D(uSrc, cuv + vec2(o.x, -o.y)).rgb + texture2D(uSrc, cuv + vec2(-o.x, o.y)).rgb) * .25;
+      float L = clamp(lum(sc) * 1.5, 0., 1.), n = floor(L * 5.); vec2 q = fr - .5; float gl = 0., ax = abs(q.x), ay = abs(q.y), m = max(ax, ay);
+      if (n == 1.) gl = step(length(q), .13);
+      else if (n == 2.) gl = max(step(length(q - vec2(0., .2)), .1), step(length(q + vec2(0., .2)), .1));
+      else if (n == 3.) gl = step(min(ax, ay), .08) * step(m, .36);
+      else if (n == 4.) gl = step(abs(ax - ay), .1) * step(m, .4);
+      else if (n >= 5.) gl = step(m, .42);
+      col = mix(col, sc * 1.9 * gl + sc * .03, uAsc);
+    }
+    gl_FragColor = vec4(col, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }` });
+function lookStep() { const now = performance.now(), dt = Math.min(.1, (now - LOOK.t) / 1000); LOOK.t = now; const k = 1 - Math.exp(-dt / .45); LOOK.vec += (Math.max(0, Math.min(1, sp('vector', 0))) - LOOK.vec) * k; LOOK.asc += (Math.max(0, Math.min(1, sp('ascii', 0))) - LOOK.asc) * k; if (LOOK.vec < .004) LOOK.vec = Math.max(0, sp('vector', 0)) > 0 ? LOOK.vec : 0; if (LOOK.asc < .004) LOOK.asc = Math.max(0, sp('ascii', 0)) > 0 ? LOOK.asc : 0; }
 const sharpAmt = () => { const d = Math.min(1, (PW * PHt) / 1.2e6);          /* the fewer pixels the picture has, the more it is sharpened */ return Math.max(0, sp('sharpen', 0)) * Math.min(1.6, .3 + 1.4 * (1 - Math.min(1, d))); };
 // HEAD-COUPLED VIEW (&hcp): the screen is a window. Where your head is (sideways and up/down in the camera picture) moves the camera a little the same way and skews the view so a plane
 // at hcpz metres stays put: things nearer than that shift against you, things farther shift with you (parallax), the way a real window does. &hcpk = how many metres of camera per full camera-picture
@@ -551,8 +604,9 @@ function renderPost() {
     postM.uniforms.gA.value = rtG4.texture; postM.uniforms.gB.value = rtG8.texture; postM.uniforms.gC.value = rtG16.texture;
   }
   postM.uniforms.glowI.value = useGlow ? GL.intensity : 0; postM.uniforms.exposure.value = renderer.toneMappingExposure;
-  qMesh.material = postM; postM.uniforms.screen_tex.value = rtScene.texture; postM.uniforms.trail.value = dst.texture; const shAmt = sharpAmt();
- if (shAmt > .03) { renderer.setRenderTarget(rtSharp); renderer.render(qScene, qCam); qMesh.material = sharpM; sharpM.uniforms.uSrc.value = rtSharp.texture; sharpM.uniforms.uTexel.value.set(1 / PW, 1 / PHt); sharpM.uniforms.uAmt.value = Q.has('sharpdbg') ? 0 : shAmt; renderer.setRenderTarget(null); renderer.render(qScene, qCam); }
+  qMesh.material = postM; postM.uniforms.screen_tex.value = rtScene.texture; postM.uniforms.trail.value = dst.texture; const shAmt = sharpAmt(); lookStep(); const lookOn = LOOK.vec > .004 || LOOK.asc > .004;
+ if (lookOn) { renderer.setRenderTarget(rtSharp); renderer.render(qScene, qCam); qMesh.material = lookM; const lu = lookM.uniforms; lu.uSrc.value = rtSharp.texture; lu.uTexel.value.set(1 / PW, 1 / PHt); lu.uRes.value.set(PW, PHt); lu.uCell.value = Math.max(6, Math.round(PW / 110)); lu.uVec.value = LOOK.vec; lu.uAsc.value = LOOK.asc; renderer.setRenderTarget(null); renderer.render(qScene, qCam); }
+ else if (shAmt > .03) { renderer.setRenderTarget(rtSharp); renderer.render(qScene, qCam); qMesh.material = sharpM; sharpM.uniforms.uSrc.value = rtSharp.texture; sharpM.uniforms.uTexel.value.set(1 / PW, 1 / PHt); sharpM.uniforms.uAmt.value = Q.has('sharpdbg') ? 0 : shAmt; renderer.setRenderTarget(null); renderer.render(qScene, qCam); }
  else { renderer.setRenderTarget(null); renderer.render(qScene, qCam); }
 }
 // QUALITY GOVERNOR: the picture steps down by itself, one notch at a time, whenever the frame time stays over ~21 ms (below 48 fps): glow off, then fewer MSAA samples, then a lower render resolution. (Godot's own tiers do the same, Lighting.gd: glow off at tier 2, the colour adjustment at tier 1.) ?nogov turns it off.
@@ -629,7 +683,8 @@ function headStep(dt, now) {
   if (!HD.on || !HD.cur || HD.fb.length < 12 || !HD.cal) { window.__steer = 0; HD.ramp = 0; return; }
   if (HD.wasLost && !HD.lost) { HD.vel = 0; HD.s = 0; HD.vs = 0; HD.ramp = 0; } HD.wasLost = HD.lost;
   HD.ramp = Math.min(1, HD.ramp + dt / (HD.lost ? .5 : .8));
-  const nv = [HD.cur[0] / HN3[0], HD.cur[1] / HN3[1], HD.cur[2] / HN3[2]]; let pr = hproj(nv); if (HD.pT !== HD.t) { const t0 = HD.t, dt0 = (t0 - (HD.pT0 || 0)) / 1000; if (HD.pT0 && dt0 > .004) HD.pvel = (HD.pvel || 0) + (Math.max(-6, Math.min(6, (pr - HD.pPr) / dt0)) - (HD.pvel || 0)) * .5; if (HD.pT0 && dt0 > .004 && HD.cur) { HD.vT = (HD.vT || 0) + (Math.max(-200, Math.min(200, (HD.cur[0] - HD.pY) / dt0)) - (HD.vT || 0)) * .5; HD.vL = (HD.vL || 0) + (Math.max(-100, Math.min(100, (HD.cur[2] - HD.pL) / dt0)) - (HD.vL || 0)) * .5; } if (HD.cur) { HD.pY = HD.cur[0]; HD.pL = HD.cur[2]; } HD.pT = t0; HD.pT0 = t0; HD.pPr = pr; } { const PMS = sp('pred', 130); if (PMS > 0 && !HD.lost) pr += Math.max(-3, Math.min(3, HD.pvel || 0)) * Math.min(.25, (performance.now() - HD.t + PMS) / 1000); }          /* prediction: the reading is about 100 ms old; move to where the head probably is now (speed from the readings' own timestamps) */
+  const nv = [HD.cur[0] / HN3[0], HD.cur[1] / HN3[1], HD.cur[2] / HN3[2]]; let pr = hproj(nv); if (HD.gT !== HD.t) { const dtg = (HD.t - (HD.gT0 || HD.t - 60)) / 1000; if (HD.gPr !== undefined && dtg > .004 && Math.abs(pr - HD.gPr) / dtg > 14) HD.glitchT = now; HD.gPr = pr; HD.gT0 = HD.t; HD.gT = HD.t; } if (HD.lost || now - HD.t > 250) HD.glitchT = now;          /* GLITCH FLAG: a reading that jumps farther than a head can move, or a stale/lost one, marks the last 350 ms as "tracking trouble" (used to forgive a graze) */
+  if (HD.pT !== HD.t) { const t0 = HD.t, dt0 = (t0 - (HD.pT0 || 0)) / 1000; if (HD.pT0 && dt0 > .004) HD.pvel = (HD.pvel || 0) + (Math.max(-6, Math.min(6, (pr - HD.pPr) / dt0)) - (HD.pvel || 0)) * .5; if (HD.pT0 && dt0 > .004 && HD.cur) { HD.vT = (HD.vT || 0) + (Math.max(-200, Math.min(200, (HD.cur[0] - HD.pY) / dt0)) - (HD.vT || 0)) * .5; HD.vL = (HD.vL || 0) + (Math.max(-100, Math.min(100, (HD.cur[2] - HD.pL) / dt0)) - (HD.vL || 0)) * .5; } if (HD.cur) { HD.pY = HD.cur[0]; HD.pL = HD.cur[2]; } HD.pT = t0; HD.pT0 = t0; HD.pPr = pr; } { const PMS = sp('pred', 130); if (PMS > 0 && !HD.lost) pr += Math.max(-3, Math.min(3, HD.pvel || 0)) * Math.min(.25, (performance.now() - HD.t + PMS) / 1000); }          /* prediction: the reading is about 100 ms old; move to where the head probably is now (speed from the readings' own timestamps) */
   {          /* RE-CENTRING: the middle is not fixed, it follows where your head rests. When the head has been still for a moment and is near the middle, the middle slides to where it is: slowly in normal riding (a few seconds), quickly while the board is held by a ramp, rail or arc or in the air, and for a second and a half after one of those ends (landing, rail end, lip). A head deliberately held well off to one side is never absorbed. &recentre=0 turns it off. */
     const nowT = performance.now(), locked = !!(PH.rail || PH.vlock !== null || !PH.grounded || (typeof toys !== 'undefined' && toys && toys.active && toys.active())), still = Math.abs(HD.pvel || 0) < .3 && !HD.lost && (window.__rot || 0) < 25;
     if (HD._free === false && !locked) HD.recentreUntil = nowT + 1500; HD._free = !locked; HD.stillT = still ? (HD.stillT || 0) + dt : 0;
@@ -663,7 +718,7 @@ if (HD.on) {
 let AK = parseFloat(Q.get('aa') || '.5');          // the strength of the gate assist: 0 off, .5 low, 1 medium (the default), 1.5 high. [ and ] change it while riding
 let SMOOTHW = sp('smooth', 12);
 const PLAY = Q.has('play'); const K = { l: 0, r: 0 };
-const SPK = parseFloat(Q.get('spd') || '1'), STK = sp('turn', 4.2);
+const SPK = parseFloat(Q.get('spd') || '1.12'), STK = sp('turn', 4.2);
 // ---- ASSISTED STEERING. (Barrier courses, the ones with gates, default to direct steering plus the gate lock-on: there is no single trail to aim around.) 'lane' (the default): the head only SELECTS a lane (left / middle / right, with hysteresis and a dwell before returning to the middle); the board then carves to it on Godot's own pull rule, so tracker jitter cannot shake it. 'free': the head steers directly (?assist=free). Either way the assists (lock-on pull, lane hold, edge push) are low-passed, so they cannot flip the input from one frame to the next.
 const ASSIST = Q.get('assist') || (LABS && (LABS.assist === 'aim' || LABS.assist === 'free') ? LABS.assist : null) || (Object.values(lvl.rows || {}).some((r) => r && r.has_row) ? 'free' : 'aim'), LANE = { i: 0, n: 0, x: null }, LANE_W = parseFloat(Q.get('lanew') || '8'), REACH = sp('reach', (lvl.feat_off || 15) < 10 ? 16 : 36); let ASM = 0;          // 'aim' (default): the head aims at a POSITION across the width of the course (full lean = REACH metres off the trail) and the board carves there; 'lane': three fixed lanes; 'free': direct steering
 const LANEPIPS = (() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;left:0;right:0;bottom:9%;display:flex;justify-content:center;gap:14px;pointer-events:none;z-index:5'; d.innerHTML = '<i></i><i></i><i></i>'; for (const e of d.children) e.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#fff3;transition:background .15s,transform .15s'; if (ASSIST === 'lane') document.body.appendChild(d); let last = 9; return (i) => { if (i === last) return; last = i; [...d.children].forEach((e, k) => { const on = k === i + 1; e.style.background = on ? '#fff' : '#fff3'; e.style.transform = on ? 'scale(1.5)' : 'scale(1)'; }); }; })();
@@ -730,7 +785,7 @@ const SFX = {
   grindOn: () => { const a = ac(); if (!a || grindN) return; const n = a.sampleRate * 1, b = a.createBuffer(1, n, a.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; const s = a.createBufferSource(); s.buffer = b; s.loop = true; const fl = a.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 2200; fl.Q.value = 3; const g = a.createGain(); g.gain.value = .22; s.connect(fl); fl.connect(g); g.connect(SFXG); s.start(); grindN = { s, g, fl }; },
   grindOff: () => { if (grindN) { try { grindN.g.gain.setTargetAtTime(0, AC.currentTime, .05); grindN.s.stop(AC.currentTime + .3); } catch (e) { } grindN = null; } },
 };
-toys = createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks: { lkFree: () => sp('lkfree', 1.4), beatK: () => BEATFX.pulse * BEATFX.k, beatOff: () => { try { if (CHILL || (GM.arc && GM.arc.stage === 'chill')) return 9; const bp = (gmOn && GM.beatPos() > 0) ? GM.beatPos() : U.uTime.value * 128 / 60; return Math.abs(bp - Math.round(bp)) * 60 / 128; } catch (e) { return 9; } }, quant: (f) => { let d = 0; try { if (gmOn && !(CHILL || (GM.arc && GM.arc.stage === 'chill'))) { const bp = GM.beatPos(); if (bp > 0) d = (Math.ceil(bp * 2) / 2 - bp) * 60 / 128; } } catch (e) { } if (d > .02 && d < .26) setTimeout(f, d * 1000); else f(); }, onPill: (t, first, mi) => { try { PSY.events.onMolecule(['mescaline', 'dom', '2cb', '2ce', '2ct2', '2ct7'][mi], t.name); } catch (e) { } } } });
+toys = createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks: { onBump: (x, y, z) => { try { FX.E.orb([x, y + 1.5, z]); FX.E.cheer([x, y + 2, z], 0xffcc44, 1); } catch (e) { } try { SFX.pick(); } catch (e) { } toast('BOING!  +80', '#fc6'); PH.boost_t = Math.max(PH.boost_t, .6); }, lkFree: () => sp('lkfree', 1.4), beatK: () => BEATFX.pulse * BEATFX.k, beatOff: () => { try { if (CHILL || (GM.arc && GM.arc.stage === 'chill')) return 9; const bp = (gmOn && GM.beatPos() > 0) ? GM.beatPos() : U.uTime.value * 128 / 60; return Math.abs(bp - Math.round(bp)) * 60 / 128; } catch (e) { return 9; } }, quant: (f) => { let d = 0; try { if (gmOn && !(CHILL || (GM.arc && GM.arc.stage === 'chill'))) { const bp = GM.beatPos(); if (bp > 0) d = (Math.ceil(bp * 2) / 2 - bp) * 60 / 128; } } catch (e) { } if (d > .02 && d < .26) setTimeout(f, d * 1000); else f(); }, onPill: (t, first, mi) => { try { PSY.events.onMolecule(['mescaline', 'dom', '2cb', '2ce', '2ct2', '2ct7'][mi], t.name); } catch (e) { } } } });
 const VFX = createVortexFx({ THREE, scene, lvl, th, PH, SPK, REGN, MAT, rgb, toast, SFX, gain: (n) => { PH.score += n; }, groove: () => (PSY.flow ? PSY.flow.groove : 1), onAirRing: () => { chainHit(); }, onAirChainEnd: (c) => { if (c >= 3) chainHit(); } }); VFX.fixMaterials();
 const FX = createFx({ THREE, scene, camera }); const TRB = FX.trailBoost(), TRM = FX.trailMult(), SPRAY = FX.spray(); let railSparkT = 0;
 
@@ -873,7 +928,7 @@ function takeBuff(b) {
 }
 for (const k of Object.keys(TUNE.grab)) TUNE.grab[k] *= parseFloat(Q.get('grab') || '1.3');          // pickups count from 30% farther out, so a near miss with a head is still a catch (?grab=1 for the original)
 function collectStep() {
-  if (window.__slalomTick) window.__slalomTick();
+  if (window.__slalomTick) window.__slalomTick(); shaftStep();
   const above = PH.y - th(PH.x, PH.z); const TG = TUNE.grab, MG = PH.mult > 0 ? TUNE.magnet.molX : 1, MB = PH.mult > 0 ? TUNE.magnet.other : 1;          // MAGNET: molecules count from twice as far sideways, other pickups from 1.6x
   for (const b of BUFFS) {
     if (Math.abs(b.z - PH.z) > 150) continue;
@@ -888,8 +943,9 @@ function collectStep() {
   if (low || above <= 16) for (const p of PADS) {
     if (p.used || p.lk || !low || Math.abs(p.z - PH.z) > 230) continue;
     if (Math.abs(p.z - 2.2 - PH.z) < 3.6 && Math.abs(p.x - PH.x) < 4.6) {
-      p.used = true; hideTarget(p); PH.pads++; PH.boost_t = Math.max(PH.boost_t, 1.8); const fx = Math.sin(PH.heading), fz = -Math.cos(PH.heading), sp0 = Math.hypot(PH.vx, PH.vz);
-      PH.vx += fx * 7 * SPK * PSY.perks().padK; PH.vz += fz * 7 * SPK * PSY.perks().padK; PH.vxa = Math.max(PH.vxa, 1.4); const v = Math.hypot(PH.vx, PH.vz), lim = Math.max(C.SPEED_CAP, sp0) + 6 * SPK; if (v > lim) { PH.vx *= lim / v; PH.vz *= lim / v; }
+      p.used = true; hideTarget(p); PH.pads++; PH.boost_t = Math.max(PH.boost_t, 2.6); const fx = Math.sin(PH.heading), fz = -Math.cos(PH.heading), sp0 = Math.hypot(PH.vx, PH.vz);
+      PH.vx += fx * 10 * SPK * PSY.perks().padK; PH.vz += fz * 10 * SPK * PSY.perks().padK; PH.vxa = Math.max(PH.vxa, 1.4); const v = Math.hypot(PH.vx, PH.vz), lim = Math.max(C.SPEED_CAP, sp0) + 10 * SPK; if (v > lim) { PH.vx *= lim / v; PH.vz *= lim / v; }          /* a pad is a real kick: it is allowed past the speed cap a little, so it is felt at any speed */
+      try { FX.E.orb([PH.x, PH.y + .5, PH.z]); } catch (e) { } shudder(.15);
       if (AWON) AW.onPadHit(); else SFX.pad(); try { FX.E.pad([PH.x, PH.y, PH.z]); } catch (e) { } toast(p.epic ? 'LAUNCH PAD' : 'BOOST PAD', '#fb4'); PH.score += 40; chainHit(); try { PSY.events.onPad(p.epic); } catch (e) { }
     }
   }
@@ -902,6 +958,9 @@ function obstacleStep(px, pz) {
       if (o.dead) continue; let t = sl > 1e-6 ? ((o.x - px) * sx + (o.z - pz) * sz) / sl : 1; t = Math.max(0, Math.min(1, t)); const qx = px + sx * t, qz = pz + sz * t, R = o.r + C.SLED_R, ex = qx - o.x, ez = qz - o.z;
       if (ex * ex + ez * ez < R * R && above < (o.k < .5 ? 7 : 3)) {
         if (o.k < .5 && BANK.saw > 0 && onPath(o)) { bankSpend('saw'); cutTree(o); toast('SAWED THROUGH  ' + BANK.saw + ' left', '#7f7'); try { FX.E.treeHit(o.x, th(o.x, o.z), o.z, 12); } catch (e) { } SFX.snap(); continue; }
+        if (HD.on && sp('forgive', 1) > 0 && performance.now() - (HD.glitchT || -1e9) < 350 && Math.hypot(ex, ez) > R - .5 && !PH.rail) {          /* SAVED: tracking glitched and this is only a graze of the edge: slide off, keep the speed, no crash */
+          const d0 = Math.hypot(ex, ez) || 1; PH.x = o.x + ex / d0 * (R + .1); if (PH.grounded) { PH.y = th(PH.x, PH.z); PH.gh_prev = PH.y; } toast('SAVED', '#8f8'); try { SFX.snap(); } catch (e) { } window.__saved = (window.__saved || 0) + 1; continue;
+        }
         const dx = ex || .01, dz = ez || .01;
         const d = Math.hypot(dx, dz) || 1, nx = dx / d, nz = dz / d; PH.x = o.x + nx * (R + .1); PH.z = o.z + nz * (R + .1); if (PH.grounded) { PH.y = th(PH.x, PH.z); PH.gh_prev = PH.y; }
         const sp0 = Math.hypot(PH.vx, PH.vz), dp = PH.vx * nx + PH.vz * nz; let bx = PH.vx - (1 + .35) * Math.min(dp, 0) * nx, bz = PH.vz - (1 + .35) * Math.min(dp, 0) * nz;          // reflect: slide along the trunk and be pushed away from it
@@ -1022,7 +1081,7 @@ for (const k of VXS) if (k.trail) mkBeacon(k, k.x, k.z, _bAt(k.x, k.z), 'ramp', 
 for (const mm of PILLS) { const mo = MOLS[mm.id]; mkBeacon(mm, mm.x, mm.z, _bAt(mm.x, mm.z), 'mol', 7, 160, mo ? mo.c : null); }
 let molPing = 0;
 function beaconTick(time) {
-  for (const B of BEAC) { const o = B.o; const gone = o.taken || o.used || o.done || o.hidden || o.t > 1e14; B.m.visible = !gone && PLAY && Math.abs(B.z - PH.z) < (B.kind === 'mol' ? 900 : (B.kind === 'ramp' ? 520 : 340));  }
+  for (const B of BEAC) { const o = B.o; const gone = o.taken || o.used || o.done || o.hidden || o.gone || o.zoneHid || o.thin || o.dead || o.t > 1e14;          /* a light never outlives its object */ B.m.visible = !gone && PLAY && Math.abs(B.z - PH.z) < (B.kind === 'mol' ? 900 : (B.kind === 'ramp' ? 520 : 340));  }
   // the molecule ahead pings, faster the closer it gets (a quiet two-note tick), so it is heard before it is seen
   const tg = PILLS.find((p) => !(p.taken || p.t > 1e14) && p.z < PH.z - 4);
   if (PLAY && !st.paused && tg) { const d = PH.z - tg.z; if (d < 900) { const period = Math.max(.35, d / 700); if (time / 1000 - molPing > period) { molPing = time / 1000; tone(740 + 500 * (1 - d / 900), 740 + 500 * (1 - d / 900), .09, .12); } } }
@@ -1081,7 +1140,7 @@ function playStep(dt, first = true, frameDt = dt) {          // dt is one physic
     if (SPp > 0) { const big = Math.max(0, Math.min(1, Math.abs(tgtL - LANE.x) / 8)), w = (1 / Math.max(.05, sp('aimtau', .1) + SPp * .3 + vw * sp('vxslow', .12))) * (1 + 2.2 * big); LANE.v = LANE.v || 0; const ns = 4, h = dt / ns; for (let q = 0; q < ns; q++) { LANE.v += (w * w * (tgtL - LANE.x) - 2 * w * LANE.v) * h; LANE.x += LANE.v * h; } } else LANE.v = 0;          /* SMOOTH PATH (&smoothpath=0..1): the aim point glides to where the head points on a critically damped spring (no overshoot, gentle start and end), stiffer when the head makes a big, decisive move so it never fights you; 0 = the plain easing below */
     if (!(SPp > 0)) LANE.x += (tgtL - LANE.x) * (1 - Math.exp(-dt / ((ASSIST === 'lane' ? .18 : sp('aimtau', .1)) + Math.max(0, 1 - (performance.now() - LANE.born) / 1500) * .9)));
     const slowK = (1 - sstep(14 * SPK, 40 * SPK, Math.hypot(PH.vx, PH.vz))) * Math.max(0, sp('slowboost', 1)); if (!C.TH0) C.TH0 = C.THETA_MAX; C.THETA_MAX = C.TH0 * (1 + .5 * slowK);
-    sIn = Math.max(-1, Math.min(1, (LANE.x - (PH.x + PH.vx * (.45 + .55 * sp('stab', 1) * (1 - sstep(.05, .3, la))))) / (10 / (1 + .8 * slowK)))); if (ASSIST === 'lane') LANEPIPS(LANE.i);
+    sIn = Math.max(-1, Math.min(1, (LANE.x - (PH.x + PH.vx * (.45 + .55 * sp('stab', 1) * (1 - sstep(.05, .3, la))) * (1 + .5 * slowK * (1 - sstep(.05, .3, la))))) / (10 / (1 + .8 * slowK * sstep(.03, .25, la))))); if (ASSIST === 'lane') LANEPIPS(LANE.i);
   } else sIn = Math.max(-1, Math.min(1, K.r - K.l + hs));
   bankAuto(dt); reachStep(dt); const sHead = sIn; if (!PH.rail && PH.ready) gazeOrbStep(dt, sHead); PH.sVel = (PH.sVel || 0) + (Math.max(-12, Math.min(12, (sIn - (PH.sPrev || 0)) / Math.max(dt, 1e-3))) - (PH.sVel || 0)) * .2; PH.sPrev = sIn; const sPred = Math.max(-1, Math.min(1, sIn + .22 * PH.sVel));          // (where the lean is heading, so the assist can pick the gate you mean a moment earlier)
   // LOCK-ON (RunRig._update_buff_aim + _guard_path): every pickup, pad, rail and ramp up to 260 m ahead is a candidate; nudge toward one (or line one up dead ahead) and the green reticle locks on. While locked the board is pulled toward it by Godot's rule
@@ -1153,7 +1212,7 @@ function playStep(dt, first = true, frameDt = dt) {          // dt is one physic
   if (toastT > 0) { toastT -= dt; if (toastT <= 0) toastEl.style.opacity = 0; }
   st.x = PH.x; st.z = PH.z;
 }
-const RIG = createCamRig({ THREE, scene, camera, th: (x, z) => { const g = groundY(x, z); return g === null ? PH.y : g; }, trailX, PH, SPK, PSY, touch: TOUCHLOOK, lookDown: () => sp('camdown', .38), fovMul: () => (LABV.fovMul || 1) * BEATFX.fov * (() => { const base = Math.max(78, Math.min(108, 80 + (Math.hypot(PH.vx, PH.vz) / SPK - 18) * .6)), cap = parseFloat(Q.get('fovcap') || '88'); return base > cap ? cap / base : 1; })() });          /* (Godot widens the view to 108 degrees at speed, which shrinks everything in the distance: capped at 88, ?fovcap=108 for the original) */
+const RIG = createCamRig({ THREE, scene, camera, th: (x, z) => { const g = groundY(x, z); return g === null ? PH.y : g; }, trailX, PH, SPK, PSY, touch: TOUCHLOOK, lookDown: () => sp('camdown', .62), fovMul: () => (LABV.fovMul || 1) * BEATFX.fov * (() => { const base = Math.max(78, Math.min(108, 80 + (Math.hypot(PH.vx, PH.vz) / SPK - 18) * .6)), cap = parseFloat(Q.get('fovcap') || '88'); return base > cap ? cap / base : 1; })() });          /* (Godot widens the view to 108 degrees at speed, which shrinks everything in the distance: capped at 88, ?fovcap=108 for the original) */
 const MAE = { adapt: 0, v: 0 };
 function maeTick(dt) {          // adaptation fills while you ride fast (about 6 s) and drains slowly (about 12 s); the drift shows when the flow stops: a crash, the pause, the comedown
   if (Q.has('nomae')) { postM.uniforms.mae.value = 0; return; }
@@ -1231,10 +1290,10 @@ if (PLAY && !Q.has('noedge')) {
     geo.attributes.position.needsUpdate = true; geo.attributes.wz.needsUpdate = true;
   };
 }
-const PB = document.createElement('div'); PB.textContent = 'II'; PB.style.cssText = 'position:fixed;right:10px;top:8px;width:44px;height:44px;line-height:44px;text-align:center;border:2px solid #fff9;border-radius:22px;color:#fff;font:700 18px ui-monospace,Consolas,monospace;background:#0006;z-index:9;cursor:pointer;user-select:none'; document.body.appendChild(PB);
+const PB = document.createElement('div'); PB.textContent = 'PAUSE'; PB.style.cssText = 'position:fixed;right:10px;top:8px;width:56px;height:56px;line-height:56px;text-align:center;border:2px solid #fff9;border-radius:28px;color:#fff;font:700 11px system-ui,sans-serif;letter-spacing:.5px;background:#0006;z-index:9;cursor:pointer;user-select:none'; document.body.appendChild(PB);
 const PV = document.createElement('div'); PV.style.cssText = 'position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;background:transparent;z-index:25;color:#fff;font:700 40px ui-monospace,Consolas,monospace;cursor:pointer;text-align:center'; PV.innerHTML = '<div style="background:#000a;padding:6px 14px;border-radius:10px;font-size:20px">PAUSED <span style="font-size:13px;opacity:.8">P / Esc resume &nbsp; <b>right-click</b>: select what is under the pointer and copy its details &nbsp; (I inspect, Y copy)</span></div>'; const PI = document.createElement('pre'); PI.style.cssText = 'position:fixed;left:6px;bottom:6px;margin:0;max-width:96vw;background:#000c;color:#9fe;font:11px/1.35 ui-monospace,Consolas,monospace;padding:6px 8px;border-radius:6px;text-align:left;white-space:pre-wrap;pointer-events:auto;user-select:text;cursor:text'; PI.addEventListener('click', (e) => e.stopPropagation()); PV.appendChild(PI); document.body.appendChild(PV);          // paused: the picture stays undimmed, and a small caption records where you are, so a screenshot is a bug report
 function pauseInfo() { try { const j = Math.max(0, Math.floor(-PH.z / 180)), R = (k) => { const r = lvl.rows && lvl.rows[String(k)]; return r ? (r.zone || '-') : '-'; }; return 'course ' + (Q.get('course') || 'long_s7') + '  row ' + j + '  zone ' + R(j) + ' > ' + R(j + 1) + ' > ' + R(j + 2) + '\n' + 'x ' + PH.x.toFixed(1) + '  z ' + PH.z.toFixed(0) + '  y ' + PH.y.toFixed(1) + '  speed ' + Math.hypot(PH.vx, PH.vz).toFixed(1) + '  grounded ' + PH.grounded + '\n' + 'cave ' + (CAVE.k || 0).toFixed(2) + '  exposure ' + renderer.toneMappingExposure.toFixed(2) + '  assist ' + ASSIST + ' aa ' + AK + '\n' + 'view ' + innerWidth + 'x' + innerHeight + '  pixel ratio ' + renderer.getPixelRatio().toFixed(2) + '  url ' + location.search; } catch (e) { return 'info unavailable: ' + e.message; } }
-function setPause(v) { try { GM.setPaused(v); } catch (e) { }  st.paused = v; PV.style.display = v ? 'flex' : 'none'; if (v) PI.textContent = pauseInfo(); PB.textContent = v ? '>' : 'II'; if (v) SFX.grindOff(); else last = performance.now(); }
+function setPause(v) { try { GM.setPaused(v); } catch (e) { }  st.paused = v; PV.style.display = v ? 'flex' : 'none'; if (v) PI.textContent = pauseInfo(); PB.textContent = v ? 'PLAY' : 'PAUSE'; if (v) SFX.grindOff(); else last = performance.now(); }
 // INSPECT: while paused, press I with the pointer over anything that looks wrong; the caption names the mesh and shader there (so a screenshot says exactly what to fix)
 let PTR = { x: 0, y: 0 }; addEventListener('pointermove', (e) => { PTR = { x: e.clientX, y: e.clientY }; });
 const RAYC = new THREE.Raycaster(); function inspectAt(k = 0) {
@@ -1266,7 +1325,7 @@ window.__gv = { RTG, BANK, bankAdd, bankSpend, cutTree, onPath, OGRID, groundY, 
 // TUNING PANEL (&tune): two compact tables, steering on the left and the head-coupled view on the right, so both fit a phone held sideways. Changes apply live and are saved on this device
 // (localStorage 'gvtune'); each slider has its own reset arrow; Copy gives the address-bar settings; Reset all clears every change.
 if (Q.get('tune') === 'all') {
-  const L = 'Steering', R = 'Window view';
+  const L = 'Steering', R = '3D depth + density';
   const rows = [
     [L, 'splitmix', 'Head signal: 0 auto, 1 split', 0, 1, 1, 0, 'Auto = the mix of turn, tilt and sideways position the game learns from you. Split = turn for gentle corrections, lean for the far reaches (best on a PC).'],
     [L, 'smoothpath', 'Softness (glide)', 0, 1, .05, 1, 'Higher = a softer, gentler glide to where you point. Lower = snappier.'],
@@ -1280,9 +1339,16 @@ if (Q.get('tune') === 'all') {
     [R, 'hcpz', 'Still distance (m)', 3, 40, 1, 10, 'The distance that stays still. Nearer things shift against you.'],
     [R, 'hcpy', 'Up/down strength', 0, 1.5, .05, .6, 'Vertical share of the effect.'],
     [R, 'hcpflip', 'Reverse left/right (0/1)', 0, 1, 1, 0, 'If the picture shifts the wrong way.'],
+    [R, 'density', 'Density: bumpers, gates, slings', 0, 1, .05, .5, 'How many of the course toys stay in the content stretches. 0 = none, 1 = all.'],
+    [R, 'hoops', 'Density: jump hoops + targets', 0, 1, .05, 1, 'The chance a jump gets its hoops, landing target and ring stream. 0 = none.'],
+    [R, 'shaftmolk', 'Density: shaft molecules (1 in N)', 1, 20, 1, 5, 'Every Nth light shaft holds a molecule. Higher = rarer.'],
+    [R, 'shaftsize', 'Light shaft size (reload)', .6, 2.5, .05, 1.35, 'How much bigger the light shafts are drawn. Takes effect when the page loads.'],
+    [R, 'slalomrun', 'Density: pylon rows in a row (reload)', 0, 4, 1, 2, 'The longest run of pylon rows. 0 = no pylon rows. Takes effect when the page loads.'],
+    [L, 'stab', 'Anti-waggle', 0, 2.5, .1, 1, 'Calms the wobble after a turn. Higher settles sooner.'],
+    [L, 'forgive', 'Glitch forgiveness (0/1)', 0, 1, 1, 1, 'A graze right after a tracking glitch slides off instead of crashing.'],
   ];
   const wrap = document.createElement('div'); wrap.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:30;pointer-events:none;font:11px/1.2 system-ui,sans-serif;color:#fff';
-  const btn = document.createElement('button'); btn.textContent = 'TUNE'; btn.style.cssText = 'position:absolute;right:6px;top:6px;pointer-events:auto;padding:5px 12px;border-radius:14px;border:1px solid #fff6;background:#000a;color:#fff;font:600 12px system-ui;touch-action:manipulation';
+  const btn = document.createElement('button'); btn.textContent = 'TUNE'; btn.style.cssText = 'position:absolute;right:76px;top:14px;pointer-events:auto;padding:5px 12px;border-radius:14px;border:1px solid #fff6;background:#000a;color:#fff;font:600 12px system-ui;touch-action:manipulation';
   const mkPanel = (side, title) => { const d = document.createElement('div'); d.style.cssText = 'display:none;position:absolute;top:38px;' + side + ':6px;width:min(46vw,290px);padding:5px 8px 6px;background:#000c;border:1px solid #fff4;border-radius:10px;pointer-events:auto;max-height:calc(100vh - 46px);overflow:auto'; const h = document.createElement('div'); h.textContent = title; h.style.cssText = 'font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;opacity:.8;margin-bottom:2px'; d.appendChild(h); wrap.appendChild(d); return d; };
   const pl = mkPanel('left', L), pr = mkPanel('right', R); wrap.appendChild(btn); document.body.appendChild(wrap);
   const save = () => { try { localStorage.setItem('gvtune', JSON.stringify(LIVE)); } catch (e) { } };
@@ -1316,9 +1382,10 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
   const SET = {          // key, label, min, max, step, default, help, what it sets
     gain: ['gain', 'Sensitivity', .3, 2.5, .05, .7, 'How far the board goes for a head move. Too high = it jumps to the edges.', (v) => ({ gain: v })],
     smooth: ['m_smooth', 'Smoothness', 0, 1, .05, 1, 'Higher = a softer glide (also slower). Lower = crisp, quick.', (v) => ({ smoothpath: v, aimtau: lerp2(.05, .14, v) })],
-    ahead: ['pred', 'Anticipation (ms)', 0, 250, 10, 130, 'Reacts ahead of the camera delay. Higher = quicker, can overshoot.', (v) => ({ pred: v })],
-    calm: ['m_calm', 'Calm centre', 0, 1, .05, .4, 'Ignores tiny head movements near the middle (and steadies the window view).', (v) => ({ dz: .04 * v, sticky: .5 * v, hyst: .03 * v })],
-    win: ['m_win', 'Window view', 0, 1, .05, 0, 'The screen as a window: 0 off; higher = the picture shifts more as your head moves.', (v) => ({ hcp: v > 0 ? 1 : 0, hcpk: v * 6 })],
+    ahead: ['pred', 'Prediction (ms)', 0, 250, 10, 130, 'Reacts ahead of the camera delay. Higher = quicker, can overshoot.', (v) => ({ pred: v })],
+    calm: ['m_calm', 'Stabilize centre', 0, 1, .05, .4, 'Ignores tiny head movements near the middle (and steadies the window view).', (v) => ({ dz: .04 * v, sticky: .5 * v, hyst: .03 * v })],
+    stab: ['stab', 'Anti-waggle', 0, 2.5, .1, 1, 'Calms the wobble after a turn or a slalom. Higher = the board settles straight sooner (too high feels heavy). Lower = looser.', (v) => ({ stab: v })],
+    win: ['m_win', '3D depth', 0, 1, .05, 0, 'The screen as a window: 0 off; higher = the picture shifts more as your head moves.', (v) => ({ hcp: v > 0 ? 1 : 0, hcpk: v * 6 })],
   };
   const css = (el, t) => { el.style.cssText = t; return el; };
   const wrap = css(document.createElement('div'), 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:30;pointer-events:none;font:14px/1.2 system-ui,sans-serif;color:#fff;-webkit-tap-highlight-color:transparent');
@@ -1356,7 +1423,8 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
   const rsAll = () => { for (const k of Object.keys(LIVE)) delete LIVE[k]; for (const name of Object.keys(SET)) apply(name, SET[name][5]); for (const name in els) els[name].refresh(); };
   const sv = mk('Save', () => { save(); try { localStorage.setItem('gvtune_saved', JSON.stringify({ t: Date.now(), v: LIVE })); } catch (e) { } toast('SETTINGS SAVED ON THIS DEVICE', '#6df'); sv.textContent = 'Saved ✓'; setTimeout(() => { sv.textContent = 'Save'; }, 1500); });          /* every setting stays on this device and is applied each time the game opens */
   const sh = mk('Share', () => { const u = new URL(location.href); for (const k of ['resettune']) u.searchParams.delete(k); for (const [k, v] of Object.entries(LIVE)) u.searchParams.set(k, String(Math.round(v * 1000) / 1000)); const url = u.toString(); const done = () => { sh.textContent = 'Copied'; setTimeout(() => { sh.textContent = 'Share'; }, 1500); }; if (navigator.share) navigator.share({ title: 'Downhill settings', url }).catch(() => { }); else { try { navigator.clipboard.writeText(url).then(done, done); } catch (e) { done(); } } });          /* a link that opens the game with every setting applied: for another phone */
-  mk('Centre', () => { if (window.__recentreNow) window.__recentreNow(); }); mk('Reset', rsAll); mk('Close', () => { sheet.style.display = 'none'; btn.style.display = 'block'; });
+  { /* WORLD: switch the whole environment (sky, ground, trees, weather). It reloads the page with &theme=, keeping everything else in the link */ const sel = css(document.createElement('select'), 'width:100%;height:48px;margin-top:6px;border-radius:12px;border:1px solid #fff6;background:#ffffff22;color:#fff;font:700 15px system-ui;flex:none;padding:0 10px'); const BN = { psychedelic: 'Trip', alpine: 'Alps', candy: 'Candy Land', egypt: 'Pyramids', tunnel: 'Tunnel', desert: 'Desert', matrix: 'Matrix', synthwave: 'Synthwave' }; for (const w of Object.keys(BN)) { const o = document.createElement('option'); o.value = w; o.textContent = 'Biome: ' + BN[w]; o.style.color = '#000'; if (w === WORLD_THEME) o.selected = true; sel.appendChild(o); } sel.onchange = () => { const u = new URL(location.href); u.searchParams.set('theme', sel.value); location.href = u.toString(); }; sel.style.cssText = 'flex:2;min-width:0;height:44px;border-radius:12px;border:1px solid #fff6;background:#ffffff22;color:#fff;font:700 14px system-ui;padding:0 8px'; const lrow = css(document.createElement('div'), 'display:flex;gap:6px'); lrow.appendChild(sel); const LV = [0, .5, 1], LN = ['off', 'half', 'full']; for (const [key, nm] of [['vector', 'Vector'], ['ascii', 'ASCII']]) { const b = css(document.createElement('button'), 'flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid #fff6;background:#ffffff22;color:#fff;font:700 13px system-ui;touch-action:manipulation;padding:0'); const show = () => { const v = sp(key, 0); b.textContent = nm + ': ' + LN[Math.max(0, LV.findIndex((x) => Math.abs(x - v) < .01))]; b.style.background = v > 0 ? '#3cf6' : '#ffffff22'; }; b.onclick = () => { const v = sp(key, 0); const i = Math.max(0, LV.findIndex((x) => Math.abs(x - v) < .01)); LIVE[key] = LV[(i + 1) % 3]; save(); show(); }; show(); lrow.appendChild(b); } grid.insertBefore(lrow, grid.firstChild); }
+  mk('All params', () => { const u = new URL(location.href); u.searchParams.set('tune', 'all'); location.href = u.toString(); }); mk('Centre', () => { if (window.__recentreNow) window.__recentreNow(); }); mk('Reset', rsAll); mk('Close', () => { sheet.style.display = 'none'; btn.style.display = 'block'; });
   sheet.appendChild(bar);
   btn.onclick = () => { layout(); sheet.style.display = 'flex'; btn.style.display = 'none'; };          /* the round button hides while the sheet is open (Close brings it back), so nothing overlaps */
   // the health line: what is going on, in plain words, updated twice a second
@@ -1402,7 +1470,8 @@ if (Q.has('tune') && Q.get('tune') !== 'all') {
     const ib = new THREE.InstancedMesh(geoB, matB, B.length), ic = new THREE.InstancedMesh(capGeo, capMat, B.length); B.forEach(([x, z], i) => { const y = groundY(x, z), yy = y === null ? th(x, z) : y; m.makeScale(1, 1, 1).setPosition(x, yy, z); ib.setMatrixAt(i, m); m.makeScale(1, 1.5, 1).setPosition(x, yy + 9.6, z); ic.setMatrixAt(i, m); addOb(x, z, .5); });
     ib.frustumCulled = false; scene.add(ib); ic.frustumCulled = false; scene.add(ic);
   };
-  const KIT = createKit({ scene, th, groundY, trailX, PH, C, SPK, RAILS, toast, hooks: {}, PADS, BUFFS, nrows: lvl.nrows || 43, hooks: { onRing: (g) => { try { FX.E.orb([g.x, g.y, g.z]); } catch (e) { } try { SFX.orb(); SFX.pick(); } catch (e) { } }, cheer: (p, c, s) => { try { FX.E.cheer(p, c, s); } catch (e) { } }, sfx: () => { try { SFX.pick(); SFX.snap(); } catch (e) { } }, chain: () => { try { chainHit(); } catch (e) { } } }, zoneOf: (j) => window.__zoneOf(j), seed: sp('seed', lvl.seed || 7), onTarget: (o, kind) => { if (kind === 'pad') mkBeacon(o, o.x, o.z, th(o.x, o.z), 'pad', 3, 38); else mkBeacon(o, o.x, o.z, o.y - 2.4, kind, 3.2, 48); } }); KIT.setVxRows((lvl.vx || []).map((k) => Math.floor(-k.z / 180))); window.__kitStep = (dt) => KIT.step(dt); window.__kitLaunch = () => KIT.launch();          /* custom ramps, rails and hoops in five cheap materials (kit.js) */
+  const KIT = createKit({ scene, th, groundY, trailX, PH, C, SPK, RAILS, toast, hooks: {}, PADS, BUFFS, nrows: lvl.nrows || 43, hooks: { hoopP: () => sp('hoops', 1), onRing: (g) => { try { FX.E.orb([g.x, g.y, g.z]); } catch (e) { } try { SFX.orb(); SFX.pick(); } catch (e) { } }, cheer: (p, c, s) => { try { FX.E.cheer(p, c, s); } catch (e) { } }, sfx: () => { try { SFX.pick(); SFX.snap(); } catch (e) { } }, chain: () => { try { chainHit(); } catch (e) { } } }, zoneOf: (j) => window.__zoneOf(j), seed: sp('seed', lvl.seed || 7), onTarget: (o, kind) => { if (kind === 'pad') mkBeacon(o, o.x, o.z, th(o.x, o.z), 'pad', 3, 38); else mkBeacon(o, o.x, o.z, o.y - 2.4, kind, 3.2, 48); } }); KIT.setVxRows((lvl.vx || []).map((k) => Math.floor(-k.z / 180))); window.__inv = () => { const cnt = (arr, f) => { const o = {}; for (const x of arr) { const k = f(x); o[k] = (o[k] || 0) + 1; } return o; }; const ob = []; for (const v of OGRID.values()) ob.push(...v); return { rows: ROWS.length, buffs: cnt(BUFFS, (x) => x.t + '/' + (x.kind || '')), pads: cnt(PADS, (x) => x.t || x.kind || '?'), feats: cnt(FEATS, (x) => x.kind), toys: cnt(ROWS.flatMap((r) => r.toys || []), (x) => x.kind), obstacles: cnt(ob, (x) => (x.label || (x.k < .5 ? 'tree' : 'rock')) + (x.im ? '(inst)' : '')), sLoot: JSON.stringify(FEATS.filter((x) => x.kind === 'loot').slice(0, 2)).slice(0, 500), sToy: JSON.stringify(FEATS.filter((x) => x.kind === 'toy').slice(0, 2)).slice(0, 500), sPad: JSON.stringify(PADS.slice(0, 2)).slice(0, 400), lkPads: JSON.stringify(PADS.filter((x) => x.lk).map((x) => [x.x | 0, x.z | 0, !!x.used, !!x.zoneHid, Object.keys(x.lk).join('+')])).slice(0, 900), kitRings: KIT.rings.length, kitRamps: KIT.ramps.length }; };
+  window.__shafts = () => SHAFTS; window.__kitStep = (dt) => KIT.step(dt); window.__kitLaunch = () => KIT.launch();          /* custom ramps, rails and hoops in five cheap materials (kit.js) */
   const spansOf = (j, rr) => { const sp0 = []; for (const q of [lvl.rows[String(j - 1)], rr, lvl.rows[String(j + 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) sp0.push([Math.min(...zs) - 6, Math.max(...zs) + (f.kind === 'jump' ? 140 : 8)]); } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) sp0.push([t.z - 25, t.z + 25]); } return sp0; };
   const singles = (j, rr, z0) => {
     const spans = []; for (const q of [lvl.rows[String(j - 1)], rr, lvl.rows[String(j + 1)]]) { if (!q) continue; for (const f of (q.feats || [])) { if (f.kind !== 'jump' && f.kind !== 'rail') continue; const zs = [f.za, f.zb, f.zl, f.z].filter(Number.isFinite); if (zs.length) spans.push([Math.min(...zs) - 6, Math.max(...zs) + (f.kind === 'jump' ? 140 : 8)]); } for (const t of (q.toys || [])) if (t.kind === 'pill' && Number.isFinite(t.z)) spans.push([t.z - 25, t.z + 25]); }
