@@ -180,6 +180,7 @@ export function createKit(o) {
       else buildRail(d, mat, x, z, buf);
       made++;
     }
+    if (ph === 'open' || ph === 'warm') { if (R() < (ph === 'warm' ? .6 : .45)) { const zb = z0 - 45 - R() * 100; if (clear(zb + 8, zb - 8)) { const r2 = R(), t = r2 < .3 ? 'shield' : r2 < .55 ? 'mult' : r2 < .78 ? 'donut' : 'saw'; makeBuff(t, trailX(zb) + lane + (R() < .5 ? -1 : 1) * (3 + R() * 6), zb, R); made++; } } }          /* powerups (shield, magnet, wings, saw) also lie in the open stretches, so they are met every few hundred metres */
     if (!made) return;
     for (const [buf, mt] of [[B, matO], [BG, matG]]) { if (!buf.count) continue; const mesh = new THREE.Mesh(buf.geo(), mt); mesh.frustumCulled = false; if (mt === matG) mesh.renderOrder = 6; scene.add(mesh); }
   }
@@ -233,7 +234,8 @@ export function createKit(o) {
   function flightPath() { let x = PH.x, y = PH.y, z = PH.z, vx = PH.vx, vy = PH.vy, vz = PH.vz; const g = (C.GV || 9.8) * (C.AIR_G_K || 2.1), pts = []; for (let i = 0; i < 90; i++) { const dt = .05; vy -= g * dt; x += vx * dt; y += vy * dt; z += vz * dt; const gg = groundY(x, z), gy = gg === null ? th(x, z) : gg; pts.push({ x, y, z, gy }); if (y <= gy + .3) break; } return pts; }
   const launched = []; let sweepT = 0;
   function launch() {
-    const pts = flightPath(); if (pts.length < 4) return; if (launched.some((q) => Math.abs(q - PH.z) < 60)) return; launched.push(PH.z); if (hooks.hoopP && Math.random() > hooks.hoopP()) return;          // (one set of hoops and one target per jump: a second take-off from the same ramp makes no copies) const R = mulberry((Math.floor(Math.abs(PH.z) * 13) + 91 + (Math.floor(seed) % 100000) * 7) >>> 0), L = pts[pts.length - 1], design = ARCS[Math.floor(R() * 4)], n = Math.min(5, Math.max(3, Math.floor(pts.length / 3)));
+    const pts = flightPath(); if (pts.length < 4) return; if (launched.some((q) => Math.abs(q - PH.z) < 60)) return; launched.push(PH.z); if (hooks.hoopP && Math.random() > hooks.hoopP()) return;          /* (one set of hoops and one target per jump: a second take-off from the same ramp makes no copies) */
+    const R = mulberry((Math.floor(Math.abs(PH.z) * 13) + 91 + (Math.floor(seed) % 100000) * 7) >>> 0), L = pts[pts.length - 1], design = ARCS[Math.floor(R() * 4)], n = Math.min(5, Math.max(3, Math.floor(pts.length / 3)));
     for (let i = 0; i < n; i++) { const p = pts[Math.min(pts.length - 2, Math.floor((i + 1) / (n + 1) * pts.length))]; let dx = 0; if (design === 'spiral') dx = Math.sin(i * 1.3) * 3; else if (design === 'sweep') dx = Math.sin(i * .9) * 5; addRing(p.x + dx, p.y + 1.1, p.z); }
     const off = (R() < .5 ? -1 : 1) * (4 + R() * 5), tx = L.x + off, tz = L.z - 6 - R() * 10; buildTarget(tx, tz); buildRings({ x: tx, z0: tz, len: 90 }, tx - off * .5, tz + 22, 'steel', 'stream');
   }

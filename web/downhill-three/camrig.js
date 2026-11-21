@@ -37,6 +37,7 @@ export function fovFor(gsp, punch, vw, vh, touch) {
   return base;
 }
 
+import { createBike } from './bike.js';
 export function createCamRig(o) {
   const { THREE, scene, camera, th, PH } = o, SPK = o.SPK || 1, trailX = o.trailX || (() => 0), PSY = o.PSY || null;
   const viewport = o.viewport || (() => ({ w: (typeof innerWidth !== 'undefined' ? innerWidth : 960), h: (typeof innerHeight !== 'undefined' ? innerHeight : 540) }));
@@ -71,6 +72,10 @@ export function createCamRig(o) {
     const bootG = mergeGeos([{ g: boot, m: M(-0.19, 0.13, -0.78, Math.PI * 0.5) }, { g: boot, m: M(0.19, 0.13, -0.78, Math.PI * 0.5) }]);
     for (const [g, c] of [[blueG, srgb(0.15, 0.3, 0.75)], [rimG, srgb(0.97, 0.97, 1.0)], [orangeG, srgb(1.0, 0.55, 0.15)], [bootG, srgb(0.12, 0.13, 0.18)]]) { const m = new THREE.Mesh(g, litMat(c)); m.frustumCulled = false; m.castShadow = false; tip.add(m); }
   }
+  // THE DIRTBIKE FRONT END (o.useBike, bike.js): a small hint of a bike in place of the board: the wheel turns with speed, the fork and bars turn with the steering, the fork compresses when you land and
+  // stretches in the air. Kept small and low in the picture.
+  let bike = null; const BK = { kick: 0, wasG: true, lastVy: 0, comp: .38 };
+  if (o.useBike && o.useBike()) { for (const ch of [...tip.children]) tip.remove(ch); bike = createBike(THREE, { accent: o.bikeAccent ? o.bikeAccent() : [1, .45, .1] }); bike.group.scale.setScalar(o.bikeScale ? o.bikeScale() : .5); bike.group.position.set(0, -0.06, 0.45); tip.add(bike.group); }
   camera.add(tip); if (!camera.parent && scene) scene.add(camera);          // the tip lives in the camera's space: the camera must be in the scene for it to draw
   tip.renderOrder = 10;
 
@@ -167,6 +172,7 @@ export function createCamRig(o) {
     S.tipPitch = lerp(S.tipPitch, clamp(gp - camPitch, -0.5, 0.5), 1 - Math.exp(-7 * dt));
     S.tipX = lerp(S.tipX, clamp(-slip * 0.012, -0.14, 0.14), 1 - Math.exp(-4 * dt));
     const hum = PH.grounded ? (0.008 * Math.sin(age * 17) + 0.005 * Math.sin(age * 29)) * spn : 0;
+    if (bike) { if (!PH.grounded) BK.lastVy = PH.vy / SPK; if (PH.grounded && !BK.wasG) BK.kick = clamp(-BK.lastVy / 14, .25, 1); BK.wasG = PH.grounded; BK.kick *= Math.exp(-dt * 7); const tgt = PH.grounded ? Math.max(.38 + .05 * Math.sin(age * 11) * spn, BK.kick) : 0; bike.update(dt, { speed: sp, steer: PH.steer, comp: tgt, lean: 0 }); }
     tip.position.set(S.tipX, -1.15 + hum - (grabbing ? 0.1 : 0) - S.crest * 0.95, 0);
     tip.rotation.set(tf + S.hopVisPitch + (grabbing ? 0.2 : 0) + S.tipPitch, S.tipYaw + ts + S.hopVisSpin, S.tipRoll);
   }

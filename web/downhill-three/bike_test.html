@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><title>bike test</title><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>html,body{margin:0;background:#12081c;overflow:hidden;font:12px ui-monospace,monospace;color:#cfe}#i{position:fixed;left:8px;top:6px;text-shadow:0 0 3px #000}</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+<div id="i"></div>
+<script type="module">
+import * as THREE from 'three';
+import { createBike } from './bike.js';
+const q = new URLSearchParams(location.search), side = q.get('view') === 'side';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); r.setPixelRatio(Math.min(devicePixelRatio, 2)); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(); s.background = new THREE.Color(0x1a0b2e); s.fog = new THREE.FogExp2(0x1a0b2e, .012);
+s.add(new THREE.HemisphereLight(0xcfd8ff, 0x402060, 1.1)); const dl = new THREE.DirectionalLight(0xfff0e0, 2.2); dl.position.set(-3, 6, 4); s.add(dl);
+const cam = new THREE.PerspectiveCamera(side ? 40 : 88, innerWidth / innerHeight, .05, 300);
+// the road: moving stripes so the speed reads
+const road = new THREE.Mesh(new THREE.PlaneGeometry(40, 400), new THREE.MeshBasicMaterial({ color: 0x241038 })); road.rotation.x = -Math.PI / 2; road.position.z = -100; s.add(road);
+const stripes = []; for (let i = 0; i < 30; i++) { const m = new THREE.Mesh(new THREE.PlaneGeometry(.25, 3), new THREE.MeshBasicMaterial({ color: 0xd9c9ff })); m.rotation.x = -Math.PI / 2; m.position.set(0, .01, -i * 8); s.add(m); stripes.push(m); }
+const B = createBike(THREE, { accent: [1, .45, .1] }); const tip = new THREE.Group(); tip.add(B.group); s.add(tip);
+document.title = 'bike ok ' + Math.round(B.tris()) + ' tris';
+let t0 = performance.now();
+function f(now) {
+  const t = (now - t0) / 1000, dt = Math.min(.05, (now - (f.l || now)) / 1000); f.l = now;
+  const speed = 34, steer = Math.sin(t * .9) * .8, hit = (t % 4.5) < .35 ? 1 : 0, air = (t % 4.5) > 2.2 && (t % 4.5) < 3.2;
+  B.update(dt, { speed, steer, comp: air ? 0 : hit ? 1 : .35 + .1 * Math.sin(t * 9), lean: -steer * .18 });
+  tip.position.y = air ? .5 * Math.sin(Math.PI * ((t % 4.5) - 2.2)) : 0; tip.rotation.x = air ? .12 * Math.sin(Math.PI * ((t % 4.5) - 2.2)) : 0;
+  for (const m of stripes) { m.position.z += speed * dt; if (m.position.z > 6) m.position.z -= 240; }
+  if (side) { cam.position.set(2.4, .9, -1.4); cam.lookAt(0, .5, -1.4); } else { cam.position.set(0, 1.15, 0); cam.lookAt(0, .35, -3.2); }
+  document.getElementById('i').textContent = (air ? 'in the air: fork extended' : hit ? 'landing: fork compressed' : 'riding') + '   steer ' + steer.toFixed(2) + '   ' + Math.round(B.tris()) + ' triangles';
+  r.render(s, cam); requestAnimationFrame(f);
+}
+requestAnimationFrame(f);
+</script>
