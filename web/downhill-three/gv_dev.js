@@ -864,7 +864,7 @@ const INTRO = { a: null, started: false };
 function startIntro() { try { const a = new Audio('../music/space_echo.ogg'); a.loop = true; a.volume = 0; INTRO.a = a; a.play().then(() => { let v = 0; const iv = setInterval(() => { v = Math.min(.75, v + .05); a.volume = v; if (v >= .75) clearInterval(iv); }, 120); }).catch(() => { }); } catch (e) { } }
 function goMusic() { if (window.__introDone) return; window.__introDone = true; clearTimeout(window.__mainTimer); const a = INTRO.a; if (a) { let v = a.volume; const iv = setInterval(() => { v = Math.max(0, v - .06); a.volume = v; if (v <= 0) { clearInterval(iv); a.pause(); } }, 120); } mainMusic(); }
 window.__goMusic = goMusic;
-function gmStart() { biomeBanner(); if (window.__introDone || Q.has('nomusic') || Q.has('nointro')) { mainMusic(); return; } if (!INTRO.started) { INTRO.started = true; startIntro(); window.__mainTimer = setTimeout(goMusic, HD.on ? 25000 : 6000); } }
+function gmStart() { biomeBanner(); mainMusic(); }          /* the intro track is gone: the biome's own music starts on the tap */
 function mainMusic() { if (gmOn || Q.has('nomusic')) return; const tr = biomeTrack(); if (tr) { if (!window.__bt) { try { startBiomeTrack(tr); } catch (e) { } } return; } gmOn = true; try { GM.start(); } catch (e) { gmOn = false; } }
 const AW = createAudioWire({ SFX, GM, PSY });          // every game event -> Godot's sound sequence (audiowire.js); ?oldsfx keeps the earlier one-sound calls
 const AWON = !Q.has('oldsfx');
