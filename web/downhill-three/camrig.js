@@ -156,7 +156,7 @@ export function createCamRig(o) {
     hopTick(dt);          // (_juice advances the hop, then _view_juice reads it)
     S.hopCam = S.hopT < 1 ? S.hopH * 4 * S.hopT * (1 - S.hopT) * 0.5 : 0;          // (_view_juice's first line: the NEXT frame's camera uses it, as in Godot)
     const ts = st.inAir ? (st.trkSpin || 0) : (st.trkVisSpin || 0), tf = st.inAir ? (st.trkFlip || 0) : (st.trkVisFlip || 0), grabbing = !!(st.inAir && st.grabbing);
-    tip.visible = (PH.hurt || 0) <= 0 || Math.floor((st.age !== undefined ? st.age : S.t) * 14) % 2 === 0;
+    tip.visible = !(o.noTip && o.noTip()) && ((PH.hurt || 0) <= 0 || Math.floor((st.age !== undefined ? st.age : S.t) * 14) % 2 === 0);
     const heading = PH.heading, age = st.age !== undefined ? st.age : S.t;
     const d = wrapPi(heading - Math.atan2(S.lookX, -S.lookZ)), rx = Math.cos(heading), rz = Math.sin(heading);
     const slip = vx * rx + vz * rz, spn = clamp(sp / 45, 0, 1);
