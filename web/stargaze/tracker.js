@@ -201,7 +201,7 @@ export class Tracker {
             const mod = await import(m.base + '/vision_bundle.mjs');
             if (typeof self.dbg !== 'function') self.dbg = () => {};
             const files = await mod.FilesetResolver.forVisionTasks(m.base + '/wasm');
-            const opts = (d) => ({ baseOptions: { modelAssetPath: m.base + '/face_landmarker.task', delegate: d }, runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true, minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
+            const opts = (d) => ({ baseOptions: { modelAssetPath: m.base + '/face_landmarker.task', delegate: d }, runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: !m.nb, outputFacialTransformationMatrixes: true, minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5 });
             let dlg = m.gpu ? 'GPU' : 'CPU';
             try { lm = await mod.FaceLandmarker.createFromOptions(files, opts(dlg)); } catch (err) { dlg = 'CPU'; lm = await mod.FaceLandmarker.createFromOptions(files, opts('CPU')); }
             self.postMessage({ type: 'ready', dlg });
@@ -239,7 +239,7 @@ export class Tracker {
         else if (m.type === 'error') { clearTimeout(to); reject(new Error(m.msg)); }
       };
       w.onerror = (ev) => { clearTimeout(to); reject(new Error(ev.message || 'worker error')); };
-      w.postMessage({ type: 'init', base, gpu: !new URLSearchParams(location.search).has('cpu') });          // the graphics delegate by default (the game is light enough to share the chip; the CPU model took 50-100 ms a frame in the logs); ?cpu forces the CPU
+      w.postMessage({ type: 'init', base, nb: this.noBlend === true || new URLSearchParams(location.search).has('noblend'), gpu: !new URLSearchParams(location.search).has('cpu') });          // the graphics delegate by default (the game is light enough to share the chip; the CPU model took 50-100 ms a frame in the logs); ?cpu forces the CPU
     });
   }
   // FACE CROP. The model gets a square crop around the face (about 1.7 x the face, sent at 320 px) instead of the whole frame shrunk to 400 px: the iris is then about 2.5 times
