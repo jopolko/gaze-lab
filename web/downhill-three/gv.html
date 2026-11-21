@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <script>/* the game runs inside shell.html (fullscreen and sound survive a biome switch); &noshell opens it bare */if (window.top === window && !/[?&](noshell|inshell)(?![A-Za-z])/.test(location.search)) location.replace("shell.html" + (location.search || "?play"));</script>
+<script>/* Google Analytics (the site's tag), only when the game is opened bare (&noshell): inside the shell the outer page counts the visit once */if (window.top === window && /[?&]noshell(?![A-Za-z])/.test(location.search)) { window.dataLayer = window.dataLayer || []; window.gtag = function () { dataLayer.push(arguments); }; gtag('js', new Date()); gtag('config', 'G-1GZN9MX2P4'); var gs = document.createElement('script'); gs.async = true; gs.src = 'https://www.googletagmanager.com/gtag/js?id=G-1GZN9MX2P4'; document.head.appendChild(gs); }</script>
 <title>Godot level viewer</title>
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
