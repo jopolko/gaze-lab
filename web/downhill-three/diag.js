@@ -12,13 +12,13 @@
   const src = `
     let sid, logUrl, lastAlive = 0, state = {}, marks = [];
     const post = (rec) => fetch(logUrl, { method: 'POST', body: JSON.stringify(Object.assign({ app: 'gv', kind: 'diag', sid }, rec)), keepalive: true }).catch(() => {});
-    function beat() { const now = performance.now(); post({ ev: 'beat', t: Math.round(state.t || 0), mainAgoMs: lastAlive ? Math.round(now - lastAlive) : -1, frames: state.frames, last: state.last, heapMB: state.heap, vis: state.vis, marks: marks.splice(0, 40) }); }
-    onmessage = (e) => { const d = e.data; if (d.type === 'init') { sid = d.sid; logUrl = d.logUrl; post({ ev: 'start', info: d.info }); setInterval(beat, 1000); } else if (d.type === 'mark') marks.push([Math.round(d.t), d.label]); else if (d.type === 'alive') { lastAlive = performance.now(); state = d; } };`;
+    function beat() { const now = performance.now(); post({ ev: 'beat', t: Math.round(state.t || 0), mainAgoMs: lastAlive ? Math.round(now - lastAlive) : -1, frames: state.frames, last: state.last, heapMB: state.heap, vis: state.vis, marks: marks.splice(0, 150) }); }
+    onmessage = (e) => { const d = e.data; if (d.type === 'init') { sid = d.sid; logUrl = d.logUrl; post({ ev: 'start', info: d.info }); const t0w = performance.now(), loop = () => { beat(); setTimeout(loop, performance.now() - t0w < 60000 ? 2000 : 5000); }; setTimeout(loop, 2000); } else if (d.type === 'mark') marks.push([Math.round(d.t), d.label]); else if (d.type === 'alive') { lastAlive = performance.now(); state = d; } };`;
   const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
   w.postMessage({ type: 'init', sid, info, logUrl: new URL('log.php', location.href).href });
   const mark = (label) => { last = label; w.postMessage({ type: 'mark', label, t: performance.now() - T0 }); };
   window.__dm = mark; mark('html: diag started');
-  setInterval(() => { w.postMessage({ type: 'alive', t: performance.now() - T0, frames, last, heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0, vis: document.visibilityState }); }, 100);
+  setInterval(() => { w.postMessage({ type: 'alive', t: performance.now() - T0, frames, last, heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : 0, vis: document.visibilityState }); }, 250);
   const tick = () => { frames++; requestAnimationFrame(tick); }; requestAnimationFrame(tick);
   addEventListener('error', (e) => mark('ERROR ' + e.message + ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno));
   addEventListener('unhandledrejection', (e) => mark('REJECTED ' + String((e.reason && e.reason.message) || e.reason).slice(0, 120)));
