@@ -24,6 +24,11 @@
 <script>
 (function () {
   var q = location.search || '?play', f = document.getElementById('g');
+  /* THE CAMERA TRACKER LIVES HERE: made once, in this outer page, so a biome switch (which reloads only the iframe) does not stop the camera or reload the face model. The game borrows it (window.parent.__shellTrkP). &nosharedcam: the game makes its own, as before. */
+  (function () { var Qs = new URLSearchParams(location.search); if (!Qs.has('head') || Qs.has('nosharedcam')) return;
+    window.__shellTrkP = (async function () { var video = document.createElement('video'); video.playsInline = true; video.muted = true; video.autoplay = true; video.style.cssText = 'position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none'; document.body.appendChild(video);
+      var m = await import('../stargaze/tracker.js'); var tr = new m.Tracker(video); tr.noBlend = !Qs.has('blend'); if (Qs.has('hires')) { tr.camW = 1280; tr.camH = 720; tr.fullRes = true; } else { tr.camW = 640; tr.camH = 480; tr.fullRes = false; } tr.useWorker = true; tr.inW = +Qs.get('inw') || 256; return { tr: tr, p: null, ready: false }; })();
+    window.__shellTrkP.catch(function () { }); })();
   f.src = 'gv.html' + q + (q.indexOf('?') === 0 && q.length > 1 ? '&' : '?') + 'inshell=1';
   function go() { if (/[?&]nofs\b/.test(location.search) || document.fullscreenElement || document.webkitFullscreenElement) return; var el = document.documentElement, r = el.requestFullscreen || el.webkitRequestFullscreen; if (r) { try { var p = r.call(el, { navigationUI: 'hide' }); if (p && p.catch) p.catch(function () { }); } catch (e) { } } }
   addEventListener('message', function (e) { if (e.origin !== location.origin) return; if (e.data === 'gv-fs') go(); });
