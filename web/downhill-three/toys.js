@@ -185,7 +185,7 @@ export function createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks
       const r = rec(t.n);
       if (kind === 'pill') {
         if (!t.hid && !t.eaten) {
-          const by = t.y + .25 * Math.sin(S.age * 2.8 + t.x), sr = t.spin ? rec(t.spin) : null; t.a = (t.a || 0) + 2.4 * dt;
+          const gy0 = th(t.x + (t.px || 0), tz + (t.pz || 0)); if (t.y < gy0 + 1.5) { if (!t.rz) { t.rz = 1; try { (window.__dm || (() => {}))('PILL RAISED ' + t.id + ' y ' + t.y.toFixed(1) + ' ground ' + gy0.toFixed(1)); } catch (e) { } } t.y = gy0 + 3; } const by = t.y + .25 * Math.sin(S.age * 2.8 + t.x), sr = t.spin ? rec(t.spin) : null; t.a = (t.a || 0) + 2.4 * dt;
           /* A MOLECULE IS PULLED TOWARD YOU when you are close (a wider reach with a magnet), and it can be caught from further away: forgiving, not fiddly */
           { const pr = hooks && hooks.pillPull ? hooks.pillPull() : 0; if (pr > 0) { const ddx = PH.x - (t.x + (t.px || 0)), ddz = PH.z - (tz + (t.pz || 0)), dd = Math.hypot(ddx, ddz); if (dd < pr && dd > .01) { const k = Math.min(1, dt * (1.6 + 3 * (1 - dd / pr))); t.px = (t.px || 0) + ddx * k; t.pz = (t.pz || 0) + ddz * k; } } }
           if (r) { const dy = by - r.base.elements[13]; for (const q of r.meshes) { _t.copy(trans(t.px || 0, dy, t.pz || 0)); if (sr && q.path.startsWith(sr.nd.path)) _t.multiply(sr.base).multiply(rotY(t.a)).multiply(sr.inv); q.m.matrix.copy(_t).multiply(q.orig); } }
