@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b1530"/><stop offset="1" stop-color="#3a1a5e"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f1d37a"/><stop offset=".5" stop-color="#b8892b"/><stop offset="1" stop-color="#f1d37a"/></linearGradient>
+    <radialGradient id="paper" cx=".5" cy=".1" r=".9"><stop offset="0" stop-color="#fffaf0"/><stop offset="1" stop-color="#f6ead0"/></radialGradient>
+    <linearGradient id="holo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4fd8"/><stop offset=".33" stop-color="#19e6ff"/><stop offset=".66" stop-color="#ffe14a"/><stop offset="1" stop-color="#4dff9a"/></linearGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2a8"/><stop offset=".5" stop-color="#ffb400"/><stop offset="1" stop-color="#ff4d6a" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <!-- the certificate -->
+  <rect x="60" y="40" width="1080" height="550" rx="6" fill="url(#paper)" stroke="url(#gold)" stroke-width="8"/>
+  <rect x="82" y="62" width="1036" height="506" fill="none" stroke="#b8892b" stroke-width="2" stroke-dasharray="10 6" opacity=".7"/>
+  <rect x="96" y="76" width="1008" height="478" fill="none" stroke="#f1d37a" stroke-width="2"/>
+  <!-- header -->
+  <text x="600" y="128" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="17" letter-spacing="6" fill="#b8892b">THE INTERNATIONAL BUREAU OF DOWNHILL ROCKETRY</text>
+  <text x="600" y="200" text-anchor="middle" font-family="DejaVu Serif, serif" font-weight="bold" font-size="58" fill="#2a1f0c" letter-spacing="1">Certificate of Authentic</text>
+  <text x="600" y="262" text-anchor="middle" font-family="DejaVu Serif, serif" font-weight="bold" font-size="58" fill="#2a1f0c" letter-spacing="1">Rocket</text>
+  <text x="600" y="304" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-size="24" fill="#2a1f0c">A genuine, officially unofficial document</text>
+  <!-- serial -->
+  <g transform="rotate(-1.5 600 372)">
+    <rect x="370" y="334" width="460" height="64" fill="none" stroke="#a3201c" stroke-width="4"/>
+    <text x="600" y="378" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-weight="bold" font-size="38" letter-spacing="6" fill="#a3201c">RKT-XXXX-XXXX</text>
+  </g>
+  <text x="600" y="432" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="16" letter-spacing="2" fill="#2a1f0c">No. 000001 / 009,999  ·  COLLECTOR'S SERIES IX  ·  RUN &#937;</text>
+  <text x="600" y="460" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-size="15" fill="#6b5a30">limited to 9,999 (give or take 9,990,000) · valid nowhere · void where prohibited</text>
+  <text x="600" y="518" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="20" letter-spacing="4" fill="#0d6b2b">&#10003; VERIFIED &#8212; BY US, JUST NOW</text>
+
+  <!-- fig 1: a molecule of dubious and unidentifiable origin -->
+  <g transform="translate(215 372)">
+    <g stroke="#2a1f0c" stroke-width="5" stroke-linecap="round" opacity=".8">
+      <line x1="0" y1="0" x2="-52" y2="-30"/><line x1="0" y1="0" x2="48" y2="-36"/><line x1="0" y1="0" x2="10" y2="56"/><line x1="48" y1="-36" x2="92" y2="-8"/>
+    </g>
+    <circle cx="0" cy="0" r="28" fill="#19e6ff" stroke="#2a1f0c" stroke-width="3"/>
+    <circle cx="-52" cy="-30" r="17" fill="#ff4fd8" stroke="#2a1f0c" stroke-width="3"/>
+    <circle cx="48" cy="-36" r="20" fill="#ffe14a" stroke="#2a1f0c" stroke-width="3"/>
+    <circle cx="10" cy="56" r="14" fill="#8a2dff" stroke="#2a1f0c" stroke-width="3"/>
+    <circle cx="92" cy="-8" r="11" fill="#c8c8c8" stroke="#2a1f0c" stroke-width="3"/>
+    <text x="92" y="-3" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="14" fill="#2a1f0c">?</text>
+    <ellipse cx="-8" cy="-10" rx="9" ry="6" fill="#fff" opacity=".6" transform="rotate(-30 -8 -10)"/>
+    <text x="20" y="104" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-size="15" fill="#6b5a30">fig. 1: specimen of</text>
+    <text x="20" y="123" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-size="15" fill="#6b5a30">undetermined provenance</text>
+  </g>
+  <!-- fig 2: a rocket, tastefully speeding by -->
+  <g transform="translate(1050 372) rotate(38) scale(.85)">
+    <g stroke="#b8892b" stroke-width="4" stroke-linecap="round" opacity=".55"><line x1="-6" y1="62" x2="-6" y2="128"/><line x1="-26" y1="70" x2="-26" y2="150"/><line x1="14" y1="70" x2="14" y2="140"/></g>
+    <path d="M-12 62 Q0 150 12 62Z" fill="url(#flame)"/>
+    <path d="M0 -70 C26 -40 26 20 18 54 H-18 C-26 20 -26 -40 0 -70Z" fill="#fff" stroke="#2a1f0c" stroke-width="4"/>
+    <circle cx="0" cy="-18" r="11" fill="#19e6ff" stroke="#2a1f0c" stroke-width="3"/>
+    <path d="M-18 26 L-46 62 L-18 54Z M18 26 L46 62 L18 54Z" fill="#ff4d6a" stroke="#2a1f0c" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M0 -70 C10 -62 16 -52 18 -44 H-18 C-16 -52 -10 -62 0 -70Z" fill="#ff4d6a"/>
+  </g>
+  <text x="1040" y="506" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-size="15" fill="#6b5a30">fig. 2: rocket, speeding</text>
+  <g transform="translate(600 545)"><text x="-150" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-size="13" fill="#6b5a30">fully accredited by the Accreditation Accreditation Board</text><text x="190" text-anchor="middle" font-family="DejaVu Serif, serif" font-style="italic" font-weight="bold" font-size="26" fill="#16306b" transform="rotate(-4 190 0)">Luke</text><text x="300" y="0" text-anchor="start" font-family="DejaVu Sans, sans-serif" font-size="11" fill="#6b5a30">Registrar, Certificate Mill</text></g>
+  <!-- the stamp and the hologram -->
+  <g transform="translate(1052 158) rotate(-14) scale(.8)"><circle r="62" fill="none" stroke="#a3201c" stroke-width="5" opacity=".85"/><circle r="52" fill="none" stroke="#a3201c" stroke-width="2" opacity=".85"/>
+    <text y="-14" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="18" letter-spacing="2" fill="#a3201c" opacity=".9">TOTALLY</text>
+    <text y="8" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="22" letter-spacing="2" fill="#a3201c" opacity=".9">LEGIT</text>
+    <text y="30" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="14" letter-spacing="2" fill="#a3201c" opacity=".9">&#8226; 100% &#8226;</text></g>
+  <g transform="translate(150 158) scale(.85)"><circle r="46" fill="url(#holo)" opacity=".8"/><text y="-2" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-weight="bold" font-size="11" fill="#2a1f0c" opacity=".7">HOLOGRAM</text><text y="12" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="10" fill="#2a1f0c" opacity=".7">(imitation)</text></g>
+</svg>
