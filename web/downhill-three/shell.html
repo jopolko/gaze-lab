@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon192.png">
+<title>Downhill</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#000}</style>
+</head>
+<body>
+<!-- THE SHELL: the game runs in an iframe inside this page. Switching biome reloads only the iframe, so this page keeps (1) fullscreen and (2) the browser's permission to play sound,
+     both of which a normal page reload throws away. The game asks for fullscreen by message; the request is made here, from the same tap. -->
+<iframe id="g" allow="camera; microphone; autoplay; fullscreen; accelerometer; gyroscope; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
+<script>
+(function () {
+  var q = location.search || '?play', f = document.getElementById('g');
+  f.src = 'gv.html' + q + (q.indexOf('?') === 0 && q.length > 1 ? '&' : '?') + 'inshell=1';
+  function go() { if (/[?&]nofs\b/.test(location.search) || document.fullscreenElement || document.webkitFullscreenElement) return; var el = document.documentElement, r = el.requestFullscreen || el.webkitRequestFullscreen; if (r) { try { var p = r.call(el, { navigationUI: 'hide' }); if (p && p.catch) p.catch(function () { }); } catch (e) { } } }
+  addEventListener('message', function (e) { if (e.origin !== location.origin) return; if (e.data === 'gv-fs') go(); });
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach(function (ev) { addEventListener(ev, go, true); });
+  f.addEventListener('load', function () { try { f.contentWindow.focus(); } catch (e) { } });
+  addEventListener('focus', function () { try { f.contentWindow.focus(); } catch (e) { } });
+})();
+</script>
+</body>
+</html>
