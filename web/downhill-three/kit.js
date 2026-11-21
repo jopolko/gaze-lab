@@ -7,6 +7,7 @@
 // The physics reads plain records: rails go into the game's RAILS list (so the existing grind code rides them, curved ones through f.cv(z)); ramps and rings are stepped by kit.step().
 import * as THREE from 'three';
 import { createPickupMesh } from './pickupmesh.js';
+import { iconGeo } from './icons.js';
 
 const MATS = ['steel', 'glass', 'wood', 'neon', 'rust'], MCOL = { steel: [.62, .7, .8], glass: [.7, .9, 1], wood: [.7, .45, .22], neon: [1, .3, .9], rust: [.8, .4, .15] };
 const mulberry = (seed) => { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -156,18 +157,18 @@ export function createKit(o) {
     p.upd(0); for (const im of ims) im.instanceMatrix.needsUpdate = true; PADS.push(p); try { onTarget && onTarget(p, 'pad'); } catch (e) { } return p;
   }
   function makeBuff(t, x, z, R) {          // a powerup (the Godot kit shape, halo and pool), one at a time
-    const spec = PM.buff(t), ims = [0, 1, 2].map((k) => { const im = new THREE.InstancedMesh(spec.parts[k].geo, spec.parts[k].mat, 1); im.frustumCulled = false; scene.add(im); return im; }); ims[1].renderOrder = 4; ims[2].renderOrder = 3;
+    const spec = PM.buff(t), ims = [0, 1, 2].map((k) => { const im = new THREE.InstancedMesh(k === 0 ? (ICONS[t] || (ICONS[t] = iconGeo(THREE, t))) : spec.parts[k].geo, spec.parts[k].mat, 1); im.frustumCulled = false; scene.add(im); return im; }); ims[1].renderOrder = 4; ims[2].renderOrder = 3;
     const g = groundY(x, z), y = (g === null ? th(x, z) : g) + 2.4, b = { mine: true, x, z, y, t, kind: 'path', taken: false, orbs: [], ph: R() * 6.28, base: y };
     b.upd = (age) => { const a = spec.anim(age, b.ph), yy = b.y + a.bobY; ims[0].setMatrixAt(0, _m.compose(_v.set(b.x, yy, b.z), qA.setFromAxisAngle(_up, a.spinY), _s.set(1.3, 1.3, 1.3))); const hs = 6.2 * a.haloScale; ims[1].setMatrixAt(0, _m.compose(_v.set(b.x, yy, b.z), qB.identity(), _s.set(hs, hs, 1))); ims[2].setMatrixAt(0, _m.compose(_v.set(b.x, yy - 1.6, b.z), qC.setFromAxisAngle(_xax, -Math.PI / 2), _s.set(7, 7, 1))); for (const im of ims) im.instanceMatrix.needsUpdate = true; };
     b.hideSelf = () => { b.hidden = true; for (const im of ims) { im.setMatrixAt(0, ZERO); im.instanceMatrix.needsUpdate = true; } };
     b.upd(0); BUFFS.push(b); try { onTarget && onTarget(b, t); } catch (e) { } return b;
   }
-  const weighted = (R) => { const r = R(); return r < .4 ? 'boost' : r < .55 ? 'shield' : r < .78 ? 'mult' : 'donut'; };
+  const ICONS = {}; const weighted = (R) => { const r = R(); return r < .28 ? 'boost' : r < .5 ? 'shield' : r < .68 ? 'mult' : r < .85 ? 'donut' : 'saw'; };          // (the readable models are in icons.js; shield, magnet, wings and saw are no longer rare)
 
   // build the objects of one row (the game calls it when the row's ground exists); `spans` are z ranges to stay out of
   function buildRow(j, rr, z0, spans) {
     if (used.has(j)) return; used.add(j);
-    const R = mulberry(j * 7919 + 4242), B = GeoBuf(), BG = GeoBuf(); let made = 0;
+    const R = mulberry(j * 7919 + 4242 + (Math.floor(seed) % 100000) * 104729), B = GeoBuf(), BG = GeoBuf(); let made = 0;          // (the run's seed is part of every row's dice, so a new seed is a new run)
     const ph = phraseOf(j), pl = plan[j] || {}, lane = pl.lane === undefined ? 0 : pl.lane, t0 = 28 + Math.floor(R() * 40), clear = (za, zb) => !spans.some((s2) => zb < s2[1] + 8 && za > s2[0] - 25);
     if (ph === 'boostrun') { const za = z0 - t0, zb = za - 44 - 60; if (clear(za, zb)) { for (let i = 0; i < 3; i++) makePad(trailX(za - i * 22) + lane + (R() - .5) * 3, za - i * 22, R); makeBuff(weighted(R), trailX(zb) + lane + (R() < .5 ? -1 : 1) * (5 + R() * 5), zb, R); made++; } }
     else if (ph === 'boostgrind') { const len = 28 + Math.floor(R() * 5) * 11, za = z0 - t0, zr = za - 16, zb = zr - len - 40; if (clear(za, zb)) { const x = trailX(za) + lane; makePad(x, za, R); buildRings({ x, z0: zr, len }, x, zr + 20, 'steel', 'stream'); made++; makeBuff(weighted(R), trailX(zb) + lane + Math.sin(12.5) * 3.2, zr - 20 - 13 * 7 - 12, R); } }          // pad -> a winding stream of rings -> a powerup at its end (no rail: nothing locks the board)
@@ -232,7 +233,7 @@ export function createKit(o) {
   function flightPath() { let x = PH.x, y = PH.y, z = PH.z, vx = PH.vx, vy = PH.vy, vz = PH.vz; const g = (C.GV || 9.8) * (C.AIR_G_K || 2.1), pts = []; for (let i = 0; i < 90; i++) { const dt = .05; vy -= g * dt; x += vx * dt; y += vy * dt; z += vz * dt; const gg = groundY(x, z), gy = gg === null ? th(x, z) : gg; pts.push({ x, y, z, gy }); if (y <= gy + .3) break; } return pts; }
   const launched = []; let sweepT = 0;
   function launch() {
-    const pts = flightPath(); if (pts.length < 4) return; if (launched.some((q) => Math.abs(q - PH.z) < 60)) return; launched.push(PH.z); if (hooks.hoopP && Math.random() > hooks.hoopP()) return;          // (one set of hoops and one target per jump: a second take-off from the same ramp makes no copies) const R = mulberry((Math.floor(Math.abs(PH.z) * 13) + 91) >>> 0), L = pts[pts.length - 1], design = ARCS[Math.floor(R() * 4)], n = Math.min(5, Math.max(3, Math.floor(pts.length / 3)));
+    const pts = flightPath(); if (pts.length < 4) return; if (launched.some((q) => Math.abs(q - PH.z) < 60)) return; launched.push(PH.z); if (hooks.hoopP && Math.random() > hooks.hoopP()) return;          // (one set of hoops and one target per jump: a second take-off from the same ramp makes no copies) const R = mulberry((Math.floor(Math.abs(PH.z) * 13) + 91 + (Math.floor(seed) % 100000) * 7) >>> 0), L = pts[pts.length - 1], design = ARCS[Math.floor(R() * 4)], n = Math.min(5, Math.max(3, Math.floor(pts.length / 3)));
     for (let i = 0; i < n; i++) { const p = pts[Math.min(pts.length - 2, Math.floor((i + 1) / (n + 1) * pts.length))]; let dx = 0; if (design === 'spiral') dx = Math.sin(i * 1.3) * 3; else if (design === 'sweep') dx = Math.sin(i * .9) * 5; addRing(p.x + dx, p.y + 1.1, p.z); }
     const off = (R() < .5 ? -1 : 1) * (4 + R() * 5), tx = L.x + off, tz = L.z - 6 - R() * 10; buildTarget(tx, tz); buildRings({ x: tx, z0: tz, len: 90 }, tx - off * .5, tz + 22, 'steel', 'stream');
   }

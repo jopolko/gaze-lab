@@ -95,7 +95,7 @@ export function createSnowball(o) {
     S.shake = Math.max(S.shake, .35 * S.close * S.close); if (onShake) onShake(S.shake);
     S.rumbleT -= dt; if (S.rumbleT <= 0 && S.close > .05) { S.rumbleT = 1.8 - 1.2 * S.close; rumble(S.close); }
     if (onWarn) onWarn(S.close);
-    if (gap < 3.8 + 1.2 * (SPK - 1) && Math.abs(PH.x - S.x) < 3.9 && PH.y - th(PH.x, PH.z) < 3.5 && PH.hurt <= 0) { const dir = Math.sign(PH.x - S.x); endBehind(false); hurtPlayer('behind', dir); }
+    if (gap < 3.8 + 1.2 * (SPK - 1) && Math.abs(PH.x - S.x) < 3.9 && PH.y - th(PH.x, PH.z) < 3.5 && PH.hurt <= 0) { const dir = Math.sign(PH.x - S.x) || 1; throwBoulder(S.group, -dir, v); endBehind(false); hurtPlayer('behind', dir); }
     else if (gap > 150 * SPK) endBehind(true);
   }
 
@@ -116,19 +116,32 @@ export function createSnowball(o) {
       b.n.position.set(b.x, th(b.x, b.z) + BALL_R, b.z); b.n.rotation.x += b.vz * dt / BALL_R; b.n.rotation.z += -b.vx * dt / BALL_R;
       if (!b.done) {
         const dx = PH.x - b.x, dz = PH.z - b.z, above = PH.y - th(PH.x, PH.z), R = BALL_R + 1.1 + 1.2 * (SPK - 1);
-        if (dx * dx + dz * dz < R * R && above < BALL_R + 1) { b.done = true; hurtPlayer('side', b.vx); b.gone = true; b.n.visible = false; }
+        if (dx * dx + dz * dz < R * R && above < BALL_R + 1) { b.done = true; hurtPlayer('side', b.vx); throwBoulder(b.n, Math.sign(b.vx) || 1, Math.abs(b.vz)); b.gone = true; b.n.visible = false; }
         else if (b.z > PH.z + 6 * SPK) { b.done = true; S.dodged++; PH.score += 60; toast('DODGED', '#aef'); if (onDodge) onDodge(); }
       }
       if (b.z > PH.z + 70 * SPK || b.t > 14 || b.gone) { root.remove(b.n); balls.splice(i, 1); }
     }
   }
 
+  // A BOULDER THAT HITS YOU IS KNOCKED AWAY: it leaps ahead of you and to the side, tumbling and bouncing on the hill, so you see it go, then it is gone.
+  const debris = [];
+  function throwBoulder(src, side, speed) {
+    if (!src) return; const n = src.clone(); n.position.copy(src.position); root.add(n);
+    debris.push({ n, vx: side * (9 + rng() * 7), vy: 11 + rng() * 5, vz: -(Math.max(speed, 20 * SPK) * 1.05 + 8 + rng() * 8), rx: (rng() - .5) * 9, rz: (rng() - .5) * 9, age: 0 });
+  }
+  function stepDebris(dt) {
+    for (let i = debris.length - 1; i >= 0; i--) {
+      const d = debris[i]; d.age += dt; d.vy -= 26 * dt; const p = d.n.position; p.x += d.vx * dt; p.y += d.vy * dt; p.z += d.vz * dt; d.n.rotation.x += d.rx * dt; d.n.rotation.z += d.rz * dt;
+      const g = th(p.x, p.z) + 3; if (p.y < g) { p.y = g; d.vy = Math.abs(d.vy) * .55; d.vx *= .8; d.vz *= .85; }
+      if (d.age > 4.5) { root.remove(d.n); debris.splice(i, 1); }
+    }
+  }
   function tick(dt) {
-    S.age += dt; S.shake = Math.max(S.shake - dt * 1.6, 0);
+    S.age += dt; stepDebris(dt); S.shake = Math.max(S.shake - dt * 1.6, 0);
     if (behind) tickBehind(dt);
     if (side) tickSide(dt);
   }
-  function reset() { removeBehind(); for (const b of balls) root.remove(b.n); balls = []; S.on = false; S.close = 0; S.next = .167 * L; nextBallZ = -420 * SPK; S.shake = 0; if (onWarn) onWarn(0); }
+  function reset() { removeBehind(); for (const d of debris) root.remove(d.n); debris.length = 0; for (const b of balls) root.remove(b.n); balls = []; S.on = false; S.close = 0; S.next = .167 * L; nextBallZ = -420 * SPK; S.shake = 0; if (onWarn) onWarn(0); }
   const info = () => ({ on: S.on, gap: S.on ? S.z - PH.z : null, close: S.close, shake: S.shake, balls: balls.length, spawned: S.spawned, escaped: S.escaped, hit: S.hit, dodged: S.dodged, next: S.next, x: S.x, z: S.z });
   return { tick, reset, mesh: root, info, state: S };
 }

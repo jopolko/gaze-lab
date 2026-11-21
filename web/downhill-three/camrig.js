@@ -141,7 +141,7 @@ export function createCamRig(o) {
     const fv = fovFor(sp, punch, vp.w, vp.h, touch) * (o.fovMul ? o.fovMul() : 1); S.fov = fv;
     if (Math.abs(fv - camera.fov) > 0.05) { camera.fov = fv; camera.updateProjectionMatrix(); }
     // ---- an impact shudder, not a shake: a short decaying offset
-    if (S.shud > 0.002) { camera.position.y += Math.sin(S.t * 90) * S.shud; camera.position.x += Math.sin(S.t * 71 + 1.3) * S.shud * 0.6; S.shud *= Math.exp(-dt * 13); }
+    if (S.shud > 0.002) { camera.position.y += Math.sin(S.t * 90) * S.shud; camera.position.x += Math.sin(S.t * 71 + 1.3) * S.shud * 0.6; S.shud *= Math.exp(-dt * 7); }
     camera.updateMatrixWorld(true);
     juice(dt, st, sp, vx, vz);
   }

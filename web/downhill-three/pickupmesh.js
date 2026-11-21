@@ -7,7 +7,7 @@
 //   _spawn_orb 4094 + _glint_line 3934 (gold atoms)   _make_gates 10081 + _tm 9569 (lollipops)   _make_bumpers 9981 (three cupcake atoms)   _make_spring 10006 (the slingshot: core, cage, halo, three turning bands, pool 26)   _beacon 9419
 // USE:   const PM = createPickupMesh(THREE);  PM.buff('boost') -> { parts, anim }  (parts are static pieces relative to the holder; anim(age, ph) returns the live offsets).  See the per-builder comments.
 
-export const BUFF_COL = { boost: [1, .55, .1], shield: [.3, .85, 1], mult: [.95, .4, 1], donut: [1, .45, .7], orb: [1, .9, .45] };
+export const BUFF_COL = { boost: [1, .55, .1], shield: [.3, .85, 1], mult: [.95, .4, 1], donut: [1, .45, .7], saw: [1, .7, .3], orb: [1, .9, .45] };
 export const BUFF_KIT = { boost: 'crystal', shield: 'cage', mult: 'rings', donut: 'tetra' };          // _make_item: {"boost": "crystal", "shield": "cage", "mult": "rings", "donut": "tetra"}
 export const GATE_COLS = [[.2, .95, 1], [1, .3, .9], [1, .85, .2]];                                   // RunRig.gd GATE_COLS
 export const RAIL_H = .9;

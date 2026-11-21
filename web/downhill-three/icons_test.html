@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>icons test</title>
+<style>html,body{margin:0;background:#12081c;overflow:hidden}</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { iconGeo } from './icons.js';
+const r = new THREE.WebGLRenderer({ antialias: true }); r.setSize(innerWidth, innerHeight); document.body.appendChild(r.domElement);
+const s = new THREE.Scene(), cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, .1, 100); cam.position.set(0, 0, 20);
+s.add(new THREE.AmbientLight(0xffffff, .9)); const dl = new THREE.DirectionalLight(0xffffff, 1.6); dl.position.set(3, 5, 8); s.add(dl);
+const types = ['shield', 'mult', 'donut', 'boost', 'saw']; const ms = [];
+types.forEach((t, i) => { const m = new THREE.Mesh(iconGeo(THREE, t), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .45, metalness: .1, side: THREE.DoubleSide })); m.position.x = (i - 2) * 2.9; m.scale.setScalar(1.3); s.add(m); ms.push(m); });
+const tilt = new URLSearchParams(location.search).get('turn') === '1';
+function f(t) { ms.forEach((m, i) => { m.rotation.y = tilt ? t / 1000 + i : .5 * Math.sin(t / 900 + i); }); r.render(s, cam); requestAnimationFrame(f); } f(0);
+document.title = 'icons ok ' + ms.map((m) => m.geometry.attributes.position.count).join(',');
+</script>
