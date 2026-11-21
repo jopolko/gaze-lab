@@ -180,7 +180,7 @@ export function createKit(o) {
       else buildRail(d, mat, x, z, buf);
       made++;
     }
-    if (ph === 'open' || ph === 'warm') { if (R() < (ph === 'warm' ? .6 : .45)) { const zb = z0 - 45 - R() * 100; if (clear(zb + 8, zb - 8)) { const r2 = R(), t = r2 < .3 ? 'shield' : r2 < .55 ? 'mult' : r2 < .78 ? 'donut' : 'saw'; makeBuff(t, trailX(zb) + lane + (R() < .5 ? -1 : 1) * (3 + R() * 6), zb, R); made++; } } }          /* powerups (shield, magnet, wings, saw) also lie in the open stretches, so they are met every few hundred metres */
+    if (ph === 'open' || ph === 'warm') { if (R() < (ph === 'warm' ? .95 : .85)) { const zb = z0 - 45 - R() * 100; if (clear(zb + 8, zb - 8)) { const r2 = R(), t = r2 < .3 ? 'shield' : r2 < .55 ? 'mult' : r2 < .78 ? 'donut' : 'saw'; makeBuff(t, trailX(zb) + lane + (R() < .5 ? -1 : 1) * (3 + R() * 6), zb, R); made++; } } }          /* powerups (shield, magnet, wings, saw) also lie in the open stretches, so they are met every few hundred metres */
     if (!made) return;
     for (const [buf, mt] of [[B, matO], [BG, matG]]) { if (!buf.count) continue; const mesh = new THREE.Mesh(buf.geo(), mt); mesh.frustumCulled = false; if (mt === matG) mesh.renderOrder = 6; scene.add(mesh); }
   }
