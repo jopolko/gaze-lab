@@ -71,7 +71,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
-<iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
+<iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
 <div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
@@ -155,6 +155,7 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
   const fx = p.does.split(';')[0].trim(); d.className = 'fx'; d.textContent = fx.charAt(0).toUpperCase() + fx.slice(1) + (WORLDOF[KEYS[si]] ? ' · found: ' + WORLDOF[KEYS[si]] : ''); strainEl.append(n, d); }
 
 const GAME = { el: document.getElementById('game'), ready: false, tint: '' };
+if (!/[?&]painted/.test(location.search)) GAME.el.src = GAME.el.dataset.src;          /* (&painted: the painted scene only, no real level behind) */
 setInterval(() => { if (GAME.ready) return; try { const w = GAME.el.contentWindow; if (w && w.__splashReady && w.__G && w.__G.PH && w.__G.PH.z < -30) { GAME.ready = true; GAME.el.classList.add('on'); setTimeout(() => { skyc.style.display = 'none'; }, 1500); } } catch (e) { } }, 400);
 function gameTint() { if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
 function draw(t, dt) {
