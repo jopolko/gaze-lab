@@ -64,7 +64,8 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
-const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* reduced motion (many phones have it on) doesn't freeze the screen: it goes calm instead (slow rings, no trip waves, no tracer) */
+const CALM = matchMedia('(prefers-reduced-motion: reduce)').matches, RM = false;
 const cv = document.getElementById('c'), cx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 function size() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cx.setTransform(DPR, 0, 0, DPR, 0, 0); buildSun(); }
@@ -76,10 +77,10 @@ let PANES = [];
 function buildSun() { PANES = []; let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const rings = [0, .28, .52, .76, 1], wedges = [5, 9, 13, 17];
   for (let r = 0; r < 4; r++) { const n = wedges[r], off = rnd() * 6.28; for (let k = 0; k < n; k++) { const a0 = off + k / n * 6.283, a1 = off + (k + 1) / n * 6.283; PANES.push({ ring: r, r0: rings[r], r1: rings[r + 1], a0, a1, ci: Math.floor(rnd() * PAL.length), ph: rnd() * 6.28 }); } } }
-const RSPD = [.05, -.08, .11, -.065];
+const RSPD = [.05, -.08, .11, -.065].map((v) => v * (CALM ? .4 : 1));
 const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
 /* the trip wave: 0 (calm) to 1 (peak), rising and settling over about twenty seconds, never quite the same twice */
-const wave = (t) => RM ? .35 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
+const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
 function paneColour(p, t, k) { const f = (t * .18 + p.ph / 6.283) % 1, a = PAL[(p.ci + Math.floor(t * .18 + p.ph / 6.283)) % PAL.length], b = PAL[(p.ci + 1 + Math.floor(t * .18 + p.ph / 6.283)) % PAL.length];
   return k > .05 ? mix(a, b, f * f * (3 - 2 * f) * Math.min(1, k * 1.4)) : PAL[p.ci]; }
 function sunPath(p, cxm, sy, R, rot, br) { const r1 = p.r1 * R * br, r0 = Math.max(.01, p.r0 * R * br); cx.beginPath(); cx.arc(cxm, sy, r1, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, r0, p.a1 + rot, p.a0 + rot, true); cx.closePath(); }
@@ -156,7 +157,7 @@ const SPEC = [[0, [255, 42, 0]], [.18, [255, 122, 0]], [.32, [255, 212, 0]], [.4
 const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
 const wp = document.getElementById('wp'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
-const LOCK_AT = RM ? 0 : 2.6, TARGET = 540, F0 = 400, F1 = 790; let locked = false;
+const LOCK_AT = 2.6, TARGET = 540, F0 = 400, F1 = 790; let locked = false;
 function dial(t) { let f; if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`);
@@ -166,11 +167,12 @@ function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKE
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
 
 let t0 = performance.now(), last = t0;
-function frame(now) { const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now;
+let errs = 0;
+function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now;          /* (next frame booked first: one bad frame never stops it) */
   sT += dt; if (sT > 5) { sT = 0; si = (si + 1) % KEYS.length; showStrain(); }
-  draw(t); dial(t); if (!RM) requestAnimationFrame(frame); }
+  try { draw(t); dial(t); } catch (e) { if (errs++ < 3) console.error('splash', e); } }
 addEventListener('resize', () => { size(); if (RM) draw(0); });
-size(); showStrain(); if (RM) { sT = 1; draw(0); dial(LOCK_AT); } else requestAnimationFrame(frame);
+size(); showStrain(); requestAnimationFrame(frame);
 
 /* tap: the menu (inside the shell, fullscreen first) */
 let gone = false; const go = () => { if (gone) return; gone = true; location.href = 'menu.html'; };
