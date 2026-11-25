@@ -1397,6 +1397,15 @@ void main() {
     ENG.v.fifth.g.gain.setTargetAtTime(.32 * rv, t, .25); ENG.v.oct.g.gain.setTargetAtTime(.18 * rv * rv, t, .35);
     ENG.lp.frequency.setTargetAtTime(380 + sp * 4 + 500 * rv, t, .3);
     ENG.out.gain.setTargetAtTime(PAUSED || FXO.hold || (OPEN.on && OPEN.playing && !OPEN.done) ? 0 : (.04 + .015 * Math.min(1, sp / 70) + .02 * rv) * (LAB.chl ? .7 : 1), t, .25); }
+  const MWD = { log: [], last: 0 }; window.__MWD = MWD;
+  function musicFix(why) { try { if (!window.ME || !ME.on || PAUSED || FXO.hold || Q.has('nomusic')) return; const T = window.Tone; if (!T) return; const fixes = [];
+      if (T.context.state !== 'running') { fixes.push('context ' + T.context.state); T.context.resume(); }
+      if (T.Transport.state !== 'started') { fixes.push('clock ' + T.Transport.state); T.Transport.start(); }
+      const v = T.getDestination().volume.value; if (!(v > -30) || T.getDestination().mute) { T.getDestination().mute = false; T.getDestination().volume.value = -3; fixes.push('volume ' + Math.round(v)); }
+      if (fixes.length) { MWD.log.push(new Date().toISOString().slice(11, 19) + ' ' + why + ': ' + fixes.join(', ') + ' @' + Math.round(-PH.z) + 'm'); if (MWD.log.length > 12) MWD.log.shift(); } } catch (e) { } }
+  setInterval(() => musicFix('watch'), 1500);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => musicFix('back'), 300); });
+  for (const ev of ['pointerdown', 'touchstart', 'keydown']) addEventListener(ev, () => musicFix('touch'), { passive: true });
   const FPSR = { el: null, n: 0, t0: performance.now(), v: 0, xr: null, tex: null };
   { const d = document.createElement('div'); d.id = 'fpsCorner'; d.style.cssText = 'position:fixed;left:max(6px,var(--sa-left, env(safe-area-inset-left,0px)));bottom:max(4px,var(--sa-bottom, env(safe-area-inset-bottom,0px)));z-index:96;pointer-events:none;font:700 11px/1 ui-monospace,Consolas,monospace;color:#e8f4ff;background:rgba(5,8,16,.55);padding:3px 6px;border-radius:5px;letter-spacing:.04em'; d.textContent = '-- fps'; document.body.appendChild(d); FPSR.el = d; }
   function fpsTick(now) { FPSR.n++; if (now - FPSR.t0 < 500) return; FPSR.v = FPSR.n * 1000 / (now - FPSR.t0); FPSR.n = 0; FPSR.t0 = now; const t = Math.round(FPSR.v) + ' fps', col = FPSR.v >= 55 ? '#7dff9a' : FPSR.v >= 40 ? '#ffd23a' : '#ff6a5a';
@@ -1513,7 +1522,8 @@ void main() {
       try { o.groundHeightHere = o.point ? +(HF.height(o.point[0], o.point[2]) ?? NaN).toFixed(2) : undefined; } catch (e) { }
     }
     o.rider = { x: +PH.x.toFixed(1), y: +PH.y.toFixed(1), z: +PH.z.toFixed(1) }; try { const u = PSY.uniforms(); o.trip = { mode: u.mode, trip: +u.trip.toFixed(2) }; } catch (e) { }
-    o.jumps = (window.__jumps || []).filter((q) => !q.legit).slice(-10); try { o.quality = { gpu: POST.gpu, picturePass: !!warpOn && !!warp, threePass: P3, level: POST.level, cap: POST.cap, resolution: +POST.rs.toFixed(2), refreshHz: POST.refresh, fps: Math.round(fps) }; } catch (e) { } o.jumpsAll = (window.__jumps || []).length;
+    o.jumps = (window.__jumps || []).filter((q) => !q.legit).slice(-10); try { try { o.music = { engine: !!(window.ME && ME.on), paused: !!(window.ME && ME.paused), context: window.Tone && Tone.context.state, clock: window.Tone && Tone.Transport.state, volume: window.Tone && +Tone.getDestination().volume.value.toFixed(1), rescues: MWD.log.slice() }; } catch (e) { }
+      o.quality = { gpu: POST.gpu, picturePass: !!warpOn && !!warp, threePass: P3, level: POST.level, cap: POST.cap, resolution: +POST.rs.toFixed(2), refreshHz: POST.refresh, fps: Math.round(fps) }; } catch (e) { } o.jumpsAll = (window.__jumps || []).length;
     lastInsp = J(o); inspBox.textContent = 'copied to clipboard: ' + (o.hit ? o.category + '  ' + (o.node || o.mesh) + '  [' + (o.material ? o.material.kind + ' / ' + (o.material.shaderReady === true ? 'shader ok' : 'SHADER ' + o.material.shaderReady) : '') + ']' : 'nothing here (sky or hole)'); inspBox.style.display = 'block'; clearTimeout(inspTimer); inspTimer = setTimeout(() => { inspBox.style.display = 'none'; }, 5000); copyText(lastInsp);
     if (mark) { mark.dispose(); mark = null; } if (o.hit && o.point) { mark = B.MeshBuilder.CreateSphere('inspmark', { diameter: 1 }, scene); const mm = new B.StandardMaterial('inspM', scene); mm.emissiveColor = new B.Color3(0, 1, .5); mm.disableLighting = true; mark.material = mm; mark.isPickable = false; mark.renderingGroupId = 1; mark.position.set(o.point[0], o.point[1], o.point[2]); mark.scaling.setAll(Math.max(.4, o.distance * .018)); const mk = mark; setTimeout(() => { if (mark === mk) { mk.dispose(); mark = null; } }, 5000); }
   }
