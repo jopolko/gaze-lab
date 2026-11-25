@@ -502,7 +502,7 @@ void main() { vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N; vec3 V = norm
       vec3 alb = mix(mix(hc, bc, band * 0.5), pc, clamp(pol_k * pf, 0.0, 1.0)); float al = clamp(mo_k * (0.58 + 0.30 * mm + 0.20 * band) + pol_k * pf * 0.6, 0.0, 0.94); gl_FragColor = vec4(s2l(alb), al); }`;
     const mk = (nm, un) => { const m = new B.ShaderMaterial(nm, scene, nm, { attributes: nm === 'tband' ? ['position', 'uv'] : ['position'], uniforms: ['worldViewProjection', 'world', 'viewProjection', 'uTime'].concat(un) }); m.backFaceCulling = false; m.disableDepthWrite = true; m.needAlphaBlending = () => true; return m; };
     const dm = mk('tdome', ['polar', 'tun', 'spd']); dm.alphaMode = B.Engine.ALPHA_ADD;
-    TRIPFX.dome = B.MeshBuilder.CreateSphere('tdome', { diameter: 880, segments: 24, sideOrientation: B.Mesh.BACKSIDE }, scene); TRIPFX.dome.material = dm; TRIPFX.dome.isPickable = false; TRIPFX.dome.infiniteDistance = false; TRIPFX.dome.setEnabled(false); TRIPFX.dome.renderingGroupId = 0;
+    TRIPFX.dome = B.MeshBuilder.CreateSphere('tdome', { diameter: 880, segments: 96, sideOrientation: B.Mesh.BACKSIDE }, scene); TRIPFX.dome.material = dm; TRIPFX.dome.isPickable = false; TRIPFX.dome.infiniteDistance = false; TRIPFX.dome.setEnabled(false); TRIPFX.dome.renderingGroupId = 0;
     const bm = mk('tband', ['k']); bm.alphaMode = B.Engine.ALPHA_ADD;
     TRIPFX.band = B.MeshBuilder.CreatePlane('tband', { width: 1500, height: 520, sideOrientation: B.Mesh.DOUBLESIDE }, scene); TRIPFX.band.material = bm; TRIPFX.band.isPickable = false; TRIPFX.band.alwaysSelectAsActiveMesh = true; TRIPFX.band.setEnabled(false);
     const mm = mk('tmtn', ['mo_k', 'br_k', 'pol_k', 'trav', 'mo_t', 'cam_pos']); mm.alphaMode = B.Engine.ALPHA_COMBINE; TRIPFX.mtn = []; TRIPFX.mm = mm;
@@ -671,7 +671,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   vec2 sp = floor(vec2(az * 60., el * 60.)); float st = step(.995, fract(sin(dot(sp, vec2(12.9898, 78.233))) * 43758.5453)) * smoothstep(.1, .5, el); c += vec3(st) * .9;
   c += hsv(fract(h + .3), .6, 1.) * pow(max(0., 1. - abs(el - .02) * 6.), 3.) * (.3 + uBeat);
   gl_FragColor = vec4(c, 1.); }`;
-  const sky = B.MeshBuilder.CreateSphere('sky', { diameter: 900, segments: 24, sideOrientation: B.Mesh.BACKSIDE }, scene), skyMat = new B.ShaderMaterial('skyM', scene, 'sky', { attributes: ['position'], uniforms: ['worldViewProjection', 'uTime', 'uTrip', 'uBeat'] });
+  const sky = B.MeshBuilder.CreateSphere('sky', { diameter: 900, segments: 96, sideOrientation: B.Mesh.BACKSIDE }, scene), skyMat = new B.ShaderMaterial('skyM', scene, 'sky', { attributes: ['position'], uniforms: ['worldViewProjection', 'uTime', 'uTrip', 'uBeat'] });
   skyMat.backFaceCulling = false; skyMat.disableDepthWrite = true; sky.material = skyMat; sky.infiniteDistance = false; sky.renderingGroupId = 0; sky.isPickable = false;
   // ================================================================ THE BOARD (a port of the type 1 handling)
   let SPK = +(Q.get('spd') || 1.344), AIRG = +(Q.get('airg') || 1.5), LAUNCH = +(Q.get('launch') || 1), BLAST = +(Q.get('blast') || 2); const STK = 4.2; let GV = 9.8 * SPK;
