@@ -177,7 +177,7 @@ let si = 0, sT = 0;
 const strainEl = document.getElementById('strain');
 const WORLDOF = { lucid: 'Route Zero', haze: 'Sugarfall', hollow: 'The Safe Peaks', fold: 'Tomb of the Old Servers', embrace: 'Neon Accord', velocity: 'The Undertow', deep: 'Cold Rack', drift: 'Neon Accord, rarely' };          /* (as the menu's Strains codex) */
 function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255)); strainEl.style.setProperty('--c', `rgb(${c})`); strainEl.innerHTML = ''; strainEl.classList.remove('in'); void strainEl.offsetWidth; strainEl.classList.add('in');
-  const b = document.createElement('b'), n = document.createElement('div'), d = document.createElement('div'); b.textContent = p.name; n.append(b, document.createTextNode(' · wild ' + p.plant));
+  const b = document.createElement('b'), n = document.createElement('div'), d = document.createElement('div'); b.textContent = p.name; n.append(b, document.createTextNode(' · ' + ({ 'green tea': 'roadside green tea', cacao: 'black-market cacao', coffee: 'contraband coffee', 'ginger root': 'feral ginger root', chamomile: 'ditch-grown chamomile', peppermint: 'glacier peppermint', turmeric: 'tomb-dust turmeric', chilli: 'server-rack chilli' }[p.plant] || p.plant)));          /* (where each grows: its home level) */
   const fx = p.does.split(';')[0].trim(); d.className = 'fx'; d.textContent = fx.charAt(0).toUpperCase() + fx.slice(1) + (WORLDOF[KEYS[si]] ? ' · found: ' + WORLDOF[KEYS[si]] : ''); strainEl.append(n, d); }
 
 const GAME = { el: document.getElementById('game'), ready: false, tint: '' };
