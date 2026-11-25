@@ -6,21 +6,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <style>
 /* THE TITLE SCREEN. Night road, the stained-glass sun, ACCORD's billboards, a column of light with a wild strain turning in it (a different one every few
-   seconds, drawn from molpantry.js), and the pirate dial: the needle hunts through static and locks on, and the redaction bar comes off the title. Tap: the menu. */
+   seconds, drawn from molpantry.js), and the light: a marker hunts across the spectrum and locks on, and the redaction bar comes off the title. Tap: the menu. */
 :root { --bg:#05070c; --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; --amber:#ffb14a; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
 canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #ui { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; box-sizing:border-box; cursor:pointer;
   padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
-/* the dial */
+/* the light: a band of the visible spectrum (red 400 THz to violet 790 THz), a marker that hunts and locks on, and the light wave itself above it */
 #dial { width:min(92vw,620px); font:700 clamp(10px,1.6vmin + 6px,14px) "Barlow Condensed","Arial Narrow",sans-serif; letter-spacing:.12em; color:var(--dim); }
-#dial .scale { position:relative; height:clamp(26px,5vmin,40px); border-bottom:1px solid rgba(185,194,212,.45);
-  background:repeating-linear-gradient(90deg,rgba(185,194,212,.55) 0 1px,transparent 1px 2.5%) bottom/100% 30% no-repeat,
-             repeating-linear-gradient(90deg,rgba(185,194,212,.9) 0 1px,transparent 1px 10%) bottom/100% 60% no-repeat; }
-#dial .nums { display:flex; justify-content:space-between; margin-top:3px; }
-#needle { position:absolute; top:-4px; bottom:-4px; width:2px; margin-left:-1px; background:var(--amber); box-shadow:0 0 10px var(--amber),0 0 22px rgba(255,177,74,.6); left:20%; }
-#rd { display:flex; justify-content:space-between; margin-top:2px; color:var(--amber); }
-#rd .lock { color:var(--dim); } #rd .lock.on { color:var(--sea); text-shadow:0 0 10px var(--sea); }
+#wave { display:block; width:100%; height:clamp(22px,5vmin,38px); overflow:visible; }
+#dial .scale { position:relative; height:clamp(8px,1.6vmin,12px); border-radius:3px;
+  background:linear-gradient(90deg,#ff2a00 0%,#ff7a00 18%,#ffd400 32%,#9dff2a 42%,#2aff7a 52%,#00e5ff 62%,#2f6bff 78%,#7a3dff 100%);
+  box-shadow:0 0 14px rgba(255,255,255,.12); }
+#dial .nums { display:flex; justify-content:space-between; margin-top:4px; }
+#needle { position:absolute; top:-5px; bottom:-5px; width:3px; margin-left:-1.5px; background:#fff; border-radius:2px; box-shadow:0 0 8px #fff,0 0 18px var(--lc,#fff); left:20%; }
+#rd { display:flex; justify-content:space-between; margin-top:2px; color:var(--lc,#fff); }
+#rd .lock { color:var(--dim); } #rd .lock.on { color:var(--lc,#38e8ff); text-shadow:0 0 10px var(--lc,#38e8ff); }
 /* the title */
 #title { margin-top:clamp(10px,6vh,70px); text-align:center; position:relative; }
 #title h1 { margin:0; font:400 clamp(54px,15vmin + 10px,168px)/.86 "Bebas Neue","Impact","Arial Narrow",sans-serif; letter-spacing:.04em; color:#fff;
@@ -51,9 +52,9 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 <body>
 <canvas id="c" aria-hidden="true"></canvas>
 <div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
-  <div id="dial" aria-hidden="true"><div class="scale"><div id="needle"></div></div>
-    <div class="nums"><span>88</span><span>92</span><span>96</span><span>100</span><span>104</span><span>108</span></div>
-    <div id="rd"><span id="mhz">88.0 MHz</span><span class="lock" id="lock">SEARCHING</span></div></div>
+  <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
+    <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
+    <div id="rd"><span id="mhz">400 THz</span><span class="lock" id="lock">SEARCHING</span></div></div>
   <div id="title" class="glitch"><h1><span>THE</span>FREQUENCY</h1><div id="bar"></div></div>
   <div id="tag">The last road nobody watches.</div>
   <div class="grow"></div>
@@ -125,14 +126,18 @@ function drawMol(p, x0, y0, sc, a, c, fade) { if (fade <= 0) return; const ca = 
     cx.fillStyle = `rgb(${ec})`; if (q.m) { cx.shadowColor = '#fff'; cx.shadowBlur = 14; } cx.fill(); cx.shadowBlur = 0; }
   cx.globalAlpha = 1; }
 
-/* the dial: hunts through static, then locks */
+/* the light: the marker hunts across the spectrum and locks on 540 THz (green-gold: the frequency the SI defines brightness by) */
+const SPEC = [[0, [255, 42, 0]], [.18, [255, 122, 0]], [.32, [255, 212, 0]], [.42, [157, 255, 42]], [.52, [42, 255, 122]], [.62, [0, 229, 255]], [.78, [47, 107, 255]], [1, [122, 61, 255]]];
+const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
+const wp = document.getElementById('wp'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
-const LOCK_AT = RM ? 0 : 2.6, TARGET = 97.3; let locked = false;
-function dial(t) { let f; if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = 88 + 20 * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
-  else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .02);
-  needle.style.left = ((f - 88) / 20 * 100) + '%'; mhz.textContent = f.toFixed(1) + ' MHz';
+const LOCK_AT = RM ? 0 : 2.6, TARGET = 540, F0 = 400, F1 = 790; let locked = false;
+function dial(t) { let f; if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
+  else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
+  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`);
+  { const lam = 4200 / f * 9, ph = RM ? 0 : t * 9; let d = ''; for (let x = 0; x <= 600; x += 4) { const env = Math.sin(Math.PI * x / 600); d += (x ? 'L' : 'M') + x + ' ' + (20 + 15 * env * Math.sin(2 * Math.PI * x / lam - ph)).toFixed(1); } wp.setAttribute('d', d); wp.setAttribute('stroke', `rgb(${c})`); wp.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
 }
-function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKED · PIRATE SIGNAL'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
+function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
 
 let t0 = performance.now(), last = t0;
