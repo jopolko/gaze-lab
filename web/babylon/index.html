@@ -65,6 +65,10 @@ if (new URLSearchParams(location.search).has('beat') || new URLSearchParams(loca
 /* SOUND EFFECTS: the three.js game's own synthesised set (sfxset.js) and its event wiring (audiowire.js: every game event -> Godot's sound sequence, and the music duck / bump). &nosfx turns them off. The audio context is made on the first touch, key or headset entry. */
 let ACX = null; const SFXOFF = new URLSearchParams(location.search).has('nosfx'), acx = () => { if (SFXOFF) return null; try { if (!ACX) ACX = new (window.AudioContext || window.webkitAudioContext)(); if (ACX.state === 'suspended') ACX.resume(); } catch (e) { } return ACX; };
 const SFX = createSfx(() => acx(), null), AW = createAudioWire({ SFX, GM, PSY });
+/* Route Zero's title track ('Legalize') plays alone: no pickup sounds until it has finished and faded (openHandoff marks the start of the fade) */
+{ const quiet = () => OPEN.on && OPEN.playing && (!OPEN.done || performance.now() - (OPEN.doneAt || 0) < 1500);
+  for (const k of ['onPickup', 'onOrb', 'onMoleculeFound', 'onChain', 'onGlint', 'onGlintBonus', 'onPadHit', 'onSpringPad', 'onAirRing', 'onGate', 'onToyGate', 'onPop', 'onChargedPop', 'onGoal', 'onCheer']) if (typeof AW[k] === 'function') { const f = AW[k]; AW[k] = (...a) => quiet() ? undefined : f.apply(AW, a); }
+  for (const k of ['mol', 'orb', 'coin', 'powerup', 'loot', 'bell', 'blip', 'levelup']) if (typeof SFX[k] === 'function') { const f = SFX[k]; SFX[k] = (...a) => quiet() ? undefined : f.apply(SFX, a); } }
 for (const ev of ['pointerdown', 'keydown', 'touchstart', 'click']) addEventListener(ev, () => { acx(); }, { passive: true });
 setTimeout(() => { try { SFX.preload && SFX.preload(); } catch (e) { } }, 3000);
 const LAB = (() => { const d = { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, cmp: '', len: 'full', chl: false, sty: '', trn: 55, nrg: 80 }; try { return Object.assign(d, JSON.parse(localStorage.getItem('dl_lab') || '{}') || {}); } catch (e) { return d; } })();          /* THE FREQUENCY (lab.html): the player's own tuning, read at the start of every level */
@@ -3025,7 +3029,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     IRS.start(); } catch (e) { console.error('intro road', e); IRS = null; } }
   function openLevel(v, tc) { const O = OPEN; try { if (O.g) O.g.gain.setTargetAtTime(v, O.g.context.currentTime, tc); else O.a.volume = Math.max(0, Math.min(1, v)); } catch (e) { } }
   function openKick() { const O = OPEN; O.an.getByteFrequencyData(O.buf); const lo = (O.buf[1] + O.buf[2] + O.buf[3]) / 765; O.avg = O.avg * .985 + lo * .015; return Math.max(0, Math.min(1, (lo - O.avg * 1.04) * 7)); }
-  function openHandoff(why) { const O = OPEN; if (!O.on || !O.playing || O.done) return; O.done = true; openLevel(0, why === 'end' ? .05 : 1.2); setTimeout(() => { try { O.a.pause(); } catch (e) { } }, 5000);
+  function openHandoff(why) { const O = OPEN; if (!O.on || !O.playing || O.done) return; O.done = true; O.doneAt = performance.now(); openLevel(0, why === 'end' ? .05 : 1.2); setTimeout(() => { try { O.a.pause(); } catch (e) { } }, 5000);
     try { if (window.ME && !ME.on && !Q.has('nomusic')) ME.start(ME_OPTS()).then(() => { try { const v = Tone.getDestination().volume; v.value = -40; v.rampTo(-3, 4); } catch (e) { } }); } catch (e) { } }
   /* THE OPENING (storyboard frames 1-5, first person, in the car): black with the engine running; at 3 s the Murmur arrives as a notification on the phone on the dash, holds, fades; at 9.8 s the lights come up over 3 s;
      at 12.8 s a small ROUTE ZERO title sits in the lower third for 3 s; then nothing for the eye but the road. Nothing else may speak until 17 s. */
