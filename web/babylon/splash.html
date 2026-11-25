@@ -104,11 +104,11 @@ vec3 gpal(float f) { f = fract(f) * 5.; vec3 a = vec3(.22, .91, 1.), b = vec3(1.
   return f < 1. ? mix(a, b, f) : f < 2. ? mix(b, c, f - 1.) : f < 3. ? mix(c, d, f - 2.) : f < 4. ? mix(d, e, f - 3.) : mix(e, a, f - 4.); }
 void main() {
   if (vP.y >= 0.) { skyMain();
-    if (uTune.w > .001) { vec3 sd = normalize(vec3(.12, .28, -1.)); float a = acos(clamp(dot(normalize(vP), sd), -1., 1.)), m = 1. - smoothstep(0., .7, a); gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * .35 + uTune.rgb * .95, m * uTune.w * .85); }
+    if (uTune.w > .001) { vec3 sd = normalize(vec3(.12, .28, -1.)); float a = acos(clamp(dot(normalize(vS), sd), -1., 1.)), m = 1. - smoothstep(0., .7, a); gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * .35 + uTune.rgb * .95, m * uTune.w * .85); }
     return; }
   float tt = uDrive.z / max(-vP.y, 1e-4), zw = uDrive.x + tt, X = (vP.x - .12) * tt + uDrive.y, aa = tt * uDrive.w * 1.3 + .015;
-  vec2 p = vec2(X, zw); float sc = 1. / 6., g1 = sin(p.x * sc * 6.283) * sin(p.y * sc * 6.283), ta = uTime * .045, ca = cos(ta), sa = sin(ta);
-  vec2 q = vec2(p.x * ca - p.y * sa, p.x * sa + p.y * ca) * sc * 1.037; float g2 = sin(q.x * 6.283) * sin(q.y * 6.283), amp = g1 * g2 * .5 + .5;
+  vec2 p = vec2(X, zw); float sc = 1. / 6., g1 = sin(p.x * sc * 6.283) * sin(p.y * sc * 6.283);
+  vec2 q = vec2(p.x * .9994 - p.y * .035, p.x * .035 + p.y * .9994) * sc * 1.037; float g2 = sin(q.x * 6.283) * sin(q.y * 6.283), amp = g1 * g2 * .5 + .5;          /* (the second grid a shade finer and turned 2 degrees, fixed to the ground: the beats stream past with it) */
   float far = 1. - smoothstep(40., 260., tt);
   vec3 col = vec3(.42, .21, .14) * (1. + far * (amp - .5) * 1.1) + gpal(amp * .5 + uTime * .03) * (.1 + .42 * amp) * far * (.4 + .6 * smoothstep(.25, .85, amp));
   float dx = abs(X - roadC(zw));
@@ -121,8 +121,8 @@ void main() {
   gl_FragColor = vec4(col, 1.);
 }`;
 const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antialias: false }); if (!gl) return null;
-  const vs = 'attribute vec2 p; uniform vec2 uWH; uniform vec3 uMap; varying vec3 vP; void main(){ float px = (p.x * .5 + .5) * uWH.x, py = (.5 - .5 * p.y) * uWH.y; vP = vec3(.12 + (px - uMap.x) * uMap.z, (uMap.y - py) * uMap.z, -1.); gl_Position = vec4(p, 0., 1.); }';
-  const fs = skyFragment('desert').replace('void main(){', 'void skyMain(){') + GROUND;
+  const vs = 'attribute vec2 p; uniform vec2 uWH; uniform vec4 uMap; varying vec3 vP; varying vec3 vS; void main(){ float px = (p.x * .5 + .5) * uWH.x, py = (.5 - .5 * p.y) * uWH.y; vP = vec3(.12 + (px - uMap.x) * uMap.z, (uMap.y - py) * uMap.z, -1.); vS = vec3(.12 + (px - uMap.x) * uMap.w, (uMap.y - py) * uMap.w, -1.); gl_Position = vec4(p, 0., 1.); }';
+  const fs = skyFragment('desert').replace('varying vec3 vP;', 'varying vec3 vP; varying vec3 vS;').replace('normalize(vP)', 'normalize(vS)').replace('void main(){', 'void skyMain(){') + GROUND;          /* (the sky reads its own, wider view: vS) */
   const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
   try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); gl.useProgram(pr);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
@@ -135,8 +135,8 @@ function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = 
   const camX = roadC(DRIVE.z + 14) + .7 * Math.sin(t * .63), camH = 1.7 + .035 * Math.sin(t * 7.3) + .02 * Math.sin(t * 11.1);          /* the car follows the road a little behind the curve, with a gentle sway and a road hum */
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
-  gl.uniform2f(U.uWH, W, H); gl.uniform3f(U.uMap, cxm, hz, k); gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, glass * glass * (3 - 2 * glass) * .85); gl.uniform1f(U.uPsy, 0);
-  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], TUNE.k); gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k);
+  gl.uniform2f(U.uWH, W, H); gl.uniform4f(U.uMap, cxm, hz, k, .29 / (Math.min(W, H) * .15));          /* (the sky's sun about 15% of the short side across, sitting on the horizon) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, glass * glass * (3 - 2 * glass) * .85); gl.uniform1f(U.uPsy, 0);
+  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], TUNE.k); gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
@@ -158,6 +158,16 @@ function draw(t, dt) {
   g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,6,15,.7)'); g.addColorStop(.28, 'rgba(5,6,15,.2)'); g.addColorStop(Math.max(.3, hz / H - .04), 'rgba(5,6,15,0)'); g.addColorStop(1, 'rgba(4,4,8,.55)'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
   // the hills on the horizon
   cx.fillStyle = 'rgba(12,10,24,.9)'; cx.beginPath(); cx.moveTo(0, hz + 1); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .03) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz + 1); cx.fill();
+  // trees by the road: every 18 m on both sides, 9 to 40 m out, drawn far to near; they come out of the haze and rush past
+  if (DRIVE.k) { const z0 = DRIVE.z, kk = DRIVE.k, near = [];
+    for (let n = Math.ceil((z0 + 3) / 18); n * 18 < z0 + 260; n++) for (const side of [-1, 1]) { const zz = n * 18, h = ((n * 7919 + (side > 0 ? 13 : 0)) % 97) / 97, off = 9 + h * 31, X = roadC(zz) + side * off, dist = zz - z0;
+      if (dist < 2) continue; const px = cxm + (X - DRIVE.camX) / dist / kk, base = hz + DRIVE.camH / dist / kk, ht = (5 + h * 6) / dist / kk; if (px < -ht || px > W + ht) continue; near.push({ px, base, ht, dist, h }); }
+    near.sort((a, b) => b.dist - a.dist);
+    for (const q of near) { const fade = 1 - Math.min(1, Math.max(0, (q.dist - 70) / 190)), c = PAL[Math.floor(q.h * 97) % PAL.length], w = q.ht * .42;
+      cx.globalAlpha = fade; cx.fillStyle = '#120c16'; cx.fillRect(q.px - w * .07, q.base - q.ht * .22, w * .14, q.ht * .22);
+      for (let i = 0; i < 3; i++) { const yb = q.base - q.ht * (.18 + i * .24), ww = w * (1 - i * .24); cx.beginPath(); cx.moveTo(q.px - ww, yb); cx.lineTo(q.px + ww, yb); cx.lineTo(q.px, yb - q.ht * .42); cx.closePath();
+        const gg = cx.createLinearGradient(q.px - ww, 0, q.px + ww, 0); gg.addColorStop(0, `rgba(${mix(c, [20, 12, 24], .35)},1)`); gg.addColorStop(1, `rgba(${mix(c, [20, 12, 24], .75)},1)`); cx.fillStyle = gg; cx.fill(); } }
+    cx.globalAlpha = 1; }
   // the column of light, with the strain big in it
   const p = PANTRY[KEYS[si]], c = (TUNE.k > .005 ? mix(p.c.map((v) => Math.round(v * 255)), specNow(), .6 * TUNE.k) : p.c.map((v) => Math.round(v * 255))), cw = Math.min(W, H) * .08;
   g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},${.28 + .2 * TUNE.k})`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .08, cw * 2, hz - H * .08 + 2);
