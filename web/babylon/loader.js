@@ -98,7 +98,7 @@
   const LEVEL = {
     desert: ['ROUTE ZERO: the last road nobody watches. Mostly',
       'Murmur has already told a few people you\'re leaving',
-      'The tunnel ahead is dark. Lighting provided by your optimism',
+      'The tunnel ahead is lit by your optimism. Bring some',
       'Only those who SEE may light the way. Grab the blue crystals before the tunnel',
       'Somewhere in the dark there\'s a lamp on a ledge. Look right',
       'Miss the lamp and the tunnel sends you back to try again',
