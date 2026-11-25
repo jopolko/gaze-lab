@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Music Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+/* MUSIC LAB v3: the game's generated soundtrack, on its own, to judge before it goes in. Styles: melodic techno / trance, jungle (a chopped break, reese, sub, pads),
+   eastern (Hijaz, double harmonic, Hirajoshi: drone, oud, ney, darbuka over a four-to-the-floor) and three funks. Chords come from a hand-picked bank (m9, maj7, 6/9, sus)
+   and are voice-led, so the pads move as little as possible from one chord to the next. Every "New track" is a new seed; the rules of each genre don't change. */
+:root { --line:rgba(56,232,255,.28); --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; color-scheme:dark; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:radial-gradient(ellipse at 50% 120%, #1b1030 0%, #0a0d16 50%, #040508 100%); color:var(--fg); font:600 16px/1.35 system-ui,sans-serif; overflow:hidden; }
+body { display:flex; flex-direction:column; gap:12px; padding:max(14px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px)); }
+h1 { margin:0; font:400 clamp(34px,7vmin,64px)/.9 "Bebas Neue",Impact,sans-serif; letter-spacing:.18em; }
+.row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+button { font:700 clamp(15px,2vmin + 6px,20px)/1 "Barlow Condensed",sans-serif; letter-spacing:.12em; text-transform:uppercase; padding:.6em 1.2em; border-radius:10px; border:1px solid var(--line); background:rgba(12,16,27,.92); color:var(--fg); cursor:pointer; }
+button.pri { background:var(--sea); color:#06101f; border-color:var(--sea); box-shadow:0 0 22px rgba(56,232,255,.3); }
+button.dose { border-color:var(--gold); color:var(--gold); }
+.card { background:rgba(10,14,24,.88); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
+.info { font:700 clamp(15px,1.6vmin + 7px,20px) "Barlow Condensed",sans-serif; letter-spacing:.08em; color:#cfe9ff; }
+.info b { color:#fff; }
+label { font:700 15px "Barlow Condensed",sans-serif; letter-spacing:.12em; text-transform:uppercase; color:var(--dim); display:flex; gap:10px; align-items:center; flex:1; min-width:240px; }
+input[type=range] { flex:1; accent-color:var(--sea); }
+#secs { display:flex; gap:4px; flex-wrap:wrap; }
+#secs span { font:700 13px "Barlow Condensed",sans-serif; letter-spacing:.1em; padding:.35em .6em; border-radius:6px; background:#141a2b; color:#8f99ad; border:1px solid transparent; }
+#secs span.on { background:var(--sea); color:#06101f; }
+.chip { font:700 14px "Barlow Condensed",sans-serif; letter-spacing:.06em; padding:.45em .7em; border-radius:999px; background:#141a2b; border:1px solid var(--line); color:#e6f6ff; cursor:pointer; text-transform:none; }
+.chip i { font-style:normal; color:#ff8a8a; margin-left:.5em; }
+#viz { flex:1; min-height:80px; width:100%; border-radius:14px; border:1px solid var(--line); background:#05070c; }
+small { color:var(--dim); }
+select { font:700 16px "Barlow Condensed",sans-serif; padding:.4em; border-radius:8px; background:#0b0f1a; color:#fff; border:1px solid var(--line); flex:1; }
+</style></head><body>
+<h1>MUSIC LAB</h1>
+<div class="row"><button class="pri" id="play">&#9654; Play</button><button id="newT">&#8635; New track</button><button class="dose" id="dose">&#11042; Dose</button><button id="save">&#9733; Save track</button><button id="ingame">&#9654; Play in game</button></div>
+<div class="row"><input id="seedIn" inputmode="numeric" placeholder="seed" style="width:11em;font:700 16px Barlow Condensed,sans-serif;letter-spacing:.08em;padding:.55em .8em;border-radius:10px;border:1px solid var(--line);background:#0b0f1a;color:#fff"><button id="loadSeed">Load seed</button><span id="saved" style="display:flex;gap:6px;flex-wrap:wrap"></span></div>
+<div class="card info" id="info">Press play.</div>
+<div class="row card"><label style="min-width:200px">Style <select id="style"><option value="techno">Melodic techno / trance</option><option value="acid">Acid (303, slow build)</option><option value="jungle">Jungle (chopped breaks)</option><option value="eastern">Eastern (Hijaz, Hirajoshi)</option><option value="disco">Disco funk</option><option value="boogie">Boogie funk (80s)</option><option value="break">Breakbeat funk</option></select></label><label style="min-width:240px">Level <select id="lvl"><option value="">(free play)</option></select></label></div>
+<div class="row card"><label>Techno <input type="range" id="tr" min="0" max="100" value="55"> Trance</label><label>Energy <input type="range" id="en" min="0" max="100" value="80"></label></div>
+<div id="secs"></div>
+<canvas id="viz"></canvas>
+<small>Drums: CC0 samples. Everything else is synthesised. Same seed, same track: <span id="seed"></span></small>
+<script>
+try { Tone.setContext(new Tone.Context({ latencyHint: 'playback', lookAhead: .2 })); } catch (e) { }          /* bigger buffers: no dropouts on phones */
+/* ---------- seeded randomness: every track is a seed, so a good one can be kept */
+let SEED = (() => { const q = new URLSearchParams(location.search).get('seed'); return q && /^\d+$/.test(q) ? +q : Math.floor(Math.random() * 1e9); })();          /* ?seed=123 plays that track */
+const mulberry = (a) => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+let R = mulberry(SEED); const pick = (a) => a[Math.floor(R() * a.length)];
+const midi = (m) => Tone.Frequency(m, 'midi').toNote();
+const md = (a, n) => ((a % n) + n) % n;
+/* ---------- the genres' rules (hand-picked so nothing is ever random nonsense) */
+const KEYS = [['A', 57], ['F', 53], ['G', 55], ['D', 50], ['E', 52], ['C', 48], ['B', 59]];
+const MINOR = [0, 2, 3, 5, 7, 8, 10], DORIAN = [0, 2, 3, 5, 7, 9, 10], PHRYG = [0, 1, 3, 5, 7, 8, 10];
+const HIJAZ = [0, 1, 4, 5, 7, 8, 10], DBLH = [0, 1, 4, 5, 7, 8, 11], HIRA = [0, 2, 3, 7, 8];
+/* chord qualities (semitones over the chord's root) and how they're written */
+const CQ = { m7: [0, 3, 7, 10], m9: [0, 3, 7, 10, 14], m11: [0, 3, 7, 10, 14, 17], madd9: [0, 3, 7, 14], maj7: [0, 4, 7, 11], maj9: [0, 4, 7, 11, 14], add9: [0, 4, 7, 14], '6/9': [0, 4, 7, 9, 14],
+  sus2: [0, 2, 7, 14], '7sus4': [0, 5, 7, 10], '9': [0, 4, 7, 10, 14], 'maj7#11': [0, 4, 7, 11, 18], M: [0, 4, 7, 12], m: [0, 3, 7, 12], '5': [0, 7, 12, 19] };
+const CLAB = { m7: 'm7', m9: 'm9', m11: 'm11', madd9: 'm(add9)', maj7: 'maj7', maj9: 'maj9', add9: 'add9', '6/9': '6/9', sus2: 'sus2', '7sus4': '7sus4', '9': '9', 'maj7#11': 'maj7♯11', M: '', m: 'm', '5': '5' };
+/* the progressions (roots in semitones over the key's minor tonic): the loops melodic techno, trance and liquid jungle cry on. 2 bars a chord. */
+const CPROGS = [
+  { id: 'cry', mode: 'minor', c: [[0, 'm9'], [8, 'maj7'], [3, 'maj9'], [10, '6/9']] },          /* i - VI - III - VII */
+  { id: 'longing', mode: 'minor', c: [[0, 'm9'], [5, 'm9'], [8, 'maj7'], [7, '7sus4']] },          /* i - iv - VI - v sus */
+  { id: 'float', mode: 'minor', c: [[8, 'maj9'], [10, '6/9'], [0, 'm9'], [0, 'm11']] },          /* VI - VII - i */
+  { id: 'rise', mode: 'minor', c: [[0, 'm9'], [3, 'maj7'], [10, 'add9'], [5, 'm9']] },          /* i - III - VII - iv */
+  { id: 'night', mode: 'phrygian', c: [[0, 'm11'], [1, 'maj7'], [0, 'm11'], [10, 'add9']] },          /* i - bII: dark */
+  { id: 'dorian', mode: 'dorian', c: [[0, 'm9'], [5, '9'], [0, 'm9'], [5, '9']] },          /* i9 - IV9 */
+  { id: 'sparkle', mode: 'minor', c: [[0, 'madd9'], [8, 'add9'], [3, 'add9'], [10, 'add9']] },          /* trance add9s */
+  { id: 'lift', mode: 'minor', c: [[8, 'maj7#11'], [10, '6/9'], [3, 'maj9'], [7, '7sus4']] },
+  { id: 'ache', mode: 'minor', c: [[0, 'm9'], [7, 'm7'], [8, 'maj9'], [5, 'm11']] },          /* i - v - VI - iv */
+  { id: 'deep', mode: 'minor', c: [[0, 'm11'], [0, 'm11'], [8, 'maj9'], [10, '7sus4']] },
+  { id: 'home', mode: 'minor', c: [[3, 'maj9'], [10, '6/9'], [5, 'm9'], [0, 'm11']] },          /* III - VII - iv - i */
+  { id: 'drift', mode: 'minor', c: [[0, 'm9'], [10, 'sus2'], [8, 'maj7'], [5, 'm9']] }];
+/* eastern: modal, so the chords stay close to the drone */
+const ESCALES = [{ id: 'hijaz', name: 'Hijaz', sc: HIJAZ, progs: [[[0, 'M'], [1, 'M'], [0, 'M'], [10, 'm']], [[0, '5'], [1, 'M'], [5, 'm'], [0, 'M']]] },
+  { id: 'dblh', name: 'Double harmonic', sc: DBLH, progs: [[[0, 'M'], [1, 'M'], [5, 'm'], [1, 'M']], [[0, '5'], [0, '5'], [1, 'maj7'], [0, '5']]] },
+  { id: 'hira', name: 'Hirajoshi', sc: HIRA, progs: [[[0, 'madd9'], [8, 'maj7'], [0, 'madd9'], [7, '5']], [[0, 'sus2'], [8, 'maj7#11'], [7, '5'], [0, 'madd9']]] }];
+const FUNKP = [[0, 3], [0, 0, 3, 3], [0, 3, 0, 4], [3, 3, 0, 0], [0, 6, 5, 3], [0, 5, 4, 3], [0, 3, 6, 4], [0, 0, 6, 6], [0, 2, 3, 4], [0, 6, 3, 3]];          /* funk vamps, played as 7th chords (scale degrees) */
+const STYLES = { acid: { bpm: [128, 134] }, techno: { bpm: [122, 133] }, jungle: { bpm: [168, 175] }, eastern: { bpm: [116, 126] }, disco: { bpm: [116, 122] }, boogie: { bpm: [104, 112] }, break: { bpm: [92, 102] } };
+const FUNKS = ['disco', 'boogie', 'break'];
+/* each level's music: what hypes it or calms it (the game uses these): name, style, bpm range, trance 0-100, energy 0-100 */
+const LVLP = { routezero: ['Route Zero', 'techno', [126, 130], 30, 92], candy: ['Sugarfall', 'boogie', [106, 110], 55, 70], alpine: ['The Safe Peaks', 'techno', [116, 120], 85, 40], egypt: ['Tomb of the Old Servers', 'eastern', [118, 124], 40, 80],
+  synthwave: ['Neon Accord', 'disco', [118, 122], 70, 80], tunnel: ['The Undertow', 'jungle', [170, 174], 35, 100], matrix: ['Cold Rack', 'break', [94, 100], 25, 90], psychedelic: ['The Open Channel', 'techno', [130, 134], 90, 95] };
+/* your saves teach it: progressions and scales you keep come up more */
+const rdT0 = () => { try { return JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { return []; } };
+function pickW(list, keyOf, counts) { const w = list.map((x) => 1 + 3 * (counts[keyOf(x)] || 0)), tot = w.reduce((a, b) => a + b, 0); let q = R() * tot; for (let i = 0; i < list.length; i++) { q -= w[i]; if (q <= 0) return list[i]; } return list[list.length - 1]; }
+const FARRS = [[['INTRO', 8], ['GROOVE', 16], ['BREAK', 8], ['DROP', 16], ['GROOVE', 16], ['BREAK', 8], ['DROP', 16], ['OUTRO', 8]], [['INTRO', 4], ['GROOVE', 16], ['DROP', 16], ['BREAK', 8], ['RISE', 4], ['DROP', 16], ['OUTRO', 8]]];
+const ARRS = [
+  [['INTRO', 16], ['BUILD', 16], ['GROOVE', 32], ['BREAK', 16], ['RISE', 8], ['DROP', 32], ['GROOVE', 16], ['BREAK', 8], ['DROP', 32], ['OUTRO', 16]],
+  [['INTRO', 8], ['GROOVE', 16], ['BUILD', 8], ['DROP', 32], ['BREAK', 16], ['RISE', 8], ['DROP', 32], ['OUTRO', 16]],
+  [['INTRO', 16], ['GROOVE', 32], ['BREAK', 16], ['RISE', 8], ['DROP', 32], ['BREAK', 16], ['RISE', 8], ['DROP', 32], ['OUTRO', 8]]];
+const JARRS = [[['INTRO', 8], ['ROLL', 8], ['DROP', 32], ['BREAK', 16], ['RISE', 4], ['DROP', 32], ['SWITCH', 16], ['DROP', 16], ['OUTRO', 8]],
+  [['INTRO', 8], ['DROP', 32], ['BREAK', 8], ['RISE', 4], ['SWITCH', 16], ['DROP', 32], ['OUTRO', 8]]];
+/* which parts play in each section: kick, hats, open hat, clap, rumble, bass, pad, arp, lead, ride */
+const SECT = {
+  INTRO: { k: 1, h: .6, oh: 0, cl: 0, ru: .5, ba: 0, pad: .5, arp: 0, ld: 0, ri: 0 },
+  BUILD: { k: 1, h: 1, oh: 1, cl: .6, ru: 1, ba: 1, pad: .6, arp: .5, ld: 0, ri: .5 },
+  GROOVE: { k: 1, h: 1, oh: 1, cl: 1, ru: 1, ba: 1, pad: .7, arp: .6, ld: .4, ri: 1 },
+  BREAK: { k: 0, h: .3, oh: 0, cl: 0, ru: 0, ba: 0, pad: 1, arp: .7, ld: 1, ri: 0 },
+  RISE: { k: .5, h: 1, oh: 0, cl: 1, ru: 0, ba: .4, pad: 1, arp: 1, ld: .7, ri: 0, riser: 1 },
+  DROP: { k: 1, h: 1, oh: 1, cl: 1, ru: 1, ba: 1, pad: 1, arp: 1, ld: 1, ri: 1 },
+  OUTRO: { k: 1, h: .6, oh: .5, cl: 0, ru: .6, ba: .5, pad: .7, arp: 0, ld: 0, ri: 0 } };
+/* jungle: the break, the sub, the reese, pads, the atmosphere loop, a lead in the breakdowns */
+const JSECT = {
+  INTRO: { brk: 0, sub: 0, rs: 0, pad: 1, atm: 1, ld: 0, sh: .5 },
+  ROLL: { brk: .6, sub: 1, rs: 0, pad: .8, atm: .7, ld: 0, sh: 1 },
+  DROP: { brk: 1, sub: 1, rs: 1, pad: .55, atm: .3, ld: 0, sh: 1 },
+  BREAK: { brk: 0, sub: .6, rs: 0, pad: 1, atm: 1, ld: 1, sh: 0 },
+  RISE: { brk: .6, sub: 0, rs: 0, pad: 1, atm: .6, ld: .6, sh: 1, riser: 1, roll: 1 },
+  SWITCH: { brk: 1, sub: 1, rs: 1, pad: .35, atm: .2, ld: .5, sh: 1, alt: 1 },
+  OUTRO: { brk: .6, sub: .5, rs: 0, pad: .8, atm: 1, ld: 0, sh: .5 } };
+/* ---------- the kits: CC0 drum samples (Stargate sample pack, samples/LICENSE-CC0.txt); each track picks its own combination */
+const KIT = { snare: ['x0xproc1-snare'], kick: ['x0xproc1-kick', 'x0xproc2-kick', 'distkit-kick', 'synthkit-kick', 'kick-1-A', 'kick-2-A', '266764__hard3eat__synth-kick-3'], clap: ['x0xproc1-clap', 'x0xproc2-clap', 'synthkit-clap', '509526__synthnisse__claps'],
+  hat: ['x0xproc1-hatclsd', 'x0xproc2-hatclsd', 'synthkit-hatclsd', '439766__twentytwentymusic__electronic-closed-hat-9'], oh: ['x0xproc1-hatopen', 'x0xproc2-hatopen', '165028__rodrigo-the-mad__mini-909ish-open-hat'], ride: ['x0xproc1-ride', 'synthkit-ride'],
+  perc: ['x0xproc2-rimshot', 'x0xproc2-cowbell', 'sdbkit-fmperc', 'x0xproc2-maracas', 'distkit-zap'], crash: ['x0xproc1-crash'] };
+const ALLS = [...new Set(Object.values(KIT).flat())];
+/* THE BREAK (samples/Drums_170BPM.wav, CC0): four bars at 170, cut into 64 sixteenths. Each hit's slices, found by ear-maths (tools: onset energy and spectrum per slice). */
+const BRK = { bpm: 170, n: 64, K: [0, 10, 16, 22, 28, 32, 42, 48, 54, 60], S: [4, 12, 18, 24, 30, 36, 44, 50, 56, 62], H: [2, 6, 8, 14, 20, 26, 34, 38, 40, 46, 52, 58], G: [21, 27, 53, 59] };
+/* jungle patterns over one bar: K kick, S snare, G ghost snare, H hat, r a snare roll (two 32nds), . nothing (the last hit rings) */
+const JPAT = { two: 'K.H.S.H.HHK.S.H.', amen: 'K.K.S.GSG.KKS.GS', roll: 'K.HGS.GKG.K.S.GG', half: 'K.H.H.H.S.H.H.GH', chop: 'K.S.K.SSK.HGS.rr', step: 'K..KS.G.K.K.S.GH', tear: 'KGS.GKS.KGS.GKSr' };
+const JFILL = ['S.S.SSS.SSSSrrrr', 'K.S.KSS.SSSSSSSS', 'SGSGSGSGrrrrrrrr', 'K.S.K.S.SSSSrrrr'];
+/* eastern percussion (darbuka): D doum, T tek, k ka (a ghost) */
+const DPAT = { maqsum: 'D.T.k.T.D.k.T.kk', baladi: 'D.D.k.T.D.k.T.k.', ayoub: 'D.kDT.k.D.kDT.k.', saidi: 'D.T.k.D.D.k.T.k.' };
+/* ACID: 303 lines (eighths, semitones over the root at A1-G#2); the first is the Pattern Desk's acid line, and seed 132 always plays it exactly (A, 132 BPM) */
+const ACANON = { line: [0, 0, 12, 0, 3, 0, -2, 12, -4, -4, 8, -4, 0, -4, -5, 8, -7, -7, 5, -7, -4, -7, -9, 5, -5, -5, 7, -5, 0, -1, 2, 7],          /* F minor: Fm, Db, Bbm, then C: sus4 (F) to the third (E), the fifth, home */
+  prog: { id: 'canon', mode: 'minor', c: [[0, 'm9'], [8, 'maj7'], [5, 'm9'], [7, '7sus4']] } };
+const ALINES = [[0, 0, 12, 0, 3, 0, -2, 12], [0, 12, 0, 0, 10, 0, 7, 12], [0, 0, 3, 0, 12, 0, 5, 7], [0, 7, 0, 12, 0, 3, 10, 0], [0, 0, 12, 10, 0, 0, 3, 5], [12, 0, 0, 12, 0, 7, 0, 10]];
+/* the slow build: the line alone, then the kick, then the hats, then a snare accent (the offbeat of beat 4, every other bar, caught on the next downbeat), then the groove;
+   a breakdown brings the pads in, and the drop has everything */
+const AARRS = [[['ACID', 16], ['KICK', 8], ['HATS', 8], ['SNARE', 16], ['FULL', 32], ['BREAK', 8], ['DROP', 32], ['OUTRO', 8]]];
+const ASECT = { ACID: { k: 0, h: 0, sn: 0, oh: 0, ru: 0, cl: 0, pad: 0 }, KICK: { k: 1, h: 0, sn: 0, oh: 0, ru: 0, cl: 0, pad: 0 }, HATS: { k: 1, h: 1, sn: 0, oh: 0, ru: 0, cl: 0, pad: 0 },
+  SNARE: { k: 1, h: 1, sn: 1, oh: 0, ru: .5, cl: 0, pad: 0 }, FULL: { k: 1, h: 1, sn: 1, oh: 1, ru: 1, cl: 0, pad: 0 }, BREAK: { k: 0, h: .5, sn: 0, oh: 0, ru: 0, cl: 0, pad: 1, riser: 1 },
+  DROP: { k: 1, h: 1, sn: 1, oh: 1, ru: 1, cl: 1, pad: .55 }, OUTRO: { k: 1, h: 1, sn: 0, oh: 0, ru: .5, cl: 0, pad: .3 } };
+/* techno basslines: where the bass speaks in each bar (never with the kick) */
+const BPATS = [[0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1], [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1], [0, 0, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 0, 1, 0, 1], [0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 1]];
+/* ---------- voicing: the pad's chord, placed so it moves as little as possible from the last one (voice leading) */
+function voice(prev, rootPc, q, lo, hi) {
+  let iv = CQ[q]; if (iv.length >= 5) iv = iv.slice(1);          /* five-note chords drop the root (the bass has it) */
+  const pcs = [...new Set(iv.map((i) => md(rootPc + i, 12)))], cands = [];
+  for (let r = 0; r < pcs.length; r++) { const ord = pcs.slice(r).concat(pcs.slice(0, r)); let n = lo; while (md(n, 12) !== ord[0]) n++; const v = [n]; for (let k = 1; k < ord.length; k++) { let m = v[k - 1] + 1; while (md(m, 12) !== ord[k]) m++; v.push(m); }
+    if (v[v.length - 1] <= hi) cands.push(v); if (v.length >= 4) { const o = v.slice(); o[1] += 12; o.sort((a, b) => a - b); if (o[o.length - 1] <= hi + 4) cands.push(o); } }          /* close and open (drop-2 style) voicings */
+  if (!cands.length) return pcs.map((p) => lo + md(p - lo, 12)).sort((a, b) => a - b);
+  const mid = (lo + hi) / 2, cost = (v) => { if (!prev) return Math.abs(v.reduce((a, b) => a + b, 0) / v.length - mid); let c = 0; for (const n of v) c += Math.min(...prev.map((p) => Math.abs(p - n))); return c + .6 * Math.abs(v[v.length - 1] - prev[prev.length - 1]); };
+  return cands.reduce((b, v) => (cost(v) < cost(b) ? v : b));
+}
+const snapTo = (n, pcs) => { for (const d of [0, -1, 1, -2, 2, -3, 3]) if (pcs.includes(md(n + d, 12))) return n + d; return n; };
+/* ---------- the track (made from the seed) */
+let T = null;
+let STYLE = 'techno', LV = null;
+function makeTrack() { R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; for (const t of sv) { if (t.prog) pc[[].concat(t.prog).join(',')] = (pc[[].concat(t.prog).join(',')] || 0) + 1; if (t.mode) mc[t.mode] = (mc[t.mode] || 0) + 1; }
+  const funk = FUNKS.includes(STYLE), P0 = LV ? LVLP[LV] : null, canon = STYLE === 'acid' && +SEED === 132; let [kn, root] = pick(KEYS); if (canon) { kn = 'F'; root = 53; }
+  const br = P0 ? P0[2] : STYLES[STYLE].bpm; let bpm = br[0] + Math.floor(R() * (br[1] - br[0] + 1)); if (canon) bpm = 128;
+  const kit = { kick: pick(KIT.kick), clap: pick(KIT.clap), hat: pick(KIT.hat), oh: pick(KIT.oh), ride: pick(KIT.ride), perc: pick(KIT.perc), crash: KIT.crash[0] }, pmask = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 || i === 6 || i === 10) && R() < .45 ? 1 : 0);
+  const hacc = Array.from({ length: 16 }, (_, i) => (i % 4 === 2 ? .9 : i % 2 ? .45 : .65) * (.85 + R() * .3));
+  const rhythms = [[0, 3, 6, 8, 11, 14, 16, 19], [0, 2, 4, 7, 10, 12, 16, 22], [0, 3, 4, 8, 11, 12, 15, 24], [0, 4, 6, 8, 12, 14, 20, 22], [0, 6, 8, 14, 16, 22, 24, 28]], rh = pick(rhythms);
+  let d = pick([0, 2, 4]); const motif = rh.map((st, i) => { if (i) d += pick([-1, -1, 1, 1, 2, -2, 0, 3]); d = Math.max(-2, Math.min(9, d)); return { st, d, len: pick([2, 2, 3, 4]) }; });
+  const secsOf = (arr) => { const secs = []; let b = 0; for (const [n, len] of arr) { secs.push({ n, b0: b, len }); b += len; } return [secs, b]; };
+  if (funk) {          /* FUNK: unchanged from v2 (scale-degree 7th chords) */
+    const MODES = [['dorian', DORIAN], ['dorian', DORIAN], ['minor', MINOR]], mm = pickW(MODES, (x) => x[0], mc), mode = mm[1], prog = pickW(FUNKP, (x) => x.join(','), pc), arr = pick(FARRS);
+    const deg = (d2, oct) => root + 12 * (oct || 0) + mode[md(d2, 7)] + 12 * Math.floor(d2 / 7), chord = (d2) => [deg(d2), deg(d2 + 2), deg(d2 + 4), deg(d2 + 6)];
+    const FK = { kick: [[0, 6, 10], [0, 7, 10], [0, 3, 10], [0, 10, 13], [0, 8, 11]], ghost: [[7, 9, 14], [3, 7, 15], [7, 11, 14], [9, 14, 15]], bass: [[0, 3, 6, 8, 10, 13, 14], [0, 2, 6, 7, 10, 12, 14], [0, 3, 4, 7, 10, 11, 14], [0, 6, 8, 9, 12, 14], [0, 3, 6, 10, 11, 13]], clav: [[2, 5, 6, 10, 13, 14], [1, 3, 6, 9, 11, 14], [2, 3, 7, 10, 12, 15], [3, 6, 7, 11, 14]], keys: [[2, 6, 10, 14], [3, 6, 11, 14], [2, 7, 10, 15]] };
+    const fk = { kick: pick(FK.kick), ghost: pick(FK.ghost), bass: pick(FK.bass), clav: pick(FK.clav), keys: pick(FK.keys), boctave: FK.bass[0].map(() => R() < .3) };
+    const pent = [0, 3, 5, 7, 10], pdeg = (i, oct) => root + 12 * (oct || 0) + pent[md(i, 5)] + 12 * Math.floor(i / 5), [secs, bars] = secsOf(arr);
+    T = { style: STYLE, kind: 'funk', funk: true, fk, pdeg, modeName: mm[0], kn, root, mode, prog, bpm, deg, chord, motif, secs, bars, kit, pmask, hacc, name: kn + ' ' + mm[0] };
+  } else {
+    const kind = STYLE; let cprog, mode, modeName, scName = null;
+    if (kind === 'eastern') { const E = pick(ESCALES); scName = E.name; mode = E.sc; modeName = E.id; cprog = { id: E.id + E.progs.indexOf(E.progs[0]), c: pick(E.progs) }; }
+    else { cprog = pickW(CPROGS, (x) => x.id, pc); if (canon) cprog = ACANON.prog; modeName = cprog.mode; mode = { minor: MINOR, dorian: DORIAN, phrygian: PHRYG }[cprog.mode]; }
+    const n = mode.length, deg = (d2, oct) => root + 12 * (oct || 0) + mode[md(d2, n)] + 12 * Math.floor(d2 / n);
+    /* the voicings, led through the loop twice so the first chord also follows the last */
+    const lo = kind === 'jungle' ? 53 : 55, hi = kind === 'jungle' ? 77 : 76; let prev = null; const pv = []; for (let k = 0; k < cprog.c.length * 2; k++) { const [s, q] = cprog.c[k % cprog.c.length]; prev = voice(prev, md(root + s, 12), q, lo, hi); if (k >= cprog.c.length) pv.push(prev); }
+    const bn = cprog.c.map(([s]) => 33 + md(root + s - 33, 12)), pcs = cprog.c.map(([s, q]) => CQ[q].map((i) => md(root + s + i, 12)));          /* bass roots between A1 and G#2; each chord's pitch classes */
+    const arr = pick(kind === 'jungle' ? JARRS : kind === 'acid' ? AARRS : ARRS), [secs, bars] = secsOf(arr), aline = canon ? ACANON.line : pick(ALINES);
+    const bpat = pick(BPATS), boct = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 && R() < .3 ? 12 : i === 14 && R() < .3 ? 7 : 0)), arpMode = pick(['up', 'updown', 'gate', 'up']);
+    const gate = Array.from({ length: 16 }, (_, i) => (i % 2 === 0 || R() < .35 ? 1 : 0));
+    const jp = [pick(['two', 'amen', 'roll', 'step']), pick(['amen', 'chop', 'roll', 'tear', 'two'])], jalt = pick(['half', 'chop', 'tear', 'step']);
+    const chop = {}; for (const c of ['K', 'S', 'H', 'G']) { const a = BRK[c].slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } chop[c] = a.slice(0, c === 'G' ? 2 : 3); }
+    const dpat = DPAT[pick(Object.keys(DPAT))], oud = (() => { const rr = pick([[0, 3, 6, 8, 10, 12, 14], [0, 2, 3, 6, 8, 11, 14], [0, 3, 4, 6, 8, 12, 15], [0, 2, 4, 6, 8, 10, 12, 14]]); let dd = 0; return rr.map((st, i) => { if (i) dd = Math.max(-2, Math.min(5, dd + pick([-1, 1, -1, 1, 2, -2, 0]))); return { st, d: dd }; }); })();
+    T = { style: STYLE, kind, funk: false, cbars: canon ? 1 : 2, aline, aroot: 33 + md(root - 33, 12), kn, root, mode, modeName, scName, cprog, pv, bn, pcs, bpm, deg, motif, secs, bars, kit, pmask, hacc, bpat, boct, arpMode, gate, jp, jalt, chop, jfill: pick(JFILL), dpat, oud, name: kn + ' ' + (scName || modeName) };
+  }
+  document.getElementById('seed').textContent = SEED; drawSecs(); info(); }
+function info(extra) { if (!T) return; const roman = ['i', 'ii', 'III', 'iv', 'v', 'VI', 'VII']; const sty = { disco: 'Disco funk', boogie: 'Boogie funk', break: 'Breakbeat funk', jungle: 'Jungle', eastern: 'Eastern', techno: 'Techno' }[T.style]; document.getElementById('info').innerHTML = '<b>' + sty + '</b> &middot; <b>' + T.name + '</b> &middot; ' + T.bpm + ' BPM &middot; ' + (T.funk ? T.prog.map((x) => roman[x]).join(' &ndash; ') + ' (' + chordNames() + ')' : chordNames()) + ' &middot; ' + T.bars + ' bars' + (extra ? ' &middot; ' + extra : ''); }
+function drawSecs() { const w = document.getElementById('secs'); w.innerHTML = ''; T.secs.forEach((s, i) => { const e = document.createElement('span'); e.textContent = s.n; e.dataset.i = i; w.appendChild(e); }); }
+/* ---------- the sound: built once */
+let S = null;
+function build() {
+  const master = new Tone.Limiter(-2.5).toDestination(), mG = new Tone.Gain(.7).connect(master), comp = new Tone.Compressor({ threshold: -16, ratio: 3, attack: .012, release: .18 }).connect(mG);
+  const rev = new Tone.Reverb({ decay: 4, wet: 1 }).connect(comp), revS = new Tone.Gain(.0).connect(rev);
+  const dly = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: .38, wet: 1 }).connect(comp), dlyS = new Tone.Gain(0).connect(dly);
+  const duck = new Tone.Gain(1).connect(comp);          /* the sidechain: everything melodic pumps under the kick */
+  const drumBus = new Tone.Gain(1).connect(comp), drums = new Tone.Players(Object.fromEntries(ALLS.map((n) => [n, 'samples/' + n + '.wav']))).connect(drumBus);
+  // the kick: a tuned synth kick, driven so it has a body small speakers can play (its click and its 100-200 Hz), with a sample on top for texture
+  const kick = new Tone.MembraneSynth({ pitchDecay: .05, octaves: 6, oscillator: { type: 'sine' }, envelope: { attack: .001, decay: .38, sustain: 0, release: .08 } });
+  const kd = new Tone.Distortion(.32), kickG = new Tone.Gain(.9); kick.chain(kd, kickG, comp);
+  const rumbleSrc = new Tone.MembraneSynth({ pitchDecay: .03, octaves: 4, envelope: { attack: .001, decay: .3, sustain: 0, release: .1 } }); const rumRev = new Tone.Reverb({ decay: 1.6, wet: 1 }), rumLP = new Tone.Filter(110, 'lowpass', -24), rumG = new Tone.Gain(0); rumbleSrc.chain(rumRev, new Tone.Distortion(.4), rumLP, rumG, duck);
+  const hat = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: .001, decay: .035, sustain: 0, release: .01 } }); const hatHP = new Tone.Filter(8000, 'highpass'); const hatG = new Tone.Gain(.28); hat.chain(hatHP, hatG, comp);
+  const oh = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: .002, decay: .2, sustain: 0, release: .05 } }); const ohHP = new Tone.Filter(6500, 'highpass'); const ohG = new Tone.Gain(.18); oh.chain(ohHP, ohG, comp);
+  const clap = new Tone.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: .001, decay: .14, sustain: 0, release: .05 } }); const clBP = new Tone.Filter(1400, 'bandpass'); clBP.Q.value = .9; const clG = new Tone.Gain(.42); clap.chain(clBP, clG, comp); clG.connect(revS);
+  const ride = new Tone.MetalSynth({ frequency: 320, envelope: { attack: .001, decay: .5, release: .1 }, harmonicity: 5.1, modulationIndex: 20, resonance: 5000, octaves: 1.2 }); const riG = new Tone.Gain(.035); ride.chain(new Tone.Filter(5000, 'highpass'), riG, comp);
+  // bass: a saw through a resonant filter that the groove keeps moving (the rolling techno bass); a cleaner square for the trance gallop
+  const bass = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { Q: 4, type: 'lowpass', rolloff: -24 }, envelope: { attack: .003, decay: .16, sustain: .2, release: .08 }, filterEnvelope: { attack: .002, decay: .12, sustain: .15, release: .1, baseFrequency: 90, octaves: 3.2 } }); const baG = new Tone.Gain(.42); bass.chain(baG, duck);
+  const bass2 = new Tone.MonoSynth({ oscillator: { type: 'square' }, filter: { Q: 1, type: 'lowpass' }, envelope: { attack: .004, decay: .1, sustain: .5, release: .05 }, filterEnvelope: { attack: .002, decay: .08, sustain: .3, baseFrequency: 160, octaves: 2 } }); const b2G = new Tone.Gain(.3); bass2.chain(b2G, duck);
+  // pads: three detuned saws per voice, a slowly breathing filter, chorus and lots of space
+  const pad = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'fatsawtooth', count: 3, spread: 24 }, envelope: { attack: 1.1, decay: .6, sustain: .85, release: 2.6 } }); pad.maxPolyphony = 24;
+  const padLP = new Tone.Filter(1100, 'lowpass', -24), padLFO = new Tone.LFO(.05, 600, 2400).start(); padLFO.connect(padLP.frequency); const padCh = new Tone.Chorus(.8, 3.5, .55).start(), padG = new Tone.Gain(.14); pad.chain(padLP, padCh, padG, duck); padG.connect(revS);
+  // arp: short plucks running the chord, through the dotted delay
+  const arp = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'square' }, envelope: { attack: .002, decay: .12, sustain: 0, release: .1 } }); const arpLP = new Tone.Filter(2400, 'lowpass'), arpG = new Tone.Gain(.075); arp.maxPolyphony = 8; arp.chain(arpLP, arpG, duck); arpG.connect(dlyS); arpG.connect(revS);
+  // the hook: a soft supersaw lead, delayed and reverbed (the ethereal part)
+  const lead = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'fatsawtooth', count: 2, spread: 22 }, envelope: { attack: .02, decay: .3, sustain: .5, release: 1.2 } }); const ldLP = new Tone.Filter(3200, 'lowpass'), ldG = new Tone.Gain(.075); lead.maxPolyphony = 4; lead.chain(ldLP, ldG, comp); ldG.connect(dlyS); ldG.connect(revS);
+  // the riser: noise swept up before a drop
+  const rn = new Tone.Noise('white').start(), rnBP = new Tone.Filter(400, 'bandpass'), rnG = new Tone.Gain(0); rnBP.Q.value = 2; rn.chain(rnBP, rnG, comp); rnG.connect(revS);
+  // FUNK: a slap-ish synth bass with a little glide, a wah clav, a Rhodes-style electric piano, and a horn section for stabs
+  const fbass = new Tone.MonoSynth({ portamento: .012, oscillator: { type: 'square' }, filter: { Q: 3, type: 'lowpass', rolloff: -24 }, envelope: { attack: .002, decay: .2, sustain: .3, release: .06 }, filterEnvelope: { attack: .001, decay: .14, sustain: .25, release: .1, baseFrequency: 110, octaves: 3.6 } }); const fbG = new Tone.Gain(0); fbass.chain(fbG, duck);
+  const clav = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'pulse', width: .3 }, envelope: { attack: .001, decay: .11, sustain: 0, release: .05 } }); clav.maxPolyphony = 8; const wah = new Tone.AutoWah({ baseFrequency: 300, octaves: 4, sensitivity: -28, Q: 3 }), cvG = new Tone.Gain(0); clav.chain(wah, cvG, comp);
+  const ep = new Tone.PolySynth(Tone.FMSynth, { harmonicity: 3, modulationIndex: 9, oscillator: { type: 'sine' }, modulation: { type: 'sine' }, envelope: { attack: .003, decay: 1.4, sustain: .15, release: .9 }, modulationEnvelope: { attack: .002, decay: .35, sustain: .05, release: .4 } }); ep.maxPolyphony = 10; const trem = new Tone.Tremolo(4.5, .35).start(), epG = new Tone.Gain(0); ep.chain(trem, epG, duck); epG.connect(revS);
+  const horn = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'fatsawtooth', count: 3, spread: 18 }, envelope: { attack: .012, decay: .22, sustain: .35, release: .12 } }); horn.maxPolyphony = 8; const hnLP = new Tone.Filter(2600, 'lowpass'), hnG = new Tone.Gain(0); horn.chain(hnLP, hnG, comp); hnG.connect(revS);
+  // JUNGLE: the break (sliced), a sine sub, a reese (two detuned saws, a slowly moving filter) and the atmosphere loop (85 BPM, played at double time)
+  const brkG = new Tone.Gain(.9).connect(comp);          /* three players at fixed loudness (velocity layers): automating one player's volume per hit breaks when rolls schedule out of order. (Each loads the file itself: a shared buffer is copied before it has loaded.) */
+  const brk = [1, .62, .36].map((g) => { const p = new Tone.Player({ url: 'samples/Drums_170BPM.wav', fadeIn: .002, fadeOut: .012 }); p.chain(new Tone.Gain(g), brkG); return p; });
+  const sub = new Tone.MonoSynth({ oscillator: { type: 'sine' }, filter: { type: 'lowpass', frequency: 200 }, envelope: { attack: .01, decay: .2, sustain: .9, release: .25 }, filterEnvelope: { baseFrequency: 200, octaves: 0 } }); const subG = new Tone.Gain(0); sub.chain(subG, comp);
+  const reese = new Tone.MonoSynth({ portamento: .03, oscillator: { type: 'fatsawtooth', count: 2, spread: 28 }, filter: { Q: 2.5, type: 'lowpass', rolloff: -24 }, envelope: { attack: .02, decay: .3, sustain: .8, release: .2 }, filterEnvelope: { attack: .05, decay: .4, sustain: .6, release: .3, baseFrequency: 160, octaves: 2 } });
+  const rsLFO = new Tone.LFO(.18, 220, 900).start(), rsLP = new Tone.Filter(600, 'lowpass', -24); rsLFO.connect(rsLP.frequency); const rsG = new Tone.Gain(0); reese.chain(new Tone.Distortion(.25), rsLP, rsG, duck);
+  const atm = new Tone.Player({ url: 'samples/Ambience_A_85BPM.wav', loop: true, fadeIn: .5 }), atmG = new Tone.Gain(0); atm.chain(new Tone.Filter(3500, 'lowpass'), atmG, comp); atmG.connect(revS);
+  // EASTERN: a tanpura-like drone, a plucked oud, a breathy ney with vibrato and slides, and a darbuka (doum and tek)
+  const drone = new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'fatsawtooth', count: 2, spread: 12 }, envelope: { attack: 2.5, decay: 1, sustain: .9, release: 3 } }); drone.maxPolyphony = 6; const drLP = new Tone.Filter(700, 'lowpass', -24), drLFO = new Tone.LFO(.07, 350, 1400).start(); drLFO.connect(drLP.frequency); const droneG = new Tone.Gain(0); drone.chain(drLP, droneG, duck); droneG.connect(revS);
+  const oud = new Tone.PluckSynth({ attackNoise: 1.4, dampening: 3600, resonance: .965 }), oudG = new Tone.Gain(0); oud.chain(new Tone.Filter(4200, 'lowpass'), oudG, comp); oudG.connect(revS); oudG.connect(dlyS);
+  const ney = new Tone.MonoSynth({ portamento: .07, oscillator: { type: 'triangle' }, filter: { type: 'lowpass', Q: 1 }, envelope: { attack: .09, decay: .2, sustain: .8, release: .5 }, filterEnvelope: { attack: .1, decay: .3, sustain: .7, baseFrequency: 900, octaves: 1.4 } });
+  const vib = new Tone.Vibrato(5.2, .12), breath = new Tone.Noise('pink').start(), brBP = new Tone.Filter(1800, 'bandpass'), brG = new Tone.Gain(0), neyG = new Tone.Gain(0); ney.chain(vib, neyG, comp); breath.chain(brBP, brG, neyG); neyG.connect(revS); neyG.connect(dlyS);
+  const doum = new Tone.MembraneSynth({ pitchDecay: .02, octaves: 2.2, envelope: { attack: .001, decay: .32, sustain: 0, release: .1 } }), dkG = new Tone.Gain(.55); doum.chain(dkG, comp);
+  // ACID: a sawtooth through a resonant low-pass (swept by the sequencer), a touch of drive, pumped by the kick
+  const acid = new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: .003, decay: .12, sustain: 0, release: .05 } }), acF = new Tone.Filter({ type: 'lowpass', frequency: 800, Q: 12, rolloff: -12 }), acG = new Tone.Gain(0); acid.chain(acF, new Tone.Distortion(.18), acG, duck); acG.connect(dlyS);
+  revS.gain.value = .35; dlyS.gain.value = .3;
+  S = { acid, acF, acG, fbass, fbG, clav, cvG, ep, epG, horn, hnG, drums, drumBus, kick, rumbleSrc, rumG, hat, hatG, oh, ohG, clap, ride, bass, bass2, baG, b2G, pad, padG, padLP, arp, arpLP, arpG, lead, ldG, ldLP, rnG, rnBP, duck, revS, dlyS, comp,
+    brk, sub, subG, reese, rsG, atm, atmG, drone, droneG, oud, oudG, ney, neyG, brG, doum,
+    ready: () => Promise.all([rev.ready, rumRev.ready].filter(Boolean)) };
+}
+/* ---------- the sequencer: one step = a sixteenth */
+function hit(name, time, vel) { try { const p = S.drums.player(name); if (!p.loaded) return; try { p.volume.setValueAtTime(Tone.gainToDb(Math.max(.001, vel)), time); } catch (e) { } p.start(time); } catch (e) { } }          /* (a volume that can't be scheduled never costs the hit itself) */
+let step = 0, dose = 0, doseBar = -99, lastSec = -1;
+const TR = () => +document.getElementById('tr').value / 100, EN = () => +document.getElementById('en').value / 100;
+function secAt(bar) { const b = bar % T.bars; for (let i = T.secs.length - 1; i >= 0; i--) if (b >= T.secs[i].b0) return [T.secs[i], i]; return [T.secs[0], 0]; }
+/* every style uses its own instruments; the rest stay silent */
+const USE = { acid: ['acG', 'padG', 'rumG'], techno: ['baG', 'b2G', 'rumG', 'padG', 'arpG', 'ldG'], jungle: ['subG', 'rsG', 'atmG', 'padG', 'ldG'], eastern: ['droneG', 'oudG', 'neyG', 'padG', 'baG', 'rumG'], funk: ['fbG', 'cvG', 'epG', 'hnG'] };
+const ALLG = [...new Set(Object.values(USE).flat())];
+function quiet(time, kind) { const u = USE[kind]; for (const g of ALLG) if (!u.includes(g)) S[g].gain.setTargetAtTime(0, time, .08); }
+function pump(time, depth, len) { const g = S.duck.gain; g.cancelScheduledValues(time); g.setValueAtTime(depth, time); g.linearRampToValueAtTime(1, time + len); }
+function kickHit(time, v) { S.kick.triggerAttackRelease(midi(T.kroot || 33), '8n', time, v); hit(T.kit.kick, time, .45 * v); }
+function riserStep(time, P, sec, inSec, st, dosing, bar, big) { const riseK = P.riser ? (inSec * 16 + st) / (sec.len * 16) : dosing && bar - doseBar < 2 ? ((bar - doseBar) * 16 + st) / 32 : 0;
+  S.rnG.gain.setTargetAtTime(riseK > 0 ? .02 + (big || .16) * riseK : 0, time, riseK > 0 ? .1 : .02); S.rnBP.frequency.setTargetAtTime(300 + 9000 * riseK * riseK, time, .1); }
+function padChord(time, P2, bar, len) { const cb = T.cbars || 2, ci = Math.floor(bar / cb) % T.pv.length; if (P2.pad && (bar % cb === 0) && T.cst === 0) { S.pad.releaseAll(time); S.pad.triggerAttackRelease(T.pv[ci].map(midi), cb === 1 ? '1m' : (len || '2m'), time, .5 * P2.pad); } return ci; }
+
+/* FUNK: a drummer, a bass player, a clav, keys and horns, all on the same pocket. Kick patterns, ghost notes and comping rhythms come from real funk grooves. */
+function funkTick(time, s, bar, st, sec, inSec, lastBar, P, dosing, en) {
+  const F = T.fk, sty = T.style, chordD = T.prog[Math.floor(bar / 2) % T.prog.length], ch = T.chord(chordD), root = T.deg(chordD, -2);
+  const drumsOn = P.k > 0, full = sec.n === 'DROP' || sec.n === 'GROOVE' || dosing;
+  const kick = sty === 'disco' ? st % 4 === 0 : F.kick.includes(st);
+  if (drumsOn && kick) { kickHit(time, .9 + .1 * en); pump(time, .3, .16); }
+  if (drumsOn && (st === 4 || st === 12)) { hit('x0xproc1-snare', time, .85); if (sty === 'disco') hit(T.kit.clap, time, .55); }
+  if (drumsOn && sty !== 'disco' && F.ghost.includes(st)) hit('x0xproc1-snare', time, .14 + .08 * R());          /* ghost notes */
+  if (P.h && (sty === 'boogie' ? st % 2 === 0 : true) && R() < .9) hit(T.kit.hat, time, (st % 4 === 0 ? .5 : st % 2 ? .25 : .38) * (.7 + .4 * en));
+  if (P.oh && sty === 'disco' && st % 4 === 2) hit(T.kit.oh, time, .5);
+  if (drumsOn && lastBar && st >= 12 && sec.n !== 'OUTRO') hit('x0xproc1-snare', time, .3 + .1 * (st - 12));          /* a fill into the next section */
+  if (inSec === 0 && st === 0 && sec.n === 'DROP') hit(T.kit.crash, time, .45);
+  if (P.ba) { if (sty === 'disco') { if (st % 2 === 0) S.fbass.triggerAttackRelease(midi(root + (st % 4 === 2 ? 12 : 0)), '16n', time, .8); }
+    else { const i = F.bass.indexOf(st); if (i >= 0) S.fbass.triggerAttackRelease(midi(root + (F.boctave[i] ? 12 : 0) + (i === F.bass.length - 1 && st > 12 ? 7 : 0)), '16n', time, .85); } }
+  S.fbG.gain.setTargetAtTime(P.ba ? (sty === 'disco' ? .18 : .26) : 0, time, .1);          /* (measured: louder than this and the bass buries the kick) */
+  if (full && sty !== 'disco' && F.clav.includes(st)) S.clav.triggerAttackRelease(ch.slice(1, 4).map((m) => midi(m + 12)), '32n', time, .6);
+  S.cvG.gain.setTargetAtTime(sty !== 'disco' && full ? .16 : 0, time, .1);
+  if (P.pad) { const v = ch.map((m) => { let x = m; while (x < 55) x += 12; while (x > 74) x -= 12; return midi(x); });
+    if (sty === 'disco' ? st === 0 && bar % 2 === 0 : F.keys.includes(st)) S.ep.triggerAttackRelease(v, sty === 'disco' ? '1m' : '16n', time, sty === 'disco' ? .45 : .55); }
+  S.epG.gain.setTargetAtTime(.22 * (P.pad ? 1 : 0), time, .2);
+  if (full && bar % 4 === 3 && (st === 10 || st === 14)) S.horn.triggerAttackRelease(ch.slice(0, 3).map((m) => midi(m + 12)), '16n', time, .7);
+  if ((sec.n === 'DROP' || dosing) && P.ld) { const pos = (bar % 2) * 16 + st; for (const m of T.motif) { if (m.st !== pos) continue; S.horn.triggerAttackRelease(midi(T.pdeg(m.d + 5, 0)), (m.len * .25 * 60 / T.bpm), time, .6); } }
+  S.hnG.gain.setTargetAtTime(full ? .07 : 0, time, .15);
+  if (st === 0) quiet(time, 'funk');
+  riserStep(time, P, sec, inSec, st, false, bar, .12);
+}
+/* TECHNO / TRANCE: four to the floor, offbeat open hat, a rolling bassline from the pattern bank, voice-led pads, an arp and a hook that lands on chord tones */
+function technoTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
+  const ci = padChord(time, P2, bar), v = T.pv[ci], pcs = T.pcs[ci], bn = T.bn[ci];
+  const kickOn = P.k > 0 && st % 4 === 0 && !(lastBar && P.k < 1 && st > 8), fill = lastBar && (sec.n === 'BUILD' || sec.n === 'RISE') && st >= 12;
+  if (kickOn || (fill && st % 2 === 0)) { kickHit(time, kickOn ? .95 + .05 * en : .7); if (inSec === 0 && st === 0 && (sec.n === 'DROP' || sec.n === 'GROOVE')) hit(T.kit.crash, time, .5); if (P.ru * en > .1) S.rumbleSrc.triggerAttackRelease(midi(bn - 12 > 24 ? bn - 12 : bn), '8n', time, .7); pump(time, .25, .2); }
+  S.rumG.gain.setTargetAtTime(P.ru * (1 - tr * .7) * en * .5, time, .1);
+  if (P.h && st % 4 !== 0 && R() < P.h * (.6 + .4 * en)) hit(T.kit.hat, time, T.hacc[st] * (.5 + .4 * en));
+  if (P.oh && st % 4 === 2) hit(T.kit.oh, time, .55 + .15 * en);
+  if (P.cl && (st === 4 || st === 12) && R() < P.cl) hit(T.kit.clap, time, .8);
+  if ((sec.n === 'GROOVE' || sec.n === 'DROP') && T.pmask[st]) hit(T.kit.perc, time, .32 + .2 * en);
+  if (P.ri && st % 4 === 2 && tr < .8) hit(T.kit.ride, time, .25 * (1 - tr));
+  if (P.ba) { const techno = T.bpat[st] && R() < 1 - tr * .7, trance = st % 4 !== 0 && R() < tr * 1.1;
+    if (techno) { S.bass.filterEnvelope.octaves = 2.4 + 2.2 * en * (.6 + .4 * Math.sin(bar * .7)); S.bass.triggerAttackRelease(midi(bn + T.boct[st]), '16n', time, .75); }
+    if (trance) S.bass2.triggerAttackRelease(midi(bn + (st % 4 === 2 ? 12 : 0)), '16n', time, .7); }
+  S.baG.gain.setTargetAtTime(.42 * (1 - tr * .6), time, .2); S.b2G.gain.setTargetAtTime(.3 * tr, time, .2);
+  S.padG.gain.setTargetAtTime(.14 * (.55 + .7 * tr) * P2.pad, time, .3);
+  if (P2.arp) { const tones = v.concat(v.slice(0, 3).map((m) => m + 12)), L = tones.length;
+    if (T.arpMode === 'gate') { if (T.gate[st]) S.arp.triggerAttackRelease(v.map((m) => midi(m + 12)), '32n', time, .35); }
+    else if (R() < .94) { const i = T.arpMode === 'up' ? (st + bar * 3) % L : (() => { const k = (st + bar * 2) % (2 * L - 2); return k < L ? k : 2 * L - 2 - k; })(); S.arp.triggerAttackRelease(midi(tones[i] + 12), '32n', time, .6); } }
+  S.arpLP.frequency.setTargetAtTime(900 + 3800 * Math.min(1, (inSec + st / 16) / Math.max(4, sec.len)) * (.4 + .6 * tr), time, .3); S.arpG.gain.setTargetAtTime(.07 * P2.arp * (.3 + .9 * tr), time, .3);
+  if (P2.ld) { const pos = (bar % 2) * 16 + st, rep = Math.floor(bar / 2) % 4; for (const m of T.motif) { if (m.st !== pos) continue; let dd = m.d + (rep === 2 ? 2 : 0); if (rep === 3 && m === T.motif[T.motif.length - 1]) dd += pick([-3, 4, 2]); let note = T.deg(dd, 1); if (st % 4 === 0) note = snapTo(note, pcs); S.lead.triggerAttackRelease(midi(note), (m.len * .25 * 60 / T.bpm), time, .55); } }
+  S.ldG.gain.setTargetAtTime(.075 * P2.ld * (.35 + .8 * tr), time, .4);
+  if (st === 0) quiet(time, 'techno');
+  riserStep(time, P, sec, inSec, st, dosing, bar);
+}
+/* JUNGLE: the break chopped and re-sequenced (two patterns, a switch-up, fills and rolls), the sub on the roots, the reese in the drops, pads and the atmosphere over the top */
+function brkHit(time, sl, vel, len) { const rate = T.bpm / BRK.bpm, p = S.brk[vel > .8 ? 0 : vel > .45 ? 1 : 2], SL = p.buffer.duration / BRK.n; try { if (p.playbackRate !== rate) p.playbackRate = rate; p.start(time, sl * SL, (len || 2) * SL / rate); } catch (e) { if (!brkHit.err) { brkHit.err = 1; console.warn('brkHit', e); } } }
+function jungleTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
+  const ci = padChord(time, P2, bar, '2m'), pcs = T.pcs[ci], bn = T.bn[ci], firstOfChord = bar % 2 === 0 && st === 0;
+  if (P.brk && S.brk[0].loaded) { const pat = lastBar && sec.n !== 'OUTRO' && sec.n !== 'BREAK' ? T.jfill : P.alt ? JPAT[T.jalt] : JPAT[T.jp[Math.floor(bar / 4) % 2 === 1 && bar % 4 === 3 ? 1 : 0]], c = pat[st];
+    if (c && c !== '.') { if (c === 'r') { const sl = T.chop.S[bar % T.chop.S.length]; brkHit(time, sl, .55, 1); brkHit(time + 30 / T.bpm / 4, sl, .7, 1); }
+      else if (!(P.brk < 1 && c === 'K')) { const L = T.chop[c], sl = L[(bar + st) % L.length], fillK = lastBar ? .6 + .4 * st / 15 : 1; brkHit(time, sl, (c === 'G' ? .5 : c === 'H' ? .75 : 1) * fillK, c === 'K' || c === 'S' ? 3 : 2);
+        if (c === 'K' && P.brk >= 1) { S.kick.triggerAttackRelease(midi(T.kroot || 33), '16n', time, .55); pump(time, .45, .16); } } }
+    if (P.sh && st % 2 === 1 && R() < .8) hit('x0xproc2-maracas', time, .12 + .1 * en); }
+  if (inSec === 0 && st === 0 && (sec.n === 'DROP' || sec.n === 'SWITCH')) hit(T.kit.crash, time, .5);
+  if (firstOfChord && P.sub) S.sub.triggerAttackRelease(midi(bn), '2m', time, .9);
+  S.subG.gain.setTargetAtTime(.26 * P.sub, time, .1);
+  if (P.rs) { const riff = [0, 6, 10]; if (firstOfChord) S.reese.triggerAttackRelease(midi(bn + 12), '1m', time, .8); else if (bar % 2 === 1 && riff.includes(st)) S.reese.triggerAttackRelease(midi(bn + 12 + (st === 6 ? 7 : st === 10 ? 12 : 0)), st === 10 ? '4n' : '8n', time, .7); }
+  S.rsG.gain.setTargetAtTime(.26 * P.rs * (.6 + .4 * en), time, .15);
+  S.padG.gain.setTargetAtTime(.13 * P2.pad, time, .4);
+  try { if (S.atm.loaded && S.atm.state !== 'started') { S.atm.playbackRate = T.bpm / 170; S.atm.start(time); } } catch (e) { }
+  S.atmG.gain.setTargetAtTime(.22 * P.atm, time, .6);
+  if (P2.ld) { const pos = (bar % 2) * 16 + st; for (const m of T.motif) { if (m.st !== pos) continue; let note = T.deg(m.d, 1); if (st % 4 === 0) note = snapTo(note, pcs); S.lead.triggerAttackRelease(midi(note), (m.len * .25 * 60 / T.bpm) * 1.5, time, .5); } }
+  S.ldG.gain.setTargetAtTime(.06 * P2.ld, time, .4);
+  if (st === 0) quiet(time, 'jungle');
+  riserStep(time, P, sec, inSec, st, dosing, bar);
+}
+/* EASTERN: four to the floor under a darbuka rhythm (maqsum, baladi, ayoub, saidi), a drone on the tonic and fifth, an oud riff in the scale, the ney's phrases
+   with grace notes and slides, and modal chords that never stray far from the drone */
+function easternTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
+  const ci = padChord(time, Object.assign({}, P2, { pad: P2.pad * .7 }), bar, '2m'), pcs = T.pcs[ci], bn = T.bn[ci];
+  if (P.k > 0 && st % 4 === 0 && !(lastBar && P.k < 1 && st > 8)) { kickHit(time, 1); pump(time, .3, .2); if (inSec === 0 && st === 0 && sec.n === 'DROP') hit(T.kit.crash, time, .4); }
+  if (P.oh && st % 4 === 2) hit(T.kit.oh, time, .35);
+  const c = T.dpat[st]; if (P.h && c && c !== '.') { if (c === 'D') S.doum.triggerAttackRelease(midi(T.root - 12 + 7 > 40 ? T.root - 12 : T.root), '16n', time, .8); else hit('x0xproc2-rimshot', time, c === 'T' ? .55 : .22); }
+  if (P.ba && st % 4 !== 0 && (sec.n === 'DROP' || sec.n === 'GROOVE' || sec.n === 'BUILD')) S.bass.triggerAttackRelease(midi(bn), '16n', time, .6);
+  S.baG.gain.setTargetAtTime(.24 * P.ba, time, .2); S.rumG.gain.setTargetAtTime(0, time, .1);
+  if (bar % 4 === 0 && st === 0) { S.drone.releaseAll(time); S.drone.triggerAttackRelease([midi(T.root - 12), midi(T.root - 5)], '4m', time, .5); }
+  S.droneG.gain.setTargetAtTime(.12 * (.6 + .4 * tr), time, .5);
+  if (P2.arp) for (const o of T.oud) if (o.st === st) { let note = T.deg(o.d, 0); if (st % 4 === 0) note = snapTo(note, pcs); S.oud.triggerAttack(midi(note + 12), time); }
+  S.oudG.gain.setTargetAtTime(.45 * P2.arp, time, .3);
+  if (P2.ld) { const pos = (bar % 2) * 16 + st, rep = Math.floor(bar / 2) % 4; for (const m of T.motif) { if (m.st !== pos) continue; const note = T.deg(m.d + (rep === 2 ? 1 : 0), 1), dur = m.len * .25 * 60 / T.bpm * 1.4;
+      if (m.len >= 3 && R() < .5) { S.ney.triggerAttack(midi(T.deg(m.d + 1, 1)), time, .6); S.ney.setNote(midi(note), time + 60 / T.bpm / 8); S.ney.triggerRelease(time + dur); }          /* a grace note from above, sliding in */
+      else S.ney.triggerAttackRelease(midi(note), dur, time, .6);
+      S.brG.gain.setValueAtTime(.02, time); S.brG.gain.linearRampToValueAtTime(0, time + .25); } }
+  S.neyG.gain.setTargetAtTime(.2 * P2.ld, time, .4);
+  S.padG.gain.setTargetAtTime(.08 * P2.pad, time, .4);
+  if (st === 0) quiet(time, 'eastern');
+  riserStep(time, P, sec, inSec, st, dosing, bar, .1);
+}
+/* ACID: the 303 line in eighths with its filter swept by a slow sine (200 Hz to 3 kHz over four bars); the build adds the kick, the hats, then the snare accent */
+function acidTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
+  padChord(time, P2, bar);
+  if (st % 2 === 0) { const ph = (bar + st / 16) / 4, f = 200 + 2800 * (.5 + .5 * Math.sin(2 * Math.PI * ph)); S.acF.frequency.setValueAtTime(f, time); S.acid.triggerAttackRelease(midi(T.aroot + T.aline[(bar % (T.aline.length / 8)) * 8 + st / 2]), '16n', time, .85); }
+  S.acG.gain.setTargetAtTime(1.35, time, .1);          /* (measured: the line alone has to carry the opening) */
+  if (P.k && st % 4 === 0) { kickHit(time, .95); pump(time, .45, .18); if (inSec === 0 && st === 0 && (sec.n === 'FULL' || sec.n === 'DROP')) hit(T.kit.crash, time, .45); }
+  if (P.h && st % 4 === 2) hit(T.kit.hat, time, .7 * P.h);
+  if (P.h && st % 2 === 1 && R() < .45) hit(T.kit.hat, time, .22 * P.h);
+  if (P.oh && st % 4 === 2) hit(T.kit.oh, time, .35);
+  if (P.sn) { if (bar % 2 === 1 && st === 14) hit('x0xproc1-snare', time, .85); if (bar % 2 === 1 && st === 15) hit('x0xproc1-snare', time, .32); if (bar % 2 === 0 && st === 0 && inSec > 0) hit(T.kit.clap, time, .55); }          /* the accent, and the catch */
+  if (P.cl && (st === 4 || st === 12)) hit(T.kit.clap, time, .7);
+  if (P.ru && st % 4 === 0) S.rumbleSrc.triggerAttackRelease(midi(T.aroot), '8n', time, .6);
+  S.rumG.gain.setTargetAtTime(.22 * (P.ru || 0), time, .1);
+  S.padG.gain.setTargetAtTime(.2 * (P2.pad || 0), time, .5);
+  if (st === 0) quiet(time, 'acid');
+  riserStep(time, P, sec, inSec, st, dosing, bar);
+}
+function tick(time) {
+  const s = step++, bar = Math.floor(s / 16), st = s % 16, [sec, si] = secAt(bar), P = (T.kind === 'jungle' ? JSECT : T.kind === 'acid' ? ASECT : SECT)[sec.n] || SECT.GROOVE, tr = TR(), en = EN(), inSec = (bar % T.bars) - sec.b0, lastBar = inSec === sec.len - 1;
+  const dosing = bar - doseBar < 8, P2 = dosing ? Object.assign({}, P, { ld: 1, arp: 1, pad: 1 }) : P;          /* a dose: the hook and the arp come in whatever the section */
+  T.cst = st; if (!T.kroot) T.kroot = 31 + md(T.root - 31, 12);          /* the kick tuned to the key (G1 to F#2) */
+  if (si !== lastSec && st === 0) { lastSec = si; Tone.Draw.schedule(() => { document.querySelectorAll('#secs span').forEach((e) => e.classList.toggle('on', +e.dataset.i === si)); }, time); }
+  if (T.funk) funkTick(time, s, bar, st, sec, inSec, lastBar, P, dosing, en);
+  else if (T.kind === 'jungle') jungleTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing);
+  else if (T.kind === 'acid') acidTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing);
+  else if (T.kind === 'eastern') easternTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing);
+  else technoTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing);
+  if (st === 0) Tone.Draw.schedule(() => info(sec.n + ' · bar ' + (inSec + 1) + '/' + sec.len + (dosing ? ' · DOSE' : '')), time);
+}
+const swingOf = () => T.funk ? (T.style === 'break' ? .18 : .12) : T.kind === 'jungle' ? 0 : .06;
+/* OFFLINE RENDER: plays a track into a buffer faster than real time (for measuring, and for the loop library). o: { style, seed, secs, from: section name } */
+async function renderOffline(o) { const keep = [S, T, step, lastSec, STYLE, LV, SEED, doseBar];
+  try { const buf = await Tone.Offline(async (ctx) => { S = null; build(); await Tone.loaded(); await S.ready(); STYLE = o.style || 'techno'; LV = o.level || null; SEED = o.seed || 12345; step = 0; lastSec = -1; doseBar = -99; makeTrack();
+      const g = T.secs.find((x) => x.n === (o.from || 'DROP')) || T.secs.find((x) => x.n === 'GROOVE'); if (g) step = g.b0 * 16;
+      const tp = ctx.transport; tp.bpm.value = T.bpm; tp.swing = swingOf(); tp.swingSubdivision = '16n'; tp.scheduleRepeat(tick, '16n'); tp.start(0); }, o.secs || 12);
+    return { buf, bpm: T.bpm, name: T.name, chords: chordNames(), style: T.style }; }
+  finally { [S, T, step, lastSec, STYLE, LV, SEED, doseBar] = keep; } }
+function chordNames() { const N = (['E', 'B'].includes(T.kn) || (T.mode === DORIAN && ['A', 'E', 'B'].includes(T.kn))) ? ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'] : ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+  if (!T.funk) return T.cprog.c.map(([s, q]) => N[md(T.root + s, 12)] + CLAB[q]).join(' – ');
+  return T.prog.map((d) => { const c = T.chord(d), third = (c[1] - c[0] + 12) % 12, fifth = (c[2] - c[0] + 12) % 12; const sev = (c[3] - c[0] + 12) % 12 === 10 ? '7' : (c[3] - c[0] + 12) % 12 === 11 ? 'maj7' : ''; return N[c[0] % 12] + (third === 3 ? (fifth === 6 ? 'dim' : 'm') : '') + sev; }).join(' – '); }
+/* ---------- controls */
+let started = false, loopId = null;
+async function start() { if (!S && Tone.getContext().latencyHint !== 'playback') { try { Tone.setContext(new Tone.Context({ latencyHint: 'playback', lookAhead: .2 })); } catch (e) { } } await Tone.start(); if (!S) { build(); document.getElementById('info').textContent = 'Loading the drums…'; await Tone.loaded(); await S.ready(); } if (!T) makeTrack(); Tone.Transport.bpm.value = T.bpm; Tone.Transport.swing = swingOf(); Tone.Transport.swingSubdivision = '16n'; if (loopId === null) loopId = Tone.Transport.scheduleRepeat(tick, '16n'); Tone.Transport.start('+0.1'); started = true; document.getElementById('play').innerHTML = '&#10074;&#10074; Stop'; }
+function stop() { Tone.Transport.stop(); try { S.pad.releaseAll(); S.lead.releaseAll(); S.drone.releaseAll(); S.atm.stop(); S.brk.forEach((p) => p.stop()); } catch (e) { } started = false; document.getElementById('play').innerHTML = '&#9654; Play'; }
+document.getElementById('play').onclick = () => (started ? stop() : start());
+const retime = () => { Tone.Transport.bpm.rampTo(T.bpm, .5); Tone.Transport.swing = swingOf(); try { S.atm.stop(); } catch (e) { } };
+document.getElementById('newT').onclick = async () => { SEED = Math.floor(Math.random() * 1e9); step = 0; lastSec = -1; makeTrack(); if (started) retime(); else await start(); };
+document.getElementById('style').onchange = async (e) => { STYLE = e.target.value; LV = null; document.getElementById('lvl').value = ''; step = 0; lastSec = -1; makeTrack(); if (started) retime(); };
+{ const sel = document.getElementById('lvl'); for (const k in LVLP) { const o = document.createElement('option'); o.value = k; o.textContent = LVLP[k][0] + ' · ' + LVLP[k][1] + ' ' + LVLP[k][2][0]; sel.appendChild(o); }
+  sel.onchange = async () => { LV = sel.value || null; if (LV) { const p = LVLP[LV]; STYLE = p[1]; document.getElementById('style').value = STYLE; document.getElementById('tr').value = p[3]; document.getElementById('en').value = p[4]; } step = 0; lastSec = -1; makeTrack(); if (started) retime(); else await start(); }; }
+document.getElementById('dose').onclick = async () => { if (!started) await start(); doseBar = Math.floor(step / 16) + 1; };
+/* SAVED TRACKS: kept on this device (the game reads the same list). Each keeps its seed, style and the two sliders. */
+const rdT = () => { try { return JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { return []; } }, wrT = (a) => { try { localStorage.setItem('dl_tracks', JSON.stringify(a)); } catch (e) { } };
+function drawSaved() { const w = document.getElementById('saved'); w.textContent = ''; rdT().forEach((t, i) => { const c = document.createElement('button'); c.className = 'chip'; c.textContent = '★ ' + (t.style && t.style !== 'techno' ? t.style + ' · ' : '') + t.name + ' ' + t.bpm + ' · ' + t.chords; const x = document.createElement('i'); x.textContent = '×'; x.title = 'Remove'; x.onclick = (e) => { e.stopPropagation(); const a = rdT(); a.splice(i, 1); wrT(a); drawSaved(); }; c.appendChild(x); c.onclick = () => loadSeed(t.seed, t.tr, t.en, t.style); w.appendChild(c); }); }
+async function loadSeed(seed, tr, en, style) { SEED = +seed; if (style) { STYLE = style; document.getElementById('style').value = style; } if (tr !== undefined) document.getElementById('tr').value = tr; if (en !== undefined) document.getElementById('en').value = en; step = 0; lastSec = -1; makeTrack(); if (started) retime(); else await start(); }
+document.getElementById('save').onclick = () => { const a = rdT(); if (a.some((t) => t.seed === SEED && t.style === T.style)) { info('already saved'); return; } a.unshift({ seed: SEED, level: LV, style: T.style, prog: T.funk ? T.prog : [T.cprog.id], mode: T.modeName, name: T.name, bpm: T.bpm, chords: chordNames(), tr: +document.getElementById('tr').value, en: +document.getElementById('en').value, at: Date.now() }); wrT(a.slice(0, 30)); drawSaved(); info('★ saved'); };
+/* PLAY IN GAME: this exact track (seed, style, sliders, level) carried into a level; the game plays it from its first bar */
+document.getElementById('ingame').onclick = () => { if (started) stop(); const w = LV && LV !== 'routezero' ? LV : 'desert'; location.href = 'index.html?biome=' + w + '&nointake=1&mseed=' + SEED + '&mstyle=' + STYLE + '&mtr=' + document.getElementById('tr').value + '&men=' + document.getElementById('en').value + (LV ? '&mlv=' + LV : ''); };
+document.getElementById('loadSeed').onclick = () => { const v = document.getElementById('seedIn').value.trim(); if (/^\d+$/.test(v)) loadSeed(v); };
+{ const q = new URLSearchParams(location.search).get('style'); if (q && STYLES[q]) { STYLE = q; document.getElementById('style').value = q; } }
+drawSaved();
+makeTrack();
+/* the watchdog: if the browser stalls the audio (a glitch, a backgrounded tab), bring it back */
+setInterval(() => { const c = Tone.getContext(); if (started && c.state !== 'running') c.resume(); }, 1000); document.addEventListener('visibilitychange', () => { if (!document.hidden && started) Tone.getContext().resume(); });
+/* ---------- a light scope so you can see it breathe (20 frames a second, resized only when its size changes) */
+(() => { const cv = document.getElementById('viz'), cx = cv.getContext('2d'); let an = null, last = 0;
+  (function draw(now) { requestAnimationFrame(draw); if (!S || !started || now - last < 50) return; last = now; if (!an) { an = new Tone.Analyser('fft', 64); S.comp.connect(an); } const w = Math.round(cv.clientWidth * devicePixelRatio), h = Math.round(cv.clientHeight * devicePixelRatio); if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const v = an.getValue(), W = cv.width, H = cv.height, bw = W / v.length; cx.clearRect(0, 0, W, H);
+    for (let i = 0; i < v.length; i++) { const hh = Math.max(0, (v[i] + 110) / 90) * H; cx.fillStyle = 'hsl(' + (190 + i * 2.6) + ',90%,' + (45 + 15 * (hh / H)) + '%)'; cx.fillRect(i * bw, H - hh, bw - 1, hh); } })(0); })();
+window.__lab = { renderOffline };
+</script>
+</body></html>

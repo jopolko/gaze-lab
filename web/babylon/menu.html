@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Downfall</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+/* The main menu, neo-noir: Play (continue, the eight levels as lit cards over a still from each world, the journey) and Upgrades (gear tier II), links to the tutorial and the character editor.
+   One screen, never scrolls: everything scales to fit, landscape (4 x 2) or portrait (2 x 4). Every text sits on a dark veil, so no colour ever melts into the picture.
+   Card states: the level to play next is LIT (full colour, cyan edge); cleared levels settle a little darker with their medal; locked ones are dark and grey. */
+:root { --bg:#05070c; --line:rgba(56,232,255,.26); --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; --silver:#dfe6f2; --bronze:#e8a86a; --tt:"Bebas Neue","Barlow Condensed",Impact,"Arial Narrow",sans-serif; --lb:"Barlow Condensed","Arial Narrow",sans-serif; color-scheme:dark; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:600 clamp(13px,1.5vmin + 7px,18px)/1.3 system-ui,-apple-system,"Segoe UI",sans-serif; overflow:hidden; }
+body { background:radial-gradient(ellipse at 50% 130%, #1b1030 0%, #0a0d16 50%, #040508 100%); padding:max(10px, env(safe-area-inset-top,0px)) max(14px, env(safe-area-inset-right,0px)) max(10px, env(safe-area-inset-bottom,0px)) max(14px, env(safe-area-inset-left,0px)); display:flex; flex-direction:column; gap:1.3vmin; }
+body::after { content:""; position:fixed; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(255,255,255,.018) 0 1px, transparent 1px 3px); }
+header { display:flex; align-items:center; gap:12px 18px; flex-wrap:wrap; }
+h1 { margin:0; font:400 clamp(34px,7.5vmin,72px)/.9 var(--tt); letter-spacing:.2em; color:#fff; text-shadow:0 0 24px rgba(56,232,255,.25); }
+.tag { color:var(--dim); font:italic 500 clamp(12px,1.6vmin + 4px,16px) Georgia,serif; }
+.sh { margin-left:auto; display:flex; align-items:center; gap:.4em; font:700 clamp(15px,2.4vmin,22px) var(--lb); letter-spacing:.1em; color:#9fe8ff; background:rgba(10,14,24,.85); border:1px solid var(--line); border-radius:999px; padding:.2em .8em; }
+.sh small { color:var(--dim); font-size:.72em; letter-spacing:.14em; text-transform:uppercase; }
+nav { display:flex; gap:8px; flex-wrap:wrap; }
+nav button, .btn { text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:.4em; border:1px solid var(--line); background:rgba(12,16,27,.92); color:var(--fg); border-radius:10px; padding:.45em 1.1em; font:700 clamp(14px,1.9vmin + 5px,20px)/1 var(--lb); letter-spacing:.12em; text-transform:uppercase; cursor:pointer; }
+nav button[aria-pressed="true"] { background:var(--sea); color:#06101f; border-color:var(--sea); }
+.btn.pri { background:var(--sea); color:#06101f; border-color:var(--sea); box-shadow:0 0 22px rgba(56,232,255,.3); }
+.btn:disabled { opacity:.45; cursor:default; }
+button:focus-visible, a:focus-visible { outline:3px solid var(--gold); outline-offset:2px; }
+main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
+.row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.grid { flex:1; min-height:0; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); gap:1.2vmin; }
+.lv, .card { position:relative; overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.09); background:#04060a; padding:0; text-align:left; color:var(--fg); font:inherit; min-height:0; cursor:pointer; isolation:isolate; }
+.art { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:-2; filter:saturate(.75) contrast(1.12) brightness(.62); transition:filter .4s, transform .6s; }
+.veil { position:absolute; inset:0; z-index:-1; background:linear-gradient(180deg, rgba(4,6,12,.05) 0%, rgba(4,6,12,.2) 38%, rgba(4,6,12,.9) 100%), linear-gradient(135deg, rgba(56,232,255,.10), rgba(110,60,255,.10)); }
+.num { position:absolute; left:.6em; top:.45em; font:400 clamp(16px,2.6vmin,26px)/1 var(--tt); letter-spacing:.1em; color:rgba(255,255,255,.8); text-shadow:0 1px 6px #000; }
+.chip { position:absolute; right:.55em; top:.5em; font:700 clamp(12px,1.5vmin + 5px,16px)/1 var(--lb); letter-spacing:.14em; text-transform:uppercase; padding:.32em .65em; border-radius:999px; background:rgba(4,6,12,.86); border:1px solid rgba(255,255,255,.18); color:var(--fg); white-space:nowrap; }
+.txt { position:absolute; left:0; right:0; bottom:0; padding:0 .7em .6em; display:flex; flex-direction:column; gap:.15em; }
+.txt b { font:400 clamp(20px,3.7vmin,42px)/.95 var(--tt); letter-spacing:.07em; color:#fff; text-shadow:0 2px 10px #000, 0 0 2px #000; }
+.txt small { font:700 clamp(12px,1.5vmin + 5px,17px)/1.1 var(--lb); letter-spacing:.1em; text-transform:uppercase; color:#d6dcea; text-shadow:0 1px 4px #000; }
+.txt small em { font-style:normal; }
+.qs { display:flex; gap:3px; flex-wrap:wrap; margin-top:.15em; } .qs i { font-style:normal; font-size:clamp(10px,1.2vmin + 4px,14px); line-height:1; opacity:.3; filter:grayscale(1); } .qs i.on { opacity:1; filter:none; }
+.lv.s-next { border-color:var(--sea); box-shadow:0 0 0 1px var(--sea), 0 0 26px rgba(56,232,255,.35); }
+.lv.s-next .art { filter:saturate(1.05) contrast(1.08) brightness(.92); }
+.lv.s-next .chip { background:var(--sea); color:#06101f; border-color:var(--sea); }
+.lv.s-done .art { filter:saturate(.7) contrast(1.1) brightness(.5); }
+.lv.s-open .art { filter:saturate(.85) contrast(1.1) brightness(.68); }
+.lv.s-lock { cursor:default; } .lv.s-lock .art { filter:grayscale(1) contrast(1.15) brightness(.26); } .lv.s-lock .txt b { color:#c9d0dc; } .lv.s-lock .chip { color:#c9d0dc; }
+.lv:not(.s-lock):hover .art { transform:scale(1.04); }
+.m-GOLD { color:var(--gold)!important; border-color:rgba(255,210,58,.6)!important; } .m-SILVER { color:var(--silver)!important; border-color:rgba(223,230,242,.5)!important; } .m-BRONZE { color:var(--bronze)!important; border-color:rgba(232,168,106,.55)!important; } .m-CLEARED { color:#9fe8ff!important; border-color:var(--line)!important; }
+.up { flex:1; min-height:0; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1.2vmin; }
+.card { cursor:default; } .card .txt b { font-family:var(--tt); text-transform:uppercase; } .card .art { object-position:50% 30%; }
+.card .txt p { margin:.1em 0 .3em; color:#e3e8f2; font:600 clamp(12px,1.3vmin + 6px,16px)/1.25 system-ui,sans-serif; text-shadow:0 1px 4px #000; }
+.card .btn { align-self:flex-start; font-size:clamp(13px,1.6vmin + 5px,18px); }
+.uphint { color:#cfe9ff; font:700 clamp(13px,1.5vmin + 6px,18px) var(--lb); letter-spacing:.06em; }
+.uphint b { color:var(--gold); }
+.cx { flex:1; min-height:0; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); gap:1.2vmin; }
+.st { position:relative; overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.1); background:radial-gradient(ellipse at 50% 35%, rgba(var(--sc),.16), #05070c 70%); color:var(--fg); font:inherit; text-align:left; padding:0; min-height:0; cursor:pointer; }
+.st canvas { position:absolute; left:0; top:0; width:100%; height:66%; }
+.st .txt b { font-size:clamp(16px,2.6vmin,30px); letter-spacing:.03em; }
+.st.off { cursor:default; } .st.off .txt b { color:#8a93a6; }
+.st.off canvas { filter:brightness(0) drop-shadow(0 0 1px rgba(255,255,255,.4)); opacity:.7; }
+#sdet { position:fixed; inset:0; z-index:5; display:flex; align-items:center; justify-content:center; background:rgba(3,4,8,.84); padding:max(14px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(14px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px)); }
+#sdet .box { position:relative; width:min(780px,100%); max-height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.35fr); gap:1.4vmin 2.4vmin; align-items:center; background:#070a12; border:1px solid rgba(var(--sc),.55); border-radius:16px; box-shadow:0 0 40px rgba(var(--sc),.2); padding:2.2vmin 2.6vmin; overflow:hidden; }
+#sdet canvas { width:100%; aspect-ratio:1; max-height:56vh; }
+#sdet .rar { font:700 clamp(12px,1.4vmin + 5px,16px) var(--lb); letter-spacing:.16em; text-transform:uppercase; color:rgb(var(--sc)); }
+#sdet h2 { margin:.1em 0 .15em; font:400 clamp(24px,4.6vmin,46px)/.95 var(--tt); letter-spacing:.04em; color:#fff; overflow-wrap:anywhere; }
+#sdet .sys { color:#aeb7c9; font:italic 500 clamp(11px,1.1vmin + 6px,15px)/1.25 Georgia,serif; overflow-wrap:anywhere; }
+#sdet p { margin:.55em 0 0; font:600 clamp(12px,1.2vmin + 6px,16px)/1.3 system-ui,sans-serif; color:#e3e8f2; }
+#sdet p.acc { color:#ffd9a8; } #sdet p.wild { color:#cfe9ff; font-style:italic; }
+#sdet .x { position:absolute; right:.4em; top:.3em; background:none; border:0; color:#cfd6e4; font:700 28px/1 var(--lb); cursor:pointer; padding:.1em .3em; }
+.cxhint { color:#cfe9ff; font:700 clamp(13px,1.5vmin + 6px,18px) var(--lb); letter-spacing:.06em; }
+@media (orientation:portrait) { .cx { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } #sdet .box { grid-template-columns:1fr; } #sdet canvas { height:28vh; width:auto; justify-self:center; } }
+[hidden] { display:none !important; }
+@media (orientation:portrait) { .grid { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } .up { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); } .tag { display:none; } .txt b { font-size:clamp(20px,5vmin,36px); } }
+@media (prefers-reduced-motion: reduce) { .art { transition:none; } .lv:hover .art { transform:none; } }
+</style></head><body>
+<header><h1>DOWNFALL</h1><span class="tag">The last road nobody watches.</span><span class="sh" id="shards" title="Shards: spend them on upgrades"></span></header>
+<nav><button id="tPlay" aria-pressed="true">Play</button><button id="tUp" aria-pressed="false">Upgrades</button><button id="tCx" aria-pressed="false">Strains</button><a class="btn" href="index.html?tutorial=1&nointake=1">Tutorial</a><a class="btn" href="dressup.html?next=menu.html">Character</a><a class="btn" href="lab.html" style="border-color:rgba(255,177,74,.6);color:#ffd9a8">&#9673; The Frequency</a></nav>
+<main id="play">
+  <div class="row"><button class="btn pri" id="cont"></button><button class="btn" id="journey"></button></div>
+  <div class="grid" id="levels"></div>
+</main>
+<main id="cxm" hidden><div class="row"><span class="cxhint" id="cxhint"></span></div><div class="cx" id="codex"></div></main>
+<div id="sdet" hidden></div>
+<main id="ups" hidden><div class="row"><span class="uphint" id="uphint"></span></div><div class="up" id="upgrades"></div></main>
+<script>
+const LEVELS = [
+  { id: 'routezero', name: 'Route Zero', world: 'Desert', art: 'desert', comp: 'lucid', url: 'index.html?story=1&nointake=1' },
+  { id: 'candy', name: 'Sugarfall', world: 'Candy Land', art: 'candy', comp: 'haze', url: 'index.html?biome=candy&nointake=1' },
+  { id: 'alpine', name: 'The Safe Peaks', world: 'Alps', art: 'alpine', comp: 'hollow', url: 'index.html?biome=alpine&nointake=1' },
+  { id: 'egypt', name: 'Tomb of the Old Servers', world: 'Egypt', art: 'egypt', comp: 'fold', url: 'index.html?biome=egypt&nointake=1' },
+  { id: 'synthwave', name: 'Neon Accord', world: 'Synthwave', art: 'synthwave', comp: 'embrace', url: 'index.html?biome=synthwave&nointake=1' },
+  { id: 'tunnel', name: 'The Undertow', world: 'Tunnel', art: 'tunnel', comp: 'velocity', url: 'index.html?biome=tunnel&nointake=1' },
+  { id: 'matrix', name: 'Cold Rack', world: 'Matrix', art: 'matrix', comp: 'deep', url: 'index.html?biome=matrix&nointake=1' },
+  { id: 'psychedelic', name: 'The Open Channel', world: 'Trip', art: 'psychedelic', comp: 'all', url: 'index.html?biome=psychedelic&nointake=1' },
+];
+/* each world's home compound, in its own colour (bright enough to read on the dark veil) */
+const COMPC = { lucid: ['LUCID', '#6fe0ff'], haze: ['HAZE', '#7dff8a'], hollow: ['HOLLOW', '#dfe6f2'], fold: ['FOLD', '#d6ff5c'], embrace: ['EMBRACE', '#ffc04d'], velocity: ['VELOCITY', '#e8f6ff'], deep: ['DEEP', '#b4a3ff'], all: ['EVERYTHING', '#ffffff'] };
+const GEARS = [
+  { id: 'rocket', name: 'Seeker Rockets II', what: 'Reloads a third faster: more drones and mines cleared per stretch.' },
+  { id: 'pole', name: 'Magnet Pole II', what: 'Hauls a third faster: catch the second target in a pair.' },
+  { id: 'shield', name: 'Shield II', what: 'Recharges in half the time: survive the longer hazard runs.' },
+  { id: 'bull', name: 'Bull Bar II', what: 'The wedge: ploughs drones as well. No weak side.' },
+];
+const COST = 4;
+const rd = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } };
+const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
+let P = rd('dl_prog', { worlds: {} }), T = rd('dl_gtier', {});
+const cleared = (id) => { const w = (P.worlds || {})[id]; return !!(w && w.best && w.best !== 'NONE'); };
+/* demo mode: menu.html?all=1 opens every level and the journey (remembered on this device; ?all=0 turns it off) */
+const ALLQ = new URLSearchParams(location.search).get('all'); try { if (ALLQ === '1') localStorage.setItem('dl_all', '1'); if (ALLQ === '0') localStorage.removeItem('dl_all'); } catch (e) { }
+const ALL = (() => { try { return localStorage.getItem('dl_all') === '1'; } catch (e) { return false; } })();
+const unlocked = (i) => ALL || i === 0 || cleared(LEVELS[i - 1].id);
+const spent = () => Object.values(T).filter((v) => v >= 2).length * COST;
+const questShards = () => Object.values(P.worlds || {}).reduce((n, w) => n + ['mols', 'rail', 'relay', 'rings'].filter((k) => (w.quests || {})[k]).length, 0);
+const shards = () => Math.max(0, (P.icosa || 0) + questShards() - spent());
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+const QUESTS = [['main', '◈'], ['rocket', '🚀'], ['pole', '🧲'], ['shield', '🛡️'], ['bull', '🐂'], ['hidden', '✷'], ['gold', '★'], ['clean', '✧'], ['mols', '⬢'], ['rail', '═'], ['relay', '⚡'], ['rings', '◎']];
+function art(src) { const im = el('img', 'art'); im.alt = ''; im.decoding = 'async'; im.src = src; return im; }
+function render() {
+  P = rd('dl_prog', { worlds: {} }); T = rd('dl_gtier', {});
+  const sh = document.getElementById('shards'); sh.textContent = '✦ ' + shards() + ' '; sh.appendChild(el('small', null, 'shards'));
+  const nextI = LEVELS.findIndex((L, i) => unlocked(i) && !cleared(L.id));
+  const g = document.getElementById('levels'); g.textContent = '';
+  LEVELS.forEach((L, i) => { const open = unlocked(i), best = ((P.worlds || {})[L.id] || {}).best, done = !!(best && best !== 'NONE');
+    const st = !open ? 's-lock' : i === nextI ? 's-next' : done ? 's-done' : 's-open';
+    const b = el('button', 'lv ' + st); b.appendChild(art('art/thumb_' + L.art + '.jpg')); b.appendChild(el('span', 'veil'));
+    b.appendChild(el('span', 'num', String(i + 1).padStart(2, '0')));
+    const chip = el('span', 'chip', !open ? '🔒 Locked' : i === nextI ? '▶ Play' : done ? best : 'Open'); if (done && open && i !== nextI) chip.classList.add('m-' + best); b.appendChild(chip);
+    const tx = el('span', 'txt'); tx.appendChild(el('b', null, L.name)); const sm = el('small', null, L.world + ' · '); const em = el('em', null, COMPC[L.comp][0]); em.style.color = COMPC[L.comp][1]; sm.appendChild(em); tx.appendChild(sm);
+    if (!open) tx.appendChild(el('small', null, 'Clear ' + LEVELS[i - 1].name + ' to open'));
+    else if (L.id !== 'routezero') { const qd = (((P.worlds || {})[L.id] || {}).quests) || {}, qs = el('span', 'qs'); QUESTS.forEach(([k, ic]) => qs.appendChild(el('i', qd[k] ? 'on' : null, ic))); tx.appendChild(qs); }
+    b.appendChild(tx);
+    if (!open) { b.disabled = true; b.title = 'Clear ' + LEVELS[i - 1].name + ' to open'; } else b.onclick = () => { location.href = L.url; };
+    g.appendChild(b); });
+  const c = document.getElementById('cont'), ci = nextI < 0 ? 0 : nextI;
+  c.textContent = (nextI < 0 ? '↻ Replay ' : cleared(LEVELS[0].id) ? '▶ Continue: ' : '▶ Start: ') + LEVELS[ci].name; c.onclick = () => { location.href = LEVELS[ci].url; };
+  const j = document.getElementById('journey'), jok = ALL || cleared('routezero'); j.textContent = jok ? '∞ Endless Journey' : '∞ Journey (clear Route Zero)'; j.disabled = !jok; j.onclick = () => { location.href = 'index.html?journey=1&biome=desert&nointake=1'; };
+  /* upgrades: what a shard is, and how far you are from the next upgrade */
+  { const nextG = GEARS.find((G) => (T[G.id] || 1) < 2), have = shards(), h = document.getElementById('uphint'); h.textContent = '';
+    if (!nextG) h.textContent = 'Every upgrade owned.';
+    else h.append('Shards come from the prize at the end of each level and from the molecule, rail and relay quests. ', el('b', null, have >= COST ? 'You can buy an upgrade now.' : '✦ ' + have + ' of ' + COST + ' toward the next one.')); }
+  const u = document.getElementById('upgrades'); u.textContent = '';
+  GEARS.forEach((G) => { const k = el('div', 'card'); k.appendChild(art('art/gear_' + G.id + '.jpg')); k.appendChild(el('span', 'veil')); const own = (T[G.id] || 1) >= 2;
+    if (own) k.appendChild(el('span', 'chip m-GOLD', 'Owned'));
+    const tx = el('span', 'txt'); tx.appendChild(el('b', null, G.name)); tx.appendChild(el('p', null, G.what));
+    if (!own) { const bt = el('button', 'btn' + (shards() >= COST ? ' pri' : ''), 'Unlock · ✦ ' + COST); bt.disabled = shards() < COST; bt.onclick = () => { if (shards() < COST) return; T[G.id] = 2; wr('dl_gtier', T); render(); }; tx.appendChild(bt); }
+    k.appendChild(tx); u.appendChild(k); });
+}
+/* tabs */
+const TABS = [['tPlay', 'play'], ['tUp', 'ups'], ['tCx', 'cxm']];
+TABS.forEach(([b]) => { document.getElementById(b).onclick = () => { TABS.forEach(([b2, m]) => { document.getElementById(m).hidden = b2 !== b; document.getElementById(b2).setAttribute('aria-pressed', String(b2 === b)); }); if (b === 'tCx') codex(); }; });
+/* THE STRAINS: the eight wild strains (molpantry.js), each logged the first time you take it in a level. Found ones show in their colour; tap one for its file. */
+let PAN = null, SPIN = [];
+const WORLDOF = { lucid: 'Route Zero', haze: 'Sugarfall', hollow: 'The Safe Peaks', fold: 'Tomb of the Old Servers', embrace: 'Neon Accord', velocity: 'The Undertow', deep: 'Cold Rack', drift: 'Neon Accord, rarely' };
+const ELC = { O: '#ff4a40', N: '#4a78ff', F: '#8cff9a', S: '#ffe066' };
+const rgbOf = (c) => c.map((v) => Math.round(v * 255)).join(',');
+function molDraw(cv, M, t) { const W = cv.clientWidth, H = cv.clientHeight; if (!W || !H) return; const dpr = Math.min(2, devicePixelRatio || 1); if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); } const x = cv.getContext('2d'); x.setTransform(dpr, 0, 0, dpr, 0, 0); x.clearRect(0, 0, W, H);
+  let R = 0; for (const a of M.atoms) R = Math.max(R, Math.hypot(a[1], a[2], a[3])); const k = Math.min(W, H) * .44 / (R || 1), ca = Math.cos(t), sa = Math.sin(t), cb = Math.cos(.35), sb = Math.sin(.35);
+  const P = M.atoms.map((a) => { const X = a[1] * ca + a[3] * sa, Z0 = -a[1] * sa + a[3] * ca, Y = a[2] * cb - Z0 * sb, Z = a[2] * sb + Z0 * cb; return [W / 2 + X * k, H / 2 - Y * k, Z]; });
+  x.lineCap = 'round'; x.strokeStyle = 'rgba(200,210,225,.55)'; x.lineWidth = Math.max(1.5, k * .16);
+  for (const [i, j] of M.bonds) { x.beginPath(); x.moveTo(P[i][0], P[i][1]); x.lineTo(P[j][0], P[j][1]); x.stroke(); }
+  const ord = M.atoms.map((_, i) => i).sort((i, j) => P[i][2] - P[j][2]), cc = 'rgb(' + rgbOf(M.c) + ')';
+  for (const i of ord) { const a = M.atoms[i], mut = !!a[4], r = k * (mut ? .5 : .38) * (1 + P[i][2] * .04); x.beginPath(); x.arc(P[i][0], P[i][1], Math.max(2, r), 0, 7); x.fillStyle = mut ? '#fffbe8' : a[0] === 'C' ? cc : (ELC[a[0]] || '#ccc'); if (mut) { x.shadowColor = cc; x.shadowBlur = k * .9; } x.fill(); x.shadowBlur = 0; } }
+const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let spinOn = false;
+function spinLoop(now) { SPIN = SPIN.filter((q) => q.cv.isConnected && !q.cv.closest('[hidden]')); for (const q of SPIN) molDraw(q.cv, q.M, still ? .6 : q.o + now / 2600); spinOn = SPIN.length > 0 && !still; if (spinOn) requestAnimationFrame(spinLoop); }
+const spinAdd = (cv, M, o) => { SPIN.push({ cv, M, o }); if (!spinOn) { spinOn = true; requestAnimationFrame(spinLoop); } };
+async function codex() { if (!PAN) { try { PAN = (await import('./molpantry.js')).PANTRY; } catch (e) { document.getElementById('cxhint').textContent = 'The strains could not load.'; return; } }
+  const got = new Set(rd('dl_strains', [])), g = document.getElementById('codex'); g.textContent = ''; SPIN = [];
+  const n = Object.keys(PAN).filter((k) => got.has(k)).length;
+  document.getElementById('cxhint').textContent = n + ' of 8 wild strains found. Every world grows its own: take one in a level to log it here.';
+  Object.entries(PAN).forEach(([cp, M], i) => { const on = got.has(cp) || ALL, b = el('button', 'st' + (on ? '' : ' off')); b.style.setProperty('--sc', rgbOf(M.c)); const cv = el('canvas'); b.appendChild(cv);
+    const tx = el('span', 'txt'); tx.appendChild(el('b', null, on ? M.name : '? ? ?')); const sm = el('small', null, on ? '' : 'Grows in ' + WORLDOF[cp]); if (on) { const em = el('em', null, M.eff); em.style.color = 'rgb(' + rgbOf(M.c.map((v) => Math.min(1, .45 + v * .6))) + ')'; sm.append(em, ' \u00B7 wild ' + M.plant); } tx.appendChild(sm); b.appendChild(tx);
+    if (on) b.onclick = () => strainOpen(M); else b.disabled = true; g.appendChild(b); spinAdd(cv, M, i * .8); }); }
+function strainOpen(M) { const d = document.getElementById('sdet'); d.textContent = ''; const bx = el('div', 'box'); bx.style.setProperty('--sc', rgbOf(M.c)); const cv = el('canvas'); bx.appendChild(cv);
+  const t = el('div'); t.append(el('div', 'rar', 'Wild strain \u00B7 ' + M.eff), el('h2', null, M.name), el('div', 'sys', M.sys), el('p', null, M.does + '.'), el('p', 'acc', M.acc), el('p', 'wild', '\u201C' + M.wild + '\u201D')); bx.appendChild(t);
+  const x = el('button', 'x', '\u00D7'); x.setAttribute('aria-label', 'Close'); bx.appendChild(x); d.appendChild(bx); d.hidden = false; spinAdd(cv, M, 0);
+  const close = () => { d.hidden = true; d.textContent = ''; }; x.onclick = close; d.onclick = (e) => { if (e.target === d) close(); }; }
+/* first launch: the character, then the tutorial */
+if (!ALL && !localStorage.getItem('dl_char')) location.replace('dressup.html?next=' + encodeURIComponent('index.html?tutorial=1&nointake=1'));
+render();
+if (new URLSearchParams(location.search).has('strains')) document.getElementById('tCx').click();
+</script>
+<script>/* FULLSCREEN, always (no browser bars): browsers only allow it from a tap, click or key, so the first one goes fullscreen and any tap after leaving it goes back in. Either way up works. &nofs turns it off. */
+(() => { if (/[?&]nofs\b/.test(location.search) || window.top !== window.self || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const de = document.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+</body></html>

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pattern Desk</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* PATTERN DESK: starter patterns for Strudel (strudel.cc, TidalCycles in the browser). Each "Open" button loads its code into Strudel; press play there (or ctrl+enter),
+   change a number, press ctrl+enter again: the music changes on the next cycle without stopping. Nothing here runs Strudel itself (it's AGPL; we only link to it). */
+:root { color-scheme:dark; --fg:#f4f1ea; --dim:#9aa5b8; --sea:#38e8ff; --amber:#ffb14a; --bg:#05070c; --card:#0c111c; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:500 16px/1.45 system-ui,sans-serif; padding:max(18px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(18px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px)); }
+main { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:20px; }
+h1 { margin:0; font:400 46px/.9 "Bebas Neue",Impact,sans-serif; letter-spacing:.16em; }
+.lede { color:var(--dim); margin:0; max-width:65ch; }
+.lede b { color:var(--fg); }
+article { background:var(--card); border:1px solid rgba(56,232,255,.2); border-radius:14px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; min-width:0; }
+article header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+h2 { margin:0; font:700 24px "Barlow Condensed",sans-serif; letter-spacing:.06em; }
+h2 small { font-size:15px; color:var(--dim); letter-spacing:.04em; margin-left:.4em; }
+.btns { display:flex; gap:8px; }
+.btns a, .btns button { font:700 15px "Barlow Condensed",sans-serif; letter-spacing:.12em; text-transform:uppercase; padding:.5em .95em; border-radius:9px; border:1px solid var(--sea); background:var(--sea); color:#06101f; text-decoration:none; cursor:pointer; }
+.btns button { background:transparent; color:var(--sea); }
+pre { margin:0; overflow-x:auto; background:#03050a; border-radius:10px; padding:12px 14px; font:400 13.5px/1.55 "JetBrains Mono",ui-monospace,monospace; color:#d8e6f5; }
+.try { color:var(--dim); font-size:14px; margin:0; }
+.try code { color:var(--amber); font-family:"JetBrains Mono",monospace; font-size:13px; }
+footer { color:var(--dim); font-size:14px; }
+a.back { color:var(--sea); }
+</style></head><body><main>
+<h1>PATTERN DESK</h1>
+<p class="lede"><b>TidalCycles in your browser.</b> Each pattern opens in Strudel, TidalCycles' browser version. Press <b>play</b> there, or ctrl+enter. Then change a number and press ctrl+enter again: the music changes on the next bar without stopping. That's live coding. Each card ends with one thing to try.</p>
+<div id="list"></div>
+<footer>Strudel is free and open source (strudel.cc). The jungle and eastern patterns load the classic Tidal sample pack (Dirt-Samples) the first time, which takes a few seconds. <a class="back" href="links.html">All links</a></footer>
+</main>
+<script>
+const P = [
+  { t: 'Rave (a whole track)', s: 'chopped Amen, pads, reese, build and drop', try: 'Swap the chords in <code>ch</code>, or the order of the sections in <code>arrange(...)</code>.', c: "// RAVE: a whole track. Intro pads > build > DROP (chopped Amen, reese, stabs) > the pads come back >\n// tension > DROP 2 (the ferocious bass) > outro. Change any part below; it all follows.\nsamples('github:tidalcycles/dirt-samples')\nsetcps(172/60/4)\nconst ch = \"<Am9 F^7 C^9 G6>/2\", roots = \"<a1 f1 c2 g1>/2\", deep = \"<a0 f0 c1 g0>/2\"\n// pads: voice-led chords, slow attack, the filter breathing over 16 bars\nconst pads = chord(ch).voicing().s(\"sawtooth\").attack(1.5).release(4)\n  .lpf(saw.range(500, 3000).slow(16)).hpf(180).room(.9).gain(.3)\n// swell: the same chords, filter and volume rising together over 4 bars (tension)\nconst swell = chord(ch).voicing().s(\"supersaw\").attack(.5).release(2)\n  .lpf(saw.range(200, 6000).slow(4)).lpq(8).gain(saw.range(.05, .45).slow(4)).room(.6)\n// the Amen, chopped: four bars that re-order the slices\nconst amen = s(\"amencutup*8\")\n  .n(\"<[0 1 2 3 4 5 6 7] [0 1 2 3 12 13 6 7] [0 1 10 3 4 5 [14 15] 7] [0 9 2 3 [12 12] 13 [14 14] 15]>\")\n  .gain(1.15).hpf(50)\n// snare rolls building: the snare slice, doubling up, getting louder\nconst roll = s(\"amencutup*8\").n(\"<2 [2 2] [2 2 2 2] [2 2 2 2 2 2 2 2]>\").gain(saw.range(.3, 1).slow(4))\nconst hats = s(\"hh*8\").bank(\"RolandTR909\").gain(.35)\nconst riser = s(\"white*16\").decay(.05).sustain(0).hpf(saw.range(400, 9000).slow(4)).gain(saw.range(0, .4).slow(4))\nconst sub = note(deep).s(\"sine\").legato(1).gain(1)\n// reese: two detuned saws, distorted, a moving resonant low-pass\nconst reese = note(roots).s(\"sawtooth\").legato(1).lpf(sine.range(200, 1200).fast(2)).lpq(10)\n  .distort(1.5).jux(x => x.add(note(.15))).gain(.4)\n// the ferocious one: 16ths through a screaming filter envelope\nconst beast = note(roots).s(\"supersaw\").struct(\"x ~ x x ~ x ~ x x ~ x ~ x x ~ x\")\n  .lpf(700).lpq(16).lpenv(5).decay(.12).sustain(.3).distort(2).gain(.35)\n// stabs and arp\nconst stab = chord(ch).voicing().s(\"supersaw\").struct(\"x ~ ~ x ~ ~ x ~\").decay(.2).sustain(0).lpf(3200).room(.4).gain(.3)\nconst arp = chord(ch).voicing().arp(\"0 1 2 3 4 3 2 1\").fast(4).s(\"square\")\n  .bandf(cosine.range(800, 5000).slow(8)).bandq(6).decay(.07).sustain(0).delay(.3).gain(.22)\narrange(\n  [8,  stack(pads, sub.gain(.5))],                              // intro\n  [8,  stack(pads, arp, hats, roll, riser)],                    // build\n  [16, stack(amen, sub, reese, stab, pads.gain(.15))],          // DROP\n  [8,  stack(pads, arp, sub.gain(.6))],                         // the pads come back\n  [4,  stack(swell, roll, riser)],                              // tension\n  [16, stack(amen, sub, beast, stab, arp)],                     // DROP 2\n  [8,  stack(pads, amen.lpf(1200), sub)]                        // outro\n)" },
+  { t: 'Techno', s: 'four to the floor, rolling bass, m9 pads', try: 'Change <code>lpq(8)</code> to <code>lpq(20)</code> for an acid squelch.', c:
+`// TECHNO: 128 BPM. Every line in stack() is a part; mute one with // in front.
+setcps(128/60/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(1.1),
+  s("[~ hh]*4").bank("RolandTR909").gain(.55),
+  s("[~ oh]*4").bank("RolandTR909").gain(.35),
+  s("~ cp ~ cp").bank("RolandTR909").gain(.8),
+  note("<a1 f1 c2 g1>").s("sawtooth")
+    .struct("~ x x x ~ x x x ~ x x x ~ x x x")
+    .lpf(sine.range(300, 1600).slow(8)).lpq(8)
+    .decay(.14).sustain(0).gain(.6),
+  chord("<Am9 F^7 C^9 G6>").voicing()
+    .s("sawtooth").attack(.4).release(1.5)
+    .lpf(1600).room(.7).gain(.25)
+)` },
+  { t: 'Jungle', s: 'the Amen, chopped; reese and sub', try: 'Replace the <code>n("...")</code> pattern with <code>n(irand(32))</code> for chaos, or add <code>.ply("&lt;1 2&gt;")</code> for rolls.', c:
+`// JUNGLE: 170 BPM. amencutup is the Amen break cut into 32 slices (8 per bar).
+samples('github:tidalcycles/dirt-samples')
+setcps(170/60/4)
+stack(
+  s("amencutup*8")
+    .n("<[0 1 2 3 4 5 6 7] [0 1 2 3 12 13 6 7] [0 1 10 3 4 5 [14 15] 7] [0 9 2 3 [12 12] 13 [14 14] 15]>")
+    .gain(1),
+  note("<a0 f0 c1 g0>").s("sine").legato(1).gain(.9),
+  note("<a1 f1 c2 g1>").s("sawtooth").legato(1)
+    .lpf(sine.range(250, 900).slow(4)).lpq(3)
+    .jux(x => x.add(note(.12))).gain(.35),
+  chord("<Am9 F^7 C^9 G6>").voicing()
+    .s("triangle").attack(.6).release(3).room(.9).gain(.3)
+).slow(1)` },
+  { t: 'Eastern', s: 'Hijaz scale, tabla, drone', try: 'Change <code>"E:phrygian dominant"</code> to <code>"E:hirajoshi"</code> or <code>"E:double harmonic major"</code>.', c:
+`// EASTERN: 122 BPM, the Hijaz scale (phrygian dominant) over a drone and tabla.
+samples('github:tidalcycles/dirt-samples')
+setcps(122/60/4)
+stack(
+  s("bd*4").bank("RolandTR909").gain(.9),
+  s("tabla*8").n("<[0 3 ~ 3 0 ~ 3 ~] [0 0 ~ 3 0 ~ 3 3]>").gain(.7),
+  note("e1 b1").s("sawtooth").legato(4).lpf(700).gain(.25).slow(4),
+  n("0 2 4 <5 3> 4 2 1 0").scale("E:phrygian dominant")
+    .s("triangle").add(note(12)).decay(.2).sustain(.3)
+    .delay(.4).room(.5).gain(.5),
+  n("<7 ~ 6 4>/2").scale("E:phrygian dominant")
+    .s("sine").add(note(24)).attack(.08).release(.8)
+    .vib(5).room(.8).gain(.3)
+)` },
+  { t: 'Trance pads', s: 'just chords, voice-led, floating', try: 'Swap the chords: <code>&lt;Cm9 Ab^7 Eb^9 Bb6&gt;</code>. Any chord names work.', c:
+`// PADS: the chord bank from the game's music lab, voice-led by Strudel's voicing().
+setcps(130/60/4)
+stack(
+  chord("<Am9 F^7#11 C^9 E7sus>").voicing()
+    .s("sawtooth").attack(1).release(3).lpf(sine.range(800, 2400).slow(16))
+    .room(.9).gain(.3),
+  chord("<Am9 F^7#11 C^9 E7sus>").voicing().arp("0 1 2 3 2 1")
+    .fast(4).s("square").decay(.1).sustain(0).lpf(2200)
+    .delay(.5).gain(.15)
+)` },
+  { t: 'Hardcore', s: 'distorted kick, hoover, acid, swells', try: 'Push <code>lpq(24)</code> higher for a screaming filter, or change <code>.fast(4)</code> on the arp to <code>.fast(8)</code>.', c:
+`// HARDCORE: 160 BPM. Distorted kick, a detuned hoover stab, an acid line through a
+// resonant low-pass, a band-pass swept arp, and a pad that swells with its filter.
+setcps(160/60/4)
+stack(
+  // the kick: a 909 driven into distortion, with its own low end boosted
+  s("bd*4").bank("RolandTR909").distort(3).lpf(4000).gain(1),
+  s("[~ hh]*4").bank("RolandTR909").hpf(7000).gain(.5),
+  s("~ cp ~ [cp cp]").bank("RolandTR909").room(.3).gain(.7),
+  // hoover: three detuned saws an octave apart, stabbing the chord's root
+  note("<a2 f2 c3 g2>".add("<0 [0 12]>")).s("supersaw").unison(5).detune(.6)
+    .struct("x ~ ~ x ~ ~ x ~ ~ ~ x ~ x ~ ~ ~")
+    .lpf(2400).lpq(6).decay(.25).sustain(.2).distort(1.2).gain(.45),
+  // acid: 16ths through a screaming resonant filter that sweeps every 4 bars
+  note("a1 a1 a2 a1 c2 a1 [g1 a2] a1").fast(2).s("sawtooth")
+    .lpf(sine.range(250, 4000).slow(4)).lpq(24).lpenv(4)
+    .decay(.1).sustain(0).distort(.8).gain(.45),
+  // arp: the chord broken up and down, through a band-pass that sweeps the other way
+  chord("<Am9 F^7 C^9 G6>").voicing().arp("0 1 2 3 4 3 2 1").fast(4)
+    .s("square").bandf(cosine.range(600, 5000).slow(8)).bandq(8)
+    .decay(.08).sustain(0).delay(.35).delaytime(.1875).gain(.35),
+  // pad swell: slow attack, the filter opening over 8 bars, a high-pass keeping it out of the kick
+  chord("<Am9 F^7 C^9 G6>").voicing().s("sawtooth").attack(2).release(4)
+    .lpf(saw.range(300, 3500).slow(8)).hpf(200).room(.9).gain(.28)
+)` },
+  { t: 'Acid', s: 'one 303 line and a kick', try: 'Change the notes in <code>note("...")</code>, or the <code>.slow(4)</code> on the filter sweep.', c:
+`setcps(132/60/4)
+stack(
+  s("bd*4").bank("RolandTR909"),
+  note("a1 a1 a2 a1 c2 a1 g1 a2").s("sawtooth")
+    .lpf(sine.range(200, 3000).slow(4)).lpq(18)
+    .decay(.12).sustain(0).gain(.6)
+)` },
+];
+const hash = (code) => btoa(unescape(encodeURIComponent(code)));
+const L = document.getElementById('list');
+P.forEach((p) => { const a = document.createElement('article'); a.innerHTML = '<header><h2></h2><div class="btns"><a target="_blank" rel="noopener">Open in Strudel</a><button type="button">Copy</button></div></header><pre></pre><p class="try"></p>';
+  a.querySelector('h2').textContent = p.t; const sm = document.createElement('small'); sm.textContent = p.s; a.querySelector('h2').appendChild(sm);
+  a.querySelector('a').href = 'https://strudel.cc/#' + hash(p.c); a.querySelector('pre').textContent = p.c; a.querySelector('.try').innerHTML = 'Try: ' + p.try;
+  const b = a.querySelector('button'); b.onclick = async () => { try { await navigator.clipboard.writeText(p.c); b.textContent = 'Copied'; } catch (e) { const r = document.createRange(); r.selectNodeContents(a.querySelector('pre')); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent = 'Selected'; } setTimeout(() => (b.textContent = 'Copy'), 1500); };
+  L.appendChild(a); });
+L.style.cssText = 'display:flex;flex-direction:column;gap:16px';
+</script>
+</body></html>

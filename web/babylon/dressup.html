@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Intake Form</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+:root{--ink:#2b2250;--mut:#7a6fb0;--acc:#ff3fa4;--teal:#17c3b2;--sun:#ffd23f;--good:#2fc57a;--bad:#ff5d73}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:linear-gradient(#ffe6f2,#fff1dc);color:var(--ink);font:800 17px/1.25 ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif;overflow:hidden}
+button{font-family:inherit;color:var(--ink)}
+#app{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(400px,.9fr);height:100%;max-width:1200px;margin:0 auto}
+#stage{display:flex;flex-direction:column;min-height:0;min-width:0;padding:10px 0 10px 10px}
+#cvw{position:relative;flex:1;min-height:220px;border:4px solid var(--ink);border-radius:26px;overflow:hidden;box-shadow:0 6px 0 var(--ink);background:#8fd8ff}#cv{width:100%;height:100%;display:block;touch-action:none;outline:none}
+#bubble{position:absolute;left:8px;right:68px;top:8px;background:#fff;border:3px solid var(--ink);border-radius:20px;padding:5px 10px 7px;box-shadow:0 4px 0 var(--ink);text-align:center;pointer-events:none;z-index:2}
+#bubble::after{content:"";position:absolute;left:50%;bottom:-13px;width:20px;height:20px;background:#fff;border-right:3px solid var(--ink);border-bottom:3px solid var(--ink);transform:translateX(-50%) rotate(45deg)}
+#bubble .nm0{display:none}#bubble .jk{font-size:15px;line-height:1.2}
+#bubble .pc{display:flex;gap:5px;justify-content:center;flex-wrap:wrap;margin-top:4px}#bubble .pc span{border-radius:999px;padding:1px 8px;font-size:12px;border:2px solid var(--ink)}
+.g{background:#c9f7de}.b2{background:#ffd5db}
+#rnd{position:absolute;right:8px;top:8px;width:54px;height:54px;border-radius:50%;border:3px solid var(--ink);background:var(--sun);font-size:28px;box-shadow:0 4px 0 var(--ink);cursor:pointer;z-index:3;padding:0}
+#nm{position:absolute;left:0;right:0;bottom:62px;text-align:center;font-size:15px;color:#fff;text-shadow:0 2px 0 var(--ink),0 0 5px var(--ink);pointer-events:none}
+#stats{position:absolute;inset:0;pointer-events:none;z-index:1}
+.sc{position:absolute;width:84px;background:#fff;border:3px solid var(--ink);border-radius:20px;padding:5px 2px 5px;text-align:center;box-shadow:0 4px 0 var(--ink)}
+.sc:nth-child(1){left:8px;top:34%}.sc:nth-child(2){left:8px;top:calc(34% + 104px)}.sc:nth-child(3){right:8px;top:34%}.sc:nth-child(4){right:8px;top:calc(34% + 104px)}
+.sc .e{font-size:22px;display:block;line-height:1}.sc b{display:block;font-size:34px;line-height:1.05}.sc small{display:block;font-size:12px;color:var(--mut)}
+.sc.hi{background:#c9f7de}.sc.mid{background:#fff3b0}.sc.lo{background:#ffd5db}
+.dl{position:absolute;right:-4px;top:-10px;font-size:15px;font-weight:900;padding:1px 7px;border-radius:99px;border:2px solid var(--ink);animation:fl 1.8s forwards}.dl.p{background:var(--good);color:#fff}.dl.m{background:var(--bad);color:#fff}@keyframes fl{0%{opacity:1;transform:translateY(0) scale(1.15)}100%{opacity:0;transform:translateY(-12px)}}
+#trip{position:absolute;left:8px;right:8px;bottom:8px;padding:5px 12px;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;border-radius:18px;background:#fff;border:3px solid var(--ink);box-shadow:0 4px 0 var(--ink);z-index:2}
+#tl{font-size:13px;white-space:nowrap}#tn{font-size:13px;color:var(--mut);white-space:nowrap}#trip.vol{flex-wrap:wrap}#trip.vol #tn{flex:0 0 100%;text-align:center;white-space:normal;color:var(--ink)}
+#tb{position:relative;height:16px;border-radius:99px;border:3px solid var(--ink);background:#eee7ff;flex:1;min-width:60px;overflow:hidden}#tf{height:100%;width:0;background:linear-gradient(90deg,#17c3b2,#ff3fa4,#ffd23f);transition:width .3s}#tm{position:absolute;top:0;bottom:0;width:3px;background:var(--ink)}
+#trip.vol{background:linear-gradient(90deg,#ffe066,#ff9ed2,#9ef0ff);animation:pulse 1s infinite}@keyframes pulse{50%{transform:scale(1.02)}}
+#panel{display:flex;flex-direction:column;min-height:0;min-width:0;margin:10px 10px 10px 12px;background:#fff;border:4px solid var(--ink);border-radius:26px;box-shadow:0 6px 0 var(--ink)}
+#tabs{display:flex;gap:10px;overflow-x:auto;padding:12px 12px 10px;align-items:center;scrollbar-width:none;-webkit-overflow-scrolling:touch}#tabs::-webkit-scrollbar{display:none}
+.sep{flex:0 0 4px;height:34px;background:var(--ink);opacity:.25;border-radius:3px}
+.tabb{flex:0 0 56px;height:56px;border-radius:18px;background:#f1ecff;border:3px solid var(--ink);font-size:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 var(--ink);padding:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.tabb.life{background:#ffe0f0}.tabb .dot{width:26px;height:26px;border-radius:50%;border:3px solid var(--ink)}
+.tabb.on{background:var(--sun);transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}.tabb.life.on{background:var(--acc)}
+#ph{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:2px 16px 4px}#pt{font-size:26px}#ps{font-size:16px;color:var(--mut);text-align:right}
+#grid{flex:1;min-height:100px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;padding:6px 14px 12px;align-content:start;-webkit-overflow-scrolling:touch}
+.opt{background:#f6f2ff;border:3px solid var(--ink);border-radius:18px;padding:6px;color:var(--ink);cursor:pointer;text-align:center;font:800 14px/1.15 inherit;font-family:inherit;box-shadow:0 4px 0 var(--ink);display:flex;flex-direction:column;gap:4px;min-width:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.opt .th{display:flex;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#e7e0ff;align-items:center;justify-content:center}.opt .th img{width:100%;height:100%;object-fit:cover;display:block}.opt .emo{font-size:44px}
+.opt .nm{display:block;min-height:32px;font-size:14px}.opt .ch{display:block;font-size:12px;color:var(--mut);min-height:14px}
+.opt.on{background:#fff3a8;transform:translateY(3px);box-shadow:0 1px 0 var(--ink);outline:4px solid var(--acc);outline-offset:1px}
+#bar{display:flex;gap:10px;padding:8px 14px calc(14px + env(safe-area-inset-bottom,0px));align-items:center}
+#diff{display:flex;gap:6px}.df{width:56px;height:56px;border-radius:16px;border:3px solid var(--ink);background:#f1ecff;cursor:pointer;box-shadow:0 4px 0 var(--ink);font:800 9px/1 inherit;font-family:inherit;padding:2px 0 0;overflow:hidden;white-space:nowrap;-webkit-tap-highlight-color:transparent;touch-action:manipulation}.df .ic{display:block;font-size:24px;margin-bottom:1px}.df.on{background:var(--teal);color:var(--ink);transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+button.go{flex:1;background:var(--acc);color:#fff;border:3px solid var(--ink);border-radius:18px;font-size:24px;padding:13px;cursor:pointer;box-shadow:0 5px 0 var(--ink);text-shadow:0 2px 0 var(--ink)}
+#nameIn{width:100%;background:#fff;color:var(--ink);border:3px solid var(--ink);border-radius:14px;padding:12px 14px;font:800 20px inherit;font-family:inherit;outline:none}#nameIn::placeholder{color:#a79fd6}
+.nmw{grid-column:1/-1;display:flex;flex-direction:column;gap:5px}.nmw small{color:var(--mut);font-size:13px}
+@media(max-width:820px){#app{grid-template-columns:1fr;grid-template-rows:45% 55%}#stage{padding:8px 8px 0}#panel{margin:10px 8px 8px}#grid{grid-template-columns:repeat(3,1fr)}.sc{width:76px}.sc b{font-size:30px}.sc:nth-child(2){top:calc(34% + 96px)}.sc:nth-child(4){top:calc(34% + 96px)}#nm{display:none}#bubble .jk{font-size:16px}.tabb{flex-basis:52px;height:52px;font-size:26px}#pt{font-size:23px}}
+@media(max-width:820px) and (max-height:700px){#grid{grid-template-columns:repeat(4,1fr)}.opt .ch{display:none}.opt .emo{font-size:32px}}
+#ph{display:none}
+#bubble .nm0{display:block;font-size:14px;color:var(--ink);margin-bottom:1px;text-transform:none;letter-spacing:0}
+.tabb{flex:0 0 62px;height:68px;flex-direction:column;gap:0;padding-top:3px}.tabb .tic{font-size:26px;line-height:1.1}.tabb small{font-size:11px;line-height:1.1;font-weight:800;margin-top:1px}.tabb .dot{width:24px;height:24px;margin:2px 0 3px}
+.opt .ch{display:none}
+.opt{padding:5px 5px 6px;gap:3px;background:#f6f2ff}
+.opt .th{aspect-ratio:1;background:radial-gradient(circle at 50% 40%,#fff,#e7e0ff);border-radius:14px}
+.opt .th img{object-fit:contain;padding:0}
+.opt .nm{min-height:34px;font-size:15px;line-height:1.1;display:flex;align-items:center;justify-content:center}
+@media(max-width:820px){#grid{grid-template-columns:repeat(3,1fr);gap:7px;padding:4px 12px 8px}.opt{padding:4px 4px 5px}.opt .th{aspect-ratio:4/3}.opt .nm{min-height:28px;font-size:14px}#tabs{padding:6px 10px 4px}.tabb{flex-basis:60px;height:62px}.df{width:50px;height:50px}.df .ic{font-size:18px;margin-bottom:0}#bar{padding:6px 12px calc(10px + env(safe-area-inset-bottom,0px))}button.go{padding:10px;font-size:22px}}
+.opt .th{position:relative}
+.rib{position:absolute;left:3px;top:3px;font-size:9px;line-height:1;background:var(--ink);color:#fff;border-radius:6px;padding:2px 5px;letter-spacing:.04em}
+.opt.rar1 .th{box-shadow:inset 0 0 0 3px #3db6ff}.opt.rar2 .th{box-shadow:inset 0 0 0 3px #b05cff;background:radial-gradient(circle at 50% 40%,#fff,#eadcff)}
+.opt.rar3 .th{box-shadow:inset 0 0 0 3px #ffc233;background:radial-gradient(circle at 50% 40%,#fffbe0,#ffe27a)}
+.opt.rar1 .th img{filter:drop-shadow(0 0 5px #3db6ff)}.opt.rar2 .th img{filter:drop-shadow(0 0 6px #b05cff)}.opt.rar3 .th img{filter:drop-shadow(0 0 8px #ffb300)}
+.sp{position:absolute;font-style:normal;font-size:15px;color:#fff;text-shadow:0 0 6px #ffb300,0 0 2px #2b2250;animation:tw 1.5s infinite;pointer-events:none}.sp.s1{right:10%;top:12%}.sp.s2{left:14%;bottom:14%;animation-delay:.7s;font-size:12px}
+@keyframes tw{0%,100%{opacity:0;transform:scale(.4) rotate(0)}50%{opacity:1;transform:scale(1.2) rotate(40deg)}}
+.cs{position:absolute;left:0;right:0;bottom:0;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;background:#2b2250e6;padding:2px 4px;font-size:12px;line-height:1.2;pointer-events:none}.cs b{font-weight:800}.cs .u{color:#8dffbd}.cs .d{color:#ff9fae}.cs:empty{display:none}
+@keyframes jig{0%{transform:rotate(0) scale(1)}15%{transform:rotate(-6deg) scale(1.1)}30%{transform:rotate(6deg) scale(1.13)}45%{transform:rotate(-5deg) scale(1.1)}60%{transform:rotate(4deg) scale(1.07)}75%{transform:rotate(-2deg) scale(1.03)}100%{transform:rotate(0) scale(1)}}
+.opt.tease .th{animation:jig 1s ease-in-out 1}
+.opt.on .th{animation:happy .5s ease-out 1}@keyframes happy{0%{transform:scale(.8) rotate(-6deg)}60%{transform:scale(1.14) rotate(4deg)}100%{transform:scale(1) rotate(0)}}
+.opt:active .th{animation:none;transform:scale(.9)}
+.opt.rar2 .th::after,.opt.rar3 .th::after{content:"";position:absolute;top:0;bottom:0;width:36%;left:-60%;background:linear-gradient(100deg,transparent,#ffffffcc,transparent);transform:skewX(-20deg);pointer-events:none}.opt.tease.rar2 .th::after,.opt.tease.rar3 .th::after{animation:shine 1s ease-in-out 1}
+@keyframes shine{0%,55%{left:-60%}100%{left:140%}}
+@media(prefers-reduced-motion:reduce){.opt .th,.opt.rar2 .th::after,.opt.rar3 .th::after{animation:none}}
+#mode{display:flex;gap:8px;padding:8px 12px 0}#mode button{flex:1;background:#f1ecff;border:3px solid var(--ink);border-radius:14px;padding:4px 6px;font:800 15px inherit;font-family:inherit;color:var(--ink);cursor:pointer;box-shadow:0 4px 0 var(--ink);-webkit-tap-highlight-color:transparent;touch-action:manipulation}#mode button.on{background:var(--sun);transform:translateY(3px);box-shadow:0 1px 0 var(--ink)}
+@media(max-width:820px){#mode{padding:6px 10px 0}.tabb{flex-basis:56px;height:60px}.tabb .tic{font-size:22px}.tabb small{font-size:10px}}
+#bubble{padding:4px 8px 6px;left:6px;right:62px;top:6px}
+#bubble .nm0{font-size:12px;line-height:1.15}
+#bubble .jk{font-size:13px;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#bubble .pc{gap:3px;margin-top:3px}#bubble .pc span{font-size:11px;padding:0 6px;border-width:2px;line-height:1.3}
+#rnd{width:48px;height:48px;font-size:24px;right:6px;top:6px}
+
+/* THEME: light steel and navy with blue and orange accents. Big, readable, not heavy. No pink; gold only for Legendary items. */
+:root{--ink:#16233f;--mut:#51668a;--acc:#ff6a1a;--teal:#1f8bff;--sun:#1f8bff;--good:#1f9d57;--bad:#d9443a}
+html,body{background:linear-gradient(#e3ecf7,#cfdcec);color:var(--ink)}
+#cvw{border-color:#16233f;box-shadow:0 5px 0 #16233f;background:#9fb8d8}
+#bubble{background:#fff;color:#16233f;border-color:#16233f;box-shadow:0 4px 0 #16233f}#bubble::after{background:#fff;border-color:#16233f}
+#bubble .nm0{color:#2f6fd0}#bubble .jk{color:#16233f}
+.g{background:#cdf3dd;color:#0d5c33}.b2{background:#ffd9d3;color:#8f1f17}
+#bubble .pc span{border-color:#16233f}
+#rnd{background:#1f8bff;border-color:#16233f;color:#fff;box-shadow:0 4px 0 #16233f}
+.sc{background:#fff;border-color:#16233f;box-shadow:0 4px 0 #16233f;color:#16233f}.sc small{color:#51668a}
+.sc.hi{background:#cdf3dd}.sc.mid{background:#e3edfb}.sc.lo{background:#ffd9d3}
+.dl{border-color:#16233f}
+#trip{background:#fff;border-color:#16233f;box-shadow:0 4px 0 #16233f;color:#16233f}#tl{color:#16233f}#tn{color:#51668a}
+#tb{background:#dfe8f5;border-color:#16233f}#tf{background:linear-gradient(90deg,#1f8bff,#18b6c9,#2fbf71)}#tm{background:#16233f}
+#trip.vol{background:linear-gradient(90deg,#bfe0ff,#d6c8ff,#bff3e6)}#trip.vol #tn{color:#16233f}
+#panel{background:#f4f8fd;border-color:#16233f;box-shadow:0 5px 0 #16233f}
+#mode button{background:#e1eaf6;border-color:#16233f;color:#16233f;box-shadow:0 4px 0 #16233f}#mode button.on{background:#1f8bff;color:#fff}
+.tabb{background:#e1eaf6;border-color:#16233f;box-shadow:0 4px 0 #16233f;color:#16233f}.tabb.life{background:#dfe5ee;border-color:#16233f}
+.tabb.on{background:#1f8bff;color:#fff}.tabb.life.on{background:#ff6a1a;color:#fff}
+.tabb .dot{border-color:#16233f}
+.sep{background:#16233f33}
+#pt{color:#16233f}#ps{color:#2f6fd0}
+.opt{background:#eef3fa;border-color:#16233f;box-shadow:0 4px 0 #16233f;color:#16233f}
+.opt .th{background:radial-gradient(circle at 50% 40%,#ffffff,#cfdcf0)}
+.opt.on{background:#cfe6ff;box-shadow:0 1px 0 #16233f;outline:4px solid #1f8bff}
+.opt.rar1 .th{box-shadow:inset 0 0 0 3px #3d9bff}
+.opt.rar2 .th{box-shadow:inset 0 0 0 3px #6b5cff;background:radial-gradient(circle at 50% 40%,#ffffff,#d9d3ff)}
+.opt.rar3 .th{box-shadow:inset 0 0 0 3px #e0a010;background:radial-gradient(circle at 50% 40%,#fff6d6,#ffd873)}
+.opt.rar1 .th img{filter:drop-shadow(0 2px 3px #1f8bff88)}.opt.rar2 .th img{filter:drop-shadow(0 2px 3px #6b5cff88)}.opt.rar3 .th img{filter:drop-shadow(0 2px 4px #c88a00aa)}
+.rib{background:#16233f;color:#fff}
+.cs{background:#16233fe6}
+.sp{color:#fff;text-shadow:0 0 6px #1f8bff,0 0 2px #16233f}
+.df{background:#e1eaf6;border-color:#16233f;color:#16233f;box-shadow:0 4px 0 #16233f}.df.on{background:#1f8bff;color:#fff}
+button.go{background:#ff6a1a;color:#fff;border-color:#16233f;box-shadow:0 5px 0 #16233f;text-shadow:0 2px 0 #8f3a08}
+#nameIn{background:#fff;color:#16233f;border-color:#16233f}#nameIn::placeholder{color:#8a9bb8}.nmw small{color:#51668a}
+#glo,.gbox{background:#f4f8fd}
+#stats,#trip{display:none}
+#grid.gridg{display:flex!important;flex-direction:column;gap:8px;overflow:visible}
+.gearopt .gc{display:none}
+.opt.gearopt{flex:0 0 auto;width:100%;height:auto!important;aspect-ratio:auto!important;display:flex!important;flex-direction:row!important;align-items:center;gap:10px;text-align:left;padding:3px 12px;min-height:0}
+#grid.gridg{gap:5px!important;padding-bottom:6px}
+body.lo #tabs,body.lo #pt,body.lo #ps{display:none}
+.gearopt .emo{font-size:48px;flex:0 0 58px;text-align:center}
+.gearopt .gtx{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gearopt .emo{font-size:40px!important;flex-basis:50px!important}
+.gearopt .gt{font-size:21px;font-weight:900;line-height:1.1}
+.gearopt .gd{font-size:15px;font-weight:700;line-height:1.2;color:#16233f}
+.gearopt .gc{font-size:14px;font-weight:800;color:#8f1f17}
+#reelBtn{position:absolute;right:8px;top:66px;width:54px;height:54px;border-radius:50%;border:3px solid var(--ink);background:#fff;font-size:26px;box-shadow:0 4px 0 var(--ink);cursor:pointer;z-index:3;padding:0}#reel{position:absolute;left:6px;right:6px;bottom:6px;z-index:4;display:none;background:rgba(10,14,24,.88);border:2px solid #38e8ff;border-radius:14px;padding:6px 8px;color:#fff;font:700 15px system-ui,sans-serif}#reel.on{display:block}#reelCap{position:absolute;left:8px;right:68px;top:8px;z-index:4;display:none;background:rgba(10,14,24,.88);border:2px solid #38e8ff;border-radius:12px;padding:8px 12px;text-align:center;font:700 17px system-ui,sans-serif;color:#ffe9a8}#cvw.reeling #reelCap{display:block}#reelCap:empty{display:none!important}#cvw.reeling #bubble{display:none}#reelChips{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px}#reelChips button{flex:0 0 auto;border:2px solid #38e8ff;background:#0b1a33;color:#fff;border-radius:999px;padding:4px 10px;font:700 13px system-ui,sans-serif;cursor:pointer}#reelChips button.on{background:#38e8ff;color:#06101f}.still #panel,.still #bubble,.still #rnd,.still #reelBtn,.still #reel,.still #reelCap,.still #stats,.still #nm,.still #trip{display:none!important}.still #app{display:block;max-width:none}.still #stage{padding:0;height:100%}.still #cvw{border:0;border-radius:0;box-shadow:none;height:100%}
+/* ===== NEO-NOIR THEME (matches the menu): dark glass panels, one cyan accent, gold for the chosen and the rare, condensed display type. Every text sits on a dark ground. ===== */
+:root{--ink:#e9edf5;--mut:#a9b3c7;--acc:#38e8ff;--teal:#38e8ff;--sun:#ffd23a;--good:#2fd38a;--bad:#ff6b6b;--pan:rgba(12,16,27,.94);--line:rgba(56,232,255,.26);--fg:#f2efe6;color-scheme:dark}
+html,body{background:radial-gradient(ellipse at 50% 120%,#1a1030 0%,#0b0e18 55%,#050608 100%)!important;color:var(--fg)!important;font:600 16px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif!important}
+button{color:var(--fg)}
+#cvw{border:1px solid var(--line)!important;border-radius:16px!important;box-shadow:0 12px 34px rgba(0,0,0,.55)!important;background:#05070c!important}
+#panel{background:var(--pan)!important;border:1px solid var(--line)!important;border-radius:16px!important;box-shadow:0 12px 34px rgba(0,0,0,.55)!important}
+#bubble{background:rgba(7,10,18,.92)!important;border:1px solid var(--line)!important;box-shadow:none!important;color:var(--fg)}
+#bubble::after{background:rgba(7,10,18,.92)!important;border-color:var(--line)!important}
+#bubble .nm0{color:#9fe8ff!important;font-family:"Barlow Condensed",sans-serif;letter-spacing:.08em;text-transform:uppercase}
+#bubble .pc span{border:1px solid var(--line)!important}.g{background:#123d2b!important;color:#c9ffe4!important}.b2{background:#3d1219!important;color:#ffd5db!important}
+#rnd,#reelBtn{background:rgba(12,16,27,.94)!important;border:1px solid var(--line)!important;box-shadow:none!important}
+#nm{color:#fff!important;text-shadow:0 2px 8px #000,0 0 2px #000!important;font:400 22px/1 "Bebas Neue","Barlow Condensed",Impact,sans-serif!important;letter-spacing:.14em}
+.sc{background:rgba(7,10,18,.9)!important;border:1px solid var(--line)!important;box-shadow:none!important;border-radius:12px!important;color:var(--fg);padding:6px 4px 8px!important}
+.sc b{font:400 34px/1 "Bebas Neue",Impact,sans-serif!important;letter-spacing:.04em}.sc small{color:#cfd8e6!important;font:700 12px/1.1 "Barlow Condensed",sans-serif!important;letter-spacing:.14em;text-transform:uppercase}
+.sc.hi b{color:#5dffb0}.sc.mid b{color:#ffd23a}.sc.lo b{color:#ff8a8a}
+.sc .bar{display:block;height:5px;margin:5px 9px 0;border-radius:3px;background:#1d2535;overflow:hidden}.sc .bar i{display:block;height:100%;border-radius:3px}.sc.hi .bar i{background:#5dffb0}.sc.mid .bar i{background:#ffd23a}.sc.lo .bar i{background:#ff8a8a}
+.dl{border:0!important}
+#trip{background:rgba(7,10,18,.92)!important;border:1px solid var(--line)!important;box-shadow:none!important;color:var(--fg)}#trip.vol{border-color:var(--sun)!important;animation:none!important}#trip.vol #tn{color:#ffe9a8!important}
+#tl{font:700 14px "Barlow Condensed",sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#9fe8ff}#tn{color:#cfd8e6!important}
+#tb{border:1px solid var(--line)!important;background:#141a2b!important}#tm{background:#fff!important}#tf{background:linear-gradient(90deg,#38e8ff,#7b6bff,#ffd23a)!important}
+#mode button{background:#141a2b!important;border:1px solid var(--line)!important;box-shadow:none!important;color:var(--fg)!important;border-radius:10px!important;font:700 16px "Barlow Condensed",sans-serif!important;letter-spacing:.12em;text-transform:uppercase;transform:none!important}
+#mode button.on{background:var(--acc)!important;color:#06101f!important;border-color:var(--acc)!important}
+#tabs{overflow:hidden!important;gap:6px!important}
+.tabb{flex:1 1 0!important;min-width:0!important;background:#141a2b!important;border:1px solid var(--line)!important;box-shadow:none!important;color:var(--fg)!important;border-radius:12px!important;transform:none!important}
+.tabb small{color:#cfd8e6!important;font:700 11px "Barlow Condensed",sans-serif!important;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tabb.on{background:var(--acc)!important;border-color:var(--acc)!important}.tabb.on small{color:#06101f!important}
+.tabb.life{background:#1a1428!important}.tabb.life.on{background:var(--sun)!important;border-color:var(--sun)!important}
+.sep{background:var(--line)!important;opacity:1!important;flex:0 0 2px!important}
+#grid{overflow:hidden!important;align-content:stretch!important}
+.opt{background:#111726!important;border:1px solid var(--line)!important;box-shadow:none!important;color:var(--fg)!important;border-radius:12px!important;transform:none!important;min-height:0;overflow:hidden;height:100%}
+.opt .th{flex:1 1 auto;min-height:0;aspect-ratio:auto!important;background:radial-gradient(circle at 50% 40%,#28304a,#0b0f19)!important;container-type:size}
+.opt .emo{font-size:min(44px,58cqmin)!important}
+.opt .nm{color:var(--fg)!important;flex:0 0 auto;min-height:0!important;font:700 clamp(12px,1.2vmin + 7px,16px)/1.1 "Barlow Condensed",sans-serif!important;letter-spacing:.04em}
+.opt.on{background:#16243a!important;outline:2px solid var(--acc)!important;outline-offset:0!important;box-shadow:0 0 16px rgba(56,232,255,.35)!important}
+.opt.rar2 .th{background:radial-gradient(circle at 50% 40%,#3b2758,#0e0a17)!important}.opt.rar3 .th{background:radial-gradient(circle at 50% 40%,#4d3b10,#120e05)!important}
+.rib{background:#000!important;color:#fff!important;border:1px solid rgba(255,255,255,.25)}
+.gearopt .gt{color:var(--fg)!important;font-family:"Barlow Condensed",sans-serif;letter-spacing:.06em;text-transform:uppercase}.gearopt .gd{color:#cfd8e6!important}.gearopt .gc{color:#ffb0b0!important}
+.df{background:#141a2b!important;border:1px solid var(--line)!important;box-shadow:none!important;color:var(--fg)!important;transform:none!important;font-family:"Barlow Condensed",sans-serif!important;font-size:11px!important;letter-spacing:.06em}
+.df.on{background:var(--acc)!important;color:#06101f!important;border-color:var(--acc)!important}
+button.go{background:var(--acc)!important;color:#06101f!important;border:0!important;box-shadow:0 0 22px rgba(56,232,255,.35)!important;text-shadow:none!important;font:400 30px/1 "Bebas Neue",Impact,sans-serif!important;letter-spacing:.16em;border-radius:12px!important}
+#nameIn{background:#0b0f1a!important;color:#fff!important;border:1px solid var(--line)!important}#nameIn::placeholder{color:#7d879e!important}.nmw small{color:#cfd8e6!important}
+.cs{background:rgba(4,6,10,.92)!important}
+#reel{background:rgba(7,10,18,.94)!important}
+#bubble,#bubble .jk{color:var(--fg)!important}
+#stats{display:block!important}
+.sc{width:66px!important;padding:5px 3px 7px!important}.sc .e{font-size:16px!important}.sc b{font-size:26px!important}.sc small{font-size:11px!important}
+.sc:nth-child(1){left:8px!important;top:30%!important}.sc:nth-child(2){left:8px!important;top:calc(30% + 74px)!important}.sc:nth-child(3){right:8px!important;left:auto!important;top:30%!important}.sc:nth-child(4){right:8px!important;left:auto!important;top:calc(30% + 74px)!important}
+#tabs{flex-wrap:wrap!important}.tabb{flex:1 1 calc(12.5% - 6px)!important;height:50px!important}.tabb .tic{font-size:20px!important}.sep{display:none!important}
+</style></head><body>
+<div id="app">
+  <div id="stage"><div id="cvw"><canvas id="cv"></canvas><div id="bubble"></div><button id="rnd" title="Surprise me">&#127922;</button><button id="reelBtn" title="Story reel">&#127916;</button><div id="reelCap"></div><div id="reel"><div id="reelChips"></div></div><div id="stats"></div><div id="nm"></div>
+    <div id="trip"><span id="tl">&#127752; Trippy</span><div id="tb"><div id="tf"></div><div id="tm"></div></div><span id="tn"></span></div></div></div>
+  <div id="panel">
+    <div id="mode"><button data-m="looks" class="on">&#127917; Looks</button><button data-m="loadout">&#9881;&#65039; Loadout</button></div>
+    <div id="tabs"></div>
+    <div id="ph"><span id="pt"></span><span id="ps"></span></div>
+    <div id="grid"></div>
+    <div id="bar"><div id="diff"></div><button class="go" id="go">Drive &#9658;</button></div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.0.0/babylon.js"></script>
+<script src="charfx.js"></script>
+<script>
+(function () {
+  const O = (id, ic, name, pro, con, s, t) => ({ id, ic, name, pro: pro || '', con: con || '', s: s || {}, t: t || 0 });
+  const CATS = {
+    hat: ['🎩', 'Hat', [O('none', '✖️', 'Nothing'), O('beanie', '🧶', 'Hipster beanie', 'Perfect chains pay 10% more', 'Broken chains cost more', { spd: 1, calm: -1 }, 1), O('bowler', '🎩', 'Bowler', 'Steadier handling', 'More machines patrol', { grp: 1, calm: -1 }), O('hard', '⛑️', 'Hard hat', 'Your first crash each level is free', 'You see less sky', { calm: 1, sgt: -1 }), O('foil', '👽', 'Tinfoil hat', 'Fake signs fool you less', 'The log gets paranoid', { sgt: 1, calm: -1 }, 2), O('visor', '🪖', 'Gold-visor helmet', 'A shield that slowly recharges', 'You look very serious', { calm: 2, spd: -1 })]],
+    mask: ['🎭', 'Mask', [O('mirror', '🕶️', 'Mirror visor', 'Pickups glow brighter', 'Dark parts get darker', { sgt: -1 }, 1), O('grin', '😁', 'Glow grin', 'Pickups pop', 'Machines notice you more', { calm: -1 }, 2), O('gas', '😷', 'Gas mask', 'Calmer hazards', 'Hints are muffled', { calm: 1, sgt: -1 }), O('robot', '🤖', 'Robot plate', 'Steadier steering', 'Fewer clues', { grp: 1, sgt: -1 })]],
+    face: ['🥸', 'Face', [O('none', '✖️', 'Nothing'), O('round', '👓', 'Round glasses', 'Hidden text lasts longer', 'Hazards look farther away', { sgt: 1, calm: -1 }), O('shades', '😎', 'Shades', 'Pickups glow brighter', 'Dark parts get darker', { sgt: -1 }, 1), O('stache', '🥸', 'Big bushy moustache', 'Boosts and jumps 15% stronger', 'Everyone comments on it', { spd: 2, calm: -1 }, 2), O('curly', '😈', 'Curly moustache', 'Chains score 10% more', 'A villain sting plays on pickups', { spd: 1, calm: -1 }, 2)]],
+    outfit: ['🧥', 'Outfit', [O('plain', '🧥', 'Plain jumpsuit'), O('suit', '👔', 'Corporate Drone', 'Steadier handling', 'The feed reads your secrets aloud', { grp: 1, calm: -1 }), O('flannel', '🌲', 'Hipster flannel', 'Chains build faster', 'Colours fade sooner', { spd: 1, calm: -1 }, 1), O('hivis', '🦺', 'High-vis vest', 'You spot hazards sooner', 'Wanted posters get bigger', { sgt: 1, calm: -1 }, 1), O('track', '🏃', 'Tracksuit', 'Recover faster after a stumble', 'Smaller pickup boosts', { grp: 1 })]],
+    gloves: ['🧤', 'Gloves', [O('mitts', '🧤', 'Cosy mitts', 'A calmer drive', 'Looser grip', { calm: 1, grp: -1 }, 1), O('work', '🛠️', 'Work gloves', 'Better grip', 'Pickups arrive slower', { grp: 1, spd: -1 }), O('racing', '🏎️', 'Racing gloves', 'Faster steering', 'A bit twitchy', { spd: 1, calm: -1 }, 1)]],
+    feet: ['👟', 'Shoes', [O('none', '👞', 'Standard issue'), O('sneakers', '👟', 'Speed sneakers', 'Speed boosts last longer', 'Everyone assumes you are in a hurry', { spd: 1, calm: -1 }, 1)]],
+    charm: ['🎀', 'Charm', [O('c0', '✖️', 'Nothing'), O('c1', '🤵', 'Nodding CEO', 'A small pickup magnet', 'Nods at bad ideas too', { spd: 1 }, 2), O('c2', '🏴', 'Flag of nowhere', 'One free hint per level', 'Nobody knows which country', { sgt: 1 }, 1), O('c3', '🌲', 'Air freshener', 'A calmer start to each level', 'Smells of nothing', { calm: 1 }, 1), O('c4', '🖼️', 'Photo of last employer', 'The feed goes quiet when you wave it', 'It is a terrible photo', { calm: 1 }, 1)]],
+    alias: ['\uD83E\uDEAA', 'Alias', [O('a1', '\uD83E\uDEAA', 'Compliant Citizen #4471'), O('a2', '\uD83D\uDD75\uFE0F', 'Definitely Not The Courier', '', '', {}, 1), O('a3', '\u26D4', 'Error 403'), O('a4', '\uD83E\uDD37', 'Probably Fine')]],
+    occ: ['\uD83D\uDCBC', 'Past job', [O('driver', '\uD83D\uDE9A', 'Delivery driver', 'Rough-road grip', 'Watchers know your route', { grp: 1, calm: -1 }), O('mod', '\uD83E\uDDF9', 'Content moderator', 'Hidden text lasts longer', 'Bad stuff tempts you', { sgt: 1, calm: -1 }), O('prompt', '\u2328\uFE0F', 'Prompt engineer', 'Hints come sooner', 'Fake signs fool you', { sgt: 1, calm: -1 }), O('barista', '\u2615', 'Barista', 'Chains build faster', 'Colours fade sooner', { spd: 1, calm: -1 }), O('infl', '\uD83D\uDCF1', 'Influencer', 'A pickup magnet', 'Your secrets get read aloud', { spd: 1, calm: -1 }, 1)]],
+    cope: ['\uD83E\uDD72', 'Coping', [O('doom', '\uD83D\uDCC9', 'Doomscrolling', 'Trips hit hard', 'Colours fade faster', { calm: -1 }, 2), O('denial', '\uD83D\uDE48', 'Denial', 'Colours fade slower', 'Trips are weaker', { calm: 1 }), O('gallows', '\uD83D\uDE02', 'Gallows humour', 'Hints are free', 'Fewer chain points', { sgt: 1, spd: -1 }, 1), O('cardio', '\uD83C\uDFC3', 'Cardio', 'Recover faster', 'Smaller buffs', { grp: 1 })]],
+    gear: ['\uD83C\uDFAF', 'Gear', [O('rocket', '\uD83D\uDE80', 'Seeker Rockets'), O('pole', '\uD83E\uDDF2', 'Magnet Pole'), O('shield', '\uD83D\uDEE1\uFE0F', 'Terms Shield'), O('bull', '\uD83D\uDC02', 'Bull Bar')]],
+    wheels: ['🛞', 'Wheels', [O('stock', '🛞', 'Standard tyres'), O('slicks', '🏁', 'Racing slicks'), O('knobbly', '🌲', 'Knobbly treads'), O('monster', '🚙', 'Monster wheels')]],
+    engine: ['⚙️', 'Engine', [O('stock', '⚙️', 'Stock engine'), O('turbo', '🐌', 'Turbo kit'), O('rocket', '🚀', 'Jet exhaust'), O('hamster', '🐹', 'Hamster motor')]],
+    springs: ['🦘', 'Springs', [O('stock', '〰️', 'Stock springs'), O('pogo', '🦘', 'Pogo springs'), O('cloud', '☁️', 'Cloud suspension'), O('coil', '🔩', 'Track coilovers')]],
+    bumper: ['🐂', 'Bumper', [O('stock', '🚗', 'Stock bumper'), O('bull', '🐂', 'Bull bar'), O('noodle', '🏊', 'Pool noodles'), O('none', '😬', 'No bumper')]],
+    roof: ['🚨', 'Roof', [O('none', '✖️', 'Nothing'), O('siren', '🚨', 'Siren'), O('cone', '🚧', 'Traffic cone'), O('flag', '🚩', 'Tiny flag'), O('dish', '📡', 'Signal dish')]],
+    back: ['🪶', 'Back', [O('none', '✖️', 'Nothing'), O('wing', '🪶', 'Glider wings'), O('spoiler', '🏁', 'Giant spoiler'), O('tow', '🪝', 'Tow hook')]],
+    sticker: ['🔥', 'Stickers', [O('none', '✖️', 'Nothing'), O('flames', '🔥', 'Go-faster flames'), O('eyes', '👀', 'Googly eyes'), O('dice', '🎲', 'Lucky dice')]]
+  };
+  const JK = { 'gear.rocket': 'Locks onto sponsored content all by itself. Aiming is for people with time.', 'gear.pole': 'A magnet. On a stick. The engineers were told to be creative.', 'gear.shield': 'Blocks three crashes. By driving, you agree to all of them.', 'gear.bull': 'Move fast and break trees. The shareholders are thrilled.', 'mask.mirror': 'Reflects everyone\u2019s opinion of you. Yours stays hidden.', 'mask.grin': 'Smiles so you don\u2019t have to. Murmur finds it charming.', 'mask.gas': 'Filters the air and, regrettably, the truth.', 'mask.robot': 'Fully compliant faceplate. Emotion module sold separately.', 'face.none': 'Nothing to declare.', 'face.round': 'The look of someone who has read the terms.', 'face.shades': 'It is dark. You have a visor. Do the maths.', 'face.stache': 'Big, bushy and impossible to ignore. It grows with your combo.', 'face.curly': 'Twirl it. Tie a rail. The villain sting plays itself.', 'hat.none': 'Bare-headed, like a free citizen.', 'hat.beanie': 'Artisanal. Hand-knitted by someone you will never meet.', 'hat.bowler': 'For people who say circle back unironically.', 'hat.hard': 'Protects against falling satellites. Mostly.', 'hat.foil': 'Blocks signals. Possibly also good ideas.', 'hat.visor': 'Gold glass, serious face, shield included.', 'outfit.plain': 'Standard issue jumpsuit. It has opinions.', 'outfit.suit': 'Grey suit, lanyard, a smile at no extra cost.', 'outfit.flannel': 'Handmade in a city you cannot afford.', 'outfit.hivis': 'Be seen. By everyone. All the time.', 'outfit.track': 'Comfortable enough to escape in.', 'gloves.mitts': 'Cosy. Unreliable. Great for waving.', 'gloves.work': 'For gripping things that should not be gripped.', 'gloves.racing': 'Fast hands, twitchy nerves.', 'feet.none': 'Standard issue shoes. They have walked far.', 'feet.sneakers': 'Red, with a white stripe. Faster feet, shorter patience.', 'charm.c0': 'Nothing swings from the mirror.', 'charm.c1': 'He agrees with everything. He is, after all, a CEO.', 'charm.c2': 'A tiny flag of a place nobody can name.', 'charm.c3': 'A pine tree that smells of thoughts and prayers.', 'charm.c4': 'Your last employer, laminated and glaring.', 'alias.a1': 'Efficient, forgettable, assigned.', 'alias.a2': 'Nobody will believe it. That is the point.', 'alias.a3': 'Access denied, but with confidence.', 'alias.a4': 'The most reassuring lie there is.', 'occ.driver': 'You know the roads. The roads know you.', 'occ.mod': 'You have seen everything. Reading is easy now.', 'occ.prompt': 'You talk to machines for a living. They talk back.', 'occ.barista': 'Fast hands and a loyalty card for everything.', 'occ.infl': 'Your followers disagree. Murmur is listening.', 'cope.doom': 'Hit refresh until the world gets louder.', 'cope.denial': 'If you do not look, it cannot see you.', 'cope.gallows': 'Laugh now. There is no time later.', 'cope.cardio': 'Run toward the problem. Stop sometimes.', 'belief.works': 'It does. For someone. Probably.', 'belief.charge': 'Somebody must be. Look for them.', 'belief.phase': 'This will pass. Everything passes. Eventually.', 'belief.trust': 'Verify everything. Include this form.', 'consent.none': 'You agreed to nothing. Murmur noted that.', 'consent.all': 'Nothing to hide. Murmur will share it anyway.' };
+  Object.assign(JK, { 'wheels.stock': 'Round. Black. Reliable.', 'wheels.slicks': 'So sticky the road asks for its money back.', 'wheels.knobbly': 'For roads that are mostly suggestions.', 'wheels.monster': 'Why? Because they were available.', 'engine.stock': 'Does engine things.', 'engine.turbo': 'A snail for speed. Nobody asked the snail.', 'engine.rocket': 'Not street legal on any street.', 'engine.hamster': 'Powered by one very committed hamster.', 'springs.stock': 'Springs. Mostly springy.', 'springs.pogo': 'Bouncy enough to worry the neighbours.', 'springs.cloud': 'Like driving on a very expensive pillow.', 'springs.coil': 'Firm. Serious. Slightly rude.', 'bumper.stock': 'Bumps things politely.', 'bumper.bull': 'Tells trees who is in charge.', 'bumper.noodle': 'Safety, but swimming-pool flavoured.', 'bumper.none': 'Brave, or unaware. Hard to tell.', 'roof.none': 'A roof. Just a roof.', 'roof.siren': 'Nobody checks if it is real.', 'roof.cone': 'Left here by a very confident person.', 'roof.flag': 'Announces your arrival to nobody.', 'roof.dish': 'Picks up signals. Mostly complaints.', 'back.none': 'Nothing back there. Allegedly.', 'back.wing': 'Technically for gliding. Technically.', 'back.spoiler': 'Enormous. Aerodynamic. Mostly enormous.', 'back.tow': 'For rescuing other people\u2019s bad decisions.', 'sticker.none': 'A clean door. Suspicious.', 'sticker.flames': 'Flames on a car: legally a speed boost.', 'sticker.eyes': 'They watch the road so you do not have to.', 'sticker.dice': 'A gamble in every pothole.' });
+  const POS = { hat: [50, 9], mask: [25, 21], face: [75, 21], outfit: [22, 47], gloves: [78, 53], charm: [15, 74], color: [85, 74], feet: [50, 91], alias: [8, 14], occ: [8, 34], cope: [8, 54], belief: [92, 14], consent: [92, 34] };
+  const LEFT = ['hat', 'mask', 'face', 'outfit'], RIGHT = ['gloves', 'feet', 'charm', 'color'], LEFT2 = ['alias', 'occ', 'cope'], RIGHT2 = ['belief', 'consent'], LOOKSET = new Set(LEFT.concat(RIGHT)); let mode = 'look';
+  for (const k in CATS) for (const o of CATS[k][2]) { const key = k + '.' + o.id; o.s = (window.DLFX && DLFX.FXS[key]) || {}; const tx = window.DLFX && DLFX.TXT[key]; if (tx) { o.pro = tx[0]; o.con = tx[1]; } else if (!['gear', 'wheels', 'engine', 'springs', 'bumper', 'occ', 'cope', 'alias'].includes(k)) { o.pro = 'Just for looks'; o.con = ''; } }
+  const COLORS = [['teal', '#1fb8b0'], ['violet', '#8a5cf6'], ['indigo', '#4455d9'], ['lime', '#8bd54a'], ['orange', '#ff7a1a'], ['cyan', '#3bd6ff'], ['ruby', '#e0304a'], ['mint', '#5ff2b0']];
+  const DIFFS = [['model', '😇', 'Easy', 'Long trippy effects, slow fade, free hints.'], ['mild', '😐', 'Normal', 'The game as it was meant to be played.'], ['poi', '🕵️', 'Hard', 'Shorter trippy effects and a faster fade.']];
+  const STATS = [['spd', '\u26A1', 'Speed'], ['grp', '\uD83D\uDEDE', 'Grip'], ['air', '\uD83E\uDE82', 'Air'], ['safe', '\uD83D\uDEE1\uFE0F', 'Safety']];
+  const VOLT = 8; const TMAX = Object.keys(CATS).reduce((a, k) => a + Math.max(...CATS[k][2].map((o) => o.t)), 0);
+  const DEF = { alias: 'a2', color: 'violet', paint: 'ruby', mask: 'mirror', face: 'none', hat: 'none', outfit: 'plain', gloves: 'work', feet: 'none', charm: 'c0', wheels: 'stock', engine: 'stock', springs: 'stock', bumper: 'stock', roof: 'none', back: 'none', sticker: 'none', diff: 'mild', rating: 'mild', occ: 'driver', cope: 'denial', gear: 'rocket' };
+  let CH = Object.assign({}, DEF); try { const s = JSON.parse(localStorage.getItem('dl_char') || 'null'); if (s) CH = Object.assign(CH, s); } catch (e) { }
+  if (!COLORS.some((c) => c[0] === CH.color)) CH.color = 'violet'; if (!COLORS.some((c) => c[0] === CH.paint)) CH.paint = 'ruby'; if (!DIFFS.some((d) => d[0] === CH.diff)) CH.diff = 'mild';
+  for (const k in CATS) if (!CATS[k][2].some((o) => o.id === CH[k])) CH[k] = DEF[k];
+
+  const NEXT = new URLSearchParams(location.search).get('next') || 'menu.html', $ = (id) => document.getElementById(id);
+  const opt = (k, id) => CATS[k][2].find((o) => o.id === id) || CATS[k][2][0];
+  const GP = (() => { const g = new URLSearchParams(location.search).get('gear'); return ['rocket', 'pole', 'shield', 'bull'].includes(g) ? g : null; })(); if (GP) { CH.gear = GP; try { localStorage.setItem('dl_char', JSON.stringify(CH)); } catch (e) { } }
+  let open = GP ? 'gear' : 'mask', prev = null, ANIMST = { calm: 5, spd: 5, vol: false, cope: 'denial' }, MODEL = GP ? 'car' : 'driver', MODE = GP ? 'loadout' : 'looks';
+  const LOOK_TABS = ['hat', 'mask', 'face', 'outfit', 'gloves', 'feet', 'color', 'paint', 'roof', 'back', 'sticker', 'charm', 'alias'], LOAD_TABS = ['gear'], LOADSET = new Set(LOAD_TABS), CARSLOTS = new Set(['gear', 'paint', 'wheels', 'engine', 'springs', 'bumper', 'roof', 'back', 'sticker', 'charm']);
+  // ---- loot: every item has a product name and a rarity (a joke: rarity has nothing to do with how useful it is)
+  const RAR = ['', '\u2605 RARE', '\u2605\u2605 EPIC', '\u2605\u2605\u2605 LEGENDARY'];
+  const FUN = { 'mask.mirror': ['Mirror Visor of Eternal Judgement', 2], 'mask.grin': ['Glow Grin of Menace', 3], 'mask.gas': ['Gas Mask (Mildly Apocalyptic)', 1], 'mask.robot': ['Compliance Faceplate 9000', 2], 'face.round': ['Round Glasses (Read The Terms Edition)', 1], 'face.shades': ['Night-Vision-Ish Shades', 2], 'face.stache': ['Big Bushy Moustache of Power', 3], 'face.curly': ['Villain-Grade Handlebar', 3], 'hat.beanie': ['Artisanal Combat Beanie', 2], 'hat.bowler': ['Executive Bowler (Armoured)', 1], 'hat.hard': ['Zero-Tolerance Hard Hat', 1], 'hat.foil': ['Signal-Denial Tinfoil Hat', 3], 'hat.visor': ['Gold-Visor Helmet of Great Seriousness', 3], 'outfit.plain': ['Standard Issue Jumpsuit', 0], 'outfit.suit': ['Corporate Drone Power Suit', 2], 'outfit.flannel': ['Artisanal Flannel of Doom', 2], 'outfit.hivis': ['High-Vis Vest (Tactical)', 1], 'outfit.track': ['Escape-Ready Tracksuit', 1], 'gloves.mitts': ['High-Performance Stealth Mittens', 3], 'gloves.work': ['Tactical Work Gloves', 1], 'gloves.racing': ['Apex Racing Gauntlets', 2], 'feet.none': ['Standard Issue Shoes', 0], 'feet.sneakers': ['Velocity Sneakers (Red, Obviously)', 2], 'charm.c1': ['Nodding CEO (Weaponised)', 2], 'charm.c2': ['Flag of Nowhere', 1], 'charm.c3': ['Thoughts-and-Prayers Freshener', 1], 'charm.c4': ['Laminated Former Employer', 1] };
+  Object.assign(FUN, { 'wheels.stock': ['Standard Issue Tyres', 0], 'wheels.slicks': ['Sticky Racing Slicks of Doom', 3], 'wheels.knobbly': ['Knobbly Off-Road Treads', 1], 'wheels.monster': ['Monster Truck Wheels (Why Not)', 3], 'engine.stock': ['Stock Engine', 0], 'engine.turbo': ['Turbo Kit of Regret', 3], 'engine.rocket': ['Jet Exhaust (Not Street Legal)', 2], 'engine.hamster': ['Eco Hamster Motor', 2], 'springs.stock': ['Stock Springs', 0], 'springs.pogo': ['Pogo Springs of Mild Concern', 3], 'springs.cloud': ['Cloud Nine Suspension', 2], 'springs.coil': ['Track Coilovers', 1], 'bumper.stock': ['Stock Bumper', 0], 'bumper.bull': ['Bull Bar of Authority', 3], 'bumper.noodle': ['Pool-Noodle Safety Bumper', 2], 'bumper.none': ['No Bumper (Brave)', 1], 'roof.none': ['Plain Roof', 0], 'roof.siren': ['Police-ish Siren', 2], 'roof.cone': ['Traffic Cone of Calm', 1], 'roof.flag': ['Tiny Flag of Arrival', 1], 'roof.dish': ['Signal Dish (Mostly Complaints)', 2], 'back.none': ['Plain Back End', 0], 'back.wing': ['Glider Wings (Technically)', 3], 'back.spoiler': ['Giant Spoiler', 2], 'back.tow': ['Tow Hook of Rescue', 1], 'sticker.none': ['Clean Doors', 0], 'sticker.flames': ['Go-Faster Flames', 2], 'sticker.eyes': ['Googly Eyes of Calm', 2], 'sticker.dice': ['Lucky Dice', 1] });
+  function blip() { try { const a = blip.a || (blip.a = new (window.AudioContext || window.webkitAudioContext)()), o = a.createOscillator(), g = a.createGain(); o.frequency.setValueAtTime(520, a.currentTime); o.frequency.exponentialRampToValueAtTime(980, a.currentTime + .07); g.gain.setValueAtTime(.06, a.currentTime); g.gain.exponentialRampToValueAtTime(.001, a.currentTime + .1); o.connect(g); g.connect(a.destination); o.start(); o.stop(a.currentTime + .12); } catch (e) { } }
+  const save = () => { try { localStorage.setItem('dl_char', JSON.stringify(CH)); } catch (e) { } };
+  function totals(ch) { const v = {}; STATS.forEach((s) => v[s[0]] = 5); let t = 0; for (const k in CATS) { const o = opt(k, ch[k]); for (const q in o.s) v[q] += o.s[q]; t += o.t; } for (const q in v) v[q] = Math.max(0, Math.min(10, v[q])); return { v, t }; }
+  const bar = (n) => { let h = ''; for (let i = 0; i < 10; i++) { let c = ''; if (i < Math.min(n, 5)) c = 'f'; else if (i < n) c = 'u'; else if (i < 5 && n < 5) c = 'd'; h += '<i class="' + c + '"></i>'; } return '<div class="bar">' + h + '</div>'; };
+  const chips = (o) => { const a = []; for (const q in o.s) { const s = STATS.find((x) => x[0] === q); if (s) a.push('<b class="' + (o.s[q] > 0 ? 'u' : 'd') + '">' + s[1] + (o.s[q] > 0 ? '+' : '\u2212') + Math.abs(o.s[q]) + '</b>'); } if (o.t) a.push('<b class="u">\uD83C\uDF08+' + o.t + '</b>'); return a.join(''); };
+  function bubble(title, jk, pro, con) { $('bubble').innerHTML = '<span class="nm0">' + title + '</span><div class="jk">' + (jk || '') + '</div>' + ((pro || con) ? '<div class="pc">' + (pro ? '<span class="g">\u25B2 ' + pro + '</span>' : '') + (con ? '<span class="b2">\u25BC ' + con + '</span>' : '') + '</div>' : ''); }
+  function describe(o, hint) { const jk = JK[open + '.' + o.id], f = FUN[open + '.' + o.id]; bubble(f ? (RAR[f[1]] ? RAR[f[1]] + ' \u00B7 ' : '') + f[0] : o.ic + ' ' + o.name, jk || hint || '', o.pro, o.con); }
+  function renderStats(flash) {
+    const { v, t } = totals(CH), vol = t >= VOLT;
+    $('stats').innerHTML = STATS.map(([k, ic, nm]) => { const n = v[k], d = prev ? v[k] - prev.v[k] : 0; return '<div class="sc ' + (n >= 7 ? 'hi' : n <= 3 ? 'lo' : 'mid') + '"><span class="e">' + ic + '</span><b>' + n + '</b><small>' + nm + '</small><i class="bar"><i style="width:' + Math.max(0, Math.min(100, n * 10)) + '%"></i></i>' + (flash && d ? '<span class="dl ' + (d > 0 ? 'p' : 'm') + '">' + (d > 0 ? '+' : '') + d + '</span>' : '') + '</div>'; }).join('');
+    $('tf').style.width = Math.min(100, t / TMAX * 100) + '%'; $('tm').style.left = (VOLT / TMAX * 100) + '%';
+    $('tn').textContent = vol ? 'You signed a waiver. You read none of it.' : t + ' / ' + VOLT; $('tl').textContent = vol ? '\uD83C\uDF08 INFORMED VOLUNTEER!' : '\uD83C\uDF08 Trippy'; $('trip').classList.toggle('vol', vol);
+    CH.rating = vol ? 'volunteer' : CH.diff;
+    document.querySelectorAll('.df').forEach((b) => b.classList.toggle('on', !vol && b.dataset.id === CH.diff));
+    $('nm').textContent = (CH.name || opt('alias', CH.alias).name) + ' \u00B7 ' + (vol ? 'Informed Volunteer' : DIFFS.find((d) => d[0] === CH.diff)[2]);
+    prev = { v, t }; ANIMST = { calm: v.safe, spd: v.spd, vol, cope: CH.cope };
+  }
+  function renderTabs() {
+    const w = $('tabs'); w.innerHTML = '';
+    (MODE === 'loadout' ? LOAD_TABS : LOOK_TABS).forEach((k, i) => { if (k === 'alias' || k === 'occ') { const s = document.createElement('span'); s.className = 'sep'; w.appendChild(s); } const b = document.createElement('button'); b.className = 'tabb' + (open === k ? ' on' : '') + (['alias', 'occ', 'cope'].includes(k) ? ' life' : ''); b.title = (k === 'color' || k === 'paint') ? (k === 'paint' ? 'Paint' : 'Colour') : CATS[k][1]; b.innerHTML = ((k === 'color' || k === 'paint') ? '<span class="dot" style="background:' + COLORS.find((c) => c[0] === CH[k])[1] + '"></span><small>' + (k === 'paint' ? 'Paint' : 'Colour') + '</small>' : '<span class="tic">' + CATS[k][0] + '</span><small>' + CATS[k][1] + '</small>'); b.onclick = () => { blip(); openSlot(k); }; w.appendChild(b); });
+    const on = w.querySelector('.on'); if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+  }
+  function renderGrid() {
+    const g = $('grid'), keep = g.scrollTop; g.innerHTML = '';
+    $('pt').textContent = (open === 'color' || open === 'paint') ? (open === 'paint' ? 'Car paint' : 'Suit colour') : CATS[open][1];
+    $('ps').textContent = (open === 'color' || open === 'paint') ? CH[open] : opt(open, CH[open]).name;
+    if (open === 'alias') { const w = document.createElement('div'); w.className = 'nmw'; w.innerHTML = '<input id="nameIn" maxlength="16" autocomplete="off" autocapitalize="words" placeholder="Type your name" value="' + (CH.name || '').replace(/"/g, '') + '"><small>Or pick one of ours below. Leave it empty and we will choose for you.</small>'; g.appendChild(w); const inp = w.querySelector('input'); inp.oninput = () => { inp.value = inp.value.replace(/[^A-Za-z0-9 _.'-]/g, ''); CH.name = inp.value.trim(); save(); $('nm').textContent = (CH.name || opt('alias', CH.alias).name) + ' \u00B7 ' + $('nm').textContent.split(' \u00B7 ')[1]; }; }
+    if (open === 'color' || open === 'paint') { for (const [id, hex] of COLORS) { const b = document.createElement('button'); b.className = 'opt sw' + (CH[open] === id ? ' on' : ''); b.innerHTML = '<span class="th" style="background:linear-gradient(135deg,' + hex + ',' + hex + 'aa)"></span><span class="nm">' + id + '</span>'; b.onclick = () => { CH[open] = id; blip(); save(); build(); renderTabs(); renderGrid(); }; g.appendChild(b); } return; }
+    g.classList.toggle('gridg', open === 'gear'); document.body.classList.toggle('lo', MODE === 'loadout');
+    if (open === 'gear') { for (const o of CATS.gear[2]) { const b = document.createElement('button'); b.className = 'opt gearopt' + (CH.gear === o.id ? ' on' : ''); const tx = (window.DLFX && DLFX.TXT['gear.' + o.id]) || ['', '']; b.innerHTML = '<span class="emo">' + o.ic + '</span><span class="gtx"><span class="gt">' + o.name + '</span><span class="gd">' + tx[0] + '</span><span class="gc">\u25BC ' + tx[1] + '</span></span>'; b.onclick = () => { CH.gear = o.id; blip(); save(); if (MODEL === 'car') build(); renderGrid(); describe(o, ''); }; g.appendChild(b); } g.scrollTop = 0; return; }
+    for (const o of CATS[open][2]) { const b = document.createElement('button'); b.className = 'opt' + (CH[open] === o.id ? ' on' : ''); const key = open + '.' + o.id, im = THUMBS[key], fu = FUN[key], rr = fu ? fu[1] : 0; if (rr) b.className += ' rar' + rr; b.innerHTML = '<span class="th">' + (im ? '<img alt="" data-k="' + key + '" data-i="' + ((b.parentNode ? 0 : g.children.length * 3) % TF) + '" src="' + im[0] + '">' : '<span class="emo">' + o.ic + '</span>') + (rr ? '<b class="rib">' + ['', 'RARE', 'EPIC', 'LEGEND'][rr] + '</b>' : '') + (rr >= 2 || CH[open] === o.id ? '<i class="sp s1">\u2726</i><i class="sp s2">\u2726</i>' : '') + '<span class="cs">' + chips(o) + '</span></span><span class="nm">' + o.name + '</span>'; { const th = b.querySelector('.th'); if (th) th.style.animationDelay = (-Math.random() * 4).toFixed(2) + 's'; } b.onclick = () => { CH[open] = o.id; if (open === 'alias') CH.name = ''; blip(); save(); build(); renderGrid(); renderStats(true); describe(o, 'Nothing chosen.'); }; g.appendChild(b); }
+    g.scrollTop = keep;
+  }
+  function frame() { cam.setTarget(new B.Vector3(0, MODEL === 'car' ? .9 : 1.88, 0)); cam.radius = MODEL === 'car' ? 6.4 : 5.7; cam.alpha = Math.PI / 2 - (MODEL === 'car' ? .4 : 0); }
+  function renderMode() { document.querySelectorAll('#mode button').forEach((b) => b.classList.toggle('on', b.dataset.m === MODE)); }
+  function openSlot(k) { const m = CARSLOTS.has(k) ? 'car' : 'driver', sw = m !== MODEL; MODEL = m; MODE = LOADSET.has(k) ? 'loadout' : 'looks'; open = k; if (sw) { build(); frame(); } renderMode(); renderTabs(); renderGrid(); if (k === 'color' || k === 'paint') bubble(k === 'paint' ? '\uD83C\uDFA8 Car paint' : '\uD83C\uDFA8 Suit colour', 'Just for looks. It changes nothing about how you play.', '', ''); else describe(opt(k, CH[k]), 'Nothing chosen.'); }
+  document.querySelectorAll('#mode button').forEach((b) => { b.onclick = () => { blip(); openSlot(b.dataset.m === 'loadout' ? 'gear' : 'mask'); }; });
+  DIFFS.forEach(([id, ic, nm]) => { const b = document.createElement('button'); b.className = 'df'; b.dataset.id = id; b.innerHTML = '<span class="ic">' + ic + '</span>' + nm; b.onclick = () => { CH.diff = id; blip(); save(); renderStats(false); }; $('diff').appendChild(b); });
+  // ---- the 3D character: fully covered by suit, mask and gloves. Tap any part to open its slot.
+  const B = BABYLON, engine = new B.Engine($('cv'), true, { preserveDrawingBuffer: true }), scene0 = new B.Scene(engine); let scene = scene0; scene.clearColor = new B.Color4(.03, .035, .06, 1);
+  const cam = new B.ArcRotateCamera('c', Math.PI / 2, 1.4, 5.7, new B.Vector3(0, 1.88, 0), scene); cam.lowerRadiusLimit = 4.5; cam.upperRadiusLimit = 11; cam.lowerAlphaLimit = Math.PI / 2 - .5; cam.upperAlphaLimit = Math.PI / 2 + .5; cam.lowerBetaLimit = 1.2; cam.upperBetaLimit = 1.6; cam.attachControl($('cv'), true); cam.wheelPrecision = 60;
+  new B.HemisphericLight('h', new B.Vector3(0, 1, -.3), scene).intensity = .85; const dl = new B.DirectionalLight('d', new B.Vector3(-.4, -1, .8), scene); dl.intensity = .9; const gl = new B.GlowLayer('g', scene); gl.intensity = .35;
+  const floor = B.MeshBuilder.CreateDisc('floor', { radius: 2.5, tessellation: 56 }, scene); floor.rotation.x = Math.PI / 2; floor.position.y = .01; floor.isPickable = false; const fm = new B.StandardMaterial('fm', scene); fm.diffuseColor = new B.Color3(.08, .09, .13); fm.emissiveColor = new B.Color3(.03, .06, .11); floor.material = fm;
+  const ring = B.MeshBuilder.CreateTorus('ring', { diameter: 5, thickness: .06, tessellation: 64 }, scene); ring.position.y = .03; ring.isPickable = false; const rm = new B.StandardMaterial('rm', scene); rm.emissiveColor = new B.Color3(.2, .9, 1); rm.disableLighting = true; ring.material = rm;
+  { // the stage: a night road with a billboard and two lamps
+    scene.fogMode = B.Scene.FOGMODE_EXP2; scene.fogColor = new B.Color3(.04, .05, .09); scene.fogDensity = .02;
+    const road = B.MeshBuilder.CreateGround('road', { width: 18, height: 34 }, scene); road.position.set(0, 0, -8); road.isPickable = false; const rmt = new B.StandardMaterial('rd', scene); rmt.diffuseColor = new B.Color3(.36, .42, .54); rmt.specularColor = B.Color3.Black(); road.material = rmt;
+    for (let i = 0; i < 9; i++) { const d = B.MeshBuilder.CreateBox('dash', { width: .25, height: .01, depth: 1.2 }, scene); d.position.set(0, .012, -2 - i * 2.4); d.isPickable = false; const dm = new B.StandardMaterial('dm', scene); dm.emissiveColor = new B.Color3(.9, .85, .6); dm.disableLighting = true; d.material = dm; }
+    const bt = new B.DynamicTexture('bb', { width: 1024, height: 512 }, scene, true), bc = bt.getContext(); bc.fillStyle = '#0a1428'; bc.fillRect(0, 0, 1024, 512); bc.strokeStyle = '#38e8ff'; bc.lineWidth = 12; bc.strokeRect(10, 10, 1004, 492); bc.textAlign = 'center'; bc.fillStyle = '#38e8ff'; bc.font = 'bold 110px Arial'; bc.fillText('FORM 7-B', 512, 190); bc.fillStyle = '#ffffff'; bc.font = 'bold 56px Arial'; bc.fillText('PLEASE REMAIN CALM', 512, 290); bc.fillStyle = '#ff9f1a'; bc.font = 'bold 36px Arial'; bc.fillText('Your answers have already been noted.', 512, 380); bt.update();
+    const bb = B.MeshBuilder.CreatePlane('bb', { width: 11, height: 5.5 }, scene); bb.position.set(0, 4.6, -10); bb.rotation.y = Math.PI; bb.isPickable = false; const bbm = new B.StandardMaterial('bbm', scene); bbm.emissiveTexture = bt; bbm.disableLighting = true; bbm.backFaceCulling = false; bb.material = bbm;
+    [-1, 1].forEach((s) => { const post = B.MeshBuilder.CreateCylinder('lp', { diameter: .14, height: 5.5 }, scene); post.position.set(s * 5, 2.75, -5); post.isPickable = false; const pm = new B.StandardMaterial('pm', scene); pm.diffuseColor = new B.Color3(.13, .14, .22); post.material = pm; const lamp = B.MeshBuilder.CreateSphere('lb', { diameter: .6 }, scene); lamp.position.set(s * 5, 5.6, -5); lamp.isPickable = false; const lm = new B.StandardMaterial('lm', scene); lm.emissiveColor = new B.Color3(1, .75, .35); lm.disableLighting = true; lamp.material = lm; const pl = new B.PointLight('pl', new B.Vector3(s * 4.4, 5, -4.2), scene); pl.diffuse = new B.Color3(1, .7, .35); pl.intensity = .55; pl.range = 14; });
+  }
+  let touchT = 0; scene.onPointerObservable.add((pi) => { if (pi.type === B.PointerEventTypes.POINTERDOWN) touchT = performance.now(); });
+  const mat = (hex, o) => { const m = new B.StandardMaterial('m', scene); m.diffuseColor = B.Color3.FromHexString(hex); m.specularColor = new B.Color3(.25, .25, .25); if (o) Object.assign(m, o); return m; };
+  const glow = (hex) => mat('#000000', { emissiveColor: B.Color3.FromHexString(hex), disableLighting: true });
+  let rig = null, parts = [], popT = 0, S = 'outfit', ANIM = null;
+  function buildDriver() {
+    if (rig) rig.dispose(false, true); rig = new B.TransformNode('rig', scene); parts = []; const PY = 2.2, headPivot = new B.TransformNode('hp', scene); headPivot.parent = rig; headPivot.position.set(0, PY, 0); ANIM = { head: headPivot, armL: null, armR: null, legL: null, legR: null };
+    const hex = COLORS.find((c) => c[0] === CH.color)[1], suit = mat(hex), P = (m, x, y, z, mt) => { const hp = (S === 'mask' || S === 'hat' || S === 'face'); m.position.set(x, hp ? y - PY : y, z); m.material = mt || suit; m.parent = hp ? headPivot : rig; m.metadata = Object.assign(m.metadata || {}, { slot: S }); parts.push(m); return m; };
+    S = 'outfit'; P(B.MeshBuilder.CreateCapsule('torso', { radius: .44, height: 1.55 }, scene), 0, 1.4, 0);
+    [-1, 1].forEach((s) => { S = 'outfit'; const a = P(B.MeshBuilder.CreateCapsule('arm', { radius: .12, height: 1 }, scene), s * .62, 1.45, 0); a.rotation.z = s * .18; const lg = P(B.MeshBuilder.CreateCapsule('leg', { radius: .17, height: 1.15 }, scene), s * .22, .58, 0); if (s < 0) { ANIM.armL = a; ANIM.legL = lg; } else { ANIM.armR = a; ANIM.legR = lg; } S = 'feet'; const sn = CH.feet === 'sneakers', f = P(B.MeshBuilder.CreateSphere('ft', { diameter: .4 }, scene), s * .22, .1, .08, sn ? mat('#e8283a') : mat('#222233')); f.scaling.set(1, .5, 1.4); f.metadata.side = s; if (sn) { P(B.MeshBuilder.CreateBox('sst', { width: .36, height: .05, depth: .5 }, scene), s * .22, .14, .1, mat('#ffffff')).metadata.side = s; P(B.MeshBuilder.CreateBox('sso', { width: .44, height: .07, depth: .66 }, scene), s * .22, .05, .1, mat('#ffffff')).metadata.side = s; P(B.MeshBuilder.CreateBox('ssl', { width: .06, height: .16, depth: .3 }, scene), s * .22, .22, .0, mat('#ffd23f')).metadata.side = s; } });
+    S = 'gloves'; const GC = { mitts: ['#8a5cf6', '#ffd23f'], work: ['#d7ff2a', '#2b2250'], racing: ['#e8283a', '#ffffff'] }[CH.gloves] || ['#d7ff2a', '#2b2250'];
+    [-1, 1].forEach((s) => { const arm = s < 0 ? ANIM.armL : ANIM.armR, G = (m, x, y, z, mt, rx, rz) => { const q = P(m, 0, 0, 0, mt); q.parent = arm; q.position.set(x, y, z); if (rx) q.rotation.x = rx; if (rz) q.rotation.z = rz; q.metadata.side = s; return q; }, bm = mat(GC[0]), tm = mat(GC[1]);
+      if (CH.gloves === 'mitts') { const pm = G(B.MeshBuilder.CreateSphere('gv', { diameter: .5, segments: 18 }, scene), 0, -.5, 0, bm); pm.scaling.set(1, 1.12, .85); G(B.MeshBuilder.CreateSphere('gt', { diameter: .22, segments: 12 }, scene), -s * .24, -.44, .1, bm); G(B.MeshBuilder.CreateCylinder('gc', { diameter: .36, height: .13, tessellation: 20 }, scene), 0, -.27, 0, tm); G(B.MeshBuilder.CreateTorus('gk', { diameter: .3, thickness: .03, tessellation: 20 }, scene), 0, -.58, .18, tm, Math.PI / 2); }
+      else if (CH.gloves === 'work') { G(B.MeshBuilder.CreateBox('gv', { width: .36, height: .38, depth: .28 }, scene), 0, -.5, 0, bm); G(B.MeshBuilder.CreateBox('gt', { width: .12, height: .22, depth: .14 }, scene), -s * .24, -.46, .08, bm, 0, s * .4); G(B.MeshBuilder.CreateCylinder('gc', { diameter: .34, height: .16, tessellation: 16 }, scene), 0, -.27, 0, tm); G(B.MeshBuilder.CreateBox('gg', { width: .38, height: .07, depth: .3 }, scene), 0, -.36, 0, tm); for (let q = -1; q <= 1; q++) G(B.MeshBuilder.CreateBox('gf', { width: .09, height: .06, depth: .04 }, scene), q * .11, -.69, .13, tm); }
+      else { const pm = G(B.MeshBuilder.CreateSphere('gv', { diameter: .36, segments: 16 }, scene), 0, -.52, 0, bm); pm.scaling.set(1, 1.1, .9); G(B.MeshBuilder.CreateSphere('gt', { diameter: .15, segments: 10 }, scene), -s * .2, -.46, .08, bm); G(B.MeshBuilder.CreateCylinder('gc', { diameterTop: .3, diameterBottom: .44, height: .34, tessellation: 20 }, scene), 0, -.24, 0, tm); G(B.MeshBuilder.CreateBox('gs', { width: .05, height: .5, depth: .34 }, scene), 0, -.42, .02, tm); G(B.MeshBuilder.CreateBox('gb', { width: .3, height: .05, depth: .3 }, scene), 0, -.12, 0, bm); } });
+    const HY = 2.5; S = 'mask';
+    if (CH.mask === 'mirror') { P(B.MeshBuilder.CreateSphere('head', { diameter: .86, segments: 24 }, scene), 0, HY, 0, mat('#12131a', { specularColor: new B.Color3(1, 1, 1), specularPower: 140 })); P(B.MeshBuilder.CreateBox('vz', { width: .62, height: .13, depth: .06 }, scene), 0, HY + .02, .4, glow('#38e8ff')); }
+    if (CH.mask === 'grin') { P(B.MeshBuilder.CreateSphere('head', { diameter: .86, segments: 24 }, scene), 0, HY, 0, mat('#0c0a16')); const path = []; for (let i = 0; i <= 12; i++) { const a = Math.PI * (.15 + .7 * i / 12); path.push(new B.Vector3(Math.cos(a) * .24, HY - .08 - Math.sin(a) * .12 + .08, .41)); } P(B.MeshBuilder.CreateTube('sm', { path, radius: .03, tessellation: 8 }, scene), 0, 0, 0, glow('#ff7a1a')).position.set(0, -PY, 0); [-1, 1].forEach((s) => P(B.MeshBuilder.CreateSphere('ey', { diameter: .09 }, scene), s * .14, HY + .1, .4, glow('#ff7a1a'))); }
+    if (CH.mask === 'gas') { P(B.MeshBuilder.CreateSphere('head', { diameter: .86, segments: 24 }, scene), 0, HY, 0, mat('#5b6a3a')); [-1, 1].forEach((s) => { const e = P(B.MeshBuilder.CreateTorus('ge', { diameter: .24, thickness: .05, tessellation: 20 }, scene), s * .15, HY + .06, .39, mat('#1a1d12')); e.rotation.x = Math.PI / 2; P(B.MeshBuilder.CreateCylinder('fl', { diameter: .2, height: .22, tessellation: 16 }, scene), s * .22, HY - .15, .38, mat('#2c3320')).rotation.x = Math.PI / 2; }); }
+    if (CH.mask === 'robot') { P(B.MeshBuilder.CreateBox('head', { width: .8, height: .78, depth: .76 }, scene), 0, HY, 0, mat('#9aa6b6', { specularColor: new B.Color3(1, 1, 1), specularPower: 90 })); [-1, 1].forEach((s) => P(B.MeshBuilder.CreateBox('led', { width: .2, height: .07, depth: .04 }, scene), s * .17, HY + .08, .39, glow('#ff3f5f'))); for (let i = 0; i < 3; i++) P(B.MeshBuilder.CreateBox('gr', { width: .3, height: .025, depth: .03 }, scene), 0, HY - .16 - i * .06, .39, mat('#2a303c')); }
+    S = 'outfit'; const ov = (hx, h, y, d) => P(B.MeshBuilder.CreateCylinder('ov', { diameter: d || .96, height: h || 1.05, tessellation: 32 }, scene), 0, y || 1.35, 0, mat(hx));
+    if (CH.outfit === 'suit') { ov('#3a3f4a'); P(B.MeshBuilder.CreateBox('sh', { width: .26, height: .7, depth: .03 }, scene), 0, 1.5, .5, mat('#f2f4f8')); P(B.MeshBuilder.CreateBox('tie', { width: .08, height: .55, depth: .03 }, scene), 0, 1.45, .52, mat('#c8323c')); P(B.MeshBuilder.CreateBox('bg', { width: .2, height: .26, depth: .02 }, scene), .2, 1.2, .5, mat('#1fb8b0')); }
+    if (CH.outfit === 'flannel') { const t = new B.DynamicTexture('pl', 128, scene, true), c = t.getContext(); c.fillStyle = '#b3262d'; c.fillRect(0, 0, 128, 128); c.fillStyle = '#1a1a1a99'; for (let i = 0; i < 128; i += 32) { c.fillRect(i, 0, 14, 128); c.fillRect(0, i, 128, 14); } t.update(); const m = mat('#ffffff'); m.diffuseTexture = t; ov('#fff').material = m; }
+    if (CH.outfit === 'hivis') { ov('#d7ff2a'); [1.15, 1.55].forEach((y) => P(B.MeshBuilder.CreateCylinder('st', { diameter: .98, height: .09, tessellation: 32 }, scene), 0, y, 0, mat('#e8eef2', { emissiveColor: new B.Color3(.3, .3, .3) }))); }
+    if (CH.outfit === 'track') { ov('#2a6df4'); P(B.MeshBuilder.CreateCylinder('st', { diameter: .98, height: .07, tessellation: 32 }, scene), 0, 1.3, 0, mat('#ffffff')); }
+    S = 'hat';
+    if (CH.hat === 'beanie') { const c = P(B.MeshBuilder.CreateSphere('hat', { diameter: .9, segments: 20 }, scene), 0, HY + .2, 0, mat('#e05a2b')); c.scaling.y = .78; P(B.MeshBuilder.CreateSphere('pom', { diameter: .2 }, scene), 0, HY + .62, 0, mat('#f2e2c0')); P(B.MeshBuilder.CreateTorus('bd', { diameter: .84, thickness: .1, tessellation: 32 }, scene), 0, HY + .08, 0, mat('#b9421d')); }
+    if (CH.hat === 'bowler') { const c = P(B.MeshBuilder.CreateSphere('hat', { diameter: .84, segments: 20 }, scene), 0, HY + .28, 0, mat('#15171c')); c.scaling.y = .85; P(B.MeshBuilder.CreateCylinder('br', { diameter: 1.2, height: .05, tessellation: 32 }, scene), 0, HY + .16, 0, mat('#15171c')); }
+    if (CH.hat === 'hard') { const c = P(B.MeshBuilder.CreateSphere('hat', { diameter: .92, segments: 20 }, scene), 0, HY + .22, 0, mat('#f2c230')); c.scaling.y = .78; P(B.MeshBuilder.CreateCylinder('br', { diameter: 1.1, height: .05, tessellation: 32 }, scene), 0, HY + .1, .05, mat('#f2c230')); P(B.MeshBuilder.CreateBox('rg', { width: .1, height: .06, depth: .9 }, scene), 0, HY + .6, 0, mat('#d9a516')); }
+    if (CH.hat === 'foil') P(B.MeshBuilder.CreateCylinder('hat', { diameterTop: 0, diameterBottom: .8, height: .95, tessellation: 7 }, scene), 0, HY + .6, 0, mat('#d8dde3', { specularColor: new B.Color3(1, 1, 1), specularPower: 90 }));
+    if (CH.hat === 'visor') { const c = P(B.MeshBuilder.CreateSphere('hat', { diameter: 1.0, segments: 24 }, scene), 0, HY, 0, mat('#4a6b3a')); c.scaling.set(1.02, 1.04, 1.04); const v = P(B.MeshBuilder.CreateSphere('vz', { diameter: .76, segments: 20 }, scene), 0, HY + .02, .26, mat('#e8b630', { specularColor: new B.Color3(1, 1, 1), specularPower: 120 })); v.scaling.set(1, .62, .5); }
+    S = 'face'; const FY = HY + .02;
+    if (CH.face === 'round') [-1, 1].forEach((s) => { const r = P(B.MeshBuilder.CreateTorus('gl', { diameter: .26, thickness: .035, tessellation: 24 }, scene), s * .15, FY, .46, mat('#202228')); r.rotation.x = Math.PI / 2; });
+    if (CH.face === 'shades') { [-1, 1].forEach((s) => P(B.MeshBuilder.CreateBox('sd', { width: .27, height: .15, depth: .04 }, scene), s * .15, FY, .46, mat('#08090c', { specularColor: new B.Color3(1, 1, 1) }))); P(B.MeshBuilder.CreateBox('sb', { width: .1, height: .025, depth: .03 }, scene), 0, FY + .04, .47, mat('#08090c')); }
+    if (CH.face === 'stache') { const bm = mat('#3b2412'); [-1, 1].forEach((s) => { const m = P(B.MeshBuilder.CreateSphere('mu', { diameter: .3, segments: 14 }, scene), s * .13, 2.26, .43, bm); m.scaling.set(1.5, .55, .8); const tip = P(B.MeshBuilder.CreateSphere('mt', { diameter: .16 }, scene), s * .33, 2.32, .34, bm); tip.scaling.set(1, .8, .8); }); P(B.MeshBuilder.CreateSphere('mc', { diameter: .18 }, scene), 0, 2.29, .47, bm); }
+    if (CH.face === 'curly') { const bm = mat('#0c0c0f'); [-1, 1].forEach((s) => { const path = [[0, 0], [.1, -.02], [.22, 0], [.3, .06], [.3, .12], [.25, .15]].map((p) => new B.Vector3(s * p[0], 2.26 + p[1], .46 - p[0] * .35)); P(B.MeshBuilder.CreateTube('cu', { path, radius: .028, tessellation: 8 }, scene), 0, 0, 0, bm).position.set(0, -PY, 0); }); }
+    S = 'charm'; const cy = 1.0, cx = -1.7;
+    if (false && CH.charm === 'c1') { P(B.MeshBuilder.CreateCylinder('sp', { diameter: .03, height: .5 }, scene), cx, .55, 0, mat('#999')); P(B.MeshBuilder.CreateSphere('bh', { diameter: .45 }, scene), cx, .95, 0, mat('#7f6df2')); P(B.MeshBuilder.CreateBox('tie', { width: .09, height: .2, depth: .03 }, scene), cx, .5, .3, mat('#c8323c')); }
+    if (false && CH.charm === 'c2') { P(B.MeshBuilder.CreateCylinder('pole', { diameter: .04, height: 1 }, scene), cx, .6, 0, mat('#ccc')); const fl = P(B.MeshBuilder.CreatePlane('fl', { width: .6, height: .38 }, scene), cx + .32, 1, 0, mat('#6a4fc9', { backFaceCulling: false })); fl.metadata.wave = true; }
+    if (false && CH.charm === 'c3') { const t = P(B.MeshBuilder.CreateCylinder('tree', { diameterTop: 0, diameterBottom: .5, height: .8, tessellation: 3 }, scene), cx, cy, 0, mat('#3fbf6a')); t.metadata.spin = true; }
+    if (false && CH.charm === 'c4') { P(B.MeshBuilder.CreateBox('ph', { width: .55, height: .42, depth: .03 }, scene), cx, cy, 0, mat('#f1f1f1')); P(B.MeshBuilder.CreateBox('im', { width: .45, height: .3, depth: .035 }, scene), cx, cy, .01, mat('#6d6d78')); }
+    ANIM.fx = collectFx(); popT = performance.now();
+  }
+  // ---- the idle: the character stands and shuffles. What it does depends on the choices (calm, speed, coping, the Informed Volunteer)
+  function animate(t) {
+    if (MODEL === 'car') { if (!rig) return; rig.rotation.set(0, 0, 0); rig.rotation.z = .012 * Math.sin(t * 1.7); rig.position.y += .01 * Math.sin(t * 37); return; }
+    if (!ANIM || !ANIM.armL || !rig) return; if (REEL.on) { REEL.step(); return; } const st = ANIMST, A = ANIM, cl = (x) => Math.max(0, Math.min(1, x));
+    const fid = cl((4 - st.calm) / 4), bnc = cl((st.spd - 6) / 3), zen = cl((st.calm - 6) / 3);
+    A.armL.rotation.set(0, 0, -.18); A.armR.rotation.set(0, 0, .18); A.legL.rotation.x = 0; A.legR.rotation.x = 0; A.legL.rotation.z = 0; A.legR.rotation.z = 0; A.head.rotation.set(0, 0, 0); rig.rotation.set(0, 0, 0); rig.position.x = 0;
+    rig.scaling.y *= 1 + .012 * Math.sin(t * 1.7); { const ws = Math.sin(t * 1.3); rig.position.x = .05 * ws; rig.rotation.z += .025 * ws; A.legL.rotation.z = .06 * ws; A.legR.rotation.z = .06 * ws; }
+    if (bnc) { rig.rotation.z += .05 * Math.sin(t * 3) * bnc; rig.position.x += .06 * Math.sin(t * 3) * bnc; A.armL.rotation.x += .15 * Math.sin(t * 3) * bnc; A.armR.rotation.x -= .15 * Math.sin(t * 3) * bnc; }
+    if (zen) { rig.rotation.z = .025 * Math.sin(t * .8) * zen; A.head.rotation.x = .05 * Math.sin(t * .8); }
+    if (fid) { A.legR.rotation.x = Math.max(0, Math.sin(t * 9)) * .55 * fid; A.head.rotation.y = .55 * Math.sin(t * 1.3) * Math.max(0, Math.sin(t * .6)) * fid; A.armL.rotation.x = .1 * Math.sin(t * 11) * fid; }
+    const c = st.cope;
+    if (c === 'doom') { A.head.rotation.x = .4; A.armR.rotation.x = -1.0 + .1 * Math.sin(t * 5); A.armR.rotation.z = .08; }
+    else if (c === 'denial') { A.head.rotation.y = .5 * Math.sin(t * .5); A.head.rotation.x = -.05; }
+    else if (c === 'gallows') { const q = Math.max(0, Math.sin(t * .9)); rig.rotation.z += .035 * Math.sin(t * 20) * q; A.head.rotation.x = -.18 * q; }
+    else if (c === 'cardio') { A.legL.rotation.x = Math.sin(t * 8) * .6; A.legR.rotation.x = -Math.sin(t * 8) * .6; A.armL.rotation.x = -Math.sin(t * 8) * .6; A.armR.rotation.x = Math.sin(t * 8) * .6; rig.position.y += Math.abs(Math.sin(t * 8)) * .02; }
+    if (st.vol) { const ph = t * 3.2; rig.rotation.z += .08 * Math.sin(ph); rig.position.x += .1 * Math.sin(ph); A.armL.rotation.z = -.18 - .9 * (.5 + .5 * Math.sin(ph)); A.armR.rotation.z = .18 + .9 * (.5 + .5 * Math.sin(ph + 1.6)); A.head.rotation.z = .12 * Math.sin(ph); }
+  }
+  // ---- THE REEL: story moments acted by whatever mask and outfit you wear. No face: the body acts, and each mask has a few tricks (eye shape, tilt, glow, smile curve).
+  const MOODS = { neutral: { w: 1, h: 1, tilt: 0, curve: 1, glow: 0 }, wide: { w: 1.35, h: 1.7, tilt: 0, curve: 1.2, glow: .7 }, narrow: { w: 1.25, h: .35, tilt: 0, curve: .7, glow: 0 }, smug: { w: 1.1, h: .5, tilt: .3, curve: 1.6, glow: .2 }, droop: { w: 1, h: .6, tilt: -.4, curve: -.9, glow: -.35 }, angry: { w: 1.15, h: .55, tilt: .55, curve: -.5, glow: .6 }, happy: { w: 1.2, h: 1.15, tilt: 0, curve: 2, glow: .8 } };
+  function collectFx() {
+    const pick = (n) => parts.filter((m) => m.name === n && m.metadata && m.metadata.slot === 'mask'), k = CH.mask;
+    const E = k === 'mirror' ? pick('vz') : k === 'grin' ? pick('ey') : k === 'gas' ? pick('ge') : k === 'robot' ? pick('led') : [], sm = pick('sm')[0] || null;
+    if (sm) sm.setPivotPoint(new B.Vector3(0, 2.44, 0));
+    return { kind: k, sm, cur: Object.assign({}, MOODS.neutral), E: E.map((m) => ({ m, sx: m.scaling.x, sy: m.scaling.y, sz: m.scaling.z, rz: m.rotation.z, side: m.position.x >= 0 ? 1 : -1, ec: m.material && m.material.emissiveColor ? m.material.emissiveColor.clone() : null })) };
+  }
+  function applyMood(fx, m, k) {
+    const c = fx.cur; for (const q in c) c[q] += (m[q] - c[q]) * k;
+    for (const e of fx.E) { const o = e.m;
+      if (fx.kind === 'gas') o.scaling.set(e.sx * c.w, e.sy, e.sz * c.h); else o.scaling.set(e.sx * c.w, e.sy * c.h, e.sz);
+      if (fx.kind === 'robot') o.rotation.z = e.rz + e.side * c.tilt; else if (fx.kind === 'mirror') o.rotation.z = e.rz + c.tilt * .25;
+      if (e.ec && o.material && o.material.emissiveColor) { const g = Math.max(0, c.glow); if (e.ec.r + e.ec.g + e.ec.b > .05) o.material.emissiveColor = e.ec.scale(Math.max(.15, 1 + c.glow)); else o.material.emissiveColor.set(g * .5, g * .5, g * .4); } }
+    if (fx.sm) fx.sm.scaling.y = c.curve;
+  }
+  const REST = { hx: 0, hy: 0, hz: 0, al: [0, -.18], ar: [0, .18], lean: 0, turn: 0, dy: 0, mood: 'neutral' };
+  const SCENES = [
+    { id: 'murmur', name: 'The Murmur', dur: 10, cap: [[1.2, 'MURMUR \u00B7 now'], [3.6, '\u201C...thinking about leaving.\u201D'], [6.4, '\u201CThey were thrilled for you.\u201D']], keys: [
+      { t: 0 }, { t: 1.2 }, { t: 1.7, hz: .38, mood: 'wide' }, { t: 3.2, hz: .38, mood: 'wide', ar: [-.25, .2] }, { t: 3.5, hz: 0, hx: 0, mood: 'narrow' }, { t: 5.2, hy: -.55, turn: .45, mood: 'narrow' },
+      { t: 6.6, hy: -.55, turn: .45, hx: .25, lean: .05, mood: 'smug' }, { t: 8, hx: .5, dy: -.1, mood: 'droop', al: [0, -.06], ar: [0, .06], turn: 0, hy: 0 }, { t: 9.4, hx: .05, mood: 'neutral', al: [0, -.7], ar: [0, .7], dy: 0, lean: 0 }, { t: 10 }] },
+    { id: 'blue', name: 'Something blue', dur: 8, cap: [[1.5, 'HINT'], [2.2, 'Take the blue crystal.']], keys: [
+      { t: 0 }, { t: 1.2 }, { t: 1.8, hx: -.1, lean: .08, mood: 'wide' }, { t: 3, hx: -.1, lean: .12, mood: 'wide', ar: [-.9, 1.25], hy: .1 }, { t: 4.5, ar: [-.9, 1.25], lean: .14, mood: 'happy', dy: .05 },
+      { t: 5.2, dy: .12, mood: 'happy', lean: .1 }, { t: 5.8, dy: 0, mood: 'happy', lean: .14 }, { t: 6.4, dy: .12, mood: 'happy' }, { t: 8, mood: 'neutral', ar: [0, .18], lean: 0, dy: 0 }] },
+    { id: 'see', name: 'SEE', dur: 8, cap: [[1.5, 'SEE'], [2, 'Hidden things show while the ring lasts.']], keys: [
+      { t: 0 }, { t: 1.2, mood: 'wide' }, { t: 2, hx: -.35, mood: 'wide', al: [0, -1.6], ar: [0, 1.6], dy: .1 }, { t: 3.4, hx: -.4, mood: 'happy', al: [0, -2.2], ar: [0, 2.2], dy: .16, lean: .03 },
+      { t: 5, hx: -.1, mood: 'happy', al: [0, -.9], ar: [0, .9], dy: 0 }, { t: 6.2, hx: .1, mood: 'smug', al: [0, -.18], ar: [0, .18] }, { t: 8, mood: 'neutral', hx: 0 }] },
+    { id: 'sign', name: 'The sign', dur: 9, cap: [[1.8, 'ROAD SIGN'], [2.4, 'TUNNEL AHEAD. Lighting provided by your optimism.']], keys: [
+      { t: 0 }, { t: 1.6, hz: .12 }, { t: 3, hz: .18, hx: -.1, mood: 'narrow' }, { t: 4.6, hz: .18, hx: .12, mood: 'narrow' }, { t: 5.6, hz: .2, hx: .12, mood: 'smug', ar: [-.3, .5] },
+      { t: 6.6, hz: 0, hy: -.4, mood: 'smug', al: [0, -.7], ar: [0, .7], dy: .04 }, { t: 7.6, hy: -.4, dy: 0, mood: 'neutral' }, { t: 9, hy: 0, al: [0, -.18], ar: [0, .18] }] },
+    { id: 'tunnel', name: 'The tunnel', dur: 10, cap: [[1.5, 'DARK INSIDE'], [2, 'SEE lights the way.']], keys: [
+      { t: 0 }, { t: 1.5, hx: -.15, mood: 'narrow' }, { t: 3, hx: .2, lean: -.05, mood: 'droop', dy: -.04 }, { t: 4.6, hx: .35, mood: 'droop', al: [0, -.05], ar: [0, .05], lean: -.06 }, { t: 5.6, hx: .05, mood: 'neutral', lean: 0, dy: 0 },
+      { t: 6.8, hx: -.12, mood: 'angry', al: [-.6, -.1], ar: [-.6, .1], lean: .1 }, { t: 8.4, hx: -.12, mood: 'angry', lean: .16, al: [-.6, -.1], ar: [-.6, .1] }, { t: 10, mood: 'angry', lean: .16 }] },
+    { id: 'lamp', name: 'The lamp', dur: 11, cap: [[2.5, 'ROUTE ZERO'], [3, 'Done. Keep driving.']], keys: [
+      { t: 0, mood: 'droop', hx: .2 }, { t: 1.8, hx: .12, mood: 'narrow' }, { t: 3, hx: -.35, mood: 'wide', ar: [-.9, .35], hy: .25 }, { t: 4.8, hx: -.3, mood: 'happy', al: [0, -.55], ar: [0, .55], hy: 0 },
+      { t: 6.5, hx: -.15, mood: 'happy', al: [0, -.9], ar: [0, .9], dy: .06 }, { t: 8, hx: .35, mood: 'happy', lean: 0, al: [0, -.4], ar: [0, .4], dy: -.06 }, { t: 9.2, hx: 0, mood: 'happy', dy: 0 }, { t: 11, mood: 'neutral', al: [0, -.18], ar: [0, .18] }] }
+  ];
+  const REEL = { on: false, sc: null, t0: 0, cap: '',
+    start(i) { this.sc = SCENES[i]; this.t0 = performance.now(); this.on = true; this.cap = ''; document.querySelectorAll('#reelChips button[data-i]').forEach((b) => b.classList.toggle('on', +b.dataset.i === i)); },
+    stop() { this.on = false; document.getElementById('reelCap').textContent = ''; document.querySelectorAll('#reelChips button').forEach((b) => b.classList.remove('on')); if (ANIM && ANIM.fx) applyMood(ANIM.fx, MOODS.neutral, 1); },
+    step() {
+      const A = ANIM, sc = this.sc, hold = this.hold != null, t = hold ? this.hold : (performance.now() - this.t0) / 1000; if (!sc || (!hold && t > sc.dur + .6)) { this.stop(); return; }
+      const K = sc.keys; let i = 0; while (i < K.length - 2 && K[i + 1].t <= t) i++; const a = K[i], b = K[Math.min(i + 1, K.length - 1)], u = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 1, s = u * u * (3 - 2 * u);
+      const g = (k) => { const x = a[k] === undefined ? REST[k] : a[k], y = b[k] === undefined ? REST[k] : b[k]; return Array.isArray(x) ? [x[0] + (y[0] - x[0]) * s, x[1] + (y[1] - x[1]) * s] : x + (y - x) * s; };
+      A.head.rotation.set(g('hx'), g('hy'), g('hz')); const al = g('al'), ar = g('ar'); A.armL.rotation.set(al[0], 0, al[1]); A.armR.rotation.set(ar[0], 0, ar[1]); A.legL.rotation.set(0, 0, 0); A.legR.rotation.set(0, 0, 0);
+      rig.rotation.set(0, g('turn'), g('lean')); rig.position.x = 0; rig.position.y += g('dy');
+      if (A.fx) applyMood(A.fx, MOODS[(a.mood || 'neutral')] || MOODS.neutral, hold ? 1 : .12);
+      let cp = ''; for (const c of sc.cap) if (t >= c[0]) cp = c[1]; if (cp !== this.cap) { this.cap = cp; document.getElementById('reelCap').textContent = cp; }
+    } };
+  window.__REEL = REEL;
+  { const bt = document.getElementById('reelBtn'), pn = document.getElementById('reel'), ch = document.getElementById('reelChips');
+    SCENES.forEach((sc, i) => { const b = document.createElement('button'); b.dataset.i = i; b.textContent = sc.name; b.onclick = () => { if (MODEL !== 'driver') openSlot('mask'); REEL.start(i); }; ch.appendChild(b); });
+    const x = document.createElement('button'); x.textContent = 'Stop'; x.onclick = () => REEL.stop(); ch.appendChild(x);
+    bt.onclick = () => { const on = !pn.classList.contains('on'); pn.classList.toggle('on', on); document.getElementById('cvw').classList.toggle('reeling', on); if (on) { if (MODEL !== 'driver') openSlot('mask'); REEL.start(0); } else REEL.stop(); }; }
+  const SQ_STILL = () => new URLSearchParams(location.search).has('still');
+  function build() { if (MODEL === 'car') buildCar(); else buildDriver(); }
+  function buildCar() {
+    if (rig) rig.dispose(false, true); rig = new B.TransformNode('rig', scene); parts = []; ANIM = null;
+    const hex = COLORS.find((c) => c[0] === CH.paint)[1], paint = mat(hex), dark = mat('#1d1f2b'), steel = mat('#c9d1d9', { specularColor: new B.Color3(1, 1, 1), specularPower: 80 }), glass = mat('#9fe3ff');
+    const lift = CH.wheels === 'monster' ? .3 : 0, body = new B.TransformNode('body', scene); body.parent = rig; body.position.y = lift;
+    const P = (m, x, y, z, mt, onRig) => { m.position.set(x, y, z); m.material = mt || paint; m.parent = onRig ? rig : body; m.metadata = Object.assign(m.metadata || {}, { slot: S }); parts.push(m); return m; };
+    const bx = (w, h, d) => B.MeshBuilder.CreateBox('b', { width: w, height: h, depth: d }, scene), cyl = (d, h, ts) => B.MeshBuilder.CreateCylinder('c', { diameter: d, height: h, tessellation: ts || 20 }, scene), sph = (d) => B.MeshBuilder.CreateSphere('s', { diameter: d, segments: 14 }, scene), tor = (d, th) => B.MeshBuilder.CreateTorus('t', { diameter: d, thickness: th, tessellation: 24 }, scene), cone = (d, h, ts) => B.MeshBuilder.CreateCylinder('k', { diameterTop: 0, diameterBottom: d, height: h, tessellation: ts || 20 }, scene);
+    const glowM = (c) => mat('#000000', { emissiveColor: B.Color3.FromHexString(c), disableLighting: true });
+    S = 'paint'; P(bx(1.7, .55, 3.2), 0, .55, 0); P(bx(1.45, .5, 1.5), 0, 1.07, -.25); P(bx(1.2, .06, 1.6), 0, 1.35, -.25);
+    P(bx(1.47, .36, .04), 0, 1.07, .52, glass).rotation.x = -.35; P(bx(1.47, .34, .04), 0, 1.07, -1.02, glass); [-1, 1].forEach((s) => P(bx(.04, .34, 1.0), s * .74, 1.07, -.25, glass));
+    [-1, 1].forEach((s) => { P(sph(.28), s * .6, .62, 1.58, glowM('#ffe066')); P(sph(.26), s * .62, .62, -1.58, glowM('#ff4d5e')); });
+    // wheels (one wheel is the one shown alone on the tile)
+    S = 'wheels'; const WR = { stock: .38, slicks: .38, knobbly: .42, monster: .62 }[CH.wheels] || .38, WW = { stock: .28, slicks: .44, knobbly: .34, monster: .5 }[CH.wheels] || .28, WM = { stock: dark, slicks: mat('#2a2d3a'), knobbly: mat('#3a2f25'), monster: mat('#15161c') }[CH.wheels] || dark;
+    [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => { const sd = (sx === 1 && sz === 1) ? -1 : 1, wx = sx * .95, wz = sz * 1.05; const w = P(cyl(WR * 2, WW, 24), wx, WR, wz, WM, true); w.rotation.z = Math.PI / 2; w.metadata.side = sd; const hub = P(cyl(WR * 1.1, WW + .03, 16), wx + sx * .005, WR, wz, steel, true); hub.rotation.z = Math.PI / 2; hub.metadata.side = sd;
+      if (CH.wheels === 'slicks') { const st = P(cyl(WR * 1.7, WW + .04, 24), wx, WR, wz, mat('#e8283a'), true); st.rotation.z = Math.PI / 2; st.scaling.y = .25; st.metadata.side = sd; }
+      if (CH.wheels === 'knobbly') for (let i = 0; i < 12; i++) { const a = i * Math.PI / 6, k = P(bx(WW, .1, .14), wx, WR + Math.cos(a) * (WR + .03), wz + Math.sin(a) * (WR + .03), WM, true); k.rotation.x = -a; k.metadata.side = sd; } });
+    S = 'engine';
+    if (CH.engine === 'stock') { P(bx(.9, .2, .7), 0, .93, 1.0, mat('#4a4f66')); P(bx(.5, .1, .4), 0, 1.06, 1.0, steel); }
+    if (CH.engine === 'turbo') { P(tor(.5, .18), 0, 1.05, .95, mat('#ff8a1f', { specularColor: new B.Color3(1, 1, 1) })).rotation.x = Math.PI / 2; P(cyl(.3, .3, 16), 0, 1.05, .95, steel).rotation.x = Math.PI / 2; P(cyl(.12, .5, 12), .3, .98, .6, steel).rotation.z = 1.2; }
+    if (CH.engine === 'rocket') [-1, 1].forEach((s) => { const ex = P(cyl(.3, .8, 16), s * .4, .75, -1.85, steel); ex.rotation.x = Math.PI / 2; ex.metadata.side = s; const fl = P(cone(.28, .7, 12), s * .4, .75, -2.4, glowM('#ff8a1f')); fl.rotation.x = -Math.PI / 2; fl.metadata.side = s; });
+    if (CH.engine === 'hamster') { P(tor(.7, .06), 0, 1.0, -1.85, steel).rotation.x = Math.PI / 2; [0, 1, 2].forEach((i) => { const sp = P(bx(.64, .03, .03), 0, 1.0, -1.85, steel); sp.rotation.z = i * Math.PI / 3; }); P(sph(.24), 0, .8, -1.85, mat('#e0a96d')); P(sph(.07), .08, .86, -1.74, mat('#111')); }
+    S = 'springs';
+    [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sz]) => { const sd = (sx === 1 && sz === 1) ? -1 : 1; let m = null; const x = sx * .92, z = sz * 1.05;
+      if (CH.springs === 'pogo') { const path = []; for (let i = 0; i <= 40; i++) path.push(new B.Vector3(Math.cos(i * .9) * .17, i * .014, Math.sin(i * .9) * .17)); m = P(B.MeshBuilder.CreateTube('co', { path, radius: .03, tessellation: 8 }, scene), x, .5, z, steel, true); }
+      else if (CH.springs === 'cloud') { m = P(sph(.46), x, .55, z, mat('#ffffff'), true); const m2 = P(sph(.34), x + sx * .18, .5, z + .1, mat('#f4f7ff'), true); m2.metadata.side = sd; }
+      else if (CH.springs === 'coil') { const path = []; for (let i = 0; i <= 24; i++) path.push(new B.Vector3(Math.cos(i * 1.1) * .13, i * .012, Math.sin(i * 1.1) * .13)); m = P(B.MeshBuilder.CreateTube('co', { path, radius: .035, tessellation: 8 }, scene), x, .55, z, mat('#e8283a'), true); }
+      else { m = P(cyl(.14, .45, 10), x, .62, z, dark, true); }
+      if (m) m.metadata.side = sd; });
+    S = 'bumper';
+    if (CH.bumper === 'stock') P(bx(1.8, .2, .2), 0, .34, 1.7, steel);
+    if (CH.bumper === 'bull') { P(bx(1.9, .14, .16), 0, .5, 1.8, dark); P(bx(1.9, .14, .16), 0, .2, 1.8, dark); [-.8, -.4, 0, .4, .8].forEach((x) => P(cyl(.08, .5, 10), x, .36, 1.8, dark)); }
+    if (CH.bumper === 'noodle') { P(cyl(.2, 1.9, 14), 0, .42, 1.82, mat('#ff6fb5')).rotation.z = Math.PI / 2; P(cyl(.2, 1.9, 14), 0, .2, 1.82, mat('#2fd6c5')).rotation.z = Math.PI / 2; }
+    S = 'roof'; const RY = 1.4;
+    if (CH.roof === 'siren') { P(bx(.9, .08, .3), 0, RY, -.25, dark); P(cyl(.22, .2, 16), -.25, RY + .14, -.25, glowM('#ff3b3b')); P(cyl(.22, .2, 16), .25, RY + .14, -.25, glowM('#3b7bff')); }
+    if (CH.roof === 'cone') { P(bx(.5, .06, .5), 0, RY, -.25, mat('#ff7a1a')); P(cone(.42, .6, 20), 0, RY + .33, -.25, mat('#ff7a1a')); P(cyl(.3, .08, 20), 0, RY + .3, -.25, mat('#ffffff')); }
+    if (CH.roof === 'flag') { P(cyl(.04, .9, 8), .5, RY + .45, -.9, steel); const fl = P(B.MeshBuilder.CreatePlane('fl', { width: .5, height: .32 }, scene), .78, RY + .78, -.9, mat('#ffd23f', { backFaceCulling: false })); fl.metadata.wave = true; }
+    if (CH.roof === 'dish') { P(cyl(.08, .35, 10), 0, RY + .2, -.25, steel); const d = P(sph(.7), 0, RY + .45, -.25, steel); d.scaling.set(1, .3, 1); d.rotation.x = -.6; P(cyl(.04, .3, 8), 0, RY + .65, -.05, dark).rotation.x = .6; }
+    S = 'back';
+    if (CH.back === 'wing') [-1, 1].forEach((s) => { const w = P(bx(1.1, .06, .6), s * 1.25, 1.0, -.6, mat('#ffd23f')); w.rotation.z = s * -.12; w.metadata.side = s; P(bx(.06, .4, .06), s * .85, .8, -.6, dark).metadata.side = s; });
+    if (CH.back === 'spoiler') { P(bx(1.8, .08, .45), 0, 1.08, -1.72, dark); [-1, 1].forEach((s) => P(bx(.08, .35, .08), s * .7, .88, -1.72, dark)); }
+    if (CH.back === 'tow') { P(tor(.34, .07), 0, .42, -1.9, steel).rotation.x = Math.PI / 2; P(bx(.12, .12, .3), 0, .42, -1.7, dark); }
+    S = 'sticker';
+    if (CH.sticker === 'flames') [-1, 1].forEach((s) => { for (let i = 0; i < 4; i++) { const f = P(B.MeshBuilder.CreateCylinder('f', { diameterTop: 0, diameterBottom: .3 - i * .04, height: .6 - i * .08, tessellation: 3 }, scene), s * .866, .6, .9 - i * .5, glowM(i % 2 ? '#ffd23f' : '#ff7a1a')); f.rotation.z = -s * Math.PI / 2; f.scaling.x = .25; f.metadata.side = s; } });
+    if (CH.sticker === 'eyes') [-1, 1].forEach((s) => { P(sph(.36), s * .32, .92, .85, mat('#ffffff')); P(sph(.17), s * .32, .92, 1.02, mat('#111111')); });
+    if (CH.sticker === 'dice') [-1, 1].forEach((s) => { P(bx(.3, .3, .3), s * .36, .93, .8, mat('#ffffff')).rotation.y = s * .5; P(sph(.07), s * .36, 1.09, .8, mat('#111111')); P(sph(.07), s * .36 + .1, .93, .96, mat('#111111')); });
+    S = 'charm';
+    if (CH.charm === 'c1') { P(cyl(.02, .3, 6), 0, 1.2, .45, steel); P(sph(.22), 0, 1.4, .45, mat('#7f6df2')); }
+    if (CH.charm === 'c2') { P(cyl(.02, .4, 6), 0, 1.25, .45, steel); const fl = P(B.MeshBuilder.CreatePlane('fl', { width: .3, height: .2 }, scene), .16, 1.38, .45, mat('#6a4fc9', { backFaceCulling: false })); fl.metadata.wave = true; }
+    if (CH.charm === 'c3') { P(cone(.26, .4, 3), 0, 1.3, .45, mat('#3fbf6a')); }
+    if (CH.charm === 'c4') { P(bx(.34, .26, .02), 0, 1.3, .45, mat('#f1f1f1')); P(bx(.28, .2, .025), 0, 1.3, .46, mat('#6d6d78')); }
+    S = 'gear';          /* the loadout, mounted on the car: what you pick is what you see */
+    if (CH.gear === 'rocket') [-1, 1].forEach((s) => { P(bx(.34, .3, 1.1), s * .5, 1.52, -.35, dark).metadata.side = s; for (let k = 0; k < 2; k++) for (let j = 0; j < 2; j++) { const t = P(cyl(.11, .18, 10), s * .5 + (k - .5) * .14, 1.45 + j * .14, .23, glowM('#ff8a1f')); t.rotation.x = Math.PI / 2; t.metadata.side = s; } });
+    if (CH.gear === 'pole') { P(cyl(.07, 1.7, 10), .55, 1.75, -1.5, steel).rotation.x = -.35; const mg = P(tor(.42, .13), .55, 2.55, -1.8, mat('#e8283a')); mg.rotation.x = Math.PI / 2 - .35; P(bx(.12, .14, .16), .35, 2.55, -1.8, steel); P(bx(.12, .14, .16), .75, 2.55, -1.8, steel); }
+    if (CH.gear === 'shield') { const sh = P(sph(3.9), 0, .75, -.1, mat('#46e0ff', { alpha: .16, emissiveColor: new B.Color3(.1, .5, .7), backFaceCulling: false })); sh.scaling.set(.62, .42, 1); sh.isPickable = false; P(cyl(.34, .16, 6), 0, 1.45, .3, glowM('#46e0ff')); }
+    if (CH.gear === 'bull') { [.62, .36, .1].forEach((y) => P(bx(2.0, .13, .14), 0, y + .1, 1.95, steel)); [-.85, -.3, .3, .85].forEach((x) => P(cyl(.1, .62, 10), x, .4, 1.95, steel)); [-1, 1].forEach((s) => { const h = P(cone(.16, .5, 12), s * .98, .72, 2.0, mat('#f1eadf')); h.rotation.z = -s * 1.2; h.metadata.side = s; }); }
+    popT = performance.now();
+  }
+  scene.onPointerObservable.add((pi) => { if (pi.type === B.PointerEventTypes.POINTERTAP) { const pk = scene.pick(scene.pointerX, scene.pointerY, (m) => !!(m.metadata && m.metadata.slot)); if (pk && pk.hit) { blip(); openSlot(pk.pickedMesh.metadata.slot); } } });
+  scene.onBeforeRenderObservable.add(() => { const t = performance.now() / 1000; if (rig) { const k = Math.min(1, (performance.now() - popT) / 260), s = .88 + .12 * (1 - Math.pow(1 - k, 3)) + (k < 1 ? .06 * Math.sin(k * Math.PI) : 0); rig.scaling.set(s, s, s); rig.position.y = .012 * Math.sin(t * 2); animate(t); } parts.forEach((m) => { if (m.metadata && m.metadata.spin) m.rotation.y = t * 3; if (m.metadata && m.metadata.wave) m.rotation.y = Math.sin(t * 3) * .5; }); const vol = prev && prev.t >= VOLT; if (vol) rm.emissiveColor = B.Color3.FromHSV((t * 90) % 360, .8, 1); else rm.emissiveColor.set(.2, .9, 1); ring.rotation.y = t * .6; });
+  engine.runRenderLoop(() => scene0.render()); addEventListener('resize', () => engine.resize());
+
+  // ---- thumbnails: every option drawn alone, close up, and spun on a turntable (12 pictures each)
+  const THUMBS = {}, TF = 12; let T2 = null;
+  const FR = { hat: [0, 2.85, 0, 2.1], mask: [0, 2.5, 0, 1.9], face: [0, 2.42, 0, 1.55], outfit: [0, 1.6, 0, 4.2], gloves: [0, 1.0, 0, 1.6], feet: [0, .2, 0, 2.0], charm: [-1.7, 1.0, 0, 2.8] };
+  function thumbEnv() {
+    if (T2) return T2; const c2 = document.createElement('canvas'); c2.width = 224; c2.height = 168; const e2 = new B.Engine(c2, true, { preserveDrawingBuffer: true, alpha: true, premultipliedAlpha: false }), s2 = new B.Scene(e2); s2.clearColor = new B.Color4(0, 0, 0, 0);
+    const h2 = new B.HemisphericLight('h2', new B.Vector3(0, .6, .8), s2); h2.intensity = 1.05; h2.groundColor = new B.Color3(.55, .55, .6); const d2 = new B.DirectionalLight('d2', new B.Vector3(-.3, -.4, -1), s2); d2.intensity = .9; const cam2 = new B.ArcRotateCamera('t', Math.PI / 2, 1.42, 4, B.Vector3.Zero(), s2); cam2.minZ = .05;
+    T2 = { c2, e2, s2, cam2 }; return T2;
+  }
+  function thumbItem(k, o, n) {
+    const T = thumbEnv(), sv = { scene, CH, rig, parts, S, popT, ANIM, MODEL }, frames = []; rig = null;
+    try {
+      MODEL = CARSLOTS.has(k) ? 'car' : 'driver'; scene = T.s2; CH = Object.assign({}, DEF, { color: 'violet', hat: 'none', face: 'none', outfit: 'plain', feet: 'none', charm: 'c0', gloves: 'work', mask: 'mirror' }, { [k]: o.id }); build();
+      parts.forEach((m) => { const keep = m.metadata && m.metadata.slot === k && m.metadata.side !== 1; if (!keep) m.isVisible = false; else { try { m.enableEdgesRendering(.4); m.edgesWidth = 2.2; m.edgesColor = new B.Color4(.17, .13, .31, 1); } catch (e) { } } });
+      let mn = null, mx = null; parts.forEach((m) => { if (!m.isVisible) return; m.computeWorldMatrix(true); const bb = m.getBoundingInfo().boundingBox; if (!mn) { mn = bb.minimumWorld.clone(); mx = bb.maximumWorld.clone(); } else { mn = B.Vector3.Minimize(mn, bb.minimumWorld); mx = B.Vector3.Maximize(mx, bb.maximumWorld); } });
+      let rad = mn ? Math.max(1.2, Math.max((mx.y - mn.y) * 1.1 / .846, (mx.x - mn.x) * 1.1 / 1.128, .3) + (mx.z - mn.z) * .6) : NaN; if (mn && isFinite(rad) && isFinite(mn.x + mx.x + mn.y + mx.y)) { T.cam2.setTarget(mn.add(mx).scale(.5)); T.cam2.radius = rad; } else { const f = FR[k]; T.cam2.setTarget(new B.Vector3(f[0], f[1], f[2])); T.cam2.radius = f[3]; }
+      for (let q = 0; q < n; q++) { T.cam2.alpha = ({ wheels: .3, springs: .3, sticker: .25 }[k] === undefined ? Math.PI / 2 : { wheels: .3, springs: .3, sticker: .25 }[k]) - .6 + q * 1.2 / (TF - 1); T.s2.render(); frames.push(T.c2.toDataURL('image/png')); }
+      rig.dispose(false, true);
+    } catch (e) { console.warn('thumb ' + k + '.' + o.id + ': ' + e); }
+    MODEL = sv.MODEL; scene = sv.scene; CH = sv.CH; rig = sv.rig; parts = sv.parts; S = sv.S; popT = sv.popT; ANIM = sv.ANIM; return frames;
+  }
+  function makeThumbs() {
+    const list = []; for (const k of ['hat', 'mask', 'face', 'outfit', 'gloves', 'feet', 'wheels', 'engine', 'springs', 'bumper', 'roof', 'back', 'sticker', 'charm']) for (const o of CATS[k][2]) { if (o.id === 'none' || o.id === 'c0') continue; list.push([k, o]); }
+    list.sort((a, b) => (a[0] === open ? 0 : 1) - (b[0] === open ? 0 : 1));
+    for (const [k, o] of list) { const f = thumbItem(k, o, 1); if (f.length) THUMBS[k + '.' + o.id] = f; }
+    renderGrid();
+    let i = 0; const next = () => { if (i >= list.length) return; const [k, o] = list[i++]; const f = thumbItem(k, o, TF); if (f.length) THUMBS[k + '.' + o.id] = f; setTimeout(next, 30); }; setTimeout(next, 150);
+  }
+  setInterval(() => { document.querySelectorAll('.th img[data-k]').forEach((im) => { const fr = THUMBS[im.dataset.k]; if (!fr || fr.length < 2) return; const i = Math.round((Math.sin(performance.now() / 750 + (+im.dataset.i || 0)) + 1) / 2 * (fr.length - 1)); if (im.dataset.f !== String(i)) { im.dataset.f = i; im.src = fr[i]; } }); }, 100);
+  setInterval(() => { const tiles = [...document.querySelectorAll('#grid .opt:not(.on):not(.sw)')]; if (!tiles.length) return; document.querySelectorAll('.opt.tease').forEach((x) => x.classList.remove('tease')); let tot = 0; const w = tiles.map((x) => { const m = /rar(\d)/.exec(x.className); const v = 1 + (m ? +m[1] : 0) * 1.5; tot += v; return v; }); let q = Math.random() * tot, k = 0; while (k < tiles.length - 1 && (q -= w[k]) > 0) k++; const tile = tiles[k]; tile.classList.add('tease'); setTimeout(() => tile.classList.remove('tease'), 1100); }, 1600);
+  $('go').onclick = () => { save(); location.href = NEXT; };
+  $('rnd').onclick = () => { for (const k in CATS) { const o = CATS[k][2]; CH[k] = o[Math.floor(Math.random() * o.length)].id; } CH.color = COLORS[Math.floor(Math.random() * COLORS.length)][0]; CH.paint = COLORS[Math.floor(Math.random() * COLORS.length)][0]; CH.alias = ['a1', 'a2', 'a3', 'a4'][Math.floor(Math.random() * 4)]; blip(); save(); build(); renderStats(true); openSlot(open); };
+  build(); renderStats(false); openSlot(GP ? 'gear' : 'mask'); save();
+  // ---- STILLS: ?still=1&scene=0&t=3.2&set=dusk&props=crystal&mask=robot&cam=alpha,beta,radius,ty  (one dramatic frame of the real model, for the storyboard and the graphic novel; tools/stills.mjs renders them)
+  if (SQ_STILL()) {
+    const Q2 = new URLSearchParams(location.search), num = (s, dflt) => { const v = parseFloat(s); return Number.isFinite(v) ? v : dflt; };
+    document.body.classList.add('still'); engine.resize();
+    for (const k of ['mask', 'hat', 'outfit', 'gloves', 'face', 'color', 'feet']) if (Q2.get(k)) CH[k] = Q2.get(k);
+    build();
+    ['floor', 'ring', 'road', 'dash', 'bb', 'lp', 'lb'].forEach((n) => scene.meshes.filter((m) => m.name === n).forEach((m) => m.setEnabled(false)));
+    scene.fogMode = B.Scene.FOGMODE_NONE;
+    const SHOTSET = { thrilled: 'black', monolith: 'black', optimism: 'tunnel', lanes: 'dusk', tiptoe: 'dusk', peek: 'tunnel', aloft: 'dusk', magnet: 'dusk' }, set = SHOTSET[Q2.get('shot')] || Q2.get('set') || 'dusk', props = (Q2.get('props') || '').split(',').filter(Boolean);
+    const PAL = { black: ['#020305', '#020305', '#020305', '#020305'], dusk: ['#1a1430', '#4a2b3a', '#e9803a', '#6b3d2a'], tunnel: ['#03060c', '#0a1426', '#1a3258', '#0d1830'], lamp: ['#03060c', '#0a1426', '#1a3258', '#0d1830'] }[set] || ['#1a1430', '#4a2b3a', '#e9803a', '#6b3d2a'];
+    const gt = new B.DynamicTexture('skyg', { width: 16, height: 512 }, scene, false), gc = gt.getContext(), gr = gc.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0, PAL[0]); gr.addColorStop(.5, PAL[1]); gr.addColorStop(.71, PAL[2]); gr.addColorStop(.712, PAL[3]); gr.addColorStop(1, PAL[3]); gc.fillStyle = gr; gc.fillRect(0, 0, 16, 512); gt.update();
+    const bk = B.MeshBuilder.CreatePlane('bk', { width: 140, height: 24 }, scene); bk.position.set(0, 7, -20); bk.rotation.y = Math.PI; bk.isPickable = false; const bkm = new B.StandardMaterial('bkm', scene); bkm.emissiveTexture = gt; bkm.disableLighting = true; bkm.backFaceCulling = false; bk.material = bkm;
+    scene.clearColor = B.Color4.FromColor3(B.Color3.FromHexString(PAL[3]), 1);
+    if (set !== 'black') { const gnd = B.MeshBuilder.CreateGround('gnd', { width: 120, height: 80 }, scene); gnd.position.set(0, -.01, -20); gnd.isPickable = false; const gm = new B.StandardMaterial('gnm', scene); gm.diffuseColor = B.Color3.FromHexString(set === 'dusk' ? '#6b3d2a' : '#0d1830'); gm.specularColor = B.Color3.Black(); gnd.material = gm;
+      const rd = B.MeshBuilder.CreateGround('rdd', { width: 7, height: 80 }, scene); rd.position.set(0, 0, -20); rd.isPickable = false; const rm2 = new B.StandardMaterial('rdm', scene); rm2.diffuseColor = B.Color3.FromHexString(set === 'dusk' ? '#2b2430' : '#16213a'); rm2.specularColor = B.Color3.Black(); rd.material = rm2;
+      for (let i = 0; i < 12; i++) { const ds = B.MeshBuilder.CreateBox('dsh', { width: .22, height: .01, depth: 1.4 }, scene); ds.position.set(0, .012, 2 - i * 3.2); ds.isPickable = false; ds.material = glow(set === 'dusk' ? '#d9c9a0' : '#7fa6d6'); } }
+    const tex = (w, h, fn) => { const t = new B.DynamicTexture('t', { width: w, height: h }, scene, true), c = t.getContext(); fn(c, w, h); t.update(); const m = new B.StandardMaterial('tm', scene); m.emissiveTexture = t; m.disableLighting = true; m.backFaceCulling = false; return m; };
+    const panel = (w, h, x, y, z, ry, mt) => { const p = B.MeshBuilder.CreatePlane('pn', { width: w, height: h }, scene); p.position.set(x, y, z); p.rotation.y = Math.PI + (ry || 0); p.material = mt; p.isPickable = false; return p; };
+    const lines = (c, ls, x, y0, dy, font, col) => { c.textAlign = 'center'; c.fillStyle = col; c.font = font; ls.forEach((l, i) => c.fillText(l, x, y0 + i * dy)); };
+    if (set === 'dusk') { const sun = B.MeshBuilder.CreateDisc('sun', { radius: 2.4, tessellation: 40 }, scene); sun.position.set(0, 2.1, -19); sun.rotation.y = Math.PI; sun.material = glow('#ffc98a'); [-34, -16, 20, 38].forEach((x, i) => { const m = B.MeshBuilder.CreateCylinder('mesa', { diameterTop: 5 + i, diameterBottom: 14 + 2 * i, height: 3.4 + i * .5, tessellation: 5 }, scene); m.position.set(x, 1.7, -22); m.material = mat('#4a2b3a'); }); }
+    if (set === 'tunnel' || set === 'lamp') { const mouth = B.MeshBuilder.CreateDisc('mouth', { radius: 7, tessellation: 48 }, scene); mouth.position.set(0, 3.2, -18); mouth.scaling.y = .9; mouth.rotation.y = Math.PI; mouth.material = glow('#010204'); [-1, 1].forEach((s) => { const wl = B.MeshBuilder.CreateBox('wall', { width: 3, height: 20, depth: 8 }, scene); wl.position.set(s * 9, 6, -12); wl.material = mat('#0b1224'); }); }
+    props.forEach((p) => {
+      if (p === 'card') panel(3.6, 1.7, -2.0, 3.9, -.4, -.12, tex(1024, 480, (c, w, h) => { c.fillStyle = '#12182a'; c.fillRect(0, 0, w, h); c.strokeStyle = '#7a5cff'; c.lineWidth = 14; c.strokeRect(7, 7, w - 14, h - 14); lines(c, ['MURMUR \u00B7 now'], w / 2, 100, 0, 'bold 62px Arial', '#b9a8ff'); lines(c, ['We noticed you\u2019ve been', 'thinking about leaving.'], w / 2, 210, 90, 'bold 78px Arial', '#ffffff'); }));
+      if (p === 'crystal') { const cr = B.MeshBuilder.CreatePolyhedron('crys', { type: 1, size: .9 }, scene); cr.scaling.y = 2.1; cr.position.set(3.1, 1.9, -4); cr.material = glow('#38e8ff'); const bm = B.MeshBuilder.CreateCylinder('beam', { diameter: .22, height: 30, tessellation: 12 }, scene); bm.position.set(3.1, 15, -4); const bmm = glow('#38e8ff'); bmm.alpha = .35; bm.material = bmm; const pl = new B.PointLight('cpl', new B.Vector3(3.1, 2.2, -3.4), scene); pl.diffuse = new B.Color3(.2, .9, 1); pl.intensity = 2.2; pl.range = 14; }
+      if (p === 'burst') { [1.6, 2.4, 3.2].forEach((r2, i) => { const t = B.MeshBuilder.CreateTorus('bt', { diameter: r2 * 2, thickness: .06, tessellation: 48 }, scene); t.position.set(0, 2.2, -.6); t.rotation.x = Math.PI / 2 + (i - 1) * .35; t.material = glow('#7ff2ff'); }); for (let i = 0; i < 18; i++) { const a = i / 18 * 6.283, sh = B.MeshBuilder.CreatePolyhedron('sh', { type: 1, size: .12 }, scene); sh.position.set(Math.cos(a) * 2.6, 2.2 + Math.sin(a * 2) * 1.2, -.6 + Math.sin(a) * 1.2); sh.material = glow('#a8f6ff'); } const pl = new B.PointLight('bpl', new B.Vector3(0, 2.4, 1.2), scene); pl.diffuse = new B.Color3(.3, .95, 1); pl.intensity = 2.4; pl.range = 12; }
+      if (p === 'sign') { const post = B.MeshBuilder.CreateCylinder('spost', { diameter: .14, height: 3.2 }, scene); post.position.set(-3.9, 1.6, -2.2); post.material = mat('#5b3a2a'); panel(3.4, 2.1, -3.9, 3.4, -2.2, .28, tex(1024, 640, (c, w, h) => { c.fillStyle = '#f4f1e8'; c.fillRect(0, 0, w, h); c.strokeStyle = '#2a2018'; c.lineWidth = 18; c.strokeRect(9, 9, w - 18, h - 18); lines(c, ['TUNNEL AHEAD.', 'Lighting provided', 'by your optimism.'], w / 2, 190, 150, 'bold 118px Arial', '#14181f'); })); }
+      if (p === 'lamp') { const bulb = B.MeshBuilder.CreateSphere('lampb', { diameter: .6, segments: 16 }, scene); bulb.position.set(3.4, 2.7, -3); bulb.material = glow('#ffe27a'); const ledge = B.MeshBuilder.CreateBox('ledge', { width: 2.6, height: .5, depth: 1.6 }, scene); ledge.position.set(3.4, 2.15, -3); ledge.material = mat('#2a3550'); const pl = new B.PointLight('lpl', new B.Vector3(3.2, 2.9, -2.4), scene); pl.diffuse = new B.Color3(1, .82, .4); pl.intensity = 3.2; pl.range = 20; const ht = new B.DynamicTexture('haloT', { width: 256, height: 256 }, scene, true), hc = ht.getContext(), hg = hc.createRadialGradient(128, 128, 0, 128, 128, 128); hg.addColorStop(0, 'rgba(255,226,122,.85)'); hg.addColorStop(.35, 'rgba(255,210,80,.35)'); hg.addColorStop(1, 'rgba(255,200,60,0)'); hc.fillStyle = hg; hc.fillRect(0, 0, 256, 256); ht.hasAlpha = true; ht.update(); const halo = B.MeshBuilder.CreatePlane('halo', { size: 7 }, scene); halo.position.set(3.4, 2.7, -3.3); halo.rotation.y = Math.PI; const hm = new B.StandardMaterial('hm', scene); hm.diffuseTexture = ht; hm.useAlphaFromDiffuseTexture = true; hm.emissiveColor = new B.Color3(1, 1, 1); hm.disableLighting = true; hm.backFaceCulling = false; halo.material = hm; }
+    });
+    // camera: low and close by default, a little off axis. cam=alpha,beta,radius,targetY
+    const cp = (Q2.get('cam') || '').split(',').map((x) => parseFloat(x)); cam.lowerAlphaLimit = cam.upperAlphaLimit = cam.lowerBetaLimit = cam.upperBetaLimit = null; cam.lowerRadiusLimit = 1; cam.upperRadiusLimit = 30;
+    cam.setTarget(new B.Vector3(0, num(cp[3], 2.0), 0)); cam.alpha = num(cp[0], Math.PI / 2 - .42); cam.beta = num(cp[1], 1.5); cam.radius = num(cp[2], 6.2); cam.detachControl();
+
+    // ---- SHOTS: staged comedy scenes with the real models (several figures, props, lights). ?still=1&shot=<name>
+    const POSES = { stand: {}, cheer: { al: [0, -2.4], ar: [0, 2.4], hx: -.35 }, cheer2: { al: [0, -1.9], ar: [0, 2.7], hx: -.25, hz: .15 }, slump: { hx: .55, al: [0, -.04], ar: [0, .04], dy: -.06, pitch: .12 }, point: { ar: [-.9, 1.25], pitch: .08 }, shrug: { al: [0, -.8], ar: [0, .8], hz: .18 },
+      lookup: { hx: -.65, al: [0, -.1], ar: [0, .1] }, peek: { hz: .5, lean: -.32, hx: -.05 }, smug: { hz: .22, hx: .12, al: [0, -.35], ar: [0, .35] }, bow: { pitch: .75, hx: .25, al: [-.4, -.1], ar: [-.4, .1] }, aloft: { al: [0, -2.8], ar: [0, 2.8], hx: -.5 }, thumbs: { ar: [-1.35, .55], hz: .15 }, tiptoe: { pitch: .2, al: [-.7, -.7], ar: [-.7, .7], hx: -.2, dy: .04 } };
+    const fig = (o) => { const save = CH; CH = Object.assign({}, CH, o.look || {}); rig = null; buildDriver(); const R = rig, A = ANIM; const p = Object.assign({ hx: 0, hy: 0, hz: 0, al: [0, -.18], ar: [0, .18], lean: 0, pitch: 0, dy: 0 }, POSES[o.pose] || {}, o.p || {});
+      A.head.rotation.set(p.hx, p.hy, p.hz); A.armL.rotation.set(p.al[0], 0, p.al[1]); A.armR.rotation.set(p.ar[0], 0, p.ar[1]); R.position.set(o.x || 0, (o.y || 0) + p.dy, o.z || 0); R.rotation.set(p.pitch, o.ry || 0, p.lean); R.scaling.setAll(o.s || 1); if (A.fx) applyMood(A.fx, MOODS[o.mood || 'neutral'] || MOODS.neutral, 1); CH = save; return R; };
+    const light = (on, h, dd) => { const hl = scene.getLightByName('h'), dl2 = scene.getLightByName('d'); if (hl) hl.intensity = h; if (dl2) dl2.intensity = dd; };
+    const spot = (x, y, z, tx, ty, tz, col, it, ang) => { const s2 = new B.SpotLight('sp', new B.Vector3(x, y, z), new B.Vector3(tx - x, ty - y, tz - z).normalize(), ang || .7, 2, scene); s2.diffuse = B.Color3.FromHexString(col); s2.intensity = it; return s2; };
+    const card = (w, h, x, y, z, ry, head, body, size) => panel(w, h, x, y, z, ry, tex(1024, Math.round(1024 * h / w), (c, W, H) => { c.fillStyle = '#12182a'; c.fillRect(0, 0, W, H); c.strokeStyle = '#7a5cff'; c.lineWidth = 14; c.strokeRect(7, 7, W - 14, H - 14); lines(c, [head], W / 2, H * .24, 0, 'bold 56px Arial', '#b9a8ff'); lines(c, body, W / 2, H * .24 + 100, size || 84, 'bold ' + Math.round((size || 84) * .9) + 'px Arial', '#ffffff'); }));
+    const board = (w, h, x, y, z, ry, ls, size) => { const post = B.MeshBuilder.CreateCylinder('bp', { diameter: .16, height: y }, scene); post.position.set(x, y / 2, z); post.material = mat('#5b3a2a'); return panel(w, h, x, y + h / 2 - .2, z, ry, tex(1024, Math.round(1024 * h / w), (c, W, H) => { c.fillStyle = '#f4f1e8'; c.fillRect(0, 0, W, H); c.strokeStyle = '#2a2018'; c.lineWidth = 18; c.strokeRect(9, 9, W - 18, H - 18); lines(c, ls, W / 2, H / 2 - (ls.length - 1) * (size || 110) / 2 + (size || 110) * .35, size || 110, 'bold ' + (size || 110) + 'px Arial', '#14181f'); })); };
+    const floorDark = (col) => { const f = B.MeshBuilder.CreateDisc('fd', { radius: 9, tessellation: 64 }, scene); f.rotation.x = Math.PI / 2; f.position.y = .005; f.material = mat(col || '#101320'); };
+    const lock = (x, y, z) => { const b2 = B.MeshBuilder.CreateBox('lk', { width: .55, height: .45, depth: .2 }, scene); b2.position.set(x, y, z); b2.material = mat('#9aa0ab'); const sh = B.MeshBuilder.CreateTorus('lks', { diameter: .38, thickness: .07, tessellation: 24 }, scene); sh.position.set(x, y + .3, z); sh.rotation.x = Math.PI / 2; sh.material = mat('#9aa0ab'); };
+    const beamOf = (x, z, col, a) => { const b2 = B.MeshBuilder.CreateCylinder('bm', { diameter: 1.1, height: 26, tessellation: 20 }, scene); b2.position.set(x, 13, z); const m2 = glow(col); m2.alpha = a; b2.material = m2; };
+    const camAt = (al, be, ra, ty, tx) => { cam.setTarget(new B.Vector3(tx || 0, ty, 0)); cam.alpha = al; cam.beta = be; cam.radius = ra; };
+    function runShot(n) {
+      REEL.on = false; if (rig) rig.setEnabled(false);
+      const ME = { mask: 'mirror', color: 'violet', outfit: 'plain' };
+      if (n === 'thrilled') { light(1, .35, .25); floorDark(); spot(0, 9, 3, 0, 0, 0, '#ffffff', 1.6, .55);
+        fig({ look: ME, pose: 'slump', mood: 'droop', z: .6 });
+        const crowd = [[-3.6, -1.4], [-2.4, -2.3], [-1.2, -2.8], [0, -3], [1.2, -2.8], [2.4, -2.3], [3.6, -1.4], [-1.8, -4.2], [0, -4.6], [1.8, -4.2]];
+        crowd.forEach(([x, z], i) => fig({ look: { mask: 'mirror', outfit: 'suit', color: 'indigo' }, pose: i % 3 === 1 ? 'cheer2' : 'cheer', mood: 'happy', x, z, ry: Math.atan2(-x, -z) * .35 }));
+        card(6.2, 1.9, 0, 5.6, -3.4, 0, 'MURMUR \u00B7 now', ['They were thrilled for you.'], 78); camAt(Math.PI / 2, 1.44, 9.2, 2.9); }
+      if (n === 'monolith') { light(1, .25, .15); floorDark('#0b0d18'); card(8.5, 4.2, 0, 4.4, -6.5, 0, 'MURMUR \u00B7 now', ['We noticed you\u2019ve been', 'thinking about leaving.'], 96); const pl = new B.PointLight('mpl', new B.Vector3(0, 4, -5), scene); pl.diffuse = new B.Color3(.55, .45, 1); pl.intensity = 2.2; pl.range = 14;
+        fig({ look: ME, pose: 'lookup', mood: 'wide', ry: Math.PI, z: .5 }); camAt(Math.PI / 2 + .18, 1.66, 7.8, 3.0); }
+      if (n === 'optimism') { light(1, .12, .06); board(5.2, 2.6, -2.8, 2.6, -3.2, .18, ['TUNNEL AHEAD.', 'Lighting provided', 'by your optimism.'], 104); spot(-2.8, 7, 1, -2.8, 3.6, -3.2, '#ffe2a8', 1.1, .5);
+        fig({ look: ME, pose: 'thumbs', mood: 'happy', x: 1.6, z: .2, ry: -.35 }); camAt(Math.PI / 2 - .12, 1.5, 9, 2.3, -.4); }
+      if (n === 'lanes') { light(1, .7, .6); const L = [['mirror', 'teal'], ['robot', 'lime'], ['grin', 'orange'], ['gas', 'ruby']]; const XS = [-4.8, -1.6, 1.6, 4.8];
+        XS.forEach((x, i) => { const mine = i === 1; const ln = B.MeshBuilder.CreateBox('lane', { width: .12, height: .02, depth: 30 }, scene); ln.position.set(x + 1.6, .02, -12); ln.material = glow('#d9c9a0');
+          if (mine) beamOf(x, -.6, '#ffd23a', .45); else { beamOf(x, -.6, '#8b93a1', .12); lock(x, 4.4, 0); }
+          fig({ look: { mask: L[i][0], color: L[i][1], outfit: 'track' }, pose: mine ? 'cheer' : (i === 3 ? 'shrug' : 'slump'), mood: mine ? 'happy' : 'droop', x, z: 0, ry: mine ? 0 : (i === 0 ? .35 : -.35) }); });
+        camAt(Math.PI / 2, 1.46, 13.5, 2.4); }
+      if (n === 'tiptoe') { light(1, .75, .7); const cr = B.MeshBuilder.CreatePolyhedron('crys', { type: 1, size: .8 }, scene); cr.scaling.y = 2.1; cr.position.set(3.6, 1.9, -.4); cr.material = glow('#38e8ff'); beamOf(3.6, -.4, '#38e8ff', .3); const pl = new B.PointLight('cpl', new B.Vector3(3.4, 2.2, .4), scene); pl.diffuse = new B.Color3(.2, .9, 1); pl.intensity = 2; pl.range = 10;
+        fig({ look: ME, pose: 'tiptoe', mood: 'narrow', x: -1.2, z: -.4, ry: Math.PI / 2 }); camAt(Math.PI / 2, 1.5, 9.5, 2.0, 1.2); }
+      if (n === 'peek') { light(1, .1, .05); const w2 = B.MeshBuilder.CreateBox('edge', { width: 7, height: 12, depth: 3 }, scene); w2.position.set(4.3, 6, 1.2); w2.material = mat('#070a12'); board(3.4, 1.6, -3.2, 2.2, -6, .15, ['ONLY THOSE WHO SEE', 'MAY LIGHT THE WAY.'], 78); spot(-3.2, 6, -3, -3.2, 2.8, -6, '#cfd8ff', .7, .45);
+        fig({ look: ME, pose: 'peek', mood: 'wide', x: .55, z: .6, ry: -.25 }); camAt(Math.PI / 2 + .05, 1.5, 7.4, 2.3); }
+      if (n === 'aloft') { light(1, .45, .5); const rk = B.MeshBuilder.CreateBox('rock', { width: 3, height: 1.6, depth: 2.2 }, scene); rk.position.set(0, .8, -2.6); rk.material = mat('#4a2b3a');
+        fig({ look: ME, pose: 'aloft', mood: 'happy', y: 1.6, z: -2.6 }); const bl = B.MeshBuilder.CreateSphere('lampb', { diameter: .7, segments: 16 }, scene); bl.position.set(0, 1.6 + 3.85, -2.6); bl.material = glow('#ffe27a'); const pl = new B.PointLight('lpl', new B.Vector3(0, 5.2, -1.8), scene); pl.diffuse = new B.Color3(1, .85, .45); pl.intensity = 3.2; pl.range = 18;
+        [[-3.4, 1.2], [-1.7, 1.6], [0, 1.8], [1.7, 1.6], [3.4, 1.2]].forEach(([x, z]) => fig({ look: { mask: 'mirror', outfit: 'suit', color: 'indigo' }, pose: 'bow', mood: 'droop', x, z, ry: Math.PI }));
+        camAt(Math.PI / 2, 1.56, 12, 3.0); }
+      if (n === 'magnet') { light(1, .75, .7); const sv = CH; CH = Object.assign({}, CH, { paint: 'ruby' }); MODEL = 'car'; rig = null; buildCar(); const car = rig; car.position.set(-1.6, 0, -.6); car.rotation.y = .55; MODEL = 'driver'; CH = sv;
+        const pole = B.MeshBuilder.CreateCylinder('pole', { diameter: .1, height: 4.6 }, scene); pole.position.set(.25, 2.5, .2); pole.rotation.z = -1.0; pole.material = mat('#c9d1d9');
+        const path = []; for (let i = 0; i <= 16; i++) { const a = Math.PI * i / 16; path.push(new B.Vector3(2.3 + Math.cos(a) * .45, 3.55 + Math.sin(a) * .45, .2)); } const mg = B.MeshBuilder.CreateTube('mag', { path, radius: .13, tessellation: 12 }, scene); mg.rotation.z = 0; mg.material = mat('#e0304a'); [1.85, 2.75].forEach((x) => { const tip = B.MeshBuilder.CreateBox('tip', { width: .26, height: .22, depth: .26 }, scene); tip.position.set(x, 3.48, .2); tip.material = mat('#e8eef2'); });
+        const dr = B.MeshBuilder.CreateBox('drone', { width: 1.5, height: .8, depth: 1.5 }, scene); dr.position.set(2.3, 2.75, .2); dr.rotation.z = .25; dr.material = glow('#c82a2a'); panel(1.3, .45, 2.3, 2.75, .97, 0, tex(512, 180, (c, W, H) => { c.fillStyle = '#c82a2a'; c.fillRect(0, 0, W, H); lines(c, ['SPONSORED'], W / 2, 118, 0, 'bold 76px Arial', '#ffffff'); }));
+        fig({ look: ME, pose: 'shrug', mood: 'smug', x: 3.6, z: 1.0, ry: -.5 }); camAt(Math.PI / 2 - .2, 1.42, 10.5, 2.2, .8); }
+      rig = null; ANIM = null;
+    }
+    if (Q2.get('shot')) runShot(Q2.get('shot')); else { const sc = parseInt(Q2.get('scene') || '0', 10); REEL.sc = SCENES[sc]; REEL.hold = parseFloat(Q2.get('t') || '0'); REEL.on = true; }
+    let fr = 0; scene.onAfterRenderObservable.add(() => { if (++fr === 8) window.__STILL_READY = true; });
+  }
+
+  setTimeout(() => { makeThumbs(); renderGrid(); }, 60);
+})();
+</script><script>/* FULLSCREEN, always: browsers only allow it from a tap, click or key, so the first one goes fullscreen (and turns the phone sideways where it can), and any tap after leaving fullscreen goes back in. &nofs turns it off. */
+(() => { if (/[?&]nofs\b/.test(location.search) || window.top !== window.self || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const de = document.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { });          /* (no orientation lock: either way up works) */ } catch (e) { } };
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+
+<script>
+(() => { const fit = () => { const g = document.getElementById('grid'); if (!g) return; const items = [...g.children].filter((c) => !c.classList.contains('nmw')), N = items.length; if (!N) return;
+    const cs = getComputedStyle(g), gap = 8, nm = g.querySelector('.nmw'); const W = g.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); let H = g.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - (nm ? nm.offsetHeight + gap : 0);
+    const gear = g.classList.contains('gridg'); let best = null;
+    for (let c = 1; c <= N; c++) { const r = Math.ceil(N / c), cw = (W - gap * (c - 1)) / c, ch = (H - gap * (r - 1)) / r; if (cw < 44 || ch < 34) continue; const sc = gear ? Math.min(cw / 3.2, ch) : Math.min(cw, ch / 1.3); if (!best || sc > best.s) best = { s: sc, c, ch }; }
+    if (!best) return; g.style.gridTemplateColumns = 'repeat(' + best.c + ',minmax(0,1fr))'; g.style.gridAutoRows = Math.floor(best.ch) + 'px'; g.style.gap = gap + 'px'; };
+  const go = () => requestAnimationFrame(fit); addEventListener('resize', go); addEventListener('load', go);
+  const t = setInterval(() => { const g = document.getElementById('grid'); if (!g) return; clearInterval(t); new MutationObserver(go).observe(g, { childList: true }); go(); }, 100); })();
+</script>
+</body></html>

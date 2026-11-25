@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Frequency</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js"></script>
+<style>
+/* THE FREQUENCY: a pirate radio booth under ACCORD's nose. Tape presets, VISION faders (what the trip does to your eyes), SOUND faders (what it does to your ears).
+   One screen, never scrolls. Everything is saved on this device (dl_lab) and the game reads it at the start of every level. */
+:root { --bg:#07050b; --wood:#1a110d; --line:rgba(255,170,80,.28); --fg:#f6efe3; --dim:#c9b9a3; --amber:#ffb14a; --sea:#38e8ff; --hot:#ff5a3c; --lime:#c6ff4d; --tt:"Bebas Neue",Impact,"Arial Narrow",sans-serif; --lb:"Barlow Condensed","Arial Narrow",sans-serif; color-scheme:dark; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:600 clamp(13px,1.4vmin + 7px,17px)/1.25 system-ui,sans-serif; overflow:hidden; }
+body { display:flex; flex-direction:column; gap:1.2vmin; padding:max(10px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px)); position:relative; isolation:isolate; }
+/* the lava lamps */
+.lava { position:fixed; inset:0; z-index:-2; overflow:hidden; opacity:.5; }          /* (no blur or blend modes: the gradients are already soft, and a full-screen blur every frame starved the audio) */
+.lava i { position:absolute; border-radius:50%; will-change:transform; animation:float 22s ease-in-out infinite alternate; }
+.lava i:nth-child(1) { width:42vmax; height:42vmax; left:-10vmax; top:30%; background:radial-gradient(circle, #ff5a3c 0%, transparent 65%); }
+.lava i:nth-child(2) { width:36vmax; height:36vmax; right:-8vmax; top:-6vmax; background:radial-gradient(circle, #ffb14a 0%, transparent 65%); animation-duration:27s; }
+.lava i:nth-child(3) { width:30vmax; height:30vmax; left:35%; bottom:-14vmax; background:radial-gradient(circle, #9b4dff 0%, transparent 65%); animation-duration:31s; }
+.lava i:nth-child(4) { width:22vmax; height:22vmax; left:60%; top:35%; background:radial-gradient(circle, #38e8ff 0%, transparent 65%); animation-duration:19s; }
+@keyframes float { 0% { transform:translate(0,0) scale(1); } 50% { transform:translate(6vmax,-8vmax) scale(1.15); } 100% { transform:translate(-5vmax,6vmax) scale(.9); } }
+body::after { content:""; position:fixed; inset:0; z-index:-1; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px), radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,.7)); }
+header { display:flex; align-items:center; gap:10px 16px; flex-wrap:wrap; }
+h1 { margin:0; font:400 clamp(34px,7vmin,68px)/.9 var(--tt); letter-spacing:.14em; color:#fff; text-shadow:0 0 18px rgba(255,177,74,.55), 0 0 2px #000; }
+.sub { font:italic 500 clamp(12px,1.2vmin + 6px,15px) Georgia,serif; color:var(--dim); }
+.onair { margin-left:auto; font:400 clamp(18px,2.6vmin + 6px,28px)/1 var(--tt); letter-spacing:.16em; padding:.25em .6em; border:2px solid #5a1d14; color:#5a1d14; border-radius:6px; background:rgba(0,0,0,.5); transition:all .3s; }
+.onair.live { color:#fff; border-color:var(--hot); background:var(--hot); box-shadow:0 0 24px var(--hot), 0 0 60px rgba(255,90,60,.5); }
+a.back { font:700 clamp(14px,1.6vmin + 6px,18px) var(--lb); letter-spacing:.14em; text-transform:uppercase; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:10px; padding:.4em .9em; background:rgba(20,12,8,.8); }
+/* the tapes */
+.tapes { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1vmin; }
+.tape { position:relative; border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg,#2a1c14,#140d09); padding:.45em .5em .5em; cursor:pointer; text-align:left; color:var(--fg); font:inherit; }
+.tape b { display:block; font:400 clamp(18px,2.4vmin + 6px,28px)/1 var(--tt); letter-spacing:.1em; }
+.tape small { display:block; color:var(--dim); font:700 clamp(11px,1vmin + 6px,14px)/1.1 var(--lb); letter-spacing:.06em; }
+.tape::after { content:""; position:absolute; right:.6em; top:50%; width:2.6em; height:1.1em; transform:translateY(-50%); border-radius:.55em; background:radial-gradient(circle at 25% 50%, #0b0705 .28em, transparent .3em), radial-gradient(circle at 75% 50%, #0b0705 .28em, transparent .3em), rgba(255,177,74,.18); }
+.tape.on { border-color:var(--amber); box-shadow:0 0 18px rgba(255,177,74,.45); }
+/* the two desks */
+main { flex:1; min-height:0; display:grid; grid-template-columns:1fr 1fr; gap:1.2vmin; }
+.desk { min-height:0; border:1px solid var(--line); border-radius:12px; background:linear-gradient(180deg, rgba(30,20,14,.88), rgba(10,7,5,.92)); padding:1vmin 1.4vmin; display:flex; flex-direction:column; gap:.7vmin; overflow:hidden; }
+.desk h2 { margin:0; font:400 clamp(20px,2.6vmin + 6px,30px)/1 var(--tt); letter-spacing:.16em; color:var(--amber); display:flex; align-items:center; gap:.5em; }
+.desk h2 small { font:700 12px var(--lb); letter-spacing:.12em; color:var(--dim); }
+.f { display:grid; grid-template-columns:minmax(6.5em,auto) 1fr minmax(3.6em,auto); align-items:center; gap:.6em; min-height:0; }
+.f label { font:700 clamp(13px,1.2vmin + 7px,17px)/1 var(--lb); letter-spacing:.08em; text-transform:uppercase; color:var(--fg); }
+.f output { font:700 clamp(12px,1vmin + 7px,15px)/1 var(--lb); letter-spacing:.06em; color:var(--amber); text-align:right; white-space:nowrap; }
+input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:1.6em; background:transparent; }
+input[type=range]::-webkit-slider-runnable-track { height:.45em; border-radius:.3em; background:linear-gradient(90deg, #3a2618, #6b3d1d); box-shadow:inset 0 1px 2px #000; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:1.1em; height:1.7em; margin-top:-.62em; border-radius:3px; background:linear-gradient(180deg,#f6efe3,#9e9282); border:1px solid #000; box-shadow:0 2px 4px #000; }
+input[type=range]::-moz-range-track { height:.45em; border-radius:.3em; background:#4a2e1a; }
+input[type=range]::-moz-range-thumb { width:1.1em; height:1.7em; border-radius:3px; background:#e8dfd0; border:1px solid #000; }
+select, .btn { font:700 clamp(13px,1.2vmin + 7px,17px)/1 var(--lb); letter-spacing:.08em; text-transform:uppercase; color:var(--fg); background:#160e09; border:1px solid var(--line); border-radius:8px; padding:.45em .6em; min-width:0; }
+.btn { cursor:pointer; padding:.55em 1em; } .btn.pri { background:var(--amber); color:#1a0e05; border-color:var(--amber); box-shadow:0 0 18px rgba(255,177,74,.4); }
+.row { display:flex; gap:.6em; flex-wrap:wrap; align-items:center; }
+.tog { display:flex; align-items:center; gap:.5em; cursor:pointer; font:700 clamp(13px,1.2vmin + 7px,17px) var(--lb); letter-spacing:.08em; text-transform:uppercase; }
+.tog input { width:1.2em; height:1.2em; accent-color:var(--lime); }
+#vu { width:100%; height:clamp(26px,6vmin,60px); border-radius:6px; background:#0a0604; border:1px solid var(--line); }
+#favs { display:flex; gap:.4em; flex-wrap:wrap; overflow:hidden; max-height:4.2em; }
+#favs button { font:700 12px var(--lb); letter-spacing:.04em; color:var(--fg); background:#1f150e; border:1px solid var(--line); border-radius:999px; padding:.35em .6em; cursor:pointer; }
+#trk { font:700 clamp(12px,1vmin + 7px,15px)/1.2 var(--lb); letter-spacing:.06em; color:#ffd9a8; min-height:1.2em; }
+footer { display:flex; gap:.8em; align-items:center; flex-wrap:wrap; }
+footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left:auto; }
+@media (orientation:portrait) { main { grid-template-columns:1fr; } .tapes { grid-template-columns:repeat(2, minmax(0,1fr)); } .sub { display:none; } .tape::after { display:none; } }
+@media (prefers-reduced-motion:reduce) { .lava i { animation:none; } }
+</style></head><body>
+<div class="lava"><i></i><i></i><i></i><i></i></div>
+<header><h1>THE FREQUENCY</h1><span class="sub" id="sub">Pirate signal. ACCORD can't hear this band. Murmur has flagged it "probably fine".</span><script>
+/* Murmur's line changes every visit (never the same twice in a row) */
+(() => { const M = ['Murmur has flagged it “probably fine”.', 'Murmur has logged this visit as “weather”.', 'Murmur rates this station two stars. Murmur has never heard it.', 'Murmur is listening. Murmur hears static.', 'Murmur filed this under “hobbies”.',
+  'Murmur has scheduled a check-in. It will be late.', 'Murmur thinks you’re asleep.', 'Murmur flagged this band, unflagged it, then forgot.', 'Murmur says this frequency doesn’t exist. Murmur is very sure.', 'Murmur has added you to a list. It’s a short list.',
+  'Murmur is buffering.', 'Murmur recommends ACCORD Calm™ instead. Noted.', 'Murmur heard a bassline and reported a fault in the grid.', 'Murmur’s last report on this band: “nothing to report”.', 'Murmur muted this tab for your safety. It didn’t take.',
+  'Murmur is updating. Please keep driving.', 'Murmur has flagged it “aggressively fine”.', 'Murmur logged zero listeners. Make it one.', 'Murmur can’t parse minor ninths.', 'Murmur is in a meeting about you.',
+  'Murmur thinks this is a podcast.', 'Murmur has marked this signal “decorative”.', 'Murmur sent a strongly worded ping. Nothing pinged back.', 'Murmur is jealous. Murmur can’t dance.', 'Murmur would like to remind you that you are being reminded.',
+  'Murmur’s filters caught the kick drum. The kick drum got away.', 'Murmur is counting your heartbeats. Wrong tempo.', 'Murmur opened a ticket. Estimated reply: never.', 'Murmur flags everything “probably fine”. Including this.', 'Murmur has reclassified the sky as “background”.',
+  'Murmur tried to download the vibe. Format not supported.', 'Murmur hears 3% of this. That 3% worries it.', 'Murmur says the signal is “a you problem”.', 'Murmur is pretending not to hum along.', 'Murmur has requested a supervisor. The supervisor is Murmur.'];
+  let k = -1; try { k = +localStorage.getItem('dl_murmur') || -1; } catch (e) { } let i = Math.floor(Math.random() * M.length); if (i === k) i = (i + 1) % M.length; try { localStorage.setItem('dl_murmur', String(i)); } catch (e) { }
+  document.getElementById('sub').textContent = 'Pirate signal. ACCORD can’t hear this band. ' + M[i]; })();
+</script><span class="onair" id="onair">ON AIR</span><a class="back" href="menu.html">&#8592; Menu</a></header>
+<div class="tapes" id="tapes"></div>
+<main>
+  <section class="desk"><h2>VISION <small>what it does to your eyes</small></h2>
+    <div class="f"><label for="int">Intensity</label><input type="range" id="int" min="30" max="140" value="100"><output id="o_int"></output></div>
+    <div class="f"><label for="trc">Tracers</label><input type="range" id="trc" min="0" max="200" value="100"><output id="o_trc"></output></div>
+    <div class="f"><label for="col">Colour</label><input type="range" id="col" min="0" max="200" value="100"><output id="o_col"></output></div>
+    <div class="f"><label for="wrp">Warp &amp; breath</label><input type="range" id="wrp" min="0" max="200" value="100"><output id="o_wrp"></output></div>
+    <div class="f"><label for="hng">Hang time</label><input type="range" id="hng" min="0" max="200" value="100"><output id="o_hng"></output></div>
+    <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no drones)</label></div>
+  </section>
+  <section class="desk"><h2>SOUND <small>what it does to your ears</small></h2>
+    <div class="row"><select id="sty" title="Style"><option value="">Style: each level's own</option><option value="techno">Melodic techno / trance</option><option value="jungle">Jungle (chopped breaks)</option><option value="eastern">Eastern (Hijaz, Hirajoshi)</option><option value="disco">Disco funk</option><option value="boogie">Boogie funk</option><option value="break">Breakbeat funk</option></select></div>
+    <div class="f"><label for="trn">Techno &#8596; Trance</label><input type="range" id="trn" min="0" max="100" value="55"><output id="o_trn"></output></div>
+    <div class="f"><label for="nrg">Energy</label><input type="range" id="nrg" min="0" max="100" value="80"><output id="o_nrg"></output></div>
+    <div class="row"><button class="btn pri" id="listen">&#9654; Listen</button><button class="btn" id="next">&#8635; Next</button><button class="btn" id="save">&#9733; Keep</button></div>
+    <div id="trk"></div>
+    <canvas id="vu"></canvas>
+    <div id="favs"></div>
+  </section>
+</main>
+<footer><a class="btn pri" id="ride" href="menu.html" style="text-decoration:none">Go live &#8594;</a><small>Saved on this device. Every level reads it when it starts.</small></footer>
+<script>
+/* the tapes: one tap sets every fader */
+const TAPES = { gentle: ['GENTLE', 'soft edges, easy waves', { int: 55, trc: 60, col: 80, wrp: 60, hng: 70, len: 'short', chl: false, trn: 70, nrg: 50 }],
+  classic: ['CLASSIC', 'the way it was tuned', { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, len: 'full', chl: false, trn: 55, nrg: 80 }],
+  heroic: ['HEROIC', 'all the way up (road stays readable)', { int: 135, trc: 170, col: 150, wrp: 160, hng: 150, len: 'long', chl: false, trn: 60, nrg: 100 }],
+  chill: ['CHILL', 'no drones, long afterglows', { int: 75, trc: 80, col: 100, wrp: 120, hng: 130, len: 'long', chl: true, trn: 90, nrg: 35 }] };
+const COMPS = [['lucid', 'Lucid'], ['embrace', 'Embrace'], ['velocity', 'Velocity'], ['haze', 'Haze'], ['drift', 'Drift'], ['hollow', 'Hollow'], ['fold', 'Fold'], ['deep', 'Deep']];
+const $ = (id) => document.getElementById(id), F = ['int', 'trc', 'col', 'wrp', 'hng', 'trn', 'nrg'];
+const rd = () => { try { return JSON.parse(localStorage.getItem('dl_lab') || 'null'); } catch (e) { return null; } };
+const wr = (v) => { try { localStorage.setItem('dl_lab', JSON.stringify(v)); } catch (e) { } };
+for (const [k, n] of COMPS) { const o = document.createElement('option'); o.value = k; o.textContent = 'Compound: ' + n; $('cmp').appendChild(o); }
+function state() { const v = { tape: cur }; for (const k of F) v[k] = +$(k).value; v.cmp = $('cmp').value; v.len = $('len').value; v.chl = $('chl').checked; v.sty = $('sty').value; return v; }
+function apply(v) { for (const k of F) if (v[k] !== undefined) $(k).value = v[k]; if (v.cmp !== undefined) $('cmp').value = v.cmp; if (v.len) $('len').value = v.len; if (v.chl !== undefined) $('chl').checked = v.chl; if (v.sty !== undefined) $('sty').value = v.sty; outs(); }
+function outs() { const pct = (k) => $(k).value + '%'; $('o_int').textContent = +$('int').value < 70 ? 'gentle' : +$('int').value > 115 ? 'heroic' : 'classic'; for (const k of ['trc', 'col', 'wrp', 'hng']) $('o_' + k).textContent = +$(k).value === 0 ? 'off' : pct(k); $('o_trn').textContent = +$('trn').value < 35 ? 'techno' : +$('trn').value > 70 ? 'trance' : 'both'; $('o_nrg').textContent = pct('nrg'); }
+let cur = 'classic';
+function drawTapes() { const w = $('tapes'); w.textContent = ''; for (const k in TAPES) { const b = document.createElement('button'); b.className = 'tape' + (k === cur ? ' on' : ''); const t = document.createElement('b'); t.textContent = TAPES[k][0]; const s = document.createElement('small'); s.textContent = TAPES[k][1]; b.append(t, s); b.onclick = () => { cur = k; apply(TAPES[k][2]); drawTapes(); save(); live(); }; w.appendChild(b); } }
+function save() { wr(state()); }
+document.querySelectorAll('input,select').forEach((e) => e.addEventListener('input', () => { if (e.id !== 'cmp' && e.id !== 'len' && e.id !== 'sty') { cur = 'custom'; drawTapes(); } outs(); save(); live(); }));
+$('sty').addEventListener('change', () => { if (ME.on) ME.restyle($('sty').value || 'techno', null); trk(); });
+const s0 = rd(); if (s0) { cur = s0.tape || 'custom'; apply(s0); } else apply(TAPES.classic[2]); drawTapes(); outs();
+/* the music: the same engine the game uses */
+function live() { if (ME.on) ME.set(+$('trn').value / 100, +$('nrg').value / 100); }
+function trk() { setTimeout(() => { const t = ME.track; $('trk').textContent = t ? (t.funk ? ({ disco: 'Disco funk', boogie: 'Boogie funk', break: 'Breakbeat funk' }[t.style]) + ' · ' : '') + t.name + ' · ' + t.bpm + ' BPM · ' + ME.chords() : ''; }, 60); }
+$('listen').onclick = async () => { if (ME.on) { ME.stop(); $('onair').classList.remove('live'); $('listen').innerHTML = '&#9654; Listen'; return; }
+  await ME.start({ style: $('sty').value || 'techno', tr: +$('trn').value / 100, en: +$('nrg').value / 100, lookAhead: .5, strong: true }); ME.volume(-4); $('onair').classList.add('live'); $('listen').innerHTML = '&#10074;&#10074; Stop'; trk(); vu(); };
+$('next').onclick = async () => { if (!ME.on) return $('listen').onclick(); ME.next(); trk(); };
+$('save').onclick = () => { if (!ME.on || !ME.track) return; let a = []; try { a = JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { } if (a.some((t) => t.seed === ME.seed)) return; const t = ME.track; a.unshift({ seed: ME.seed, level: null, style: t.style, prog: t.prog, mode: t.modeName, name: t.name, bpm: t.bpm, chords: ME.chords(), tr: +$('trn').value, en: +$('nrg').value, at: Date.now() }); try { localStorage.setItem('dl_tracks', JSON.stringify(a.slice(0, 30))); } catch (e) { } favs(); };
+function favs() { const w = $('favs'); w.textContent = ''; let a = []; try { a = JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { } a.slice(0, 8).forEach((t) => { const b = document.createElement('button'); b.textContent = '★ ' + (t.style && t.style !== 'techno' ? t.style + ' ' : '') + t.name + ' ' + t.bpm; b.onclick = async () => { if (ME.on) ME.stop(); $('sty').value = t.style || 'techno'; save(); await ME.start({ style: t.style || 'techno', seed: t.seed, tr: (t.tr ?? 55) / 100, en: (t.en ?? 80) / 100, lookAhead: .5, strong: true }); ME.volume(-4); $('onair').classList.add('live'); $('listen').innerHTML = '&#10074;&#10074; Stop'; trk(); vu(); }; w.appendChild(b); }); }
+favs();
+/* the VU meter: amber bars off the main output */
+let an = null; function vu() { if (an) return; an = new Tone.Analyser('fft', 64); Tone.getDestination().connect(an); const cv = $('vu'), cx = cv.getContext('2d');
+  let last = 0, g = null;          /* light on the main thread (a busy page makes the audio drop out): 20 frames a second, the canvas resized only when its size changes, one gradient */
+  (function draw(now) { requestAnimationFrame(draw); if (now - last < 50) return; last = now; const w = Math.round(cv.clientWidth * devicePixelRatio), h0 = Math.round(cv.clientHeight * devicePixelRatio); if (cv.width !== w || cv.height !== h0) { cv.width = w; cv.height = h0; g = null; }
+    const v = an.getValue(), W = cv.width, H = cv.height, bw = W / v.length; cx.clearRect(0, 0, W, H); if (!ME.on) return;
+    if (!g) { g = cx.createLinearGradient(0, H, 0, 0); g.addColorStop(0, '#6b3d1d'); g.addColorStop(.6, '#ffb14a'); g.addColorStop(1, '#ff5a3c'); } cx.fillStyle = g;
+    for (let i = 0; i < v.length; i++) { const h = Math.max(0, (v[i] + 105) / 85) * H; cx.fillRect(i * bw + 1, H - h, bw - 2, h); } })(0); }
+</script>
+<script>/* FULLSCREEN (no browser bars), either way up. &nofs turns it off. */
+(() => { if (/[?&]nofs\b/.test(location.search) || window.top !== window.self || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const de = document.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+</body></html>

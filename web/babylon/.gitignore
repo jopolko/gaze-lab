@@ -1,0 +1,5 @@
+# rollback copies made before each patch (kept locally, not in the repo)
+*_backup.*
+# syntax-check scratch files written by the patch scripts
+_*.js
+_*.mjs
