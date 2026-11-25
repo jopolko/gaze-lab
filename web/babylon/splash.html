@@ -10,7 +10,8 @@
 :root { --bg:#05070c; --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; --amber:#ffb14a; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
 canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
-#fx { inset:auto; left:0; top:0; }          /* sized and placed over the sun each frame */
+#fx { inset:auto; left:0; top:0; }
+#sky { filter:brightness(.78) saturate(.9); }          /* sized and placed over the sun each frame */
 #ui { touch-action:none; }
 #hint { margin-top:clamp(6px,1.4vh,12px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); text-align:center; opacity:0; transition:opacity .8s .3s; }
 #tap.on ~ #hint { opacity:.9; } #hint .rot { display:none; } @media (orientation:portrait) { #hint .rot { display:inline; } }
@@ -46,7 +47,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #strain { margin-bottom:clamp(8px,2vh,18px); font:700 clamp(11px,1.6vmin + 6px,15px) "Barlow Condensed",sans-serif; letter-spacing:.2em; text-transform:uppercase; text-align:center; color:var(--dim); min-height:1.3em; transition:opacity .5s; }
 #strain b { color:var(--c,#38e8ff); }
 #strain .fx { margin-top:3px; font:500 italic clamp(12px,1.5vmin + 7px,16px) Georgia,serif; letter-spacing:0; text-transform:none; color:#e8dcc0; text-shadow:0 0 6px #000,0 1px 2px #000; }
-#strain.in { animation:sin .7s ease-out; } @keyframes sin { from { opacity:0; transform:translateY(6px); } }
+#strain.in { animation:sin .7s ease-out; } @keyframes sin { from { opacity:0; } }
 @media (prefers-reduced-motion:reduce) { #strain.in { animation:none; } }
 #ticker { width:100%; overflow:hidden; white-space:nowrap; margin-top:clamp(8px,1.8vh,16px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.16em; color:rgba(185,194,212,.8);
   border-top:1px solid rgba(185,194,212,.18); padding-top:6px; }
@@ -66,7 +67,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
-<canvas id="bg" aria-hidden="true"></canvas><canvas id="fx" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
+<canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="fx" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
 <div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
@@ -81,7 +82,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
-import { PSYLOOK_FS, LOOKNAMES } from './psylook.js';
+import { PSYLOOK_FS, LOOKNAMES, skyFragment } from './psylook.js';
 /* reduced motion (many phones have it on) doesn't freeze the screen: the rings just swing more gently */
 const CALM = matchMedia('(prefers-reduced-motion: reduce)').matches, RM = false;
 const bg = document.getElementById('bg'), bx = bg.getContext('2d'), cv = document.getElementById('c'), cx = cv.getContext('2d'), fxc = document.getElementById('fx');
@@ -124,6 +125,20 @@ const GL = (() => { const gl = fxc.getContext('webgl', { premultipliedAlpha: tru
 /* the sun stays itself most of the time; now and then it sharpens or softens: vector (glowing outlines), line drawing (ink on paper), a fine ascii,
    or a smooth colour invert that pulses back. Each only goes part of the way, with long plain stretches between. 99 = the invert (not one of the game's looks) */
 const PSYLOOKS = [1, 1, 3, 3, 2, 99];
+/* THE GAME'S OWN SKY (Route Zero's desert, from psylook.js): warm rippling rings round its sun, the beat pulse, and every few bars the sky breaks
+   into big stained-glass panes. Below the horizon it paints the ground exactly as the game does. Its sun sits behind ours. */
+const skyc = document.getElementById('sky');
+const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antialias: false }); if (!gl) return null;
+  const vs = 'attribute vec2 p; uniform vec2 uWH; uniform vec3 uMap; varying vec3 vP; void main(){ float px = (p.x * .5 + .5) * uWH.x, py = (.5 - .5 * p.y) * uWH.y; vP = vec3(.12 + (px - uMap.x) * uMap.z, .28 + (uMap.y - py) * uMap.z, -1.); gl_Position = vec4(p, 0., 1.); }';
+  const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+  try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, skyFragment('desert'))); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); gl.useProgram(pr);
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
+    const U = {}; for (const n of ['uWH', 'uMap', 'uTime', 'uBeat', 'uGlass', 'uPsy']) U[n] = gl.getUniformLocation(pr, n); return { gl, U }; } catch (e) { console.error('splash sky', e); return null; } })();
+function drawSky(t, cxm, hz, sy) { if (!SKY) return false; const { gl, U } = SKY, q = Math.min(1.25, DPR), w = Math.round(W * q), h = Math.round(H * q);
+  if (skyc.width !== w || skyc.height !== h) { skyc.width = w; skyc.height = h; } gl.viewport(0, 0, w, h);
+  const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);          /* a soft beat; the glass breaks in every four bars and melts back */
+  gl.uniform2f(U.uWH, W, H); gl.uniform3f(U.uMap, cxm, sy, 1.6 * .28 / Math.max(1, hz - sy));          /* (1.6: the sky further off than the road, finer ripples; its horizon sits just above the hills) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, glass * glass * (3 - 2 * glass) * .85); gl.uniform1f(U.uPsy, 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 const LOOKQ = { bag: [], cur: 0, t0: -1, rise: 1.6, hold: 2, fall: 1.6, gap: 4, peak: 1 };
 window.__LOOKQ = LOOKQ;          /* (layout tests) */
 function lookNow(t) { const Q = LOOKQ; if (Q.t0 < 0 || t > Q.t0 + Q.rise + Q.hold + Q.fall + Q.gap) {
@@ -131,9 +146,10 @@ function lookNow(t) { const Q = LOOKQ; if (Q.t0 < 0 || t > Q.t0 + Q.rise + Q.hol
     Q.cur = Q.bag.pop(); Q.t0 = t + (Q.t0 < 0 ? 3 : 0); Q.peak = Q.cur === 99 ? .85 + .15 * Math.random() : .4 + .35 * Math.random(); Q.hold = Q.cur === 99 ? .5 + Math.random() * .7 : 1.5 + Math.random() * 1.5; Q.gap = 3 + Math.random() * 3.5; }
   const u = Math.max(0, t - Q.t0), e = u < Q.rise ? u / Q.rise : u < Q.rise + Q.hold ? 1 : u < Q.rise + Q.hold + Q.fall ? 1 - (u - Q.rise - Q.hold) / Q.fall : 0;
   return { idx: Q.cur, s: Q.peak * e * e * (3 - 2 * e) }; }
+let HZ = 0;
 function drawSunFx(t, cxm, sy, R) { const L = lookNow(t); drawGlass(t, R, GL && L.idx !== 99 ? 1 - .5 * L.s : 1); const S = sun.width, css = S / DPR;          /* (the lead fades while a look is strong: the look works on the whole picture) */
   if (!GL) { bx.drawImage(sun, cxm - css / 2, sy - css / 2, css, css); return; }          /* (no WebGL: the plain glass) */
-  fxc.style.width = css + 'px'; fxc.style.height = css + 'px'; fxc.style.transform = `translate(${(cxm - css / 2).toFixed(1)}px,${(sy - css / 2).toFixed(1)}px)`;
+  fxc.style.width = css + 'px'; fxc.style.height = css + 'px'; fxc.style.transform = `translate(${(cxm - css / 2).toFixed(1)}px,${(sy - css / 2).toFixed(1)}px)`; fxc.style.clipPath = `inset(0 0 ${Math.max(0, sy + css / 2 - HZ).toFixed(1)}px 0)`;
   const { gl, U } = GL; if (fxc.width !== S) { fxc.width = fxc.height = S; } gl.viewport(0, 0, S, S); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sun);
   gl.uniform2f(U.uTexel, 1 / S, 1 / S); gl.uniform2f(U.uRes, S, S); gl.uniform1f(U.uCell, Math.max(4, Math.round(S / 60)));          /* (full detail: a fine ascii, crisp lines) */
@@ -153,26 +169,26 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
 function draw(t) {
   const short = W > H && H <= 500, hz = H * (short ? .8 : W > H ? .68 : .62), cxm = W / 2, k = wave(t);
     cx.clearRect(0, 0, W, H);
-  // sky (its middle drifts between violet and deep teal, slowly) and stars
-  const sm = mix([26, 16, 54], [10, 34, 54], .5 + .5 * Math.sin(t * .07));
-  let g = bx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, `rgb(${sm})`); g.addColorStop(1, '#4a2a2a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
-  for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)); bx.fillStyle = `rgba(220,230,255,${tw * .7})`; bx.fillRect(x, y, 1.4, 1.4); }
-  // the sun: its glow and faint rays behind, then the glass with the game's looks on it
+  // the sun's place, then the game's sky round it (our glow only when the viewer has tuned the light)
   const R = short ? Math.min(W * .26, H * .44) : Math.min(W * .34, H * .3), sy = hz - R * .35;
-  const glow = bx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); const gc = TUNE.k > .005 ? mix([255, 200, 90], specNow(), TUNE.k) : [255, 200, 90]; glow.addColorStop(0, `rgba(${gc},${.3 + .15 * k + .4 * TUNE.k})`); glow.addColorStop(1, `rgba(${gc},0)`); bx.fillStyle = glow; bx.fillRect(0, 0, W, hz);
-  bx.save(); bx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 18; i++) { const a = t * .02 + i / 18 * 6.283, c = PAL[i % PAL.length]; bx.beginPath(); bx.moveTo(cxm, sy); bx.arc(cxm, sy, R * 3, a - .045, a + .045); bx.closePath(); bx.fillStyle = `rgba(${c},${.02 + .04 * k})`; bx.fill(); } bx.restore();
+  bx.clearRect(0, 0, W, H); let g;
+  HZ = hz;
+  if (!drawSky(t, cxm, hz, sy)) { g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#05060f'); g.addColorStop(.6, '#4a2a2a'); g.addColorStop(1, '#07060a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H); }
+  g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,6,15,.72)'); g.addColorStop(.3, 'rgba(5,6,15,.25)'); g.addColorStop(hz / H - .02, 'rgba(5,6,15,0)'); g.addColorStop(Math.min(.99, hz / H + .05), 'rgba(5,6,12,.25)'); g.addColorStop(1, 'rgba(4,4,8,.82)'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
+  { const v = bx.createRadialGradient(cxm, sy, Math.min(W, H) * .35, cxm, sy, Math.max(W, H) * .8); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)'); bx.fillStyle = v; bx.fillRect(0, 0, W, H); }
+  if (TUNE.k > .005) { const glow = bx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2), gc = specNow(); glow.addColorStop(0, `rgba(${gc},${.45 * TUNE.k})`); glow.addColorStop(1, `rgba(${gc},0)`); bx.fillStyle = glow; bx.fillRect(0, 0, W, hz); }
   drawSunFx(t, cxm, sy, R);
   // mountains
-  cx.fillStyle = '#0c0a18'; cx.beginPath(); cx.moveTo(0, hz); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .05) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz); cx.fill();
-  // the ground and the road
-  g = cx.createLinearGradient(0, hz, 0, H); g.addColorStop(0, '#2a1a1e'); g.addColorStop(1, '#07060a'); cx.fillStyle = g; cx.fillRect(0, hz, W, H - hz);
+  cx.fillStyle = 'rgba(12,10,24,.92)'; cx.beginPath(); cx.moveTo(0, hz); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .05) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz); cx.fill();
+  // the road (the ground round it is the game's own, painted by the sky)
   const rw = Math.min(W * .9, H * 1.1); cx.fillStyle = '#16141c'; cx.beginPath(); cx.moveTo(cxm - 3, hz); cx.lineTo(cxm + 3, hz); cx.lineTo(cxm + rw / 2, H); cx.lineTo(cxm - rw / 2, H); cx.fill();
   const ec = PAL[0]; cx.strokeStyle = `rgba(${ec},.85)`; cx.lineWidth = 2; cx.shadowColor = `rgb(${ec})`; cx.shadowBlur = 10; for (const sd of [-1, 1]) { cx.beginPath(); cx.moveTo(cxm + sd * 3, hz); cx.lineTo(cxm + sd * rw * .46, H); cx.stroke(); } cx.shadowBlur = 0;
   const sp = RM ? 0 : (t * .9) % 1; cx.fillStyle = '#f2efe6'; for (let i = 0; i < 9; i++) { const u = (i + sp) / 9, d = u * u, y = hz + (H - hz) * d, w = 1 + 7 * d, h = 2 + 30 * d * d; cx.fillRect(cxm - w / 2, y, w, h * .6); }
   // the column of light, with a strain turning in it
   const colH = (hz - H * .1), cw = Math.min(W, H) * .07, p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
   g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},.32)`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .1, cw * 2, colH + (H - hz) * .08);
-  drawMol(p, cxm, hz - Math.min(W, H) * (W > H ? .13 : .06), Math.min(W, H) * (W > H ? .024 : .036), SPIN.yaw, SPIN.pitch, c, Math.min(1, sT / .6) * Math.min(1, (6.5 - sT) / .6), k);
+  MOL.x = cxm; MOL.y = hz - Math.min(W, H) * (W > H ? .13 : .06); MOL.r = Math.min(W, H) * .17;
+  drawMol(p, cxm + SL.off, MOL.y, Math.min(W, H) * (W > H ? .024 : .036), SPIN.yaw, SPIN.pitch, c, 1, k);
 }
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
 function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
@@ -221,8 +237,8 @@ const SPIN = { yaw: 0, pitch: .5, vy: 0, held: 0 };
 function spinStep(dt, t) { if (SPIN.held > 0) { SPIN.held -= dt; SPIN.yaw += SPIN.vy * dt; SPIN.vy *= Math.exp(-dt * 2.2); return; }
   SPIN.yaw += dt * .9; SPIN.pitch += (.5 + Math.sin(t * .45) * .55 - SPIN.pitch) * Math.min(1, dt * .8); }
 let errs = 0;
-function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now; spinStep(dt, t);          /* (next frame booked first: one bad frame never stops it) */
-  sT += dt; if (sT > 6.5) { sT = 0; si = (si + 1) % KEYS.length; showStrain(); }
+function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now; spinStep(dt, t); if (SL.anim) SL.anim(now);          /* (next frame booked first: one bad frame never stops it) */
+  sT += dt; if (sT > 6.5 && !drag && !SL.anim) { sT = 0; swipeTo(1); }          /* (the next strain slides in by itself too) */
   try { draw(t); dial(t); } catch (e) { if (errs++ < 3) console.error('splash', e); } }
 addEventListener('resize', () => { size(); if (RM) draw(0); });
 size(); showStrain(); requestAnimationFrame(frame);
@@ -230,14 +246,24 @@ size(); showStrain(); requestAnimationFrame(frame);
 /* tap: the menu (inside the shell, fullscreen first) */
 let gone = false; const go = () => { if (gone) return; gone = true; location.href = 'menu.html'; };
 const ui = document.getElementById('ui'); let drag = null;
-ui.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, moved: false, id: e.pointerId, ts: e.timeStamp }; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
-ui.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.moved && Math.hypot(dx, dy) > 8) drag.moved = true;
-  if (drag.moved) { const k = .012, ddt = Math.max(.008, (e.timeStamp - drag.ts) / 1000); SPIN.yaw += dx * k; SPIN.pitch = Math.max(-1.4, Math.min(1.4, SPIN.pitch + dy * k)); SPIN.vy = dx * k / ddt; SPIN.held = 2; drag.x = e.clientX; drag.y = e.clientY; drag.ts = e.timeStamp; } });
-/* a quick sideways swipe changes the strain (left: the next one, right: the one before); a slower drag turns it; a tap tunes in */
-function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 0; showStrain(); SPIN.held = 0; SPIN.vy = 0; }
-ui.addEventListener('pointerup', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0, ms = e.timeStamp - drag.t0, tap = !drag.moved; drag = null;
-  if (tap) { go(); return; } if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy) && ms < 350) stepStrain(dx < 0 ? 1 : -1); });
-ui.addEventListener('pointercancel', () => { drag = null; });
+/* THE CAROUSEL: a sideways swipe anywhere drags the molecule and its notes with the finger; let go past a third of the way (or flick) and they slide off
+   that way while the next strain slides in from the other side (left: the next one, right: the one before); a short swipe springs back.
+   A drag that starts ON the molecule turns it in 3D instead. A tap tunes in. */
+const MOL = { x: 0, y: 0, r: 60 }, SL = { off: 0, anim: null };
+function slideApply() { strainEl.style.transform = `translateX(${SL.off.toFixed(1)}px)`; strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
+function slideTo(target, ms, then) { const from = SL.off, t0 = performance.now(); SL.anim = (now) => { const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3); SL.off = from + (target - from) * e; slideApply(); if (u >= 1) { SL.anim = null; if (then) then(); } }; }
+function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 1; showStrain(); }
+function swipeTo(d) { slideTo(-d * W * .7, 170, () => { stepStrain(d); SL.off = d * W * .7; slideApply(); slideTo(0, 260); }); }
+ui.addEventListener('pointerdown', (e) => { const onMol = Math.hypot(e.clientX - MOL.x - SL.off, e.clientY - MOL.y) < MOL.r; drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, moved: false, id: e.pointerId, ts: e.timeStamp, mode: onMol ? 'spin' : null }; SL.anim = null; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
+ui.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y, tx = e.clientX - drag.x0, ty = e.clientY - drag.y0;
+  if (!drag.moved && Math.hypot(tx, ty) > 8) { drag.moved = true; if (!drag.mode) drag.mode = Math.abs(tx) > Math.abs(ty) ? 'slide' : 'spin'; }
+  if (drag.mode === 'slide' && drag.moved) { SL.off = tx; slideApply(); }
+  else if (drag.mode === 'spin' && drag.moved) { const k = .012, ddt = Math.max(.008, (e.timeStamp - drag.ts) / 1000); SPIN.yaw += dx * k; SPIN.pitch = Math.max(-1.4, Math.min(1.4, SPIN.pitch + dy * k)); SPIN.vy = dx * k / ddt; SPIN.held = 2; }
+  drag.x = e.clientX; drag.y = e.clientY; drag.ts = e.timeStamp; });
+ui.addEventListener('pointerup', (e) => { if (!drag || e.pointerId !== drag.id) return; const tx = e.clientX - drag.x0, ms = e.timeStamp - drag.t0, D = drag; drag = null;
+  if (!D.moved) { go(); return; }
+  if (D.mode === 'slide') { if (Math.abs(tx) > W * .3 || (Math.abs(tx) > 40 && ms < 300)) swipeTo(tx < 0 ? 1 : -1); else slideTo(0, 220); } });
+ui.addEventListener('pointercancel', () => { drag = null; slideTo(0, 220); });
 ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(); });
 </script>
 <script>/* fullscreen on the first tap, as the menu does (inside the shell, the shell goes fullscreen so it lasts across pages) */
