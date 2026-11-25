@@ -157,14 +157,21 @@ const snapTo = (n, pcs) => { for (const d of [0, -1, 1, -2, 2, -3, 3]) if (pcs.i
    its genre, so every combination sounds right together. Your ratings (the Music Lab's tuner: like, dislike, swap) decide how often a part comes up:
    a liked part more, a disliked one never; parts heard in the last few tracks rest; one track in five tries parts you have not rated (so it keeps finding new
    ones without getting ugly). The game reads the same ratings, so tuning here shapes every level. */
-const TBEATS = [
-  { id: 'drive', name: 'Drive', hat: [0, .45, .9, .45, 0, .45, .9, .45, 0, .45, .9, .45, 0, .45, .9, .5], oh: [2, 6, 10, 14], clap: [4, 12], perc: [] },
-  { id: 'shuffle', name: 'Shuffle', hat: [0, 0, .9, .35, 0, 0, .9, .35, 0, 0, .9, .35, 0, 0, .9, .5], oh: [2, 6, 10, 14], clap: [4, 12], perc: [3, 6, 10, 14] },
-  { id: 'minimal', name: 'Minimal', hat: [0, 0, .7, 0, 0, 0, .7, 0, 0, 0, .7, 0, 0, 0, .7, 0], oh: [], clap: [12], perc: [7, 15] },
-  { id: 'rolling', name: 'Rolling', hat: [0, .5, .8, .5, 0, .5, .8, .5, 0, .5, .8, .5, 0, .5, .8, .55], oh: [2, 10], clap: [4, 12], perc: [6, 10] },
-  { id: 'broken', name: 'Broken', hat: [0, .4, .9, 0, 0, .4, 0, .5, 0, .4, .9, 0, 0, 0, .9, .4], oh: [6, 14], clap: [4, 10, 12], perc: [3, 11] },
-  { id: 'warehouse', name: 'Warehouse', hat: [0, .4, .85, .4, 0, .4, .85, .4, 0, .4, .85, .4, 0, .4, .85, .4], oh: [2, 6, 10, 14], clap: [4, 12, 15], perc: [7, 13] }];
-const TBASS = [{ id: 'roll', name: 'Roll', v: BPATS[0] }, { id: 'offbeat', name: 'Offbeat', v: BPATS[1] }, { id: 'gallop', name: 'Gallop', v: BPATS[2] }, { id: 'syncop', name: 'Syncopated', v: BPATS[3] }, { id: 'roll2', name: 'Rolling', v: BPATS[4] }];
+const TBEATS = [          /* straight 16ths, no swing. kdec/kpd/koct/drive shape the kick; rumble = how much reverb-rumble sits under it; ride = ride on the offbeats */
+  { id: 'berlin', name: 'Berlin', hat: [0, .16, 0, .16, 0, .16, 0, .2, 0, .16, 0, .16, 0, .16, 0, .2], oh: [2, 6, 10, 14], clap: [12], perc: [], ride: true, kdec: .45, kpd: .035, koct: 3.5, drive: .45, rumble: .6 },
+  { id: 'rumble', name: 'Rumble', hat: [0, 0, .3, 0, 0, 0, .3, 0, 0, 0, .3, 0, 0, 0, .3, .14], oh: [], clap: [], perc: [7], ride: false, kdec: .5, kpd: .03, koct: 3, drive: .55, rumble: 1 },
+  { id: 'industrial', name: 'Industrial', hat: [.18, .3, .22, .3, .18, .3, .22, .3, .18, .3, .22, .3, .18, .3, .22, .34], oh: [6, 14], clap: [4, 12], perc: [3, 11], ride: false, kdec: .36, kpd: .03, koct: 4, drive: .8, rumble: .4 },
+  { id: 'tribal', name: 'Tribal', hat: [0, 0, .26, 0, 0, 0, .26, 0, 0, 0, .26, 0, 0, 0, .26, 0], oh: [], clap: [12], perc: [3, 6, 9, 11, 14], ride: false, kdec: .4, kpd: .04, koct: 3.5, drive: .4, rumble: .5 },
+  { id: 'hypnotic', name: 'Hypnotic', hat: [.12, .12, .3, .12, .12, .12, .3, .12, .12, .12, .3, .12, .12, .12, .3, .12], oh: [2, 10], clap: [], perc: [7, 15], ride: true, kdec: .45, kpd: .035, koct: 3.2, drive: .35, rumble: .7 },
+  { id: 'peak', name: 'Peak-time', hat: [.16, .26, .2, .26, .16, .26, .2, .26, .16, .26, .2, .26, .16, .26, .2, .3], oh: [2, 6, 10, 14], clap: [4, 12], perc: [15], ride: true, kdec: .42, kpd: .035, koct: 4, drive: .6, rumble: .6 }];
+const KDEF = { kdec: .38, kpd: .05, koct: 6, drive: .32 };          /* the kick for every other style */
+const TBASS = [          /* q = resonance, base/oct = filter floor and sweep (dark), sus/dec = note shape */
+  { id: 'rolling', name: 'Rolling', v: [0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1], q: 5, base: 70, oct: 2.2, sus: .15, dec: .12 },
+  { id: 'offbeat', name: 'Offbeat', v: [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0], q: 2.5, base: 60, oct: 1.8, sus: .4, dec: .18, dur: '8n' },
+  { id: 'subdrone', name: 'Sub drone + stab', v: [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0], mode: 'drone', q: 1.5, base: 55, oct: 1.1, sus: .75, dec: .4 },
+  { id: 'acid', name: 'Acid 303', v: [1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1], mode: 'acid', q: 13, base: 110, oct: 3, sus: .1, dec: .14 },
+  { id: 'gallop', name: 'Gallop', v: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1], q: 4, base: 65, oct: 2, sus: .2, dec: .11 }];
+const BDEF = { q: 4, base: 90, oct: 3.2, sus: .2, dec: .16 };          /* the bass synth as the other styles use it */
 const ACIDS = [{ id: 'classic', name: 'Classic', v: ALINES[0] }, { id: 'climb', name: 'Octave climb', v: ALINES[1] }, { id: 'walk', name: 'Minor walk', v: ALINES[2] }, { id: 'fifth', name: 'Fifth bounce', v: ALINES[3] }, { id: 'pulse', name: 'Low pulse', v: ALINES[4] }, { id: 'high', name: 'High octave', v: ALINES[5] }];
 const JBEATS = [{ id: 'twostep', name: 'Two-step', jp: ['two', 'amen'], alt: 'half' }, { id: 'amen', name: 'Amen-style', jp: ['amen', 'chop'], alt: 'tear' }, { id: 'roll', name: 'Roller', jp: ['roll', 'two'], alt: 'step' },
   { id: 'step', name: 'Stepper', jp: ['step', 'amen'], alt: 'chop' }, { id: 'tear', name: 'Tear-out', jp: ['tear', 'roll'], alt: 'half' }, { id: 'chop', name: 'Choppy', jp: ['chop', 'two'], alt: 'tear' }];
@@ -230,8 +237,9 @@ function makeTrack() { R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; 
     parts.push({ key: 'pd', id: pdP.id, name: pdP.name }); if (kind !== 'acid') parts.push({ key: 'ml', id: melP.id, name: melP.name });
     const chop = {}; for (const c of ['K', 'S', 'H', 'G']) { const a = BRK[c].slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } chop[c] = a.slice(0, c === 'G' ? 2 : 3); }
     const dpat = ebP.v, oud = (() => { const rr = pick([[0, 3, 6, 8, 10, 12, 14], [0, 2, 3, 6, 8, 11, 14], [0, 3, 4, 6, 8, 12, 15], [0, 2, 4, 6, 8, 10, 12, 14]]); let dd = 0; return rr.map((st, i) => { if (i) dd = Math.max(-2, Math.min(5, dd + pick([-1, 1, -1, 1, 2, -2, 0]))); return { st, d: dd }; }); })();
-    T = { style: STYLE, kind, funk: false, parts, tbeat: kind === 'techno' ? tbP : null, reese: rsP, padSound: pdP, cbars: canon ? 1 : 2, aline, aroot: 33 + md(root - 33, 12), kn, root, mode, modeName, scName, cprog, pv, bn, pcs, bpm, deg, motif, secs, bars, kit, pmask, hacc, bpat, boct, arpMode, gate, jp, jalt, chop, jfill: pick(JFILL), dpat, oud, name: kn + ' ' + (scName || modeName) };
+    T = { style: STYLE, kind, funk: false, parts, tbeat: kind === 'techno' ? tbP : null, tbs: tbsP, tbs2: TBASS[(TBASS.indexOf(tbsP) + 2) % TBASS.length], reese: rsP, padSound: pdP, cbars: canon ? 1 : 2, aline, aroot: 33 + md(root - 33, 12), kn, root, mode, modeName, scName, cprog, pv, bn, pcs, bpm, deg, motif, secs, bars, kit, pmask, hacc, bpat, boct, arpMode, gate, jp, jalt, chop, jfill: pick(JFILL), dpat, oud, name: kn + ' ' + (scName || modeName) };
   }
+  if (T.kind === 'techno' && /cowbell|maracas|zap/.test(T.kit.perc)) T.kit.perc = /zap/.test(T.kit.perc) ? 'sdbkit-fmperc' : 'x0xproc2-rimshot';
   rememberParts();
   document.getElementById('seed').textContent = SEED; drawSecs(); info(); }
 function info(extra) { if (!T) return; try { drawTuner(); } catch (e) { } const roman = ['i', 'ii', 'III', 'iv', 'v', 'VI', 'VII']; const sty = { disco: 'Disco funk', boogie: 'Boogie funk', break: 'Breakbeat funk', jungle: 'Jungle', eastern: 'Eastern', techno: 'Techno' }[T.style]; document.getElementById('info').innerHTML = '<b>' + sty + '</b> &middot; <b>' + T.name + '</b> &middot; ' + T.bpm + ' BPM &middot; ' + (T.funk ? T.prog.map((x) => roman[x]).join(' &ndash; ') + ' (' + chordNames() + ')' : chordNames()) + ' &middot; ' + T.bars + ' bars' + (extra ? ' &middot; ' + extra : ''); }
@@ -261,14 +269,14 @@ function build() {
   const drumBus = new Tone.Gain(1).connect(comp), drums = new Tone.Players({}).connect(drumBus);
   // the kick: a tuned synth kick, driven so it has a body small speakers can play, with a sample on top for texture
   const kick = new Tone.MembraneSynth({ pitchDecay: .05, octaves: 6, oscillator: { type: 'sine' }, envelope: { attack: .001, decay: .38, sustain: 0, release: .08 } });
-  kick.chain(new Tone.Distortion(.32), new Tone.Gain(.9), comp);
+  const kd = new Tone.Distortion(.32); kick.chain(kd, new Tone.Gain(.9), comp);
   const rumbleSrc = new Tone.MembraneSynth({ pitchDecay: .03, octaves: 4, envelope: { attack: .001, decay: .3, sustain: 0, release: .1 } }); const rumLP = new Tone.BiquadFilter(110, 'lowpass'), rumG = new Tone.Gain(0); rumbleSrc.chain(new Tone.Distortion(.4), rumLP, rumG, duck); rumG.connect(revS);
   // pads: two detuned saws per voice, a slowly breathing filter, chorus and lots of space
   const padLP = new Tone.BiquadFilter(1100, 'lowpass'), padLFO = new Tone.LFO(.05, 600, 2400).start(); padLFO.connect(padLP.frequency); const padG = new Tone.Gain(0); padLP.chain(padG, duck); padG.connect(revS);
   const pad = new Lite(padLP, { type: 'sawtooth', count: 2, spread: 24, attack: 1.1, decay: .6, sustain: .85, release: 2, peak: .42, max: 12 });
   // the riser: noise swept up before a drop (started only while it rises)
   const rn = new Tone.Noise('white'), rnBP = new Tone.BiquadFilter(400, 'bandpass'), rnG = new Tone.Gain(0); rnBP.Q.value = 2; rn.chain(rnBP, rnG, comp); rnG.connect(revS);
-  S = { drums, drumBus, kick, rumbleSrc, rumG, pad, padG, padLP, padLFO, rn, rnG, rnBP, duck, revS, dlyS, comp, built: {}, ready: () => Promise.all([rev.ready].filter(Boolean)) };
+  S = { drums, drumBus, kick, kd, rumbleSrc, rumG, pad, padG, padLP, padLFO, rn, rnG, rnBP, duck, revS, dlyS, comp, built: {}, ready: () => Promise.all([rev.ready].filter(Boolean)) };
   const MODS = {
     bass() {          // the rolling techno bass (a resonant saw) and the trance gallop (a cleaner square)
       const bass = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { Q: 4, type: 'lowpass', rolloff: -24 }, envelope: { attack: .003, decay: .16, sustain: .2, release: .08 }, filterEnvelope: { attack: .002, decay: .12, sustain: .15, release: .1, baseFrequency: 90, octaves: 3.2 } }); const baG = new Tone.Gain(0); bass.chain(baG, duck);
@@ -323,7 +331,13 @@ const USE = { acid: ['acG', 'padG', 'rumG'], techno: ['baG', 'b2G', 'rumG', 'pad
 const ALLG = [...new Set(Object.values(USE).flat())];
 function quiet(time, kind) { const u = USE[kind]; for (const g of ALLG) if (!u.includes(g) && S[g]) pT(S[g].gain, 0, time, .08); }
 function pump(time, depth, len) { const g = S.duck.gain; g.cancelScheduledValues(time); g.setValueAtTime(depth, time); g.linearRampToValueAtTime(1, time + len); }
-function kickHit(time, v) { S.kick.triggerAttackRelease(midi(T.kroot || 33), '8n', time, v); hit(T.kit.kick, time, .45 * v); }
+function kickHit(time, v) { S.kick.triggerAttackRelease(midi(T.kroot || 33), '8n', time, v); hit(T.kit.kick, time, (T.kind === 'techno' ? .28 : .45) * v); }
+function kickSet(p) { if (S.kcur === p) return; S.kcur = p; try { S.kick.envelope.decay = p.kdec; S.kick.pitchDecay = p.kpd; S.kick.octaves = p.koct; S.kd.distortion = p.drive; } catch (e) { } }
+function bassSet(p) { const b = S.bass; if (S.bcur === p) return; S.bcur = p; try { b.filter.Q.value = p.q; b.filterEnvelope.baseFrequency = p.base; b.filterEnvelope.octaves = p.oct; b.envelope.sustain = p.sus; b.envelope.decay = p.dec; } catch (e) { } }
+function bassHit(time, bar, st, bn, en, p, mut) { const b = S.bass; bassSet(p); const open = mut === 3 ? .9 : 0, sw = .5 + .5 * Math.sin(2 * Math.PI * (bar + st / 16) / 8); let note = bn, dur = p.dur || '16n';
+  if (p.mode === 'acid') { note = bn + T.aline[(bar % (T.aline.length / 8)) * 8 + (st >> 1)]; b.filterEnvelope.octaves = 1.4 + 3.2 * sw * (.6 + .4 * en) + open; }
+  else { b.filterEnvelope.octaves = p.oct * (.75 + .25 * en) * (.85 + .15 * sw) + open; if (p.mode === 'drone') { if (st === 0) dur = '2n'; else { note = bn + 12; dur = '32n'; } } }
+  b.triggerAttackRelease(midi(note), dur, time, p.mode === 'drone' && st === 0 ? .8 : .72); }
 function riserStep(time, P, sec, inSec, st, dosing, bar, big) { const riseK = P.riser ? (inSec * 16 + st) / (sec.len * 16) : dosing && bar - doseBar < 2 ? ((bar - doseBar) * 16 + st) / 32 : 0;
   if (riseK > 0 && !S.rnOn) { S.rnOn = true; S.rn.start(time); } else if (riseK <= 0 && S.rnOn) { S.rnOn = false; S.rn.stop(time + .4); }
   pT(S.rnG.gain,riseK > 0 ? .02 + (big || .16) * riseK : 0, time, riseK > 0 ? .1 : .02); pT(S.rnBP.frequency,300 + 9000 * riseK * riseK, time, .1); }
@@ -358,23 +372,24 @@ function funkTick(time, s, bar, st, sec, inSec, lastBar, P, dosing, en) {
 /* TECHNO / TRANCE: four to the floor, offbeat open hat, a rolling bassline from the pattern bank, voice-led pads, an arp and a hook that lands on chord tones */
 function technoTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
   const ci = padChord(time, P2, bar), v = T.pv[ci], pcs = T.pcs[ci], bn = T.bn[ci];
+  const TB = T.tbeat || TBEATS[0], mut = (sec.n === 'GROOVE' || sec.n === 'DROP') ? Math.floor(bar / 16) % 4 : 0, BP = (mut === 1 ? T.tbs2 : T.tbs) || TBASS[0], gap = mut === 2 && bar % 4 === 3;          /* every 16 bars of the groove: 0 as written, 1 the other bass part, 2 hats out + a rim fill each 4th bar, 3 filter opens + ride */
   const kickOn = P.k > 0 && st % 4 === 0 && !(lastBar && P.k < 1 && st > 8), fill = lastBar && (sec.n === 'BUILD' || sec.n === 'RISE') && st >= 12;
-  if (kickOn || (fill && st % 2 === 0)) { kickHit(time, kickOn ? .95 + .05 * en : .7); if (inSec === 0 && st === 0 && (sec.n === 'DROP' || sec.n === 'GROOVE')) hit(T.kit.crash, time, .5); if (P.ru * en > .1) S.rumbleSrc.triggerAttackRelease(midi(bn - 12 > 24 ? bn - 12 : bn), '8n', time, .7); pump(time, .25, .2); }
-  pT(S.rumG.gain,P.ru * (1 - tr * .7) * en * .5, time, .1);
-  { const hv = T.tbeat ? T.tbeat.hat[st] : (st % 4 !== 0 ? T.hacc[st] : 0); if (P.h && hv > 0 && R() < P.h * (.6 + .4 * en)) hit(T.kit.hat, time, hv * (.5 + .4 * en)); }
-  if (P.oh && (T.tbeat ? T.tbeat.oh.includes(st) : st % 4 === 2)) hit(T.kit.oh, time, .55 + .15 * en);
-  if (P.cl && (T.tbeat ? T.tbeat.clap.includes(st) : (st === 4 || st === 12)) && R() < P.cl) hit(T.kit.clap, time, .8);
-  if ((sec.n === 'GROOVE' || sec.n === 'DROP') && (T.tbeat ? T.tbeat.perc.includes(st) : T.pmask[st])) hit(T.kit.perc, time, .32 + .2 * en);
-  if (P.ri && st % 4 === 2 && tr < .8) hit(T.kit.ride, time, .25 * (1 - tr));
-  if (P.ba) { const techno = T.bpat[st] && R() < 1 - tr * .7, trance = st % 4 !== 0 && R() < tr * 1.1;
-    if (techno) { S.bass.filterEnvelope.octaves = 2.4 + 2.2 * en * (.6 + .4 * Math.sin(bar * .7)); S.bass.triggerAttackRelease(midi(bn + T.boct[st]), '16n', time, .75); }
+  if (kickOn || (fill && st % 2 === 0)) { kickHit(time, kickOn ? .95 + .05 * en : .7); if (inSec === 0 && st === 0 && (sec.n === 'DROP' || sec.n === 'GROOVE')) hit(T.kit.crash, time, .5); if (P.ru * en * TB.rumble > .08) S.rumbleSrc.triggerAttackRelease(midi(bn - 12 > 24 ? bn - 12 : bn), '8n', time, .75); pump(time, .14, .26); }
+  pT(S.rumG.gain,P.ru * (1 - tr * .7) * en * .5 * (.4 + .8 * TB.rumble), time, .1);
+  { const hv = gap ? 0 : TB.hat[st]; if (P.h && hv > 0 && R() < P.h * (.85 + .15 * en)) hit(T.kit.hat, time, hv * (.55 + .3 * en)); }
+  if (P.oh && !gap && TB.oh.includes(st)) hit(T.kit.oh, time, .34 + .1 * en);
+  if (P.cl && TB.clap.includes(st) && R() < P.cl) hit(T.kit.clap, time, .6);
+  if ((sec.n === 'GROOVE' || sec.n === 'DROP') && (TB.perc.includes(st) || (gap && st >= 13))) hit(T.kit.perc, time, .2 + .12 * en);
+  if (P.ri && (TB.ride || mut === 3) && st % 4 === 2 && tr < .8) hit(T.kit.ride, time, .2 * (1 - tr));
+  if (P.ba) { const techno = BP.v[st] && R() < 1 - tr * .7, trance = st % 4 !== 0 && R() < tr * 1.1;
+    if (techno) bassHit(time, bar, st, bn, en, BP, mut);
     if (trance) S.bass2.triggerAttackRelease(midi(bn + (st % 4 === 2 ? 12 : 0)), '16n', time, .7); }
   pT(S.baG.gain,.42 * (1 - tr * .6), time, .2); pT(S.b2G.gain,.3 * tr, time, .2);
   pT(S.padG.gain,.14 * (.55 + .7 * tr) * P2.pad, time, .3);
   if (P2.arp) { const tones = v.concat(v.slice(0, 3).map((m) => m + 12)), L = tones.length;
     if (T.arpMode === 'gate') { if (T.gate[st]) S.arp.triggerAttackRelease(v.map((m) => midi(m + 12)), '32n', time, .35); }
     else if (R() < .94) { const i = T.arpMode === 'up' ? (st + bar * 3) % L : (() => { const k = (st + bar * 2) % (2 * L - 2); return k < L ? k : 2 * L - 2 - k; })(); S.arp.triggerAttackRelease(midi(tones[i] + 12), '32n', time, .6); } }
-  pT(S.arpLP.frequency,900 + 3800 * Math.min(1, (inSec + st / 16) / Math.max(4, sec.len)) * (.4 + .6 * tr), time, .3); pT(S.arpG.gain,.07 * P2.arp * (.3 + .9 * tr), time, .3);
+  pT(S.arpLP.frequency,650 + 2400 * Math.min(1, (inSec + st / 16) / Math.max(4, sec.len)) * (.4 + .6 * tr), time, .3); pT(S.arpG.gain,.07 * P2.arp * (.3 + .9 * tr), time, .3);
   if (P2.ld) { const pos = (bar % 2) * 16 + st, rep = Math.floor(bar / 2) % 4; for (const m of T.motif) { if (m.st !== pos) continue; let dd = m.d + (rep === 2 ? 2 : 0); if (rep === 3 && m === T.motif[T.motif.length - 1]) dd += pick([-3, 4, 2]); let note = T.deg(dd, 1); if (st % 4 === 0) note = snapTo(note, pcs); S.lead.triggerAttackRelease(midi(note), (m.len * .25 * 60 / T.bpm), time, .55); } }
   pT(S.ldG.gain,.075 * P2.ld * (.35 + .8 * tr), time, .4);
   if (st === 0) quiet(time, 'techno');
@@ -409,7 +424,7 @@ function easternTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) 
   if (P.k > 0 && st % 4 === 0 && !(lastBar && P.k < 1 && st > 8)) { kickHit(time, 1); pump(time, .3, .2); if (inSec === 0 && st === 0 && sec.n === 'DROP') hit(T.kit.crash, time, .4); }
   if (P.oh && st % 4 === 2) hit(T.kit.oh, time, .35);
   const c = T.dpat[st]; if (P.h && c && c !== '.') { if (c === 'D') S.doum.triggerAttackRelease(midi(T.root - 12 + 7 > 40 ? T.root - 12 : T.root), '16n', time, .8); else hit('x0xproc2-rimshot', time, c === 'T' ? .55 : .22); }
-  if (P.ba && st % 4 !== 0 && (sec.n === 'DROP' || sec.n === 'GROOVE' || sec.n === 'BUILD')) S.bass.triggerAttackRelease(midi(bn), '16n', time, .6);
+  if (P.ba && st % 4 !== 0 && (sec.n === 'DROP' || sec.n === 'GROOVE' || sec.n === 'BUILD')) { bassSet(BDEF); S.bass.triggerAttackRelease(midi(bn), '16n', time, .6); }
   pT(S.baG.gain,.24 * P.ba, time, .2); pT(S.rumG.gain,0, time, .1);
   if (bar % 4 === 0 && st === 0) { S.drone.releaseAll(time); S.drone.triggerAttackRelease([midi(T.root - 12), midi(T.root - 5)], '4m', time, .5); }
   pT(S.droneG.gain,.12 * (.6 + .4 * tr), time, .5);
@@ -444,7 +459,7 @@ function acidTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
 function tick(time) {
   const s = step++, bar = Math.floor(s / 16), st = s % 16, [sec, si] = secAt(bar), P = (T.kind === 'jungle' ? JSECT : T.kind === 'acid' ? ASECT : SECT)[sec.n] || SECT.GROOVE, tr = TR(), en = EN(), inSec = (bar % T.bars) - sec.b0, lastBar = inSec === sec.len - 1;
   const dosing = bar - doseBar < 8, P2 = dosing ? Object.assign({}, P, { ld: 1, arp: 1, pad: 1 }) : P;          /* a dose: the hook and the arp come in whatever the section */
-  need(T.kind); T.cst = st; if (!T.kroot) T.kroot = 31 + md(T.root - 31, 12);          /* the kick tuned to the key (G1 to F#2) */
+  need(T.kind); T.cst = st; if (!T.kroot) T.kroot = 31 + md(T.root - 31, 12); if (S.kick) kickSet(T.kind === 'techno' && T.tbeat ? T.tbeat : KDEF);          /* the kick tuned to the key (G1 to F#2) */
   if (si !== lastSec && st === 0) { lastSec = si; Tone.Draw.schedule(() => { document.querySelectorAll('#secs span').forEach((e) => e.classList.toggle('on', +e.dataset.i === si)); }, time); }
   if (T.funk) funkTick(time, s, bar, st, sec, inSec, lastBar, P, dosing, en);
   else if (T.kind === 'jungle') jungleTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing);
@@ -453,7 +468,7 @@ function tick(time) {
   else technoTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing);
   if (st === 0) Tone.Draw.schedule(() => info(sec.n + ' · bar ' + (inSec + 1) + '/' + sec.len + (dosing ? ' · DOSE' : '')), time);
 }
-const swingOf = () => T.funk ? (T.style === 'break' ? .18 : .12) : T.kind === 'jungle' ? 0 : .06;
+const swingOf = () => T.funk ? (T.style === 'break' ? .18 : .12) : (T.kind === 'jungle' || T.kind === 'techno' || T.kind === 'acid') ? 0 : .06;
 /* OFFLINE RENDER: plays a track into a buffer faster than real time (for measuring, and for the loop library). o: { style, seed, secs, from: section name } */
 async function renderOffline(o) { const keep = [S, T, step, lastSec, STYLE, LV, SEED, doseBar];
   try { const buf = await Tone.Offline(async (ctx) => { S = null; build(); STYLE = o.style || 'techno'; LV = o.level || null; SEED = o.seed || 12345; step = 0; lastSec = -1; doseBar = -99; makeTrack(); need(T.kind); await Tone.loaded(); await S.ready();
