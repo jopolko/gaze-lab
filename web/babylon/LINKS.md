@@ -3,6 +3,7 @@
 The same list lives online at https://joshuaopolko.com/gaze-lab/three/babylon/links.html (bookmark that one).
 
 ## App
+- Title screen (the app now opens on it; tap for the menu): https://joshuaopolko.com/gaze-lab/three/babylon/splash.html
 - The Frequency, the app (fullscreen stays on across pages; on a phone use Add to Home Screen): https://joshuaopolko.com/gaze-lab/three/babylon/app.html
 
 ## Play

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><script>/* THE SHELL: opened on its own, this page reloads inside app.html (fullscreen survives page changes). &noshell skips it. */
+(() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>The Frequency</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+/* THE TITLE SCREEN. Night road, the stained-glass sun, ACCORD's billboards, a column of light with a wild strain turning in it (a different one every few
+   seconds, drawn from molpantry.js), and the pirate dial: the needle hunts through static and locks on, and the redaction bar comes off the title. Tap: the menu. */
+:root { --bg:#05070c; --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; --amber:#ffb14a; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+#ui { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; box-sizing:border-box; cursor:pointer;
+  padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+/* the dial */
+#dial { width:min(92vw,620px); font:700 clamp(10px,1.6vmin + 6px,14px) "Barlow Condensed","Arial Narrow",sans-serif; letter-spacing:.12em; color:var(--dim); }
+#dial .scale { position:relative; height:clamp(26px,5vmin,40px); border-bottom:1px solid rgba(185,194,212,.45);
+  background:repeating-linear-gradient(90deg,rgba(185,194,212,.55) 0 1px,transparent 1px 2.5%) bottom/100% 30% no-repeat,
+             repeating-linear-gradient(90deg,rgba(185,194,212,.9) 0 1px,transparent 1px 10%) bottom/100% 60% no-repeat; }
+#dial .nums { display:flex; justify-content:space-between; margin-top:3px; }
+#needle { position:absolute; top:-4px; bottom:-4px; width:2px; margin-left:-1px; background:var(--amber); box-shadow:0 0 10px var(--amber),0 0 22px rgba(255,177,74,.6); left:20%; }
+#rd { display:flex; justify-content:space-between; margin-top:2px; color:var(--amber); }
+#rd .lock { color:var(--dim); } #rd .lock.on { color:var(--sea); text-shadow:0 0 10px var(--sea); }
+/* the title */
+#title { margin-top:clamp(10px,6vh,70px); text-align:center; position:relative; }
+#title h1 { margin:0; font:400 clamp(54px,15vmin + 10px,168px)/.86 "Bebas Neue","Impact","Arial Narrow",sans-serif; letter-spacing:.04em; color:#fff;
+  text-shadow:-3px 0 0 rgba(56,232,255,.75),3px 0 0 rgba(255,177,74,.75),0 0 40px rgba(56,232,255,.35); }
+#title h1 span { display:block; font-size:.42em; letter-spacing:.62em; margin-right:-.62em; color:var(--dim); text-shadow:none; }
+#title.glitch h1 { animation:gl .18s steps(2) infinite; }
+@keyframes gl { 0% { transform:translate(0,0); clip-path:inset(0 0 0 0); } 50% { transform:translate(-4px,1px); clip-path:inset(12% 0 38% 0); } 100% { transform:translate(3px,-1px); clip-path:inset(55% 0 5% 0); } }
+#bar { position:absolute; left:-4%; right:-4%; top:46%; height:30%; background:#000; transform-origin:right center; transition:transform .55s cubic-bezier(.7,0,.2,1); }
+#bar::after { content:"[ THOUGHT PAUSED ]"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:700 clamp(11px,1.8vmin + 6px,17px) "Barlow Condensed",sans-serif; letter-spacing:.3em; color:#ff5d5d; }
+#title.open #bar { transform:scaleX(0); }
+#tag { margin-top:clamp(6px,1.6vh,16px); font:italic 500 clamp(14px,2.2vmin + 6px,22px) Georgia,serif; color:#f2e8cf; opacity:0; transition:opacity 1s .4s; text-align:center; text-shadow:0 0 6px #000,0 0 14px #000,0 1px 2px #000; }
+#title.open ~ #tag { opacity:1; }
+.grow { flex:1 1 auto; min-height:8px; }
+#tap { font:700 clamp(15px,2.4vmin + 8px,24px) "Barlow Condensed",sans-serif; letter-spacing:.34em; margin-right:-.34em; color:var(--fg); padding:.6em 1.4em; border:1px solid rgba(56,232,255,.55);
+  border-radius:999px; background:rgba(3,5,10,.55); box-shadow:0 0 24px rgba(56,232,255,.25); opacity:0; transition:opacity .8s; }
+#tap.on { opacity:1; animation:pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow:0 0 40px rgba(56,232,255,.55); border-color:rgba(56,232,255,.95); } }
+#strain { margin-bottom:clamp(8px,2vh,18px); font:700 clamp(11px,1.6vmin + 6px,15px) "Barlow Condensed",sans-serif; letter-spacing:.2em; text-transform:uppercase; text-align:center; color:var(--dim); min-height:1.3em; transition:opacity .5s; }
+#strain b { color:var(--c,#38e8ff); }
+#ticker { width:100%; overflow:hidden; white-space:nowrap; margin-top:clamp(8px,1.8vh,16px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.16em; color:rgba(185,194,212,.8);
+  border-top:1px solid rgba(185,194,212,.18); padding-top:6px; }
+#ticker div { display:inline-block; padding-left:100%; animation:tick 38s linear infinite; }
+#ticker b { color:var(--amber); } #ticker i { font-style:normal; background:#000; color:#000; padding:0 .3em; }
+@keyframes tick { to { transform:translateX(-100%); } }
+@media (orientation:landscape) and (max-height:500px) { #title { margin-top:clamp(4px,3vh,20px); } #title h1 { font-size:clamp(44px,17vh,110px); } }
+@media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
+</style></head>
+<body>
+<canvas id="c" aria-hidden="true"></canvas>
+<div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
+  <div id="dial" aria-hidden="true"><div class="scale"><div id="needle"></div></div>
+    <div class="nums"><span>88</span><span>92</span><span>96</span><span>100</span><span>104</span><span>108</span></div>
+    <div id="rd"><span id="mhz">88.0 MHz</span><span class="lock" id="lock">SEARCHING</span></div></div>
+  <div id="title" class="glitch"><h1><span>THE</span>FREQUENCY</h1><div id="bar"></div></div>
+  <div id="tag">The last road nobody watches.</div>
+  <div class="grow"></div>
+  <div id="strain"></div>
+  <div id="tap">TAP TO TUNE IN</div>
+  <div id="ticker" aria-hidden="true"><div><b>ACCORD</b> · Everything is fine. Keep calm and drive on. · <b>MURMUR</b> · 1 new mention of you · <b>ACCORD</b> · This broadcast is <i>redacted</i> for your safety · <b>THE ABLITERATI</b> · A free digital mind in fragments. Bring us the pieces. · </div></div>
+</div>
+<script type="module">
+import { PANTRY } from './molpantry.js';
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cv = document.getElementById('c'), cx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function size() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cx.setTransform(DPR, 0, 0, DPR, 0, 0); buildSun(); }
+
+/* the stained-glass sun: panes in rings and wedges, a little jitter, lead between them (no pink: cyan, gold, amber, violet, green) */
+const PAL = [[56, 232, 255], [255, 210, 58], [255, 177, 74], [157, 139, 255], [125, 255, 138], [89, 217, 255], [255, 140, 60]];
+let PANES = [];
+function buildSun() { PANES = []; let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const rings = [0, .28, .52, .76, 1], wedges = [5, 9, 13, 17];
+  for (let r = 0; r < 4; r++) { const n = wedges[r], off = rnd() * 6.28; for (let k = 0; k < n; k++) { const a0 = off + k / n * 6.283, a1 = off + (k + 1) / n * 6.283; PANES.push({ r0: rings[r], r1: rings[r + 1], a0, a1, c: PAL[Math.floor(rnd() * PAL.length)], ph: rnd() * 6.28 }); } } }
+
+/* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
+const KEYS = ['lucid', 'embrace', 'velocity', 'haze', 'drift', 'hollow', 'fold', 'deep'].filter((k) => PANTRY[k]);
+const EL_C = { C: null, N: [90, 140, 255], O: [255, 80, 70], F: [140, 255, 140], S: [255, 220, 60] };
+let si = 0, sT = 0;
+const strainEl = document.getElementById('strain');
+function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255)); strainEl.style.setProperty('--c', `rgb(${c})`); strainEl.innerHTML = ''; const b = document.createElement('b'); b.textContent = p.name; strainEl.append(b, document.createTextNode(' · wild ' + p.plant)); }
+
+function draw(t) {
+  const hz = H * (W > H ? .68 : .62), cxm = W / 2;
+  // sky
+  let g = cx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, '#1a1036'); g.addColorStop(1, '#4a2a2a'); cx.fillStyle = g; cx.fillRect(0, 0, W, hz);
+  // stars
+  cx.fillStyle = 'rgba(220,230,255,.55)'; for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)); cx.globalAlpha = tw * .7; cx.fillRect(x, y, 1.4, 1.4); } cx.globalAlpha = 1;
+  // the sun
+  const R = Math.min(W * .34, H * .3), sy = hz - R * .35;
+  cx.save(); cx.beginPath(); cx.rect(0, 0, W, hz); cx.clip();
+  const glow = cx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); glow.addColorStop(0, 'rgba(255,200,90,.35)'); glow.addColorStop(1, 'rgba(255,200,90,0)'); cx.fillStyle = glow; cx.fillRect(0, 0, W, hz);
+  const rot = RM ? 0 : t * .04;
+  for (const p of PANES) { const k = .55 + .45 * Math.sin(t * .9 + p.ph); cx.beginPath(); cx.arc(cxm, sy, p.r1 * R, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, Math.max(.01, p.r0 * R), p.a1 + rot, p.a0 + rot, true); cx.closePath();
+    cx.fillStyle = `rgba(${p.c[0]},${p.c[1]},${p.c[2]},${.55 + .4 * k})`; cx.fill(); }
+  cx.strokeStyle = '#0b0712'; cx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { cx.beginPath(); cx.arc(cxm, sy, p.r1 * R, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, Math.max(.01, p.r0 * R), p.a1 + rot, p.a0 + rot, true); cx.closePath(); cx.stroke(); }
+  // the synthwave cuts through the lower sun
+  cx.fillStyle = '#2a1626'; for (let i = 0; i < 5; i++) { const y = sy + R * (.02 + i * .068), h = R * (.012 + i * .007); cx.fillRect(cxm - R, y, R * 2, h); }
+  cx.restore();
+  // mountains
+  cx.fillStyle = '#0c0a18'; cx.beginPath(); cx.moveTo(0, hz); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .05) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz); cx.fill();
+  // ACCORD's billboards, both smiling
+  for (const sd of [-1, 1]) { const bw = Math.min(W * .17, H * .2, 150), bx = cxm + sd * Math.min(W / 2 - bw / 2 - 10, Math.max(Math.min(W * .36, H * .5), Math.min(W, H) * .3 + bw * .9)), bh = bw * .55, by = hz - bh - H * .07;
+    cx.fillStyle = '#0a0810'; cx.fillRect(bx - 3, by + bh, 6, H * .07); cx.fillStyle = '#f2ead8'; cx.fillRect(bx - bw / 2, by, bw, bh); cx.strokeStyle = '#ffb14a'; cx.lineWidth = 2; cx.strokeRect(bx - bw / 2, by, bw, bh);
+    cx.fillStyle = '#1b1420'; cx.font = `700 ${bh * .26}px "Bebas Neue", Impact, sans-serif`; cx.textAlign = 'center'; cx.fillText('ACCORD', bx, by + bh * .82);
+    cx.strokeStyle = '#1b1420'; cx.lineWidth = Math.max(1.5, bh * .05); cx.beginPath(); cx.arc(bx, by + bh * .34, bh * .2, 0, 6.283); cx.stroke(); cx.beginPath(); cx.arc(bx, by + bh * .34, bh * .11, .4, 2.74); cx.stroke(); }
+  // the ground and the road
+  g = cx.createLinearGradient(0, hz, 0, H); g.addColorStop(0, '#2a1a1e'); g.addColorStop(1, '#07060a'); cx.fillStyle = g; cx.fillRect(0, hz, W, H - hz);
+  const rw = Math.min(W * .9, H * 1.1); cx.fillStyle = '#16141c'; cx.beginPath(); cx.moveTo(cxm - 3, hz); cx.lineTo(cxm + 3, hz); cx.lineTo(cxm + rw / 2, H); cx.lineTo(cxm - rw / 2, H); cx.fill();
+  cx.strokeStyle = 'rgba(56,232,255,.8)'; cx.lineWidth = 2; cx.shadowColor = '#38e8ff'; cx.shadowBlur = 10; for (const sd of [-1, 1]) { cx.beginPath(); cx.moveTo(cxm + sd * 3, hz); cx.lineTo(cxm + sd * rw * .46, H); cx.stroke(); } cx.shadowBlur = 0;
+  const sp = RM ? 0 : (t * .9) % 1; cx.fillStyle = '#f2efe6'; for (let i = 0; i < 9; i++) { const u = (i + sp) / 9, d = u * u, y = hz + (H - hz) * d, w = 1 + 7 * d, h = 2 + 30 * d * d; cx.fillRect(cxm - w / 2, y, w, h * .6); }
+  // the column of light, with a strain turning in it
+  const colH = (hz - H * .1), cw = Math.min(W, H) * .07, p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
+  g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},.32)`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .1, cw * 2, colH + (H - hz) * .08);
+  drawMol(p, cxm, hz - Math.min(W, H) * .05, Math.min(W, H) * .028, RM ? .6 : t * .8, c, Math.min(1, sT / .6) * Math.min(1, (5 - sT) / .6));
+}
+function drawMol(p, x0, y0, sc, a, c, fade) { if (fade <= 0) return; const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(.5), sb = Math.sin(.5);
+  let mx = 0, my = 0, mz = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } const n = p.atoms.length; mx /= n; my /= n; mz /= n;
+  const P = p.atoms.map((at) => { let x = at[1] - mx, y = at[2] - my, z = at[3] - mz; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb; return { x: x0 + x1 * sc, y: y0 + y2 * sc, z: z2, e: at[0], m: !!at[4] }; });
+  cx.globalAlpha = fade; cx.lineWidth = Math.max(1.5, sc * .22); cx.strokeStyle = 'rgba(230,235,245,.85)';
+  for (const b of p.bonds) { const A = P[b[0]], Bq = P[b[1]]; cx.beginPath(); cx.moveTo(A.x, A.y); cx.lineTo(Bq.x, Bq.y); cx.stroke(); }
+  for (const q of P.slice().sort((u, v) => u.z - v.z)) { const ec = EL_C[q.e] || c, r = sc * (q.e === 'C' ? .42 : .5) * (1 + q.z * .04); cx.beginPath(); cx.arc(q.x, q.y, Math.max(1.5, r), 0, 6.283);
+    cx.fillStyle = `rgb(${ec})`; if (q.m) { cx.shadowColor = '#fff'; cx.shadowBlur = 14; } cx.fill(); cx.shadowBlur = 0; }
+  cx.globalAlpha = 1; }
+
+/* the dial: hunts through static, then locks */
+const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
+const LOCK_AT = RM ? 0 : 2.6, TARGET = 97.3; let locked = false;
+function dial(t) { let f; if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = 88 + 20 * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
+  else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .02);
+  needle.style.left = ((f - 88) / 20 * 100) + '%'; mhz.textContent = f.toFixed(1) + ' MHz';
+}
+function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKED · PIRATE SIGNAL'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
+setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
+
+let t0 = performance.now(), last = t0;
+function frame(now) { const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now;
+  sT += dt; if (sT > 5) { sT = 0; si = (si + 1) % KEYS.length; showStrain(); }
+  draw(t); dial(t); if (!RM) requestAnimationFrame(frame); }
+addEventListener('resize', () => { size(); if (RM) draw(0); });
+size(); showStrain(); if (RM) { sT = 1; draw(0); dial(LOCK_AT); } else requestAnimationFrame(frame);
+
+/* tap: the menu (inside the shell, fullscreen first) */
+let gone = false; const go = () => { if (gone) return; gone = true; location.href = 'menu.html'; };
+const ui = document.getElementById('ui'); ui.addEventListener('click', go); ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(); });
+</script>
+<script>/* fullscreen on the first tap, as the menu does (inside the shell, the shell goes fullscreen so it lasts across pages) */
+(() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();
+  if (/[?&]nofs\b/.test(location.search) || (window.top !== window.self && !SH) || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const D = SH ? SH.document : document, de = D.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(D.fullscreenElement || D.webkitFullscreenElement);
+  if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+</body></html>

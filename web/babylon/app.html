@@ -14,7 +14,7 @@ iframe { position:fixed; inset:0; width:100%; height:100%; border:0; display:blo
 <iframe id="f" title="The Frequency" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
 <script>
 window.__SHELL = true;          /* the pages look for this: inside the shell they fullscreen the shell itself */
-(() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'menu.html';
+(() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'splash.html';          /* the title screen first; it taps through to the menu */
   if (!/^[A-Za-z0-9_-]+\.html([?#].*)?$/.test(p)) p = 'menu.html';          /* only this folder's own pages */
   f.src = p;
   /* the address bar follows the page inside, so a reload or a bookmark lands back on it */
