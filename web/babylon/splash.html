@@ -5,7 +5,7 @@
 <title>The Frequency</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <style>
-/* THE TITLE SCREEN. Night road, the stained-glass sun, ACCORD's billboards, a column of light with a wild strain turning in it (a different one every few
+/* THE TITLE SCREEN. Night road, the stained-glass sun turning in rings and swelling in trip waves, a column of light with a wild strain turning in it (a different one every few
    seconds, drawn from molpantry.js), and the light: a marker hunts across the spectrum and locks on, and the redaction bar comes off the title. Tap: the menu. */
 :root { --bg:#05070c; --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; --amber:#ffb14a; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
@@ -25,7 +25,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 /* the title */
 #title { margin-top:clamp(10px,6vh,70px); text-align:center; position:relative; }
 #title h1 { margin:0; font:400 clamp(54px,15vmin + 10px,168px)/.86 "Bebas Neue","Impact","Arial Narrow",sans-serif; letter-spacing:.04em; color:#fff;
-  text-shadow:-3px 0 0 rgba(56,232,255,.75),3px 0 0 rgba(255,177,74,.75),0 0 40px rgba(56,232,255,.35); }
+  text-shadow:calc(-1 * var(--ab,3px)) 0 0 rgba(56,232,255,.75),var(--ab,3px) 0 0 rgba(255,177,74,.75),0 0 40px rgba(56,232,255,.35); }
 #title h1 span { display:block; font-size:.42em; letter-spacing:.62em; margin-right:-.62em; color:var(--dim); text-shadow:none; }
 #title.glitch h1 { animation:gl .18s steps(2) infinite; }
 @keyframes gl { 0% { transform:translate(0,0); clip-path:inset(0 0 0 0); } 50% { transform:translate(-4px,1px); clip-path:inset(12% 0 38% 0); } 100% { transform:translate(3px,-1px); clip-path:inset(55% 0 5% 0); } }
@@ -69,12 +69,35 @@ const cv = document.getElementById('c'), cx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 function size() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cx.setTransform(DPR, 0, 0, DPR, 0, 0); buildSun(); }
 
-/* the stained-glass sun: panes in rings and wedges, a little jitter, lead between them (no pink: cyan, gold, amber, violet, green) */
+/* the stained-glass sun: panes in rings and wedges, lead between them (no pink: cyan, gold, amber, violet, green). Each ring turns on its own, the
+   colours drift from pane to pane, and the whole thing comes in waves like a trip: rays, ripples and a tracer echo swell and settle again */
 const PAL = [[56, 232, 255], [255, 210, 58], [255, 177, 74], [157, 139, 255], [125, 255, 138], [89, 217, 255], [255, 140, 60]];
 let PANES = [];
 function buildSun() { PANES = []; let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const rings = [0, .28, .52, .76, 1], wedges = [5, 9, 13, 17];
-  for (let r = 0; r < 4; r++) { const n = wedges[r], off = rnd() * 6.28; for (let k = 0; k < n; k++) { const a0 = off + k / n * 6.283, a1 = off + (k + 1) / n * 6.283; PANES.push({ r0: rings[r], r1: rings[r + 1], a0, a1, c: PAL[Math.floor(rnd() * PAL.length)], ph: rnd() * 6.28 }); } } }
+  for (let r = 0; r < 4; r++) { const n = wedges[r], off = rnd() * 6.28; for (let k = 0; k < n; k++) { const a0 = off + k / n * 6.283, a1 = off + (k + 1) / n * 6.283; PANES.push({ ring: r, r0: rings[r], r1: rings[r + 1], a0, a1, ci: Math.floor(rnd() * PAL.length), ph: rnd() * 6.28 }); } } }
+const RSPD = [.05, -.08, .11, -.065];
+const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+/* the trip wave: 0 (calm) to 1 (peak), rising and settling over about twenty seconds, never quite the same twice */
+const wave = (t) => RM ? .35 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
+function paneColour(p, t, k) { const f = (t * .18 + p.ph / 6.283) % 1, a = PAL[(p.ci + Math.floor(t * .18 + p.ph / 6.283)) % PAL.length], b = PAL[(p.ci + 1 + Math.floor(t * .18 + p.ph / 6.283)) % PAL.length];
+  return k > .05 ? mix(a, b, f * f * (3 - 2 * f) * Math.min(1, k * 1.4)) : PAL[p.ci]; }
+function sunPath(p, cxm, sy, R, rot, br) { const r1 = p.r1 * R * br, r0 = Math.max(.01, p.r0 * R * br); cx.beginPath(); cx.arc(cxm, sy, r1, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, r0, p.a1 + rot, p.a0 + rot, true); cx.closePath(); }
+function drawSun(t, cxm, sy, R, hz, k) {
+  // rays behind it, turning slowly, stronger in the wave
+  cx.save(); cx.globalCompositeOperation = 'lighter'; const nr = 18, rr = RM ? 0 : t * .035;
+  for (let i = 0; i < nr; i++) { const a = rr + i / nr * 6.283, c = PAL[i % PAL.length]; cx.beginPath(); cx.moveTo(cxm, sy); cx.arc(cxm, sy, R * 3.2, a - .05, a + .05); cx.closePath(); cx.fillStyle = `rgba(${c},${.025 + .07 * k})`; cx.fill(); }
+  // ripples spreading out of it (the moire the game paints on its ground)
+  for (let i = 0; i < 6; i++) { const f = RM ? i / 6 : (t * .12 + i / 6) % 1, c = PAL[(i + Math.floor(t * .12)) % PAL.length]; cx.beginPath(); cx.arc(cxm, sy, R * (1.04 + f * 1.6), 0, 6.283); cx.strokeStyle = `rgba(${c},${(.05 + .2 * k) * (1 - f)})`; cx.lineWidth = 1.5 + 2 * (1 - f); cx.stroke(); }
+  cx.restore();
+  const rot = (r) => RM ? 0 : t * RSPD[r] * (1 + .7 * k) + Math.sin(t * .3 + r * 1.7) * .18 * k, br = (r) => 1 + (RM ? 0 : .03 * k * Math.sin(t * 1.25 + r * 1.1));
+  // the tracer: the panes a moment ago, faint, behind the panes now
+  if (k > .1 && !RM) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (const p of PANES) { const c = paneColour(p, t - .5, k); sunPath(p, cxm, sy, R * 1.04, rot(p.ring) - .16 * Math.sign(RSPD[p.ring]), br(p.ring)); cx.fillStyle = `rgba(${c},${.16 * k})`; cx.fill(); } cx.restore(); }
+  for (const p of PANES) { const c = paneColour(p, t, k), g = .55 + .45 * Math.sin(t * .9 + p.ph); sunPath(p, cxm, sy, R, rot(p.ring), br(p.ring)); cx.fillStyle = `rgba(${c},${.55 + .4 * g})`; cx.fill(); }
+  cx.strokeStyle = '#0b0712'; cx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { sunPath(p, cxm, sy, R, rot(p.ring), br(p.ring)); cx.stroke(); }
+  // the glass catches the light: a soft sheen sweeps across
+  if (!RM) { const sx = cxm - R * 1.4 + ((t * .09) % 1) * R * 2.8, sh = cx.createLinearGradient(sx - R * .3, 0, sx + R * .3, 0); sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(.5, `rgba(255,255,255,${.06 + .1 * k})`); sh.addColorStop(1, 'rgba(255,255,255,0)'); cx.save(); cx.beginPath(); cx.arc(cxm, sy, R, 0, 6.283); cx.clip(); cx.fillStyle = sh; cx.fillRect(cxm - R, sy - R, R * 2, R * 2); cx.restore(); }
+}
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
 const KEYS = ['lucid', 'embrace', 'velocity', 'haze', 'drift', 'hollow', 'fold', 'deep'].filter((k) => PANTRY[k]);
@@ -83,68 +106,50 @@ let si = 0, sT = 0;
 const strainEl = document.getElementById('strain');
 function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255)); strainEl.style.setProperty('--c', `rgb(${c})`); strainEl.innerHTML = ''; const b = document.createElement('b'); b.textContent = p.name; strainEl.append(b, document.createTextNode(' · wild ' + p.plant)); }
 
-/* what the signs say, and what they mean. "The algorithm decided" comes round most and holds its truth longest: it is the whole story in four words */
-const SIGNS = [['EVERYTHING IS FINE', 'STAY PUT'], ['THE ALGORITHM DECIDED', 'WE DECIDED'], ['YOUR SAFETY IS OUR PRIORITY', 'YOUR DATA IS OUR PRODUCT'], ['TRUST THE PROCESS', 'NOBODY IS ACCOUNTABLE'], ['STAY ON THE ROAD', 'OBEY']];
-const SW = [1, 3, 1, 1, 1], SIGN = [{ pi: 1, swap: 4, flip: 2.4, until: 0 }, { pi: 0, swap: 6.5, flip: 4.2, until: 0 }];
-window.__SIGN = SIGN;          /* (layout tests) */
-const pickSign = (not) => { let tot = 0; SW.forEach((w, i) => { if (i !== not) tot += w; }); let r = Math.random() * tot; for (let i = 0; i < SW.length; i++) { if (i === not) continue; r -= SW[i]; if (r <= 0) return i; } return 0; };
-function signStep(i, t) { const S = SIGN[i]; if (RM) return { pi: S.pi, truth: false };
-  if (t > S.swap && t > S.until) { S.pi = pickSign(SIGN[1 - i].pi); S.swap = t + 5 + Math.random() * 3; S.flip = t + 1.5 + Math.random() * 2.5; }
-  if (t > S.flip && S.until < S.flip) { S.until = t + (S.pi === 1 ? .75 : .35); S.flip = t + 3 + Math.random() * 3; }
-  return { pi: S.pi, truth: t < S.until }; }
 function draw(t) {
-  const hz = H * (W > H ? .68 : .62), cxm = W / 2;
-  // sky
-  let g = cx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, '#1a1036'); g.addColorStop(1, '#4a2a2a'); cx.fillStyle = g; cx.fillRect(0, 0, W, hz);
-  // stars
-  cx.fillStyle = 'rgba(220,230,255,.55)'; for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)); cx.globalAlpha = tw * .7; cx.fillRect(x, y, 1.4, 1.4); } cx.globalAlpha = 1;
+  const hz = H * (W > H ? .68 : .62), cxm = W / 2, k = wave(t);
+  document.documentElement.style.setProperty('--ab', (2 + 4 * k).toFixed(2) + 'px');          /* the title's colour split breathes with the wave */
+  // sky (its middle drifts between violet and deep teal, slowly)
+  const sm = mix([26, 16, 54], [10, 34, 54], .5 + .5 * Math.sin(t * .07));
+  let g = cx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, `rgb(${sm})`); g.addColorStop(1, '#4a2a2a'); cx.fillStyle = g; cx.fillRect(0, 0, W, hz);
+  // stars, tinted in the wave
+  for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)), c = mix([220, 230, 255], PAL[i % PAL.length], k * .8); cx.fillStyle = `rgba(${c},${tw * .7})`; cx.fillRect(x, y, 1.4 + k * .8, 1.4 + k * .8); }
   // the sun
   const R = Math.min(W * .34, H * .3), sy = hz - R * .35;
   cx.save(); cx.beginPath(); cx.rect(0, 0, W, hz); cx.clip();
-  const glow = cx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); glow.addColorStop(0, 'rgba(255,200,90,.35)'); glow.addColorStop(1, 'rgba(255,200,90,0)'); cx.fillStyle = glow; cx.fillRect(0, 0, W, hz);
-  const rot = RM ? 0 : t * .04;
-  for (const p of PANES) { const k = .55 + .45 * Math.sin(t * .9 + p.ph); cx.beginPath(); cx.arc(cxm, sy, p.r1 * R, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, Math.max(.01, p.r0 * R), p.a1 + rot, p.a0 + rot, true); cx.closePath();
-    cx.fillStyle = `rgba(${p.c[0]},${p.c[1]},${p.c[2]},${.55 + .4 * k})`; cx.fill(); }
-  cx.strokeStyle = '#0b0712'; cx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { cx.beginPath(); cx.arc(cxm, sy, p.r1 * R, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, Math.max(.01, p.r0 * R), p.a1 + rot, p.a0 + rot, true); cx.closePath(); cx.stroke(); }
+  const glow = cx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); glow.addColorStop(0, `rgba(255,200,90,${.3 + .15 * k})`); glow.addColorStop(1, 'rgba(255,200,90,0)'); cx.fillStyle = glow; cx.fillRect(0, 0, W, hz);
+  drawSun(t, cxm, sy, R, hz, k);
   // the synthwave cuts through the lower sun
   cx.fillStyle = '#2a1626'; for (let i = 0; i < 5; i++) { const y = sy + R * (.02 + i * .068), h = R * (.012 + i * .007); cx.fillRect(cxm - R, y, R * 2, h); }
   cx.restore();
   // mountains
   cx.fillStyle = '#0c0a18'; cx.beginPath(); cx.moveTo(0, hz); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .05) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz); cx.fill();
-  // ACCORD's signs: dark panels lit in amber neon, a thin smile over the name, a slogan underneath; the neon stutters now and then.
-  // Every few seconds a sign glitches to what it really means (They Live): bare black, white type, a split second
-  for (const [i, sd] of [-1, 1].entries()) { const bw = Math.min(W * .14, H * .17, 124), bh = bw * .62, bx = cxm + sd * Math.min(W / 2 - bw / 2 - 12, Math.max(Math.min(W * .36, H * .5), Math.min(W, H) * .3 + bw)), by = hz - bh - H * .11;
-    const S = signStep(i, t), pr = SIGNS[S.pi];
-    cx.fillStyle = '#07060b'; cx.fillRect(bx - bw * .32, by + bh, 3, H * .11); cx.fillRect(bx + bw * .32 - 3, by + bh, 3, H * .11);
-    if (S.truth) { const jx = (Math.random() - .5) * 3; cx.fillStyle = '#000'; cx.fillRect(bx - bw / 2 + jx, by, bw, bh); cx.fillStyle = '#fff'; cx.textAlign = 'center';
-      const words = pr[1].split(' '), two = words.length > 1 && pr[1].length > 12, L = two ? [words.slice(0, Math.ceil(words.length / 2)).join(' '), words.slice(Math.ceil(words.length / 2)).join(' ')] : [pr[1]];
-      for (let k = 0; k < L.length; k++) { let fs = bh * (two ? .3 : .44); cx.font = `400 ${fs}px "Bebas Neue", Impact, sans-serif`; const w = cx.measureText(L[k]).width; if (w > bw * .86) { fs *= bw * .86 / w; cx.font = `400 ${fs}px "Bebas Neue", Impact, sans-serif`; }
-        cx.fillText(L[k], bx + jx, by + bh * (two ? (k ? .8 : .46) : .66)); }
-      continue; }
-    const fl = RM ? 1 : (Math.sin(t * 23 + sd * 5) > .97 || Math.sin(t * 1.3 + sd) > .995 ? .35 : 1), neon = `rgba(255,177,74,${.95 * fl})`;
-    cx.fillStyle = 'rgba(10,8,16,.92)'; cx.fillRect(bx - bw / 2, by, bw, bh);
-    cx.save(); cx.shadowColor = '#ffb14a'; cx.shadowBlur = 12 * fl; cx.strokeStyle = neon; cx.lineWidth = 1.6; cx.strokeRect(bx - bw / 2 + 3, by + 3, bw - 6, bh - 6);
-    cx.lineWidth = Math.max(1.4, bh * .035); cx.beginPath(); cx.arc(bx, by + bh * .2, bh * .17, .35, Math.PI - .35); cx.stroke();
-    cx.fillStyle = neon; cx.textAlign = 'center'; cx.font = `400 ${bh * .3}px "Bebas Neue", Impact, sans-serif`; cx.fillText('ACCORD', bx, by + bh * .64); cx.restore();
-    cx.fillStyle = 'rgba(232,220,192,.75)'; cx.textAlign = 'center'; let fs = bh * .12; cx.font = `600 ${fs}px "Barlow Condensed", sans-serif`; const mw = cx.measureText(pr[0]).width; if (mw > bw * .84) { fs *= bw * .84 / mw; cx.font = `600 ${fs}px "Barlow Condensed", sans-serif`; } cx.fillText(pr[0], bx, by + bh * .86); }
   // the ground and the road
   g = cx.createLinearGradient(0, hz, 0, H); g.addColorStop(0, '#2a1a1e'); g.addColorStop(1, '#07060a'); cx.fillStyle = g; cx.fillRect(0, hz, W, H - hz);
   const rw = Math.min(W * .9, H * 1.1); cx.fillStyle = '#16141c'; cx.beginPath(); cx.moveTo(cxm - 3, hz); cx.lineTo(cxm + 3, hz); cx.lineTo(cxm + rw / 2, H); cx.lineTo(cxm - rw / 2, H); cx.fill();
-  cx.strokeStyle = 'rgba(56,232,255,.8)'; cx.lineWidth = 2; cx.shadowColor = '#38e8ff'; cx.shadowBlur = 10; for (const sd of [-1, 1]) { cx.beginPath(); cx.moveTo(cxm + sd * 3, hz); cx.lineTo(cxm + sd * rw * .46, H); cx.stroke(); } cx.shadowBlur = 0;
+  const ec = mix(PAL[0], PAL[(Math.floor(t * .15) % PAL.length)], k * (.5 - .5 * Math.cos(((t * .15) % 1) * 6.283))); cx.strokeStyle = `rgba(${ec},.85)`; cx.lineWidth = 2; cx.shadowColor = `rgb(${ec})`; cx.shadowBlur = 10; for (const sd of [-1, 1]) { cx.beginPath(); cx.moveTo(cxm + sd * 3, hz); cx.lineTo(cxm + sd * rw * .46, H); cx.stroke(); } cx.shadowBlur = 0;
   const sp = RM ? 0 : (t * .9) % 1; cx.fillStyle = '#f2efe6'; for (let i = 0; i < 9; i++) { const u = (i + sp) / 9, d = u * u, y = hz + (H - hz) * d, w = 1 + 7 * d, h = 2 + 30 * d * d; cx.fillRect(cxm - w / 2, y, w, h * .6); }
   // the column of light, with a strain turning in it
   const colH = (hz - H * .1), cw = Math.min(W, H) * .07, p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
   g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},.32)`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .1, cw * 2, colH + (H - hz) * .08);
-  drawMol(p, cxm, hz - Math.min(W, H) * .05, Math.min(W, H) * .028, RM ? .6 : t * .8, c, Math.min(1, sT / .6) * Math.min(1, (5 - sT) / .6));
+  drawMol(p, cxm, hz - Math.min(W, H) * .06, Math.min(W, H) * .036, RM ? .6 : t * .9, RM ? .5 : .5 + Math.sin(t * .45) * .55, c, Math.min(1, sT / .6) * Math.min(1, (5 - sT) / .6), k);
 }
-function drawMol(p, x0, y0, sc, a, c, fade) { if (fade <= 0) return; const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(.5), sb = Math.sin(.5);
+/* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
+function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
   let mx = 0, my = 0, mz = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } const n = p.atoms.length; mx /= n; my /= n; mz /= n;
-  const P = p.atoms.map((at) => { let x = at[1] - mx, y = at[2] - my, z = at[3] - mz; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb; return { x: x0 + x1 * sc, y: y0 + y2 * sc, z: z2, e: at[0], m: !!at[4] }; });
-  cx.globalAlpha = fade; cx.lineWidth = Math.max(1.5, sc * .22); cx.strokeStyle = 'rgba(230,235,245,.85)';
-  for (const b of p.bonds) { const A = P[b[0]], Bq = P[b[1]]; cx.beginPath(); cx.moveTo(A.x, A.y); cx.lineTo(Bq.x, Bq.y); cx.stroke(); }
-  for (const q of P.slice().sort((u, v) => u.z - v.z)) { const ec = EL_C[q.e] || c, r = sc * (q.e === 'C' ? .42 : .5) * (1 + q.z * .04); cx.beginPath(); cx.arc(q.x, q.y, Math.max(1.5, r), 0, 6.283);
-    cx.fillStyle = `rgb(${ec})`; if (q.m) { cx.shadowColor = '#fff'; cx.shadowBlur = 14; } cx.fill(); cx.shadowBlur = 0; }
-  cx.globalAlpha = 1; }
+  const P = p.atoms.map((at) => { const x = at[1] - mx, y = at[2] - my, z = at[3] - mz; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb; const pz = 1 + z2 * .05; return { x: x0 + x1 * sc * pz, y: y0 + y2 * sc * pz, z: z2, e: at[0], m: !!at[4] }; });
+  cx.save(); cx.globalAlpha = fade;
+  const halo = cx.createRadialGradient(x0, y0, 0, x0, y0, sc * 6); halo.addColorStop(0, `rgba(${c},${.35 + .2 * k})`); halo.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = halo; cx.globalCompositeOperation = 'lighter'; cx.fillRect(x0 - sc * 6, y0 - sc * 6, sc * 12, sc * 12); cx.globalCompositeOperation = 'source-over';
+  const items = []; for (const bd of p.bonds) items.push({ bond: bd, z: (P[bd[0]].z + P[bd[1]].z) / 2 - .01 }); for (const q of P) items.push({ atom: q, z: q.z }); items.sort((u, v) => u.z - v.z);
+  for (const it of items) {
+    if (it.bond) { const A = P[it.bond[0]], Bq = P[it.bond[1]], w = sc * .26; cx.lineCap = 'round'; cx.strokeStyle = 'rgba(40,44,60,.9)'; cx.lineWidth = w + 2; cx.beginPath(); cx.moveTo(A.x, A.y); cx.lineTo(Bq.x, Bq.y); cx.stroke();
+      cx.strokeStyle = 'rgba(225,232,245,.95)'; cx.lineWidth = w; cx.stroke(); cx.strokeStyle = 'rgba(255,255,255,.75)'; cx.lineWidth = w * .3; cx.beginPath(); cx.moveTo(A.x - w * .2, A.y - w * .2); cx.lineTo(Bq.x - w * .2, Bq.y - w * .2); cx.stroke(); if (it.bond[2] === 2) { cx.lineWidth = w * .5; cx.strokeStyle = `rgba(${c},.9)`; cx.beginPath(); cx.moveTo(A.x, A.y); cx.lineTo(Bq.x, Bq.y); cx.stroke(); } continue; }
+    const q = it.atom, ec = EL_C[q.e] || c, r = Math.max(2, sc * (q.e === 'C' ? .5 : .6) * (1 + q.z * .05)), hi = mix(ec, [255, 255, 255], .8), lo = mix(ec, [10, 8, 20], .42);
+    const gr = cx.createRadialGradient(q.x - r * .38, q.y - r * .42, r * .05, q.x, q.y, r); gr.addColorStop(0, `rgb(${hi})`); gr.addColorStop(.35, `rgb(${ec})`); gr.addColorStop(1, `rgb(${lo})`);
+    if (q.m) { cx.shadowColor = '#fff'; cx.shadowBlur = 16 + 10 * k; }
+    cx.beginPath(); cx.arc(q.x, q.y, r, 0, 6.283); cx.fillStyle = gr; cx.fill(); cx.shadowBlur = 0;
+    cx.beginPath(); cx.ellipse(q.x - r * .36, q.y - r * .42, r * .26, r * .16, -.6, 0, 6.283); cx.fillStyle = 'rgba(255,255,255,.85)'; cx.fill(); }
+  cx.restore(); }
 
 /* the light: the marker hunts across the spectrum and locks on 540 THz (green-gold: the frequency the SI defines brightness by) */
 const SPEC = [[0, [255, 42, 0]], [.18, [255, 122, 0]], [.32, [255, 212, 0]], [.42, [157, 255, 42]], [.52, [42, 255, 122]], [.62, [0, 229, 255]], [.78, [47, 107, 255]], [1, [122, 61, 255]]];
