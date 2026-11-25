@@ -740,14 +740,16 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
      a rim that banks you back in, a pocket on the right with a steep end wall (it throws you back out at speed), a kicker, and two ridges that split the way out into three mouths. */
   let BAS = null;
   function basinH(x, z) {
-    if (!BAS) { const h0 = HF.height(trailX(BASIN.z0), BASIN.z0), h1 = HF.height(trailX(BASIN.z1), BASIN.z1); BAS = { h0: h0 === null ? pitchY(BASIN.z0) : h0, h1: h1 === null ? pitchY(BASIN.z1) : h1 }; }
+    if (!BAS) { const L = BASIN.z0 - BASIN.z1, n = Math.round(L / 5), raw = [];          /* the floor follows the road's own height under the bowl, smoothed over 60 m (so it never jumps where the bowl blends back into the road) */
+      for (let k = 0; k <= n; k++) { const z = BASIN.z0 - k * 5, g = HF.height(trailX(z), z); raw.push(g === null ? pitchY(z) : g); }
+      const sm = raw.map((_, k) => { let a = 0, c = 0; for (let q = -6; q <= 6; q++) { const i = Math.max(0, Math.min(n, k + q)); a += raw[i]; c++; } return a / c; }); BAS = { sm, n }; }
     const t = (BASIN.z0 - z) / (BASIN.z0 - BASIN.z1), we = Math.max(1 - sstep(0, .13, t), sstep(.87, 1, t)), ax = Math.abs(x);
-    const base = BAS.h0 + (BAS.h1 - BAS.h0) * t;
-    let rs = 34 + 66 * sstep(.05, .22, t) - 66 * sstep(.68, .87, t), rw = 46;
+    const fi = Math.max(0, Math.min(BAS.n, t * BAS.n)), i0 = Math.floor(fi), i1 = Math.min(BAS.n, i0 + 1), base = BAS.sm[i0] + (BAS.sm[i1] - BAS.sm[i0]) * (fi - i0);
+    let rs = 34 + 66 * sstep(.05, .22, t) - 78 * sstep(.66, .86, t), rw = 46;          /* the bowl narrows to a 22 m funnel so the mouths land on the road, clear of its trees */
     const pk = x > 0 ? sstep(.30, .33, t) * (1 - sstep(.43, .46, t)) : 0; if (pk > 0) { rs += 28 * pk; rw -= 30 * pk; }          /* the pocket: the floor runs out to 128 m, then a steep wall */
     let lift = 30 * sstep(rs, Math.min(rs + rw, 149), ax) + 1.4 * Math.sin(x * .05) * Math.sin(z * .031) * (1 - sstep(rs - 10, rs, ax));
-    { const kz = BASIN.z0 - .55 * (BASIN.z0 - BASIN.z1), d = kz - z, sx = 1 - sstep(6, 10, Math.abs(x + 35)); if (d > 0 && d < 18 && sx > 0) lift += 4.5 * Math.pow(d / 18, 1.5) * sx; }          /* the kicker */
-    lift += 7 * Math.exp(-Math.pow((ax - 16) / 4, 2)) * sstep(.72, .76, t) * (1 - sstep(.86, .9, t));          /* the ridges between the three mouths */
+    { const kz = BASIN.z0 - .55 * (BASIN.z0 - BASIN.z1), d = kz - z, sx = 1 - sstep(6, 10, Math.abs(x + 35)); if (d > 0 && d < 18 && sx > 0) lift += 3 * Math.pow(d / 18, 1.5) * sx; }          /* the kicker */
+    lift += 6 * Math.exp(-Math.pow((ax - 9) / 2.6, 2)) * sstep(.7, .74, t) * (1 - sstep(.84, .88, t));          /* the ridges between the three mouths */
     const g = HF.height(x, z), road = g === null ? base : g;
     return we * road + (1 - we) * (base + lift);
   }
@@ -760,7 +762,8 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
     B.VertexData.ComputeNormals(pos, idx, nrm); for (let k = 0; k < pos.length / 3; k++) { const ny = nrm[k * 3 + 1], sh = .78 + .22 * ny; col.push(.93 * sh, .62 * sh, .38 * sh, 1); }
     const vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.normals = nrm; vd.colors = col; const bm = new B.Mesh('basin', scene); vd.applyToMesh(bm); bm.isPickable = false;
-    let mt = window.__BASIN_MAT; if (!mt) { mt = new B.StandardMaterial('basinM', scene); mt.diffuseColor = new B.Color3(1, 1, 1); mt.specularColor = new B.Color3(0, 0, 0); } bm.material = mt; bm.__cat = 'ground';
+    let mt = window.__BASIN_MAT; if (mt && mt.clone) { try { const c = mt.clone('basinGround'); c.__kind = mt.__kind; c.setFloat('uRoadHalf', -60); GWM.push(c); mt = c; } catch (e) { } }          /* its own copy of the ground, with no road painted: the bowl is open dirt */
+    if (!mt) { mt = new B.StandardMaterial('basinM', scene); mt.diffuseColor = new B.Color3(1, 1, 1); mt.specularColor = new B.Color3(0, 0, 0); } bm.material = mt; bm.__cat = 'ground';
     if (mt.getClassName && mt.getClassName() === 'ShaderMaterial') { bm.thinInstanceSetBuffer('matrix', new Float32Array(B.Matrix.Identity().m), 16, true); }
     window.__BASINMESH = bm; }
 
@@ -2460,6 +2463,11 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function solGrade() { const p = SOL.max ? SOL.faces / SOL.max : 0; return p >= .85 ? 'GOLD' : p >= .6 ? 'SILVER' : p >= .3 ? 'BRONZE' : 'NONE'; }
   function progSave(world) { try { const P = JSON.parse(localStorage.getItem('dl_prog') || '{}'); P.worlds = P.worlds || {}; const w = P.worlds[world] || {}, g = solGrade(), rank = { NONE: 0, BRONZE: 1, SILVER: 2, GOLD: 3 }; if ((rank[g] || 0) >= (rank[w.best] || 0)) w.best = g; w.runs = (w.runs || 0) + 1; w.bestFaces = Math.max(w.bestFaces || 0, SOL.faces); w.max = SOL.max; P.worlds[world] = w; P.icosa = (P.icosa || 0) + SOL.got.icosa; P.faces = (P.faces || 0) + SOL.faces; localStorage.setItem('dl_prog', JSON.stringify(P)); return { g, w, P }; } catch (e) { return { g: solGrade() }; } }
   function tutStep(dt) {
+    if (BASIN && !BASIN.made && PH.z < -700) { BASIN.made = true; const R = mulbK(41), zt = (t) => BASIN.z0 - t * (BASIN.z0 - BASIN.z1), put = (k, x, t) => solPut(k, x, zt(t));          /* the basin's content: three lines, a pocket prize, a pad in each mouth */
+      try { makePad(-70, zt(.2), R); for (let k = 0; k < 8; k++) put('tetra', -70 + 6 * Math.sin(k * .8), .24 + k * .02); makePad(-70, zt(.42), R); put('octa', -60, .48);          /* left line: pads and a weaving trail */
+        for (let k = 0; k < 4; k++) put('tetra', -35, .44 + k * .02); makePad(-35, zt(.5), R); put('dodeca', -35, .7);          /* centre line: crystals up to a pad into the kicker, the prize where you land */
+        for (let k = 0; k < 8; k++) put('tetra', 40 + k * 11, .2 + k * .028); put('icosa', 126, .43);          /* right line: a trail that swings out into the pocket (no steeper than the board can turn), the big one at its end wall */
+        for (const x of [-16, 0, 16]) makePad(x, zt(.8), R); } catch (e) { console.error('basin', e); } }
     if (Q.has('story') && !TUT.sb && PH.z < -200) { TUT.sb = true; const R = mulbK(23); try { makePad(trailX(-760), -760, R); solPut('octa', trailX(-820), -820); solTrail('tetra', -870, 0, 5, 14, 3); solTrail('tetra', -1450, 4, 6, 14, -3); solPut('dodeca', trailX(-2790) + 4, -2790); } catch (e) { console.error('story items', e); } }          /* a few real items in the quiet gaps of Route Zero (never inside a message window) */
     if (ST.beatEnd && performance.now() < ST.beatEnd) clearAhead((ST.beatEnd - performance.now()) / 1000 + 1.6);          /* the message rule, enforced every frame (speed can change while you read) */
     if (!TUT.on || TUT.done) return;

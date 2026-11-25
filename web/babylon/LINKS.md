@@ -7,6 +7,7 @@ The same list lives online at https://joshuaopolko.com/gaze-lab/three/babylon/li
 
 ## Play
 - Route Zero with the intro road (five scenes on "Legalize"; skip after the first hit): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?story=1&nointake=1
+- Basin prototype (desert: an open bowl from 1.4 to 2.2 km, three lines, a pocket, three mouths; docs/BASINS_PLAN.md): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?biome=desert&basin=1&nointake=1
 - Main menu: https://joshuaopolko.com/gaze-lab/three/babylon/menu.html
 - Strains codex: https://joshuaopolko.com/gaze-lab/three/babylon/menu.html?strains=1
 - Trip level: https://joshuaopolko.com/gaze-lab/three/babylon/index.html?biome=psychedelic&trip
