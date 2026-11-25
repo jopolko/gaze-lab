@@ -20,6 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/babylonjs-gui@7.0.0/babylon.gui.min.js"></script>
 <script src="charfx.js"></script>
 </head><body>
+<script src="loader.js"></script>
 <canvas id="c"></canvas>
 <div id="big"></div>
 <div id="ui"><div id="status" data-k="1">loading Babylon.js...</div><div id="enter">ENTER VR</div><select id="biomeSel" title="biome"></select></div>
@@ -83,14 +84,14 @@ const NROWS = Math.max(4, Math.min(43, +(Q.get('rows') || 38))), COURSE = Q.get(
 
 const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 (async () => {
-  if (!window.BABYLON) { say('Babylon.js did not load (this page needs internet for the library).'); return; }
+  if (!window.BABYLON) { try { __LDR.done(); } catch (e) { } say('Babylon.js did not load (this page needs internet for the library).'); return; }
   const B = BABYLON, canvas = $('c');
   const engine = new B.Engine(canvas, false, { antialias: false, powerPreference: 'high-performance', xrCompatible: true, stencil: false }, true);
   const scene = new B.Scene(engine); scene.useRightHandedSystem = true; scene.clearColor = new B.Color4(.1, .03, .2, 1); scene.skipPointerMovePicking = true; scene.autoClear = true;
   const cam = new B.FreeCamera('cam', new B.Vector3(0, 3, 0), scene); cam.minZ = .2; cam.maxZ = 1800; cam.fov = 1.2; cam.inputs.clear(); scene.activeCamera = cam;
-  say('loading the course (' + NROWS + ' rows)...');
+  say('loading the course (' + NROWS + ' rows)...'); try { __LDR.to(.12); } catch (e) { }
   const [meta, phys] = await Promise.all([fetch(DIR + 'meta.json').then((r) => r.json()), fetch(DIR + 'physics.json').then((r) => r.json())]), rows = [];
-  for (let j = 0; j < NROWS; j += 4) { const part = await Promise.all([0, 1, 2, 3].filter((k) => j + k < NROWS).map((k) => fetch(DIR + 'row_' + String(j + k).padStart(2, '0') + '.json').then((r) => r.json()))); rows.push(...part); say('loading the course... ' + rows.length + ' / ' + NROWS); }
+  for (let j = 0; j < NROWS; j += 4) { const part = await Promise.all([0, 1, 2, 3].filter((k) => j + k < NROWS).map((k) => fetch(DIR + 'row_' + String(j + k).padStart(2, '0') + '.json').then((r) => r.json()))); rows.push(...part); say('loading the course... ' + rows.length + ' / ' + NROWS); try { __LDR.to(.12 + .5 * rows.length / NROWS); } catch (e) { } }
   /* ?basin=1 (a prototype, docs/BASINS_PLAN.md): rows 8-11 (z -1440 to -2160) become one open bowl 300 m wide. Their content is cleared and their ground
      is replaced by the basin's own (their ground meshes are kept only so the heightfield can blend the basin into the road at both ends). */
   /* ?splash (the title screen's backdrop): just the highway, its scenery and the sky. Every gameplay item is cleared before the world is built */
@@ -1290,6 +1291,8 @@ void main() {
 
   /* THE START CARD: every level opens on its name. One tap starts the music and the road together (browsers only allow sound after a tap), goes fullscreen,
      and starts head steering if that is how you drove last time (or tap the head button). &notap skips it (testing). */
+  /* the loading screen fills once every material is compiled (or after 15 s whatever happens), uncovering the start card */
+  try { __LDR.to(.8); const fin = () => { try { __LDR.done(); } catch (e) { } }; scene.executeWhenReady(fin); setTimeout(fin, 15000); } catch (e) { }
   (() => { if (Q.has('notap') || Q.has('shot')) { window.__go = true; return; }
     const lastCam = (() => { try { return localStorage.getItem('dl_cam') === '1'; } catch (e) { return false; } })(), hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const nm = Q.has('story') ? 'ROUTE ZERO' : Q.has('tutorial') ? 'TRAINING' : String((typeof BNAME !== 'undefined' && BNAME[WORLD0]) || WORLD0).toUpperCase();
