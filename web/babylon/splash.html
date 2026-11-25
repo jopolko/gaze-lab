@@ -114,7 +114,7 @@ vec3 skyAt(vec3 d) { SD = d; skyMain(); return gl_FragColor.rgb; }
 float cgrain(vec2 p) { return fract(sin(dot(floor(p), vec2(12.9898, 78.233))) * 43758.5453); }
 vec3 paint(vec3 c) { c = pow(max(c, 0.), vec3(.8)); float l = dot(c, vec3(.3, .5, .2)); c = mix(vec3(l), c, .62); c = mix(c, vec3(.55, .36, .27) * (.35 + l), .22);
   vec2 sp = gl_FragCoord.xy; float gr = (cgrain(sp * .5) + cgrain(sp * .25 + 7.)) * .5 - .5; c *= 1. + gr * .06;
-  vec2 v = gl_FragCoord.xy / uWH2 - .5; float vg = 1. - smoothstep(.25, .85, length(v * vec2(1., .8))) * .55; return c * .58 * vg; }
+  vec2 v = gl_FragCoord.xy / uWH2 - .5; float vg = 1. - smoothstep(.3, .9, length(v * vec2(1., v.y < 0. ? .45 : .8))) * .45; return c * .58 * vg; }
 void main() {
   if (vP.y >= 0.) { vec3 d = vS;
     if (uFx.z > .001) { float band = floor(d.y * 14. + floor(uTime * 9.) * 3.1);          /* distortion: a wobble, and now and then bands of sky slip sideways */
@@ -123,8 +123,8 @@ void main() {
     vec3 c = skyAt(d);
     if (uFx.y > .001) { vec3 c1 = skyAt(d + vec3(uFx.w, 0., 0.)), c2 = skyAt(d + vec3(0., uFx.w, 0.));          /* the art looks, from the sky's own edges */
       float L = dot(c, vec3(.3, .5, .2)), e = length(vec2(dot(c1, vec3(.3, .5, .2)) - L, dot(c2, vec3(.3, .5, .2)) - L)), ed = smoothstep(.015, .07, e); vec3 rr;
-      if (uFx.x < 1.5) rr = mix(floor(c * 4. + .5) / 4. * 1.1, vec3(.02, .02, .05), ed);          /* VECTOR: flat colour fills, inked outlines */
-      else if (uFx.x < 2.5) rr = mix(c * .1, normalize(c + .001) * 1.5, ed);          /* LINE: the sky drawn in glowing lines on black */
+      if (uFx.x < 1.5) rr = mix(floor(c * 4. + .5) / 4. * 1.1, c * .3, ed);          /* VECTOR: flat colour fills, inked outlines */
+      else if (uFx.x < 2.5) rr = mix(c * .45, normalize(c + .001) * 1.6, ed);          /* LINE: the sky drawn in glowing lines on black */
       else rr = clamp(c + (c - (c1 + c2) * .5) * 4., 0., 1.6);          /* SHARPEN: every ripple and pane edge cut crisp */
       c = mix(c, rr, uFx.y); }
     if (uTune.w > .001) { vec3 sd = normalize(vec3(.12, .28, -1.)); float a = acos(clamp(dot(normalize(vS), sd), -1., 1.)), m = 1. - smoothstep(0., .9, a), l = dot(c, vec3(.3, .5, .2));
@@ -137,7 +137,7 @@ void main() {
   float far = 1. - smoothstep(40., 260., tt);
   vec3 col = vec3(.42, .21, .14) * (1. + far * (amp - .5) * 1.1) + gpal(amp * .5 + uTime * .03) * (.1 + .42 * amp) * far * (.4 + .6 * smoothstep(.25, .85, amp));
   float dx = abs(X - roadC(zw));
-  col = mix(col, vec3(.07, .065, .09) * (.9 + .1 * far), 1. - smoothstep(6.8 - aa, 6.8 + aa, dx));          /* asphalt */
+  col = mix(col, vec3(.24, .2, .22) * (.85 + .15 * far) + vec3(1., .66, .42) * .32 * exp(-dx * dx / 14.) * smoothstep(8., 180., tt), 1. - smoothstep(6.8 - aa, 6.8 + aa, dx));          /* asphalt, the sun's glint running up the middle */
   float edge = 1. - smoothstep(.14, .14 + aa, abs(dx - 6.3)); col = mix(col, vec3(.25, .92, 1.), edge * .95);          /* glowing edge lines */
   col += vec3(.25, .92, 1.) * .18 * (1. - smoothstep(.0, .9 + aa * 2., abs(dx - 6.3))) * far;
   float dsh = smoothstep(.42, .42 + aa * .08, fract(zw / 9.)) * (1. - smoothstep(.92 - aa * .08, .92, fract(zw / 9.))), cl = 1. - smoothstep(.16, .16 + aa, dx);
@@ -191,7 +191,7 @@ function draw(t, dt) {
   gameTint();
   if (GAME.ready && skyc.style.display === 'none') { } else if (!drawSky(t, dt || 0, cxm, hz, sk)) { g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#05060f'); g.addColorStop(.6, '#4a2a2a'); g.addColorStop(1, '#07060a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H); }
   // shading: darker at the top (the title reads) and at the very bottom; the middle is the sky's sun, the molecule and the road
-  g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,6,15,.7)'); g.addColorStop(.28, 'rgba(5,6,15,.2)'); g.addColorStop(Math.max(.3, hz / H - .04), 'rgba(5,6,15,0)'); g.addColorStop(1, 'rgba(4,4,8,.55)'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
+  g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,6,15,.7)'); g.addColorStop(.28, 'rgba(5,6,15,.2)'); g.addColorStop(Math.max(.3, hz / H - .04), 'rgba(5,6,15,0)'); g.addColorStop(1, 'rgba(4,4,8,.22)'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
   // the hills on the horizon (until the real level takes over)
   if (!GAME.ready) cx.fillStyle = 'rgba(12,10,24,.9)'; cx.beginPath(); cx.moveTo(0, hz + 1); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .03) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz + 1); if (!GAME.ready) cx.fill();
   // trees by the road: every 18 m on both sides, 9 to 40 m out, drawn far to near; they come out of the haze and rush past. In waves they leave
