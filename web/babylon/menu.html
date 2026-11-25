@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><script>/* THE SHELL: a page opened on its own reloads inside app.html, so fullscreen (and the installed app) survive every page change. &noshell skips it. */
 (() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Downfall</title>
+<title>The Frequency</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <style>
 /* The main menu, neo-noir: Play (continue, the eight levels as lit cards over a still from each world, the journey) and Upgrades (gear tier II), links to the tutorial and the character editor.
@@ -72,8 +72,8 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 @media (orientation:portrait) { .grid { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } .up { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); } .tag { display:none; } .txt b { font-size:clamp(20px,5vmin,36px); } }
 @media (prefers-reduced-motion: reduce) { .art { transition:none; } .lv:hover .art { transform:none; } }
 </style></head><body>
-<header><h1>DOWNFALL</h1><span class="tag">The last road nobody watches.</span><span class="sh" id="shards" title="Shards: spend them on upgrades"></span></header>
-<nav><button id="tPlay" aria-pressed="true">Play</button><button id="tUp" aria-pressed="false">Upgrades</button><button id="tCx" aria-pressed="false">Strains</button><a class="btn" href="index.html?tutorial=1&nointake=1">Tutorial</a><a class="btn" href="dressup.html?next=menu.html">Character</a><a class="btn" href="lab.html" style="border-color:rgba(255,177,74,.6);color:#ffd9a8">&#9673; The Frequency</a></nav>
+<header><h1>THE FREQUENCY</h1><span class="tag">The last road nobody watches.</span><span class="sh" id="shards" title="Shards: spend them on upgrades"></span></header>
+<nav><button id="tPlay" aria-pressed="true">Play</button><button id="tUp" aria-pressed="false">Upgrades</button><button id="tCx" aria-pressed="false">Strains</button><a class="btn" href="index.html?tutorial=1&nointake=1">Tutorial</a><a class="btn" href="dressup.html?next=menu.html">Character</a><a class="btn" href="lab.html" style="border-color:rgba(255,177,74,.6);color:#ffd9a8">&#9673; The Dial</a></nav>
 <main id="play">
   <div class="row"><button class="btn pri" id="cont"></button><button class="btn" id="journey"></button></div>
   <div class="grid" id="levels"></div>

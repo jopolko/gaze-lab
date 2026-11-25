@@ -1,4 +1,4 @@
-# Credits
+# The Frequency: credits
 
 ## Music
 - **"Legalize"** by **MalreDeszik** ft. Synomo & IAComplexe. Licensed under [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). Source: https://ccmixter.org/files/MalreDeszik/71331. Used unmodified as Route Zero's opening track (`music/legalize.mp3`). It is credited on screen during the opening.

@@ -1,24 +1,24 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Downfall</title>
+<title>The Frequency</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#05070c">
-<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Downfall">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="The Frequency">
 <link rel="apple-touch-icon" href="icons/icon-192.png"><link rel="icon" href="icons/icon-192.png">
 <style>
-/* THE SHELL: the game's one page. Every other page (menu, levels, the Frequency, the character, the Music Lab) runs inside it, so going fullscreen once
+/* THE SHELL: the game's one page. Every other page (menu, levels, the Dial, the character, the Music Lab) runs inside it, so going fullscreen once
    lasts for the whole session (a browser always leaves fullscreen when the top page changes). Also the start page of the installed app. */
 html, body { margin:0; height:100%; background:#05070c; overflow:hidden; }
 iframe { position:fixed; inset:0; width:100%; height:100%; border:0; display:block; background:#05070c; }
 </style></head><body>
-<iframe id="f" title="Downfall" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
+<iframe id="f" title="The Frequency" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
 <script>
 window.__SHELL = true;          /* the pages look for this: inside the shell they fullscreen the shell itself */
 (() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'menu.html';
   if (!/^[A-Za-z0-9_-]+\.html([?#].*)?$/.test(p)) p = 'menu.html';          /* only this folder's own pages */
   f.src = p;
   /* the address bar follows the page inside, so a reload or a bookmark lands back on it */
-  f.addEventListener('load', () => { try { const L = f.contentWindow.location, page = L.pathname.split('/').pop() + L.search + L.hash; if (/^[A-Za-z0-9_-]+\.html/.test(page)) history.replaceState(null, '', 'app.html?p=' + encodeURIComponent(page)); document.title = f.contentDocument.title || 'Downfall'; f.contentWindow.focus(); } catch (e) { } });
+  f.addEventListener('load', () => { try { const L = f.contentWindow.location, page = L.pathname.split('/').pop() + L.search + L.hash; if (/^[A-Za-z0-9_-]+\.html/.test(page)) history.replaceState(null, '', 'app.html?p=' + encodeURIComponent(page)); document.title = f.contentDocument.title || 'The Frequency'; f.contentWindow.focus(); } catch (e) { } });
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });          /* makes it installable (Add to Home Screen); it caches nothing */
 })();
 </script>

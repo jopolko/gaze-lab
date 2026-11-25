@@ -1,9 +1,9 @@
-# Downfall links
+# The Frequency links
 
 The same list lives online at https://joshuaopolko.com/gaze-lab/three/babylon/links.html (bookmark that one).
 
 ## App
-- Downfall, the app (fullscreen stays on across pages; on a phone use Add to Home Screen): https://joshuaopolko.com/gaze-lab/three/babylon/app.html
+- The Frequency, the app (fullscreen stays on across pages; on a phone use Add to Home Screen): https://joshuaopolko.com/gaze-lab/three/babylon/app.html
 
 ## Play
 - Route Zero with the intro road (five scenes on "Legalize"; skip after the first hit): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?story=1&nointake=1
@@ -14,7 +14,7 @@ The same list lives online at https://joshuaopolko.com/gaze-lab/three/babylon/li
 - Demo mode (opens every level on this device): https://joshuaopolko.com/gaze-lab/three/babylon/menu.html?all=1
 
 ## Sound
-- The Frequency: https://joshuaopolko.com/gaze-lab/three/babylon/lab.html
+- The Dial (pirate radio: tune the trip and the music): https://joshuaopolko.com/gaze-lab/three/babylon/lab.html
 - Music Lab: https://joshuaopolko.com/gaze-lab/three/babylon/musiclab.html
 - Music Lab, acid (slow build): https://joshuaopolko.com/gaze-lab/three/babylon/musiclab.html?style=acid&seed=132
 - Music Lab, jungle: https://joshuaopolko.com/gaze-lab/three/babylon/musiclab.html?style=jungle

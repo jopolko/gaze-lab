@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><script>/* THE SHELL: a page opened on its own reloads inside app.html, so fullscreen (and the installed app) survive every page change. &noshell skips it. */
 (() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Frequency</title>
+<title>The Dial</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js"></script>
 <style>
@@ -62,7 +62,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
 @media (prefers-reduced-motion:reduce) { .lava i { animation:none; } }
 </style></head><body>
 <div class="lava"><i></i><i></i><i></i><i></i></div>
-<header><h1>THE FREQUENCY</h1><span class="sub" id="sub">Pirate signal. ACCORD can't hear this band. Murmur has flagged it "probably fine".</span><script>
+<header><h1>THE DIAL</h1><span class="sub" id="sub">Pirate signal. ACCORD can't hear this band. Murmur has flagged it "probably fine".</span><script>
 /* Murmur's line changes every visit (never the same twice in a row) */
 (() => { const M = ['Murmur has flagged it “probably fine”.', 'Murmur has logged this visit as “weather”.', 'Murmur rates this station two stars. Murmur has never heard it.', 'Murmur is listening. Murmur hears static.', 'Murmur filed this under “hobbies”.',
   'Murmur has scheduled a check-in. It will be late.', 'Murmur thinks you’re asleep.', 'Murmur flagged this band, unflagged it, then forgot.', 'Murmur says this frequency doesn’t exist. Murmur is very sure.', 'Murmur has added you to a list. It’s a short list.',
