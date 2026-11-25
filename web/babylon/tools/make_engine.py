@@ -24,22 +24,31 @@ const CURATED = { };          /* level -> seeds picked by ear in the lab (filled
 let loopId = null;
 window.ME = {
   on: false, base: null,
-  async start(o) { o = o || {}; if (this.on) return;
+  /* PRELOAD: called while the level loads (before any tap), so the instruments are built, the samples decoded and the reverb made before the first frame:
+     the tap then only starts the clock, and the music starts with the level */
+  preload(o) { if (this.pre) return this.pre; o = o || {}; this.opts = o;
     try { if (!S && Tone.getContext().latencyHint !== 'playback') Tone.setContext(new Tone.Context({ latencyHint: 'playback', lookAhead: o.lookAhead || .2 })); else if (o.lookAhead) Tone.getContext().lookAhead = o.lookAhead; } catch (e) { }          /* the game asks for more look-ahead: its frames can stall while it builds shaders, and the notes must already be planned */
-    await Tone.start(); if (!S) { build(); await Tone.loaded(); await S.ready(); }
+    if (!S) build();
     LV = o.level && LVLP[o.level] ? o.level : null; STYLE = o.style || (LV ? LVLP[LV][1] : 'techno'); if (LV) { ME_TR = LVLP[LV][3] / 100; ME_EN = LVLP[LV][4] / 100; } if (o.tr !== undefined) ME_TR = o.tr; if (o.en !== undefined) ME_EN = o.en; if (o.trAdd) ME_TR = Math.max(0, Math.min(1, ME_TR + o.trAdd)); if (o.enMul) ME_EN = Math.max(.15, Math.min(1, ME_EN * o.enMul));          /* the Frequency's faders override the level's blend */
     const mine = rdT0().filter((t) => t.level === LV && t.style === STYLE).map((t) => t.seed), pool = (CURATED[LV] || []).concat(mine);
-    SEED = o.seed || (pool.length ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 1e9)); step = 0; lastSec = -1; makeTrack(); if (o.strong && T.kind !== 'acid') { const g = T.secs.find((x) => x.n === 'GROOVE' || x.n === 'DROP'); if (g) step = g.b0 * 16; }          /* a strong start: straight into the full groove */
+    SEED = o.seed || (pool.length ? pool[Math.floor(Math.random() * pool.length)] : Math.floor(Math.random() * 1e9)); step = 0; lastSec = -1; makeTrack(); need(T.kind);
+    if (o.strong && T.kind !== 'acid') { const g = T.secs.find((x) => x.n === 'GROOVE' || x.n === 'DROP'); if (g) step = g.b0 * 16; }          /* a strong start: straight into the full groove */
+    this.pre = (async () => { await Tone.loaded(); await S.ready(); })(); return this.pre; },
+  async start(o) { if (this.on || this.starting) return; this.starting = true;
+    try { await Tone.start(); } catch (e) { }          /* first, inside the tap: unlock the audio */
+    await this.preload(o);
     Tone.Transport.bpm.value = T.bpm; Tone.Transport.swing = swingOf(); Tone.Transport.swingSubdivision = '16n';
-    if (loopId === null) loopId = Tone.Transport.scheduleRepeat(tick, '16n'); Tone.Transport.start('+0.05'); this.on = true; this.base = { tr: ME_TR, en: ME_EN };
+    if (loopId === null) loopId = Tone.Transport.scheduleRepeat(tick, '16n'); this.on = true; this.starting = false; this.base = { tr: ME_TR, en: ME_EN };
+    if (this.paused) { try { Tone.getContext().rawContext.suspend(); } catch (e) { } } else Tone.Transport.start('+0.05');          /* paused while it was loading: it waits for the resume */
     if (!this.wd) this.wd = setInterval(() => { const c = Tone.getContext(); if (ME.on && !ME.paused && c.state !== 'running') c.resume(); }, 1000); },
-  pause(b) { if (!this.on) return; this.paused = !!b; try { if (b) Tone.Transport.pause(); else { Tone.getContext().resume(); Tone.Transport.start(); } } catch (e) { } },
+  /* pause: the clock stops and the whole audio context is suspended, so held pads, tails and loops stop at once (and resume where they were) */
+  pause(b) { this.paused = !!b; if (!this.on) return; try { if (b) { Tone.Transport.pause(); Tone.getContext().rawContext.suspend(); } else { Tone.getContext().resume(); Tone.Transport.start(); } } catch (e) { } },
   dose() { if (this.on) doseBar = Math.floor(step / 16) + 1; },
   set(tr, en) { if (tr !== undefined) ME_TR = tr; if (en !== undefined) ME_EN = en; this.base = { tr: ME_TR, en: ME_EN }; },
-  restyle(style, level) { if (!this.on) return; STYLE = style || STYLE; LV = level === undefined ? LV : level; SEED = Math.floor(Math.random() * 1e9); step = 0; lastSec = -1; makeTrack(); Tone.Transport.bpm.rampTo(T.bpm, .5); Tone.Transport.swing = swingOf(); try { S.atm.stop(); } catch (e) { } },
-  stop() { try { Tone.Transport.stop(); S.pad.releaseAll(); S.drone.releaseAll(); S.atm.stop(); S.brk.forEach((p) => p.stop()); } catch (e) { } this.on = false; },
+  restyle(style, level) { if (!this.on) return; STYLE = style || STYLE; LV = level === undefined ? LV : level; SEED = Math.floor(Math.random() * 1e9); step = 0; lastSec = -1; makeTrack(); Tone.Transport.bpm.rampTo(T.bpm, .5); Tone.Transport.swing = swingOf(); try { if (S.atm) S.atm.stop(); } catch (e) { } need(T.kind); },
+  stop() { try { Tone.Transport.stop(); S.pad.releaseAll(); if (S.drone) S.drone.releaseAll(); if (S.atm) S.atm.stop(); if (S.brk) S.brk.forEach((p) => p.stop()); if (S.rnOn) { S.rn.stop(); S.rnOn = false; } } catch (e) { } this.on = false; },
   chords() { return T ? chordNames() : ''; },
-  next() { if (!this.on) return; SEED = Math.floor(Math.random() * 1e9); step = 0; lastSec = -1; makeTrack(); Tone.Transport.bpm.rampTo(T.bpm, .5); Tone.Transport.swing = swingOf(); try { S.atm.stop(); } catch (e) { } },
+  next() { if (!this.on) return; SEED = Math.floor(Math.random() * 1e9); step = 0; lastSec = -1; makeTrack(); Tone.Transport.bpm.rampTo(T.bpm, .5); Tone.Transport.swing = swingOf(); try { if (S.atm) S.atm.stop(); } catch (e) { } need(T.kind); },
   mood(m) { const b = this.base || { tr: ME_TR, en: ME_EN }; if (m === 'glow') { ME_TR = Math.min(1, b.tr + .35); ME_EN = b.en * .45; } else if (m === 'rush' || m === 'fight') { ME_TR = b.tr * .7; ME_EN = 1; } else { ME_TR = b.tr; ME_EN = b.en; } },
   beatPos() { return this.on ? Tone.Transport.ticks / Tone.Transport.PPQ : 0; },
   volume(db) { try { Tone.getDestination().volume.value = db; } catch (e) { } },          /* (getDestination: Tone.Destination is the first context's, stale after setContext) */
