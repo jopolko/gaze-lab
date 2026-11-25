@@ -112,7 +112,7 @@
       'Rough going: a chest for a Bull Bar or a Shield',
       'There\'s a big prize for anyone. Skill only. Look up after the ramp',
       'Finish once, then try the other gear. The road changes its mind',
-      'Green tea grows wild out here. Tracers almost double',
+      'Green tea grows by the roadside out here. Tracers almost double',
       'Up, up, down, down... some codes never die'],
     candy: ['SUGARFALL: every day is the same day',
       'Ginger root gone feral in the candy. The afterglow lasts half as long again',
