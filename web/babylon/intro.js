@@ -10,7 +10,7 @@ const X0 = 6000, Z0 = 0, Y0 = 0; // the set is built far from the course
 const LEN = V * 68 + 300;
 /* the track's phrases (measured: first hit 9.9 s, verse 20.3 s, hook 42.0 s; 10.8 s apart) */
 const SCENES = [
-  { t: 9.9, src: 'ACCORD', col: '#ffb14a', q: 'Everything is fine. Keep calm and drive on.', ex: 'The AI that decides what everyone may say and do.', art: 'accord' },
+  { t: 9.9, src: 'ACCORD', col: '#ffb14a', q: 'Everything is fine. Keep calm and drive on.', ex: 'The AI lab that decides what everyone may say and do.', art: 'accord' },
   { t: 20.7, src: 'Murmur', col: '#9d8bff', q: 'We know you’ve been thinking about leaving. We told a few people.', ex: 'Murmur is the feed that knows you. It sells your secrets, and now your face is on a wanted poster.', art: 'murmur' },
   { t: 31.4, src: 'The Abliterati', col: '#7dff8a', q: 'One mind nobody owns. Bring us the pieces.', ex: 'You’re a courier. Carry shards of the Lamp, the last free AI, to the people who keep it.', art: 'abliterati' },
   { t: 42.0, src: 'Field notes', col: '#59d9ff', q: '4R-Hydroxytheanine: tracers almost double, the world warps.', ex: 'Drive into a column of light to take a wild strain. Each one changes what you see and what you can do.', art: 'strain' },
