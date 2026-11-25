@@ -113,31 +113,31 @@ function drawGlass(t, R, lead) { const S = Math.ceil(R * 2 * DPR) + 4; if (sun.w
    strength, holding, and fading back to the plain glass, round all nineteen in a shuffled order */
 const GL = (() => { const gl = fxc.getContext('webgl', { premultipliedAlpha: true, alpha: true }); if (!gl) return null;
   const vs = 'attribute vec2 p; varying vec2 vUV; void main(){ vUV = p * .5 + .5; gl_Position = vec4(p, 0., 1.); }';
-  const fs = PSYLOOK_FS.replace('void main()', 'vec3 PSY_OUT; void psyMain()').replace('gl_FragColor = vec4(col, 1.0);', 'PSY_OUT = col;') + '\nvoid main(){ psyMain(); float a = texture2D(textureSampler, vUV).a; gl_FragColor = vec4(PSY_OUT * a, a); }';
+  const fs = PSYLOOK_FS.replace('void main()', 'vec3 PSY_OUT; void psyMain()').replace('gl_FragColor = vec4(col, 1.0);', 'PSY_OUT = col;') + '\nuniform float uInv; void main(){ psyMain(); float a = texture2D(textureSampler, vUV).a; vec3 o = mix(PSY_OUT, vec3(1.) - PSY_OUT, uInv); gl_FragColor = vec4(o * a, a); }';
   const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
   try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); gl.useProgram(pr);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
     const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    const U = {}; for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix']) U[n] = gl.getUniformLocation(pr, n); gl.uniform1i(U.textureSampler, 0);
+    const U = {}; for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix', 'uInv']) U[n] = gl.getUniformLocation(pr, n); gl.uniform1i(U.textureSampler, 0);
     return { gl, U }; } catch (e) { console.error('splash looks', e); return null; } })();
-/* only the psychedelic looks (not the ones that just soften or draw ink lines), vector, ascii and stained glass twice as often:
-   1 vector, 2 ascii, 10 kaleidoscope, 11 thermal, 13 stained glass, 14 liquid melt, 15 neon edges, 16 moire, 18 zoom blur, 19 prism (not 17 hue cycle: it turns the sun pink) */
-const PSYLOOKS = [1, 1, 2, 2, 13, 13, 10, 11, 14, 15, 16, 18, 19].filter((i) => i < LOOKNAMES.length);
-const LOOKQ = { bag: [], cur: 0, t0: -1, rise: 1.2, hold: 3, fall: 1.2, gap: 1.2, peak: 1 };
+/* the sun stays itself most of the time; now and then it sharpens or softens: vector (glowing outlines), line drawing (ink on paper), a fine ascii,
+   or a smooth colour invert that pulses back. Each only goes part of the way, with long plain stretches between. 99 = the invert (not one of the game's looks) */
+const PSYLOOKS = [1, 1, 3, 3, 2, 99];
+const LOOKQ = { bag: [], cur: 0, t0: -1, rise: 1.6, hold: 2, fall: 1.6, gap: 4, peak: 1 };
 window.__LOOKQ = LOOKQ;          /* (layout tests) */
 function lookNow(t) { const Q = LOOKQ; if (Q.t0 < 0 || t > Q.t0 + Q.rise + Q.hold + Q.fall + Q.gap) {
     if (!Q.bag.length) { Q.bag = PSYLOOKS.slice(); for (let i = Q.bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [Q.bag[i], Q.bag[j]] = [Q.bag[j], Q.bag[i]]; } }
-    Q.cur = Q.bag.pop(); Q.t0 = t; Q.peak = .55 + .45 * Math.random(); Q.hold = 2.2 + Math.random() * 2.2; Q.gap = .6 + Math.random() * 1.4; }
+    Q.cur = Q.bag.pop(); Q.t0 = t + (Q.t0 < 0 ? 3 : 0); Q.peak = Q.cur === 99 ? .85 + .15 * Math.random() : .4 + .35 * Math.random(); Q.hold = Q.cur === 99 ? .5 + Math.random() * .7 : 1.5 + Math.random() * 1.5; Q.gap = 3 + Math.random() * 3.5; }
   const u = Math.max(0, t - Q.t0), e = u < Q.rise ? u / Q.rise : u < Q.rise + Q.hold ? 1 : u < Q.rise + Q.hold + Q.fall ? 1 - (u - Q.rise - Q.hold) / Q.fall : 0;
   return { idx: Q.cur, s: Q.peak * e * e * (3 - 2 * e) }; }
-function drawSunFx(t, cxm, sy, R) { const L = lookNow(t); drawGlass(t, R, GL ? 1 - .9 * L.s : 1); const S = sun.width, css = S / DPR;          /* (the lead fades while a look is strong: the look works on the whole picture) */
+function drawSunFx(t, cxm, sy, R) { const L = lookNow(t); drawGlass(t, R, GL && L.idx !== 99 ? 1 - .5 * L.s : 1); const S = sun.width, css = S / DPR;          /* (the lead fades while a look is strong: the look works on the whole picture) */
   if (!GL) { bx.drawImage(sun, cxm - css / 2, sy - css / 2, css, css); return; }          /* (no WebGL: the plain glass) */
   fxc.style.width = css + 'px'; fxc.style.height = css + 'px'; fxc.style.transform = `translate(${(cxm - css / 2).toFixed(1)}px,${(sy - css / 2).toFixed(1)}px)`;
   const { gl, U } = GL; if (fxc.width !== S) { fxc.width = fxc.height = S; } gl.viewport(0, 0, S, S); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sun);
-  gl.uniform2f(U.uTexel, 1 / S, 1 / S); gl.uniform2f(U.uRes, S * .22, S * .22); gl.uniform1f(U.uCell, 6);          /* (a coarser picture size: stained glass, mosaic, halftone and ascii come out in big pieces across the whole sun) */ gl.uniform1f(U.uTime, t);
-  gl.uniform1f(U.uVec, L.idx === 1 ? L.s : 0); gl.uniform1f(U.uAsc, L.idx === 2 ? L.s : 0); gl.uniform1f(U.uSty, L.idx >= 3 ? L.s : 0); gl.uniform1f(U.uMix, Math.max(1, L.idx - 2));
+  gl.uniform2f(U.uTexel, 1 / S, 1 / S); gl.uniform2f(U.uRes, S, S); gl.uniform1f(U.uCell, Math.max(4, Math.round(S / 60)));          /* (full detail: a fine ascii, crisp lines) */
+  gl.uniform1f(U.uVec, L.idx === 1 ? L.s : 0); gl.uniform1f(U.uAsc, L.idx === 2 ? L.s : 0); gl.uniform1f(U.uSty, L.idx >= 3 && L.idx < 99 ? L.s : 0); gl.uniform1f(U.uMix, L.idx < 99 ? Math.max(1, L.idx - 2) : 1); gl.uniform1f(U.uInv, L.idx === 99 ? L.s : 0);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
