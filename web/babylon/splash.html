@@ -161,7 +161,7 @@ setInterval(() => { if (GAME.ready) return; try { const w = GAME.el.contentWindo
 function gameTint() { if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
 function draw(t, dt) {
   const short = W > H && H <= 500, hz = H * (short ? .8 : W > H ? .68 : .62), cxm = W / 2, k = wave(t);
-  const my = short ? H * .44 : W > H ? H * .4 : hz - H * .2, sk = .28 / Math.max(20, hz - my);          /* the molecule sits on the sky's sun */
+  const room = molRoom(short), my = room.y, sk = .28 / Math.max(20, hz - my);          /* the molecule sits midway between the words, on the sky's sun */
   cx.clearRect(0, 0, W, H); bx.clearRect(0, 0, W, H); let g;
   gameTint();
   if (GAME.ready && skyc.style.display === 'none') { } else if (!drawSky(t, dt || 0, cxm, hz, sk)) { g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#05060f'); g.addColorStop(.6, '#4a2a2a'); g.addColorStop(1, '#07060a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H); }
@@ -186,11 +186,17 @@ function draw(t, dt) {
   // the column of light, with the strain big in it
   const p = PANTRY[KEYS[si]], c = (TUNE.k > .005 ? mix(p.c.map((v) => Math.round(v * 255)), specNow(), .6 * TUNE.k) : p.c.map((v) => Math.round(v * 255))), cw = Math.min(W, H) * .08;
   g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},${.28 + .2 * TUNE.k})`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .08, cw * 2, hz - H * .08 + 2);
-  MOL.x = cxm; MOL.y = my; MOL.r = Math.min(W, H) * .22;
+  MOL.x = cxm; MOL.y = my; MOL.r = room.r; MOL.fit = room.r;
   drawMol(p, cxm + SL.off, my, Math.min(W, H) * (short ? .05 : W > H ? .045 : .062), SPIN.yaw, SPIN.pitch, c, 1, k + .4 * TUNE.k);
 }
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
-function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let mx = 0, my = 0, mz = 0, rr = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } mx /= p.atoms.length; my /= p.atoms.length; mz /= p.atoms.length; for (const at of p.atoms) rr = Math.max(rr, Math.hypot(at[1] - mx, at[2] - my, at[3] - mz)); sc = Math.min(sc, Math.min(W, H) * .3 / Math.max(1, rr + .6)); }          /* (the long ones are scaled down so every strain fits well inside the screen) */ const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+/* the gap the molecule may fill: portrait, from under the tagline to above the strain's notes; phone landscape (words at the sides), from under the
+   spectrum to the bottom. Measured from the page, so it follows the real text sizes */
+function molRoom(short) { let top, bot; const R = (id) => { const e = document.getElementById(id); return e ? e.getBoundingClientRect() : null; };
+  if (short) { const d = R('dial'); top = d ? d.bottom + 6 : H * .2; bot = H - 12; }
+  else { const tg = R('tag'), st = strainEl.getBoundingClientRect(); top = tg ? tg.bottom + 8 : H * .32; bot = st && st.top > top + 40 ? st.top - 8 : H * .75; }
+  const y = (top + bot) / 2, r = Math.max(24, Math.min((bot - top) / 2 * .9, W * (short ? .2 : .42))); return { y, r }; }
+function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let mx = 0, my = 0, mz = 0, rr = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } mx /= p.atoms.length; my /= p.atoms.length; mz /= p.atoms.length; for (const at of p.atoms) rr = Math.max(rr, Math.hypot(at[1] - mx, at[2] - my, at[3] - mz)); sc = Math.min(sc, (MOL.fit || Math.min(W, H) * .3) / Math.max(1, rr + .6)); }          /* (the long ones are scaled down so every strain fits well inside the screen) */ const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
   let mx = 0, my = 0, mz = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } const n = p.atoms.length; mx /= n; my /= n; mz /= n;
   const P = p.atoms.map((at) => { const x = at[1] - mx, y = at[2] - my, z = at[3] - mz; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb; const pz = 1 + z2 * .05; return { x: x0 + x1 * sc * pz, y: y0 + y2 * sc * pz, z: z2, e: at[0], m: !!at[4] }; });
   cx.save(); cx.globalAlpha = fade;
@@ -248,7 +254,7 @@ const ui = document.getElementById('ui'); let drag = null;
 /* THE CAROUSEL: a sideways swipe anywhere drags the molecule and its notes with the finger; let go past a third of the way (or flick) and they slide off
    that way while the next strain slides in from the other side (left: the next one, right: the one before); a short swipe springs back.
    A drag that starts ON the molecule turns it in 3D instead. A tap tunes in. */
-const MOL = { x: 0, y: 0, r: 60 }, SL = { off: 0, anim: null };
+const MOL = { x: 0, y: 0, r: 60, fit: 0 }, SL = { off: 0, anim: null };
 function slideApply() { strainEl.style.transform = `translateX(${SL.off.toFixed(1)}px)`; strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
 function slideTo(target, ms, then) { const from = SL.off, t0 = performance.now(); SL.anim = (now) => { const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3); SL.off = from + (target - from) * e; slideApply(); if (u >= 1) { SL.anim = null; if (then) then(); } }; }
 function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 1; showStrain(); }
