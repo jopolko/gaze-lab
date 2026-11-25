@@ -30,6 +30,7 @@ try {
   // the tap: a real input event on the card's first button
   const r = await ev('(() => { const b = document.querySelector("#goCard button"); const q = b.getBoundingClientRect(); return [q.left + q.width / 2, q.top + q.height / 2]; })()');
   for (const type of ['mousePressed', 'mouseReleased']) await send('Input.dispatchMouseEvent', { type, x: r[0], y: r[1], button: 'left', clickCount: 1 });
+  const tapAt = Date.now(); let roadAt = null, musicAt = null; for (let i = 0; i < 60; i++) { if (roadAt === null && await ev('!!window.__go')) roadAt = Date.now() - tapAt; if (musicAt === null && await ev('!!(window.ME && ME.on)')) musicAt = Date.now() - tapAt; if (roadAt !== null && musicAt !== null) break; await sleep(50); } console.log('road starts ' + roadAt + ' ms, music ' + musicAt + ' ms after the tap'); console.log('music on ' + (Date.now() - tapAt) + ' ms after the tap; preload was ' + (await ev('window.ME && ME.pre ? "made before the tap" : "not made"')));
   await sleep(300); console.log('tapped; started=' + await ev('!!window.__go') + ' z=' + await ev('window.__G ? __G.PH.z.toFixed(1) : null')); if (!(await ev('!!window.__go'))) { await ev('document.querySelector("#goCard button").click()'); console.log('clicked by script; started=' + await ev('!!window.__go')); } await sleep(5000); console.log('z after 5s ' + await ev('window.__G ? __G.PH.z.toFixed(1) : null'));
   const list = await ev('JSON.parse(JSON.stringify(window.__snd))'); clearInterval(keep);
   console.log('sounds before the tap: ' + before + ', total: ' + list.length);
