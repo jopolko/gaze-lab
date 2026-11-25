@@ -101,11 +101,25 @@ const ringRot = (r, t) => (r % 2 ? -1 : 1) * SWING[r] * Math.sin(t * SWF[r] + r 
 const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
 /* the slow swell for the sky's glow */
 const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
-function drawGlass(t, R, lead) { const S = Math.ceil(R * 2 * DPR) + 4; if (sun.width !== S) { sun.width = sun.height = S; } sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, S, S); sx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  const X = S / DPR / 2, Y = X;
-  const tk = TUNE.k, tc = specNow();
-  for (const p of PANES) { const c = tk > .005 ? mix(PAL[p.ci], tc, .72 * tk) : PAL[p.ci], g = .55 + .45 * Math.sin(t * .9 + p.ph) * (1 - .6 * tk), rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.fillStyle = `rgba(${c},${Math.min(1, .6 + .4 * g + .3 * tk)})`; sx.fill(); }
-  if (lead > .02) sx.strokeStyle = `rgba(11,7,18,${lead})`; sx.lineWidth = Math.max(2, R * .022); if (lead > .02) for (const p of PANES) { const rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.stroke(); }
+/* THE GLASS, with depth: the rings sit at different depths like a tunnel (the inner ones further away, so they slide further as the view drifts),
+   each is shaded like a raised band (lit outer edge, shadowed inner edge, light from the upper left) and throws a soft shadow onto the rings behind it */
+const PAD = 1.16;          /* the sun canvas is a little bigger than the sun, so the rings have room to slide */
+function drawGlass(t, R, lead) { const S = Math.ceil(R * 2 * PAD * DPR) + 4; if (sun.width !== S) { sun.width = sun.height = S; } sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, S, S); sx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const X = S / DPR / 2, Y = X, tk = TUNE.k, tc = specNow(), vx = R * .075 * Math.cos(t * .11), vy = R * .05 * Math.sin(t * .15 + 1);
+  const annulus = (cx0, cy0, r0, r1) => { sx.beginPath(); sx.arc(cx0, cy0, r1, 0, 6.2832); if (r0 > .5) sx.arc(cx0, cy0, r0, 6.2832, 0, true); sx.closePath(); };
+  for (let ring = 0; ring < 4; ring++) { const d = (3 - ring) / 3, cxr = X + vx * d, cyr = Y + vy * d, rot = ringRot(ring, t), ps = PANES.filter((p) => p.ring === ring), r0 = ps[0].r0 * R, r1 = ps[0].r1 * R, w = r1 - r0;
+    // its shadow on the rings behind (all but the innermost cast one)
+    if (ring > 0) { sx.save(); sx.shadowColor = 'rgba(0,0,0,.6)'; sx.shadowBlur = R * .06 * DPR; sx.shadowOffsetX = R * .022 * DPR; sx.shadowOffsetY = R * .03 * DPR; annulus(cxr, cyr, r0, r1); sx.fillStyle = '#000'; sx.fill(); sx.restore(); }
+    // the panes
+    for (const p of ps) { const c = tk > .005 ? mix(PAL[p.ci], tc, .72 * tk) : PAL[p.ci], g = .55 + .45 * Math.sin(t * .9 + p.ph) * (1 - .6 * tk); sx.beginPath(); sx.arc(cxr, cyr, r1, p.a0 + rot, p.a1 + rot); sx.arc(cxr, cyr, Math.max(.5, r0), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.fillStyle = `rgba(${c},1)`; sx.fill(); sx.fillStyle = `rgba(0,0,0,${(1 - Math.min(1, .6 + .4 * g + .3 * tk)) * .8})`; sx.fill(); }
+    // the bevel: shadowed toward the middle, a lit crest, a dark rim
+    sx.save(); annulus(cxr, cyr, r0, r1); sx.clip();
+    const gr = sx.createRadialGradient(cxr, cyr, Math.max(0, r0), cxr, cyr, r1); gr.addColorStop(0, ring ? 'rgba(0,0,0,.5)' : 'rgba(0,0,0,.15)'); gr.addColorStop(.38, 'rgba(0,0,0,0)'); gr.addColorStop(.78, 'rgba(255,255,255,.2)'); gr.addColorStop(.93, 'rgba(255,255,255,.05)'); gr.addColorStop(1, 'rgba(0,0,0,.45)');
+    sx.fillStyle = gr; sx.fillRect(cxr - r1, cyr - r1, r1 * 2, r1 * 2);
+    const gl = sx.createLinearGradient(cxr - r1, cyr - r1, cxr + r1, cyr + r1); gl.addColorStop(0, 'rgba(255,255,255,.16)'); gl.addColorStop(.5, 'rgba(255,255,255,0)'); gl.addColorStop(1, 'rgba(0,0,0,.22)');
+    sx.fillStyle = gl; sx.fillRect(cxr - r1, cyr - r1, r1 * 2, r1 * 2); sx.restore();
+    // the lead between its panes
+    if (lead > .02) { sx.strokeStyle = `rgba(11,7,18,${lead})`; sx.lineWidth = Math.max(2, R * .022); for (const p of ps) { sx.beginPath(); sx.arc(cxr, cyr, r1, p.a0 + rot, p.a1 + rot); sx.arc(cxr, cyr, Math.max(.5, r0), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.stroke(); } } }
   sx.fillStyle = '#2a1626'; for (let i = 0; i < 5; i++) { const y = Y + R * (.02 + i * .068), h = R * (.012 + i * .007); sx.fillRect(X - R, y, R * 2, h); }          /* the synthwave cuts through its lower half */
 }
 
@@ -122,14 +136,14 @@ const GL = (() => { const gl = fxc.getContext('webgl', { premultipliedAlpha: tru
     const U = {}; for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix']) U[n] = gl.getUniformLocation(pr, n); gl.uniform1i(U.textureSampler, 0);
     return { gl, U }; } catch (e) { console.error('splash looks', e); return null; } })();
 /* only the psychedelic looks (not the ones that just soften or draw ink lines), vector, ascii and stained glass twice as often:
-   1 vector, 2 ascii, 10 kaleidoscope, 11 thermal, 13 stained glass, 14 liquid melt, 15 neon edges, 16 moire, 17 hue cycle, 18 zoom blur, 19 prism */
-const PSYLOOKS = [1, 1, 2, 2, 13, 13, 10, 11, 14, 15, 16, 17, 18, 19].filter((i) => i < LOOKNAMES.length);
+   1 vector, 2 ascii, 10 kaleidoscope, 11 thermal, 13 stained glass, 14 liquid melt, 15 neon edges, 16 moire, 18 zoom blur, 19 prism (not 17 hue cycle: it turns the sun pink) */
+const PSYLOOKS = [1, 1, 2, 2, 13, 13, 10, 11, 14, 15, 16, 18, 19].filter((i) => i < LOOKNAMES.length);
 const LOOKQ = { bag: [], cur: 0, t0: -1, rise: 1.2, hold: 3, fall: 1.2, gap: 1.2, peak: 1 };
 window.__LOOKQ = LOOKQ;          /* (layout tests) */
 function lookNow(t) { const Q = LOOKQ; if (Q.t0 < 0 || t > Q.t0 + Q.rise + Q.hold + Q.fall + Q.gap) {
     if (!Q.bag.length) { Q.bag = PSYLOOKS.slice(); for (let i = Q.bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [Q.bag[i], Q.bag[j]] = [Q.bag[j], Q.bag[i]]; } }
     Q.cur = Q.bag.pop(); Q.t0 = t; Q.peak = .55 + .45 * Math.random(); Q.hold = 2.2 + Math.random() * 2.2; Q.gap = .6 + Math.random() * 1.4; }
-  const u = t - Q.t0, e = u < Q.rise ? u / Q.rise : u < Q.rise + Q.hold ? 1 : u < Q.rise + Q.hold + Q.fall ? 1 - (u - Q.rise - Q.hold) / Q.fall : 0;
+  const u = Math.max(0, t - Q.t0), e = u < Q.rise ? u / Q.rise : u < Q.rise + Q.hold ? 1 : u < Q.rise + Q.hold + Q.fall ? 1 - (u - Q.rise - Q.hold) / Q.fall : 0;
   return { idx: Q.cur, s: Q.peak * e * e * (3 - 2 * e) }; }
 function drawSunFx(t, cxm, sy, R) { const L = lookNow(t); drawGlass(t, R, GL ? 1 - .9 * L.s : 1); const S = sun.width, css = S / DPR;          /* (the lead fades while a look is strong: the look works on the whole picture) */
   if (!GL) { bx.drawImage(sun, cxm - css / 2, sy - css / 2, css, css); return; }          /* (no WebGL: the plain glass) */
@@ -230,10 +244,13 @@ size(); showStrain(); requestAnimationFrame(frame);
 /* tap: the menu (inside the shell, fullscreen first) */
 let gone = false; const go = () => { if (gone) return; gone = true; location.href = 'menu.html'; };
 const ui = document.getElementById('ui'); let drag = null;
-ui.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, ts: e.timeStamp }; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
+ui.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, moved: false, id: e.pointerId, ts: e.timeStamp }; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
 ui.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.moved && Math.hypot(dx, dy) > 8) drag.moved = true;
   if (drag.moved) { const k = .012, ddt = Math.max(.008, (e.timeStamp - drag.ts) / 1000); SPIN.yaw += dx * k; SPIN.pitch = Math.max(-1.4, Math.min(1.4, SPIN.pitch + dy * k)); SPIN.vy = dx * k / ddt; SPIN.held = 2; drag.x = e.clientX; drag.y = e.clientY; drag.ts = e.timeStamp; } });
-ui.addEventListener('pointerup', (e) => { if (!drag || e.pointerId !== drag.id) return; const tap = !drag.moved; drag = null; if (tap) go(); });
+/* a quick sideways swipe changes the strain (left: the next one, right: the one before); a slower drag turns it; a tap tunes in */
+function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 0; showStrain(); SPIN.held = 0; SPIN.vy = 0; }
+ui.addEventListener('pointerup', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0, ms = e.timeStamp - drag.t0, tap = !drag.moved; drag = null;
+  if (tap) { go(); return; } if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy) && ms < 350) stepStrain(dx < 0 ? 1 : -1); });
 ui.addEventListener('pointercancel', () => { drag = null; });
 ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(); });
 </script>
