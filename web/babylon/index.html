@@ -956,8 +956,10 @@ float sobelE() { return sobelK(1.); }
 void main() {
   vec2 uv = vUV; vec3 c = texture2D(textureSampler, uv).rgb, col = c;
   if (uVec > .001) {
-    float e = sobelE() * 3.; float ed = clamp(e, 0., 1.); vec3 hue = c / max(max(c.r, max(c.g, c.b)), .05);
-    col = mix(c, hue * ed * 2.2 + c * .03, uVec);
+    /* edges from two scales averaged (the 1-pixel one alone stair-stepped along every ripple), and a soft threshold so the faint brightness changes inside the sun
+       and the road's grain draw nothing instead of broken flecks: only real contours become lines */
+    float e = (sobelK(1.) * .45 + sobelK(2.) * .55) * 3.; float ed = smoothstep(.16, .62, e); vec3 hue = c / max(max(c.r, max(c.g, c.b)), .05);
+    col = mix(c, hue * ed * 2.2 + c * .1, uVec);
   }
   if (uAsc > .001) {
     vec2 px = vUV * uRes, cid = floor(px / uCell), fr = fract(px / uCell), cuv = (cid + .5) * uCell / uRes, o = vec2(.25) * uCell / uRes;
