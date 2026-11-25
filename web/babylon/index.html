@@ -2871,6 +2871,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     try { SFX.bell && SFX.bell(); } catch (e) { } }
   function raidAfter(R, dt) { const rt = R.rt, p = R.root.position;
     if (R.hp < 3 && Math.random() < (R.hp === 2 ? .25 : .6)) try { FXB.E.pillEat([p.x + (Math.random() - .5) * 2, p.y + 1, p.z], [.3, .3, .33]); } catch (e) { }          /* smoke: thin, then thick */
+    if (R.spinT > 0) { R.spinT = Math.max(0, R.spinT - dt); R.root.rotation.y += dt * 14 * R.spinT; }
     if (R.phase !== 'down') { if (R.hp <= 1) { R.root.rotation.z += Math.sin(rt * 6.5) * .35; R.root.rotation.x += Math.sin(rt * 4.1) * .12; if (Math.random() < .02) R.lurch = 1; } if (R.lurch) { R.lurch = Math.max(0, R.lurch - dt * 2); p.y -= 2.5 * Math.sin(R.lurch * Math.PI); } return; }
     // careening down: a spiralling dive onto the marked spot ahead of you
     const u = Math.min(1, (rt - R.d0) / R.T), e = u * u; p.x = R.from.x + (R.to.x - R.from.x) * u + Math.sin(u * 9) * 3 * (1 - u); p.z = R.from.z + (R.to.z - R.from.z) * u; p.y = R.from.y + (R.to.y + 1 - R.from.y) * e;
@@ -2937,27 +2938,55 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   /* THE STRIKE RAMP: a clean dodge puts a glowing ramp on the road ahead, in the craft's lane. Hit it squarely and it throws you up in an arc straight into the craft:
      chunks fly off it and you drop back to the road. Three rams and it is wrecked. Miss the ramp and the chance is gone (dodge the next volley for another). */
   const RAMP = { cur: null };
-  function junkReward(R) { if (RAMP.cur || PH.ram) return; const ret = junkRet(); JUNK.lockT = 3.4; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE \u00B7 LOCKED ON</div><div>HIT THE RAMP!</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
-    const sp = Math.max(25, Math.hypot(PH.vx, PH.vz)), F = rFrame(); let z = PH.z + F.f[1] * sp * 2.6, x0 = PH.x + F.f[0] * sp * 2.6; const tr = trailX(z), x = clamp(tr + R.side * 4, tr - 8, tr + 8), g = rGround(x, z);
-    const root = new B.TransformNode('ramp', scene); const ang = .32;
-    rPart(root, 'box', { s: [5.2, .35, 7], p: [0, 1.1, 0], r: [ang, 0, 0], c: [1, .78, .25] }); rPart(root, 'box', { s: [5.2, 2.4, .3], p: [0, 1.2, -3.35], c: [.55, .38, .15] });
-    for (let i = 0; i < 3; i++) rPart(root, 'box', { s: [3.2, .06, .5], p: [0, .95 + i * .55, 2.2 - i * 1.6], r: [ang, 0, 0], c: [1, .25, .2], tag: 'blink' });
-    const bm = B.MeshBuilder.CreateCylinder('rampbeam', { height: 40, diameter: .5, tessellation: 8 }, scene); bm.material = rMat([2.6, 1.9, .3]); bm.parent = root; bm.position.y = 20; bm.isPickable = false;
-    root.position.set(x, g, z); root.rotation.y = -Math.atan2(F.f[0], -F.f[1]); RAMP.cur = { root, x, z, R, parts: root.getChildMeshes() }; }
+  function junkReward(R) { if (RAMP.cur || PH.ram) return; const ret = junkRet(); JUNK.lockT = 3.6; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE · LOCKED ON</div><div>HIT THE RAMP!</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
+    kickerBuild(R); }
+  /* THE KICKER: the course's own ramp, bigger: a deck 48 m long and 16 m wide that curves up 12 m, side rails, a lip bar on posts, and the five shrinking chrome rings
+     that funnel you in (the course's own ring mesh and metal). It is placed in the craft's lane about 3 s ahead. You ride up the deck; at the lip it throws you at the craft.
+     How square you hit it decides the flight: PERFECT (dead centre, at speed): a barrel roll and a crushing hit; CLEAN: straight in; CLIPPED (near an edge): a wobbly glancing hit. */
+  const KL = 48, KW = 16, KH = 12, kProf = (u) => KH * Math.pow(Math.max(0, Math.min(1, u)), 1.7);
+  function kickerBuild(R) { const sp = Math.max(25, Math.hypot(PH.vx, PH.vz)), F = rFrame(), d0 = sp * 2.2;
+    const z0 = PH.z + F.f[1] * d0, tr0 = trailX(z0), x0 = clamp(tr0 + R.side * 5, tr0 - 9, tr0 + 9), yaw = -Math.atan2(F.f[0], -F.f[1]);
+    const P = (d, s) => { const x = x0 + F.f[0] * d + F.r[0] * s, z = z0 + F.f[1] * d + F.r[1] * s; return [x, rGround(x, z), z]; };
+    // the deck: a ribbon that follows the ground and curves up
+    const N = 20, pos = [], idx = [], uv = []; for (let i = 0; i <= N; i++) { const d = KL * i / N, h = kProf(i / N); for (const s of [-KW / 2, KW / 2]) { const p = P(d, s); pos.push(p[0], p[1] + h + .05, p[2]); uv.push(s > 0 ? 1 : 0, i / N); } }
+    for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    const deck = new B.Mesh('kickerdeck', scene), vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.uvs = uv; const nr = []; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr; vd.applyToMesh(deck);
+    deck.material = RAID.mats.deck || (RAID.mats.deck = (() => { const m = new B.StandardMaterial('kickerDeckM', scene); m.diffuseColor = new B.Color3(.95, .78, .3); m.emissiveColor = new B.Color3(.45, .3, .08); m.specularColor = new B.Color3(.3, .3, .3); m.backFaceCulling = false; return m; })()); deck.isPickable = false;
+    const root = new B.TransformNode('kicker', scene), parts = [deck];
+    // rails, lip bar and posts
+    for (const s of [-KW / 2, KW / 2]) for (let i = 0; i < N; i += 2) { const a = P(KL * i / N, s), b = P(KL * (i + 2) / N, s), ha = kProf(i / N), hb = kProf((i + 2) / N), m = B.MeshBuilder.CreateBox('kickrail', { width: .3, height: .3, depth: 1 }, scene);
+      m.material = rMat([1, .4, .2]); m.position.set((a[0] + b[0]) / 2, (a[1] + ha + b[1] + hb) / 2 + .5, (a[2] + b[2]) / 2); const L = Math.hypot(b[0] - a[0], b[1] + hb - a[1] - ha, b[2] - a[2]); m.scaling.z = L; m.lookAt(new B.Vector3(b[0], b[1] + hb + .5, b[2])); m.isPickable = false; parts.push(m); }
+    { const l = P(KL, 0), bar = B.MeshBuilder.CreateBox('kicklip', { width: KW + 1, height: .5, depth: .6 }, scene); bar.material = rMat([1, .25, .2]); bar.position.set(l[0], l[1] + KH + .3, l[2]); bar.rotation.y = yaw; bar.isPickable = false; parts.push(bar);
+      for (const s of [-KW / 2 - .5, KW / 2 + .5]) { const q = P(KL, s), po = B.MeshBuilder.CreateCylinder('kickpost', { height: KH + 1, diameter: .5 }, scene); po.material = rMat([.2, .2, .25]); po.position.set(q[0], q[1] + (KH + 1) / 2, q[2]); po.isPickable = false; parts.push(po); } }
+    // the five shrinking chrome rings in front of it, funnelling you onto the deck (the course's own ring mesh)
+    const tor = scene.meshes.find((m) => m.name === 'src' && m.material && m.material.name === 'pkmettorus');
+    for (let i = 0; i < 5; i++) { const d = -34 + i * 11.3, p = P(Math.max(0, d), 0), h = d > 0 ? kProf(d / KL) : 0, sc = 5.2 - i * .68; let m;
+      if (tor) { m = new B.Mesh('kickring', scene); tor.geometry.applyToMesh(m); m.material = tor.material; m.thinInstanceAdd(B.Matrix.Compose(new B.Vector3(sc * 1.25, sc * 1.25, sc * .875), B.Quaternion.FromEulerAngles(Math.PI / 2, yaw, 0), new B.Vector3(p[0] + F.f[0] * Math.min(0, d), p[1] + h + 3 + i * .4, p[2] + F.f[1] * Math.min(0, d)))); }
+      else { m = B.MeshBuilder.CreateTorus('kickring', { diameter: sc * 2.5, thickness: .3, tessellation: 24 }, scene); m.material = rMat([.85, .88, .95]); m.rotation.set(Math.PI / 2, yaw, 0); m.position.set(p[0] + F.f[0] * Math.min(0, d), p[1] + h + 3 + i * .4, p[2] + F.f[1] * Math.min(0, d)); }
+      m.isPickable = false; m.alwaysSelectAsActiveMesh = true; parts.push(m); }
+    const bm = B.MeshBuilder.CreateCylinder('rampbeam', { height: 46, diameter: .6, tessellation: 8 }, scene); bm.material = rMat([2.6, 1.9, .3]); { const l = P(KL, 0); bm.position.set(l[0], l[1] + KH + 23, l[2]); } bm.isPickable = false; parts.push(bm);
+    RAMP.cur = { R, parts, x0, z0, F, on: false, best: 1 }; }
+  function kickerGone(M) { for (const m of M.parts) try { m.dispose(); } catch (e) { } }
   function rampStep(dt) { const M = RAMP.cur;
-    if (M) { for (const m of M.parts) if (m.__tag === 'blink') m.visibility = Math.sin(performance.now() / 70) > 0 ? 1 : .35;
-      const F = rFrame(), ahead = (M.x - PH.x) * F.f[0] + (M.z - PH.z) * F.f[1], side = (M.x - PH.x) * F.r[0] + (M.z - PH.z) * F.r[1];
-      if (ahead < 1.5 && ahead > -3 && Math.abs(side) < 3 && !PH.ram && RAID.cur === M.R) { rampLaunch(M.R); M.root.dispose(); RAMP.cur = null; }
-      else if (ahead < -12 || RAID.cur !== M.R) { M.root.dispose(); RAMP.cur = null; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; JUNK.lockT = 0; } }
-    const Rm = PH.ram; if (Rm) { Rm.t += dt; if (!RAID.cur || RAID.cur !== Rm.R || Rm.t > 2.4) { PH.ram = null; PH.crest = true; return; }
-      const c = Rm.R.root.position; if (Math.hypot(PH.x - c.x, PH.y + 1 - c.y, PH.z - c.z) < 5.5 * (Rm.R.big || 1)) { rampHit(Rm.R); PH.ram = null; } } }
-  function rampLaunch(R) { const c = R.root.position, T = 1.05, g = GV * C.AIR_G_K; PH.grounded = false; PH.air_t = 0; PH.rail = null; PH.crest = false;
-    PH.vx = (c.x - PH.x) / T; PH.vz = (c.z - PH.z) / T; PH.vy = (c.y - 1 - PH.y) / T + .5 * g * T; PH.heading = Math.atan2(PH.vx, -PH.vz); PH.ram = { R, t: 0 };
-    JUNK.arrow.style.opacity = '0'; try { SFX.powerup && SFX.powerup(); FXB.E.landSmooth([PH.x, PH.y, PH.z]); } catch (e) { } window.__railAir = performance.now() + 250; }
-  function rampHit(R) { const p = R.root.position; try { FXB.E.blast([p.x, p.y, p.z]); FXB.confetti([p.x, p.y, p.z], 40, 1); } catch (e) { } shake = Math.max(shake, .5); R.rock = 1; R.hp--; PH.score += 500; try { chainHit(); dopAdd('mol'); } catch (e) { }
+    if (M) { const F = M.F, dx = PH.x - M.x0, dz = PH.z - M.z0, d = dx * F.f[0] + dz * F.f[1], s = dx * F.r[0] + dz * F.r[1], g = rGround(PH.x, PH.z);
+      if (d >= 0 && d <= KL && Math.abs(s) <= KW / 2 && !PH.ram && RAID.cur === M.R && (M.on || PH.y <= g + 2.5)) {          /* (on the deck: you ride its curve) */
+        M.on = true; M.best = Math.min(M.best, Math.abs(s) / (KW / 2)); const y = g + kProf(d / KL); PH.y = y; PH.gh_prev = g; PH.vy = Math.max(0, (kProf((d + 1) / KL) - kProf(d / KL)) * Math.hypot(PH.vx, PH.vz)); PH.grounded = true;
+        if (d > KL - 1.2) { const q = 1 - Math.abs(s) / (KW / 2), spd = Math.hypot(PH.vx, PH.vz) / SPK; rampLaunch(M.R, q > .72 && spd > 32 ? 'perfect' : q > .3 ? 'clean' : 'clipped'); kickerGone(M); RAMP.cur = null; } }
+      else if (M.on && (Math.abs(s) > KW / 2 || d > KL)) { M.on = false; PH.grounded = false; PH.crest = true; }          /* (rolled off the side: you drop) */
+      if (RAMP.cur && (d > KL + 15 || RAID.cur !== M.R)) { kickerGone(M); RAMP.cur = null; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; JUNK.lockT = 0; } }
+    const Rm = PH.ram; if (Rm) { Rm.t += dt; if (Rm.q === 'perfect' && Rm.t > .25 && !Rm.rolled) { Rm.rolled = true; camSpin = .01; }
+      if (Rm.q === 'clipped') { PH.x += Math.sin(Rm.t * 14) * 4 * dt; shake = Math.max(shake, .12); }
+      if (!RAID.cur || RAID.cur !== Rm.R || Rm.t > 2.4) { PH.ram = null; PH.crest = true; return; }
+      const c = Rm.R.root.position; if (Math.hypot(PH.x - c.x, PH.y + 1 - c.y, PH.z - c.z) < 5.5 * (Rm.R.big || 1)) { rampHit(Rm.R, Rm.q); PH.ram = null; } } }
+  function rampLaunch(R, q) { const c = R.root.position, T = q === 'perfect' ? 1.15 : 1.0, g = GV * C.AIR_G_K; PH.grounded = false; PH.air_t = 0; PH.rail = null; PH.crest = false;
+    const off = q === 'clipped' ? R.side * -2.2 : 0;          /* (a clipped launch goes in a little off-line: a glancing blow) */
+    PH.vx = (c.x + off - PH.x) / T; PH.vz = (c.z - PH.z) / T; PH.vy = (c.y - 1 - PH.y) / T + .5 * g * T; PH.heading = Math.atan2(PH.vx, -PH.vz); PH.ram = { R, t: 0, q };
+    JUNK.arrow.innerHTML = q === 'perfect' ? '<div>PERFECT!</div>' : q === 'clean' ? '<div>CLEAN!</div>' : '<div style="color:#ffd23a">CLIPPED</div>'; JUNK.arrow.style.opacity = '1'; setTimeout(() => { if (!PH.ram) return; JUNK.arrow.style.opacity = '0'; }, 900);
+    try { SFX.powerup && SFX.powerup(); FXB.E.blast([PH.x, PH.y, PH.z]); } catch (e) { } window.__railAir = performance.now() + (q === 'perfect' ? 350 : 150); }
+  function rampHit(R, q) { const p = R.root.position; if (q === 'perfect') { PH.score += 400; R.spinT = 1; try { FXB.E.blast([p.x + 2, p.y + 1, p.z]); } catch (e) { } junkSpill(p.clone(), 10); } else if (q === 'clipped') { PH.score -= 250; } try { FXB.E.blast([p.x, p.y, p.z]); FXB.confetti([p.x, p.y, p.z], 40, 1); } catch (e) { } shake = Math.max(shake, .5); R.rock = 1; R.hp--; PH.score += 500; try { chainHit(); dopAdd('mol'); } catch (e) { }
     const loose = R.parts.filter((m) => !m.isDisposed() && m.parent === R.root); for (let i = 0; i < Math.min(2, loose.length - 2); i++) { const m = loose[Math.floor(Math.random() * loose.length)]; if (m.parent !== R.root) continue; m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * 8, 6 + Math.random() * 6, Math.sin(a) * 8 - 6), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }          /* (chunks blasted off) */
     const F = rFrame(), back = -R.side; PH.vx = F.f[0] * 34 + F.r[0] * back * 7; PH.vz = F.f[1] * 34 + F.r[1] * back * 7; PH.vy = 3; PH.crest = true; PH.heading = Math.atan2(PH.vx, -PH.vz);          /* (you bounce off and drop back to the road, softly) */
-    junkSpill(p.clone(), 10 + Math.floor(Math.random() * 5)); if (R.hp <= 0) raidDown(R); }
+    junkSpill(p.clone(), q === 'clipped' ? 5 : 10 + Math.floor(Math.random() * 5)); if (R.hp <= 0) raidDown(R); }
   function junkStep(dt, R) {
     const ret = junkRet(), on = R && (R.phase === 'attack' || JUNK.lockT > 0);
     JUNK.lockT = Math.max(0, JUNK.lockT - dt); if (JUNK.lockT <= 0) { ret.style.color = '#9fe8ff'; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; }
