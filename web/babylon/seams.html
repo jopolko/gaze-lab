@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Seam check</title>
+<style>
+/* SEAM CHECK (a dev page): the game's desert sky drawn four ways, to find which part breaks into straight lines on a phone. Screenshot it and send it. */
+html, body { margin:0; background:#05070c; color:#e8e6df; font:13px/1.35 system-ui,sans-serif; }
+#info { padding:8px 10px; white-space:pre-wrap; font-size:11px; color:#b9c2d4; }
+#grid { display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:0 4px 8px; }
+.cell { position:relative; } .cell canvas { display:block; width:100%; aspect-ratio:3/4; background:#111; }
+.cell b { position:absolute; left:6px; top:4px; font:700 22px system-ui; color:#fff; text-shadow:0 0 6px #000; }
+.cell span { display:block; font-size:11px; color:#b9c2d4; padding:2px 2px 0; }
+</style></head><body>
+<div id="info">checking…</div>
+<div id="grid"></div>
+<script type="module">
+import { skyFragment } from './psylook.js';
+const base = skyFragment('desert');
+const VARS = [
+  ['A', 'the game sky, glass on (NEW: no loop)', (s) => s, 1],
+  ['B', 'the game sky, glass off', (s) => s, 0],
+  ['C', 'the OLD looped glass (for comparison)', (s) => s.replace(/void vst\(.*?\} vec2 vor\(vec2 p\)\{.*?return vec2\(d2 - d1, h21\(id \+ 3\.7\)\); \}/, 'vec2 vor(vec2 p){ vec2 n = floor(p), f = fract(p); float d1 = 8., d2 = 8.; vec2 id = vec2(0.); for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { vec2 g = vec2(float(i), float(j)); vec2 o = vec2(h21(n + g), h21(n + g + 17.31)); float d = length(g + o - f); if (d < d1) { d2 = d1; d1 = d; id = n + g; } else if (d < d2) d2 = d; } return vec2(d2 - d1, h21(id + 3.7)); }'), 1],
+  ['D', 'glass on, ripples off', (s) => s.replace('rip = sin((a + warp) * 46. - uTime * .6)', 'rip = 0.'), 1]];
+const info = []; const grid = document.getElementById('grid');
+for (const [id, label, mod, glass] of VARS) {
+  const cell = document.createElement('div'); cell.className = 'cell'; const c = document.createElement('canvas'), b = document.createElement('b'), sp = document.createElement('span'); b.textContent = id; sp.textContent = id + ': ' + label; cell.append(c, b, sp); grid.appendChild(cell);
+  const w = c.width = Math.round(c.getBoundingClientRect().width * Math.min(2, devicePixelRatio || 1)), h = c.height = Math.round(w * 4 / 3);
+  const gl = c.getContext('webgl'); if (!gl) { sp.textContent += ' (no WebGL)'; continue; }
+  if (id === 'A') { const dbg = gl.getExtension('WEBGL_debug_renderer_info'); const hp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT), mp = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.MEDIUM_FLOAT);
+    info.push('GPU: ' + (dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)), 'fragment highp: ' + (hp ? hp.precision + ' bits' : 'none') + '   mediump: ' + (mp ? mp.precision + ' bits' : 'none'), 'screen: ' + innerWidth + ' x ' + innerHeight + ' @' + devicePixelRatio, navigator.userAgent); }
+  const vs = 'attribute vec2 p; varying vec3 vP; void main(){ vP = vec3(.12 + p.x * .9, .28 + p.y * 1.2, -1.); gl_Position = vec4(p, 0., 1.); }';
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+  try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, mod(base))); gl.linkProgram(pr); gl.useProgram(pr);
+    const bf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
+    gl.viewport(0, 0, w, h); gl.uniform1f(gl.getUniformLocation(pr, 'uTime'), 12.3); gl.uniform1f(gl.getUniformLocation(pr, 'uBeat'), 0); gl.uniform1f(gl.getUniformLocation(pr, 'uGlass'), glass); gl.uniform1f(gl.getUniformLocation(pr, 'uPsy'), 0);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); } catch (e) { sp.textContent += ' ERROR ' + String(e.message).slice(0, 120); }
+}
+document.getElementById('info').textContent = info.join('\n');
+</script>
+</body></html>

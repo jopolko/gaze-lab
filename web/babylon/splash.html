@@ -157,15 +157,19 @@ function draw(t, dt) {
   g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,6,15,.7)'); g.addColorStop(.28, 'rgba(5,6,15,.2)'); g.addColorStop(Math.max(.3, hz / H - .04), 'rgba(5,6,15,0)'); g.addColorStop(1, 'rgba(4,4,8,.55)'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
   // the hills on the horizon
   cx.fillStyle = 'rgba(12,10,24,.9)'; cx.beginPath(); cx.moveTo(0, hz + 1); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .03) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz + 1); cx.fill();
-  // trees by the road: every 18 m on both sides, 9 to 40 m out, drawn far to near; they come out of the haze and rush past
-  if (DRIVE.k) { const z0 = DRIVE.z, kk = DRIVE.k, near = [];
+  // trees by the road: every 18 m on both sides, 9 to 40 m out, drawn far to near; they come out of the haze and rush past. In waves they leave
+  // tracers (fading copies a moment behind, the colour drifting along the trail) and their tops sway
+  if (DRIVE.k) { const z0 = DRIVE.z, kk = DRIVE.k, near = [], trc = CALM ? 0 : Math.pow(Math.max(0, Math.sin(t * .23 - .8)), 2) * (.7 + .3 * Math.sin(t * .07));
+    const at = (X, dist, h) => ({ px: cxm + (X - DRIVE.camX) / dist / kk, base: hz + DRIVE.camH / dist / kk, ht: (5 + h * 6) / dist / kk });
     for (let n = Math.ceil((z0 + 3) / 18); n * 18 < z0 + 260; n++) for (const side of [-1, 1]) { const zz = n * 18, h = ((n * 7919 + (side > 0 ? 13 : 0)) % 97) / 97, off = 9 + h * 31, X = roadC(zz) + side * off, dist = zz - z0;
-      if (dist < 2) continue; const px = cxm + (X - DRIVE.camX) / dist / kk, base = hz + DRIVE.camH / dist / kk, ht = (5 + h * 6) / dist / kk; if (px < -ht || px > W + ht) continue; near.push({ px, base, ht, dist, h }); }
+      if (dist < 2) continue; const q = at(X, dist, h); if (q.px < -q.ht * 3 || q.px > W + q.ht * 3) continue; Object.assign(q, { dist, h, X, n }); near.push(q); }
     near.sort((a, b) => b.dist - a.dist);
-    for (const q of near) { const fade = 1 - Math.min(1, Math.max(0, (q.dist - 70) / 190)), c = PAL[Math.floor(q.h * 97) % PAL.length], w = q.ht * .42;
-      cx.globalAlpha = fade; cx.fillStyle = '#120c16'; cx.fillRect(q.px - w * .07, q.base - q.ht * .22, w * .14, q.ht * .22);
-      for (let i = 0; i < 3; i++) { const yb = q.base - q.ht * (.18 + i * .24), ww = w * (1 - i * .24); cx.beginPath(); cx.moveTo(q.px - ww, yb); cx.lineTo(q.px + ww, yb); cx.lineTo(q.px, yb - q.ht * .42); cx.closePath();
-        const gg = cx.createLinearGradient(q.px - ww, 0, q.px + ww, 0); gg.addColorStop(0, `rgba(${mix(c, [20, 12, 24], .35)},1)`); gg.addColorStop(1, `rgba(${mix(c, [20, 12, 24], .75)},1)`); cx.fillStyle = gg; cx.fill(); } }
+    const tree = (q, alpha, shift) => { const fade = (1 - Math.min(1, Math.max(0, (q.dist - 70) / 190))) * alpha; if (fade <= .01) return; const c = PAL[(Math.floor(q.h * 97) + shift) % PAL.length], w = q.ht * .42, sway = q.ht * .06 * Math.sin(t * 1.3 + q.n * 1.7);
+      cx.globalAlpha = fade; if (!shift) { cx.fillStyle = '#120c16'; cx.fillRect(q.px - w * .07, q.base - q.ht * .22, w * .14, q.ht * .22); }
+      for (let i = 0; i < 3; i++) { const yb = q.base - q.ht * (.18 + i * .24), ww = w * (1 - i * .24), tip = sway * (i + 1) / 3; cx.beginPath(); cx.moveTo(q.px - ww + tip * .3, yb); cx.lineTo(q.px + ww + tip * .3, yb); cx.lineTo(q.px + tip, yb - q.ht * .42); cx.closePath();
+        if (shift) { cx.fillStyle = `rgb(${c})`; } else { const gg = cx.createLinearGradient(q.px - ww, 0, q.px + ww, 0); gg.addColorStop(0, `rgba(${mix(c, [20, 12, 24], .35)},1)`); gg.addColorStop(1, `rgba(${mix(c, [20, 12, 24], .75)},1)`); cx.fillStyle = gg; } cx.fill(); } };
+    for (const q of near) { if (trc > .03 && q.dist < 120) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (let k = 3; k >= 1; k--) { const d2 = q.dist + k * 2.6 * trc; tree(Object.assign(at(q.X, d2, q.h), { dist: d2, h: q.h, n: q.n }), .22 * trc * (1 - k / 4), k); } cx.restore(); }
+      tree(q, 1, 0); }
     cx.globalAlpha = 1; }
   // the column of light, with the strain big in it
   const p = PANTRY[KEYS[si]], c = (TUNE.k > .005 ? mix(p.c.map((v) => Math.round(v * 255)), specNow(), .6 * TUNE.k) : p.c.map((v) => Math.round(v * 255))), cw = Math.min(W, H) * .08;
