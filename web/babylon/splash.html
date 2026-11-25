@@ -17,7 +17,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #ui { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; box-sizing:border-box; cursor:pointer;
   padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
 /* the light: a band of the visible spectrum (red 400 THz to violet 790 THz), a marker that hunts and locks on, and the light wave itself above it */
-#dial { width:min(92vw,620px); font:700 clamp(10px,1.6vmin + 6px,14px) "Barlow Condensed","Arial Narrow",sans-serif; letter-spacing:.12em; color:var(--dim); }
+#dial { cursor:ew-resize; touch-action:none; padding:4px 0; width:min(92vw,620px); font:700 clamp(10px,1.6vmin + 6px,14px) "Barlow Condensed","Arial Narrow",sans-serif; letter-spacing:.12em; color:var(--dim); }
 #wave { display:block; width:100%; height:clamp(22px,5vmin,38px); overflow:visible; }
 #dial .scale { position:relative; height:clamp(8px,1.6vmin,12px); border-radius:3px;
   background:linear-gradient(90deg,#ff2a00 0%,#ff7a00 18%,#ffd400 32%,#9dff2a 42%,#2aff7a 52%,#00e5ff 62%,#2f6bff 78%,#7a3dff 100%);
@@ -53,7 +53,16 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #ticker div { display:inline-block; padding-left:100%; animation:tick 38s linear infinite; }
 #ticker b { color:var(--amber); } #ticker i { font-style:normal; background:#000; color:#000; padding:0 .3em; }
 @keyframes tick { to { transform:translateX(-100%); } }
-@media (orientation:landscape) and (max-height:500px) { #title { margin-top:clamp(4px,3vh,20px); } #title h1 { font-size:clamp(44px,17vh,110px); } }
+@media (orientation:landscape) and (max-height:500px) {
+  #ui { display:block; }
+  .grow, #ticker { display:none; }
+  #dial { position:absolute; top:max(6px,env(safe-area-inset-top)); left:50%; transform:translateX(-50%); width:min(54vw,520px); }
+  #title { position:absolute; margin:0; left:max(18px,env(safe-area-inset-left)); top:30%; text-align:left; }
+  #title h1 { font-size:clamp(38px,15vh,96px); } #title h1 span { margin-right:0; }
+  #tag { position:absolute; margin:0; left:max(18px,env(safe-area-inset-left)); top:calc(30% + 19vh); max-width:30vw; text-align:left; font-size:clamp(12px,3.6vh,18px); }
+  #strain { position:absolute; margin:0; left:max(18px,env(safe-area-inset-left)); bottom:max(10px,env(safe-area-inset-bottom)); max-width:34vw; text-align:left; }
+  #tap { position:absolute; right:max(18px,env(safe-area-inset-right)); bottom:24%; margin-right:0; font-size:clamp(13px,4vh,20px); }
+  #hint { position:absolute; margin:0; right:max(18px,env(safe-area-inset-right)); bottom:calc(24% - 3.2em); max-width:30vw; text-align:right; } }
 @media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
@@ -94,7 +103,8 @@ const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
 const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
 function drawGlass(t, R) { const S = Math.ceil(R * 2 * DPR) + 4; if (sun.width !== S) { sun.width = sun.height = S; } sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, S, S); sx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const X = S / DPR / 2, Y = X;
-  for (const p of PANES) { const c = PAL[p.ci], g = .55 + .45 * Math.sin(t * .9 + p.ph), rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.fillStyle = `rgba(${c},${.6 + .4 * g})`; sx.fill(); }
+  const tk = TUNE.k, tc = specNow();
+  for (const p of PANES) { const c = tk > .005 ? mix(PAL[p.ci], tc, .72 * tk) : PAL[p.ci], g = .55 + .45 * Math.sin(t * .9 + p.ph) * (1 - .6 * tk), rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.fillStyle = `rgba(${c},${Math.min(1, .6 + .4 * g + .3 * tk)})`; sx.fill(); }
   sx.strokeStyle = '#0b0712'; sx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { const rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.stroke(); }
   sx.fillStyle = '#2a1626'; for (let i = 0; i < 5; i++) { const y = Y + R * (.02 + i * .068), h = R * (.012 + i * .007); sx.fillRect(X - R, y, R * 2, h); }          /* the synthwave cuts through its lower half */
 }
@@ -123,7 +133,7 @@ function drawSunFx(t, cxm, sy, R) { drawGlass(t, R); const S = sun.width, L = lo
   fxc.style.width = css + 'px'; fxc.style.height = css + 'px'; fxc.style.transform = `translate(${(cxm - css / 2).toFixed(1)}px,${(sy - css / 2).toFixed(1)}px)`;
   const { gl, U } = GL; if (fxc.width !== S) { fxc.width = fxc.height = S; } gl.viewport(0, 0, S, S); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sun);
-  gl.uniform2f(U.uTexel, 1 / S, 1 / S); gl.uniform2f(U.uRes, S, S); gl.uniform1f(U.uCell, Math.max(6, Math.round(S / 70))); gl.uniform1f(U.uTime, t);
+  gl.uniform2f(U.uTexel, 1 / S, 1 / S); gl.uniform2f(U.uRes, S * .3, S * .3); gl.uniform1f(U.uCell, 6);          /* (a coarser picture size: stained glass, mosaic, halftone and ascii come out in big pieces across the whole sun) */ gl.uniform1f(U.uTime, t);
   gl.uniform1f(U.uVec, L.idx === 1 ? L.s : 0); gl.uniform1f(U.uAsc, L.idx === 2 ? L.s : 0); gl.uniform1f(U.uSty, L.idx >= 3 ? L.s : 0); gl.uniform1f(U.uMix, Math.max(1, L.idx - 2));
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
 
@@ -138,15 +148,15 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
   const fx = p.does.split(';')[0].trim(); d.className = 'fx'; d.textContent = fx.charAt(0).toUpperCase() + fx.slice(1) + (WORLDOF[KEYS[si]] ? ' · found: ' + WORLDOF[KEYS[si]] : ''); strainEl.append(n, d); }
 
 function draw(t) {
-  const hz = H * (W > H ? .68 : .62), cxm = W / 2, k = wave(t);
+  const short = W > H && H <= 500, hz = H * (short ? .8 : W > H ? .68 : .62), cxm = W / 2, k = wave(t);
     cx.clearRect(0, 0, W, H);
   // sky (its middle drifts between violet and deep teal, slowly) and stars
   const sm = mix([26, 16, 54], [10, 34, 54], .5 + .5 * Math.sin(t * .07));
   let g = bx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, `rgb(${sm})`); g.addColorStop(1, '#4a2a2a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
   for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)); bx.fillStyle = `rgba(220,230,255,${tw * .7})`; bx.fillRect(x, y, 1.4, 1.4); }
   // the sun: its glow and faint rays behind, then the glass with the game's looks on it
-  const R = Math.min(W * .34, H * .3), sy = hz - R * .35;
-  const glow = bx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); glow.addColorStop(0, `rgba(255,200,90,${.3 + .15 * k})`); glow.addColorStop(1, 'rgba(255,200,90,0)'); bx.fillStyle = glow; bx.fillRect(0, 0, W, hz);
+  const R = short ? Math.min(W * .26, H * .44) : Math.min(W * .34, H * .3), sy = hz - R * .35;
+  const glow = bx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); const gc = TUNE.k > .005 ? mix([255, 200, 90], specNow(), TUNE.k) : [255, 200, 90]; glow.addColorStop(0, `rgba(${gc},${.3 + .15 * k + .4 * TUNE.k})`); glow.addColorStop(1, `rgba(${gc},0)`); bx.fillStyle = glow; bx.fillRect(0, 0, W, hz);
   bx.save(); bx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 18; i++) { const a = t * .02 + i / 18 * 6.283, c = PAL[i % PAL.length]; bx.beginPath(); bx.moveTo(cxm, sy); bx.arc(cxm, sy, R * 3, a - .045, a + .045); bx.closePath(); bx.fillStyle = `rgba(${c},${.02 + .04 * k})`; bx.fill(); } bx.restore();
   drawSunFx(t, cxm, sy, R);
   // mountains
@@ -184,11 +194,21 @@ const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0
 const wp = document.getElementById('wp'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
 const LOCK_AT = 2.6, TARGET = 540, F0 = 400, F1 = 790; let locked = false;
-function dial(t) { let f; if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
+/* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
+const TUNE = { f: TARGET, user: false, k: 0, down: false };
+try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }
+const specNow = () => specAt((TUNE.f - F0) / (F1 - F0));
+function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE.f; else if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
+  TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
   const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`);
   { const lam = 4200 / f * 9, ph = RM ? 0 : t * 9; let d = ''; for (let x = 0; x <= 600; x += 4) { const env = Math.sin(Math.PI * x / 600); d += (x ? 'L' : 'M') + x + ' ' + (20 + 15 * env * Math.sin(2 * Math.PI * x / lam - ph)).toFixed(1); } wp.setAttribute('d', d); wp.setAttribute('stroke', `rgb(${c})`); wp.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
 }
+{ const sc = dialEl.querySelector('.scale'), setF = (e) => { const b = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); TUNE.f = F0 + u * (F1 - F0); TUNE.user = true; doLock(); };
+  dialEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); TUNE.down = true; try { dialEl.setPointerCapture(e.pointerId); } catch (er) { } setF(e); });
+  dialEl.addEventListener('pointermove', (e) => { e.stopPropagation(); if (TUNE.down) setF(e); });
+  const up = (e) => { e.stopPropagation(); if (!TUNE.down) return; TUNE.down = false; try { localStorage.setItem('dl_freq', String(Math.round(TUNE.f))); } catch (er) { } };
+  dialEl.addEventListener('pointerup', up); dialEl.addEventListener('pointercancel', up); }
 function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
 
