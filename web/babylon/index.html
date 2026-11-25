@@ -2444,14 +2444,17 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     const html = parts.map((p) => p[1]).join(''), key = html.replace(/stroke-dasharray="[^"]*"/g, ''); if (html !== HUDKEY) { HUDKEY = html; hudEl.innerHTML = html; } }
   /* EXIT LABELS: each exit ahead, named, with a line to its mouth */
   const XL = new Map();
+  /* the labels start below whatever screen furniture is on their side (gear and dose slots, the RUSH meter on the left; the pause button on the right), never on top of it */
+  const XTOP = { l: 0, r: 0 };
   function exitHud() { const W = innerWidth, H = innerHeight, live = new Set(); let lines = '', nL = 0, nR = 0;
+    { let l = H * .2, r = H * .2; for (const el of document.querySelectorAll('#hudSlots, #dopMeter, #pauseBtn, #stPause')) { const b = el.getBoundingClientRect(); if (!b.height || getComputedStyle(el).display === 'none') continue; if (b.left + b.width / 2 < W / 2) l = Math.max(l, b.bottom + 10); else r = Math.max(r, b.bottom + 10); } XTOP.l = l; XTOP.r = r; }
     const list = (LV.exits || []).filter((e) => !e.gone && e.shown && PH.z - e.z0 > 25 && PH.z - e.z0 < 760).sort((a, b) => b.z0 - a.z0);
     for (const e of list) { const ahead = PH.z - e.z0, mz = e.z0 - 25, mp = scr(exX(e, mz), th(exX(e, mz), mz) + 2, mz); live.add(e);
       let d = XL.get(e); if (!d) { d = document.createElement('div'); d.className = 'xl'; exitEl.appendChild(d); XL.set(e, d); }
       const lensK = LENSDEF[e.req], col = e.color || (lensK ? LCOL(e.req) : e.req ? (GEAR.id === e.req ? '#ffd23a' : '#9aa3b5') : e.hidden ? '#b48cff' : '#38e8ff');
       const title = e.label || (!e.req ? (e.hidden ? 'HIDDEN EXIT' : 'OPEN ROAD') : lensK ? 'SEALED \u00B7 ' + e.req : GNAME[e.req][1].toUpperCase()), sub = e.sub || (!e.req ? 'Exit ' + e.n + (e.side < 0 ? ' \u2190 left' : ' \u2192 right') : lensK ? ((LENS.t > 0 && (LENS.kind === e.req || LENS.kind === 'MERGE')) || e.open ? 'Open now \u00B7 ' : 'Needs the ' + e.req + ' lens \u00B7 ') + (e.side < 0 ? 'left' : 'right') : (GEAR.id === e.req ? 'Your gear \u00B7 ' : 'Locked \u00B7 ') + (e.side < 0 ? 'left' : 'right'));
       const k = title + '|' + sub + '|' + col; if (d.__k !== k) { d.__k = k; d.style.setProperty('--xc', col); d.innerHTML = '<small>' + (e.side < 0 ? '\u2190 ' : '') + sub + (e.side > 0 ? ' \u2192' : '') + '</small><b>' + title + '</b>'; }
-      const left = e.side < 0, i = left ? nL++ : nR++, y = H * .2 + i * 74, bw = d.offsetWidth || 160, bh = d.offsetHeight || 50; d.style.top = y + 'px'; d.style.left = left ? 'max(12px, var(--sa-left, env(safe-area-inset-left,0px)))' : ''; d.style.right = left ? '' : 'max(12px, var(--sa-right, env(safe-area-inset-right,0px)))';
+      const left = e.side < 0, i = left ? nL++ : nR++, y = (left ? XTOP.l : XTOP.r) + i * 74, bw = d.offsetWidth || 160, bh = d.offsetHeight || 50; d.style.top = y + 'px'; d.style.left = left ? 'max(12px, var(--sa-left, env(safe-area-inset-left,0px)))' : ''; d.style.right = left ? '' : 'max(12px, var(--sa-right, env(safe-area-inset-right,0px)))';
       d.classList.toggle('near', ahead < 160); d.style.opacity = String(Math.min(1, (760 - ahead) / 120));
       if (mp && ahead > 40) { const x0 = left ? 12 + bw : W - 12 - bw, y0 = y + bh / 2; lines += '<path d="M' + x0.toFixed(0) + ' ' + y0.toFixed(0) + ' C ' + ((x0 + mp[0]) / 2).toFixed(0) + ' ' + y0.toFixed(0) + ', ' + ((x0 + mp[0]) / 2).toFixed(0) + ' ' + mp[1].toFixed(0) + ', ' + mp[0].toFixed(0) + ' ' + mp[1].toFixed(0) + '" stroke="' + col + '" stroke-width="2.5" fill="none" stroke-dasharray="7 6" opacity=".85"/><circle cx="' + mp[0].toFixed(0) + '" cy="' + mp[1].toFixed(0) + '" r="6" fill="' + col + '"/>'; } }
     for (const [e, d] of XL) if (!live.has(e)) { d.remove(); XL.delete(e); }
