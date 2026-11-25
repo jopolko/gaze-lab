@@ -1370,20 +1370,26 @@ void main() {
      following your speed. It revs on a boost, a pad, a ramp or a spring arc (a quick climb in pitch and brightness that settles back), and lifts a little
      while the wheels are off the road. Quiet by design; muted when paused, on the title screen and with &nosfx. */
   const ENG = { ok: false, rev: 0, lastBoost: 0, wasAir: false }; window.__ENG = ENG;
+  /* (now musical: soft sine and triangle voices, their pitch snapped to the notes of the level's own key (the generated music's key; A minor pentatonic under a recorded track),
+     gliding from note to note as you speed up. A rev is a gentle swell: a fifth and an octave fade in over the hum and the filter opens a little, then it all settles.) */
+  const PENTA = [0, 3, 5, 7, 10];
+  function engineScale() { try { const k = window.ME && ME.on && ME.key && ME.key(); if (k && k.root) return { root: k.root % 12, mode: k.mode }; } catch (e) { } return { root: 9, mode: PENTA }; }
+  const snapNote = (f, sc) => { const m = 69 + 12 * Math.log2(Math.max(20, f) / 440); let best = m, bd = 99; for (let o = -1; o <= 1; o++) for (const iv of sc.mode) { const n = 12 * (Math.floor(m / 12) + o) + sc.root + iv, d = Math.abs(n - m); if (d < bd) { bd = d; best = n; } } return 440 * Math.pow(2, (best - 69) / 12); };
   function engineTick(dt) { if (SFXOFF || Q.has('splash') || !window.__go) return; const ac = ACX; if (!ac || ac.state !== 'running') return;
     if (!ENG.ok) { ENG.ok = true; const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0; out.connect(ac.destination);
-      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400; lp.Q.value = 3.5; lp.connect(out);
-      const mk = (type, det, g) => { const o = ac.createOscillator(), gg = ac.createGain(); o.type = type; o.detune.value = det; gg.gain.value = g; o.connect(gg); gg.connect(lp); o.start(t); return o; };
-      ENG.o = [mk('sawtooth', -7, .5), mk('sawtooth', 7, .5), mk('sine', 0, .9)];
-      const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = 5.3; lg.gain.value = 40; lfo.connect(lg); lg.connect(lp.frequency); lfo.start(t);          /* (the shimmer: the filter breathes a little) */
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; lp.Q.value = .7; lp.connect(out);
+      const mk = (type, g) => { const o = ac.createOscillator(), gg = ac.createGain(); o.type = type; gg.gain.value = g; o.connect(gg); gg.connect(lp); o.start(t); return { o, g: gg }; };
+      ENG.v = { base: mk('triangle', .55), sub: mk('sine', .7), fifth: mk('sine', 0), oct: mk('sine', 0) };
+      const lfo = ac.createOscillator(), lg = ac.createGain(); lfo.frequency.value = .35; lg.gain.value = 3; lfo.connect(lg); lg.connect(ENG.v.base.o.detune); lfo.start(t);          /* (a slow, gentle chorus) */
       ENG.out = out; ENG.lp = lp; }
     const sp = Math.hypot(PH.vx, PH.vz) / SPK, air = !PH.grounded && !PH.rail;
     if (PH.boost_t > ENG.lastBoost + .3) ENG.rev = 1; ENG.lastBoost = PH.boost_t; if (air && !ENG.wasAir && PH.vy > 3) ENG.rev = Math.max(ENG.rev, .8); ENG.wasAir = air;
-    ENG.rev = Math.max(0, ENG.rev - dt / 1.1); const rv = ENG.rev * ENG.rev * (3 - 2 * ENG.rev);
-    const f = (36 + sp * .85) * (1 + .55 * rv + (air ? .12 : 0)), t = ac.currentTime, k = .08;
-    ENG.o[0].frequency.setTargetAtTime(f, t, k); ENG.o[1].frequency.setTargetAtTime(f, t, k); ENG.o[2].frequency.setTargetAtTime(f / 2, t, k);
-    ENG.lp.frequency.setTargetAtTime(260 + sp * 7 + 900 * rv, t, k);
-    ENG.out.gain.setTargetAtTime(PAUSED || FXO.hold || (OPEN.on && OPEN.playing && !OPEN.done) ? 0 : (.035 + .02 * Math.min(1, sp / 70) + .03 * rv) * (LAB.chl ? .7 : 1), t, .12); }
+    ENG.rev = Math.max(0, ENG.rev - dt / 1.8); const rv = ENG.rev * ENG.rev * (3 - 2 * ENG.rev);
+    const sc = engineScale(), f = snapNote(55 + sp * .9, sc), t = ac.currentTime, k = .18;          /* (a note in the key, rising with speed through the low register) */
+    ENG.v.base.o.frequency.setTargetAtTime(f, t, k); ENG.v.sub.o.frequency.setTargetAtTime(f / 2, t, k); ENG.v.fifth.o.frequency.setTargetAtTime(f * 1.5, t, k); ENG.v.oct.o.frequency.setTargetAtTime(f * 2, t, k);
+    ENG.v.fifth.g.gain.setTargetAtTime(.32 * rv, t, .25); ENG.v.oct.g.gain.setTargetAtTime(.18 * rv * rv, t, .35);
+    ENG.lp.frequency.setTargetAtTime(380 + sp * 4 + 500 * rv, t, .3);
+    ENG.out.gain.setTargetAtTime(PAUSED || FXO.hold || (OPEN.on && OPEN.playing && !OPEN.done) ? 0 : (.04 + .015 * Math.min(1, sp / 70) + .02 * rv) * (LAB.chl ? .7 : 1), t, .25); }
   const FPSR = { el: null, n: 0, t0: performance.now(), v: 0, xr: null, tex: null };
   { const d = document.createElement('div'); d.id = 'fpsCorner'; d.style.cssText = 'position:fixed;left:max(6px,var(--sa-left, env(safe-area-inset-left,0px)));bottom:max(4px,var(--sa-bottom, env(safe-area-inset-bottom,0px)));z-index:96;pointer-events:none;font:700 11px/1 ui-monospace,Consolas,monospace;color:#e8f4ff;background:rgba(5,8,16,.55);padding:3px 6px;border-radius:5px;letter-spacing:.04em'; d.textContent = '-- fps'; document.body.appendChild(d); FPSR.el = d; }
   function fpsTick(now) { FPSR.n++; if (now - FPSR.t0 < 500) return; FPSR.v = FPSR.n * 1000 / (now - FPSR.t0); FPSR.n = 0; FPSR.t0 = now; const t = Math.round(FPSR.v) + ' fps', col = FPSR.v >= 55 ? '#7dff9a' : FPSR.v >= 40 ? '#ffd23a' : '#ff6a5a';

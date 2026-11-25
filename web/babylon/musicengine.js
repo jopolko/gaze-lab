@@ -444,7 +444,7 @@ function drawTuner(force) { if (!T || !T.parts) return; const sig = T.parts.map(
 const CURATED = { };          /* level -> seeds picked by ear in the lab (filled in as tracks are chosen) */
 let loopId = null;
 window.ME = {
-  on: false, base: null,
+  on: false, base: null, key() { return T ? { root: T.root, mode: T.mode || MINOR } : null; },          /* (the track's key: the game's engine hum plays in it) */
   /* PRELOAD: called while the level loads (before any tap), so the instruments are built, the samples decoded and the reverb made before the first frame:
      the tap then only starts the clock, and the music starts with the level */
   preload(o) { if (this.pre) return this.pre; o = o || {}; this.opts = o;
