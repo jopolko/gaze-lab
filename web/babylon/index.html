@@ -360,7 +360,7 @@ void main() { vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
 const vec3 SN[6] = vec3[6](vec3(.88,.92,.98), vec3(.90,.85,.78), vec3(.72,.78,.95), vec3(.95,.88,.92), vec3(.55,.60,.70), vec3(.55,.50,.50));
 const vec3 GR[6] = vec3[6](vec3(.30,.46,.27), vec3(.55,.50,.24), vec3(.24,.33,.36), vec3(.36,.58,.30), vec3(.19,.30,.27), vec3(.25,.22,.20));
 const vec3 EA[6] = vec3[6](vec3(.40,.32,.25), vec3(.62,.38,.20), vec3(.36,.29,.34), vec3(.45,.33,.27), vec3(.22,.19,.22), vec3(.33,.18,.14));
-const vec3 RD[6] = vec3[6](vec3(.26,.28,.32), vec3(.36,.31,.27), vec3(.24,.25,.33), vec3(.30,.30,.32), vec3(.17,.17,.21), vec3(.21,.18,.18));
+const vec3 RD[6] = vec3[6](vec3(.42,.44,.48), vec3(.48,.44,.40), vec3(.40,.41,.47), vec3(.45,.45,.47), vec3(.34,.34,.38), vec3(.38,.35,.35));
 const float SK[6] = float[6](.9, .15, .55, .25, .1, 0.);
 vec3 candyc(float h){ h = fract(h) * 6.; if (h < 1.) return vec3(1., .45, .72); if (h < 2.) return vec3(.5, .95, .8); if (h < 3.) return vec3(.72, .55, 1.); if (h < 4.) return vec3(1., .72, .45); if (h < 5.) return vec3(.5, .78, 1.); return vec3(1., .9, .5); }
 float trailAt(float z){ float i = clamp(-z / 6., 0., uTrailN - 2.); int a = int(i); float x0 = texelFetch(uTrail, ivec2(a, 0), 0).r, x1 = texelFetch(uTrail, ivec2(a + 1, 0), 0).r; return mix(x0, x1, fract(i)); }
@@ -368,7 +368,7 @@ float lz(float z, float per, float w, float fz){ float d = per * abs(fract(z / p
 void main(){ vec3 wp = vW; float dist = distance(wp, uCam); float speed = uSpeed;
         vec3 n0 = normalize(cross(dFdx(wp), dFdy(wp))); if (n0.y < 0.) n0 = -n0; vec3 n = normalize(mix(n0, vec3(0., 1., 0.), .5)); float slope = 1. - n0.y + (vn(wp.xz * .35) - .5) * .07, lam = clamp(dot(n, uSunL), 0., 1.), lit = .52 + .62 * lam;
         float off = wp.x - trailAt(wp.z), ao = abs(off), far = smoothstep(50., 200., dist);
-        vec3 ground, ea = vec3(.4, .32, .25), rd = vec3(.26, .28, .32); float snowK = 0., forest = 0.;
+        vec3 ground, ea = vec3(.4, .32, .25), rd = vec3(.42, .44, .48); float snowK = 0., forest = 0.;
         if (uStyle < .5) {
           float jf = max(-wp.z, 0.) / 180.; int j0 = int(min(jf, uRegN - 1.)), j1 = int(min(float(j0) + 1., uRegN - 1.)); float tr = smoothstep(.75, 1., fract(jf));
           int r0 = clamp(int(texelFetch(uRegion, ivec2(j0, 0), 0).r + .5), 0, 5), r1 = clamp(int(texelFetch(uRegion, ivec2(j1, 0), 0).r + .5), 0, 5);
@@ -729,7 +729,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   const ROADK = { alpine: 3, psychedelic: 0, candy: 1, egypt: 2, tunnel: 4, desert: 0, matrix: 4, synthwave: 4 };          /* the kind of road marking each biome has (see the ground shader) */
   /* SURFACES: what the ground does to the car (grip, drag, steering, top speed). &surf=0 turns it off. Asphalt is the reference (all 1). */
   const SURFS = { alpine: { grip: .8, drag: 1.06, steer: .96, vmax: .97 }, candy: { grip: .88, drag: 1.1, steer: 1, vmax: .97 }, egypt: { grip: .7, drag: 1.18, steer: .94, vmax: .93 }, tunnel: { grip: 1.1, drag: .97, steer: 1.03, vmax: 1.03 }, matrix: { grip: 1.05, drag: .98, steer: 1, vmax: 1.02 }, synthwave: { grip: 1.1, drag: .96, steer: 1.02, vmax: 1.03 } }, SURF_PAVED = { grip: 1, drag: 1, steer: 1, vmax: 1 }, SURF0 = (Q.get('surf') === '0' || Q.has('story') || Q.has('tutorial')) ? SURF_PAVED : (SURFS[WORLD0] || SURF_PAVED), SURF = { grip: SURF0.grip * FXM.grip, drag: SURF0.drag, steer: SURF0.steer * FXM.steer, vmax: SURF0.vmax * FXM.vmax };
-  const BGR = { alpine: { g: { road: [.26, .28, .32], line: [.93, .93, .90], glow: 0 }, dirt: 1, cont: [.55, .90, 1.] }, psychedelic: { g: { road: null, line: [.93, .93, .90], glow: 0 }, dirt: 0, cont: null }, candy: { g: { road: [.36, .20, .26], line: [1., .95, .90], glow: 0 }, dirt: 0, cont: [1., .95, .98] }, egypt: { g: { road: [.42, .31, .22], line: [.96, .90, .70], glow: 0 }, dirt: 0, cont: [1., .85, .50] }, tunnel: { g: { road: [.05, .04, .10], line: [.20, .90, 1.], glow: .8 }, dirt: 0, cont: null }, desert: { g: { road: [.26, .25, .27], line: [.97, .95, .90], glow: 0 }, dirt: 0, cont: [1., .78, .35] }, matrix: { g: { road: [0., .03, .01], line: [.10, 1., .30], glow: .8 }, dirt: 0, cont: null }, synthwave: { g: { road: [.06, .02, .12], line: [1., .20, .70], glow: .8 }, dirt: 0, cont: null } };
+  const BGR = { alpine: { g: { road: [.42, .44, .48], line: [.93, .93, .90], glow: 0 }, dirt: 1, cont: [.55, .90, 1.] }, psychedelic: { g: { road: null, line: [.93, .93, .90], glow: 0 }, dirt: 0, cont: null }, candy: { g: { road: [.47, .43, .44], line: [1., .95, .90], glow: 0 }, dirt: 0, cont: [1., .95, .98] }, egypt: { g: { road: [.52, .47, .40], line: [.96, .90, .70], glow: 0 }, dirt: 0, cont: [1., .85, .50] }, tunnel: { g: { road: [.30, .30, .34], line: [.20, .90, 1.], glow: .8 }, dirt: 0, cont: null }, desert: { g: { road: [.43, .40, .39], line: [.97, .95, .90], glow: 0 }, dirt: 0, cont: [1., .78, .35] }, matrix: { g: { road: [.25, .28, .26], line: [.10, 1., .30], glow: .8 }, dirt: 0, cont: null }, synthwave: { g: { road: [.17, .15, .21], line: [1., .20, .70], glow: .8 }, dirt: 0, cont: null } };
   for (const id in BGR) Object.assign(BDEF[id], BGR[id]); BDEF.alpine.k = 0; BDEF.alpine.fog = null; BDEF.psychedelic.fog = null; BDEF.alpine.gid = 0; BDEF.psychedelic.gid = 0;
   let BIO = BDEF.psychedelic; const skyMats = {};
   function skyFor(id) {
