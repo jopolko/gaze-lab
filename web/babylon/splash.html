@@ -12,6 +12,7 @@ html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overf
 canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #game { position:fixed; inset:0; width:100%; height:100%; border:0; display:block; opacity:0; transition:opacity 1.4s; pointer-events:none; background:#05070c; }
 #game.on { opacity:1; }
+#dim { position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 55%,rgba(8,11,20,.45),rgba(3,4,8,.9)); }          /* the level start card's dim: the world behind, the words and the molecule in front */
 #ui { touch-action:none; }
 #hint { margin-top:clamp(6px,1.4vh,12px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); text-align:center; opacity:0; transition:opacity .8s .3s; }
 #tap.on ~ #hint { opacity:.95; } #hint { display:flex; flex-wrap:wrap; gap:.35em 1.2em; justify-content:center; align-items:center; }
@@ -71,7 +72,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
-<iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
+<iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><div id="dim" aria-hidden="true"></div><canvas id="c" aria-hidden="true"></canvas>
 <div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
