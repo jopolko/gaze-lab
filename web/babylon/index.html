@@ -739,16 +739,23 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   /* THE BASIN'S SHAPE. t runs 0 to 1 down the bowl. It blends out of the road (t < .13) and back into it (t > .87). A floor that keeps falling,
      a rim that banks you back in, a pocket on the right with a steep end wall (it throws you back out at speed), a kicker, and two ridges that split the way out into three mouths. */
   let BAS = null;
+  /* the three lines through the bowl: the road itself down the middle, and two tracks that branch off it and come back through the side mouths */
+  const bT = (z) => (BASIN.z0 - z) / (BASIN.z0 - BASIN.z1), bEase = (a, b, u) => a + (b - a) * sstep(0, 1, u);
+  const basinCX = (z) => { const t = bT(z); return trailX(z) * Math.max(1 - sstep(.1, .25, t), sstep(.55, .75, t)); };
+  function trackX(side, z) { const t = bT(z), rd = trailX(z), m = basinCX(z) + 16 * side;
+    if (side < 0) { if (t < .1) return rd; if (t < .26) return bEase(rd, -70, (t - .1) / .16); if (t < .6) return -70; if (t < .78) return bEase(-70, m, (t - .6) / .18); if (t < .9) return m; return bEase(m, rd, (t - .9) / .1); }
+    if (t < .1) return rd; if (t < .2) return bEase(rd, 40, (t - .1) / .1); if (t < .42) return 40 + (t - .2) * 391; if (t < .56) return bEase(126, 70, (t - .42) / .14); if (t < .64) return 70; if (t < .78) return bEase(70, m, (t - .64) / .14); if (t < .9) return m; return bEase(m, rd, (t - .9) / .1); }
+  window.__BASINX = (side, z) => side ? trackX(side, z) : trailX(z);
   function basinH(x, z) {
     if (!BAS) { const L = BASIN.z0 - BASIN.z1, n = Math.round(L / 5), raw = [];          /* the floor follows the road's own height under the bowl, smoothed over 60 m (so it never jumps where the bowl blends back into the road) */
       for (let k = 0; k <= n; k++) { const z = BASIN.z0 - k * 5, g = HF.height(trailX(z), z); raw.push(g === null ? pitchY(z) : g); }
       const sm = raw.map((_, k) => { let a = 0, c = 0; for (let q = -6; q <= 6; q++) { const i = Math.max(0, Math.min(n, k + q)); a += raw[i]; c++; } return a / c; }); BAS = { sm, n }; }
-    const t = (BASIN.z0 - z) / (BASIN.z0 - BASIN.z1), we = Math.max(1 - sstep(0, .13, t), sstep(.87, 1, t)), ax = Math.abs(x);
+    const t = (BASIN.z0 - z) / (BASIN.z0 - BASIN.z1), we = Math.max(1 - sstep(0, .13, t), sstep(.87, 1, t)), ax = Math.abs(x - basinCX(z));
     const fi = Math.max(0, Math.min(BAS.n, t * BAS.n)), i0 = Math.floor(fi), i1 = Math.min(BAS.n, i0 + 1), base = BAS.sm[i0] + (BAS.sm[i1] - BAS.sm[i0]) * (fi - i0);
     let rs = 34 + 66 * sstep(.05, .22, t) - 78 * sstep(.66, .86, t), rw = 46;          /* the bowl narrows to a 22 m funnel so the mouths land on the road, clear of its trees */
     const pk = x > 0 ? sstep(.30, .33, t) * (1 - sstep(.43, .46, t)) : 0; if (pk > 0) { rs += 28 * pk; rw -= 30 * pk; }          /* the pocket: the floor runs out to 128 m, then a steep wall */
-    let lift = 30 * sstep(rs, Math.min(rs + rw, 149), ax) + 1.4 * Math.sin(x * .05) * Math.sin(z * .031) * (1 - sstep(rs - 10, rs, ax));
-    { const kz = BASIN.z0 - .55 * (BASIN.z0 - BASIN.z1), d = kz - z, sx = 1 - sstep(6, 10, Math.abs(x + 35)); if (d > 0 && d < 18 && sx > 0) lift += 3 * Math.pow(d / 18, 1.5) * sx; }          /* the kicker */
+    let lift = (30 - 14 * pk) * sstep(rs, Math.min(rs + rw, 149), ax) + 1.4 * Math.sin(x * .05) * Math.sin(z * .031) * (1 - sstep(rs - 10, rs, ax));
+    { const kz = BASIN.z0 - .55 * (BASIN.z0 - BASIN.z1), d = kz - z, sx = 1 - sstep(6, 10, Math.abs(x - trailX(kz))); if (d > 0 && d < 18 && sx > 0) lift += 3 * Math.pow(d / 18, 1.5) * sx; }          /* the kicker, on the road */
     lift += 6 * Math.exp(-Math.pow((ax - 9) / 2.6, 2)) * sstep(.7, .74, t) * (1 - sstep(.84, .88, t));          /* the ridges between the three mouths */
     const g = HF.height(x, z), road = g === null ? base : g;
     return we * road + (1 - we) * (base + lift);
@@ -762,10 +769,22 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
     B.VertexData.ComputeNormals(pos, idx, nrm); for (let k = 0; k < pos.length / 3; k++) { const ny = nrm[k * 3 + 1], sh = .78 + .22 * ny; col.push(.93 * sh, .62 * sh, .38 * sh, 1); }
     const vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.normals = nrm; vd.colors = col; const bm = new B.Mesh('basin', scene); vd.applyToMesh(bm); bm.isPickable = false;
-    let mt = window.__BASIN_MAT; if (mt && mt.clone) { try { const c = mt.clone('basinGround'); c.__kind = mt.__kind; c.setFloat('uRoadHalf', -60); GWM.push(c); mt = c; } catch (e) { } }          /* its own copy of the ground, with no road painted: the bowl is open dirt */
+    let mt = window.__BASIN_MAT;          /* the dump's own ground material: the road carries on through the bowl */
     if (!mt) { mt = new B.StandardMaterial('basinM', scene); mt.diffuseColor = new B.Color3(1, 1, 1); mt.specularColor = new B.Color3(0, 0, 0); } bm.material = mt; bm.__cat = 'ground';
     if (mt.getClassName && mt.getClassName() === 'ShaderMaterial') { bm.thinInstanceSetBuffer('matrix', new Float32Array(B.Matrix.Identity().m), 16, true); }
-    window.__BASINMESH = bm; }
+    window.__BASINMESH = bm;
+    if (mt && mt.clone) for (const side of [-1, 1]) { try {          /* a side track: a strip 18 m wide laid on the bowl, painted as road by a copy of the ground material whose trail is the track */
+      const arr = Float32Array.from(meta.trailx || [0, 0]); for (let i = 0; i < arr.length; i++) { const z = -6 * i; if (inBasin(z)) arr[i] = trackX(side, z); }
+      const tex = new B.RawTexture(arr, arr.length, 1, B.Constants.TEXTUREFORMAT_RED, scene, false, false, B.Texture.NEAREST_SAMPLINGMODE, B.Constants.TEXTURETYPE_FLOAT);
+      const c = mt.clone('basinTrack' + side); c.__kind = mt.__kind; c.setTexture('uTrail', tex); c.setFloat('uRoadHalf', 4.5); c.zOffset = -2; GWM.push(c);
+      const zs = []; for (let z = BASIN.z0 - 4; z > BASIN.z1 + 4; z -= 3) if (Math.abs(trackX(side, z) - trailX(z)) > 3) zs.push(z);          /* only where the track has left the road */
+      const sp = [], si = [], NX = 7, n = zs.length - 1; for (let j = 0; j <= n; j++) { const z = zs[j], cx = trackX(side, z); for (let i = 0; i < NX; i++) { const x = cx - 9 + 3 * i; sp.push(x, basinH(x, z) + .06, z); } }
+      for (let j = 0; j < n; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, cc = a + NX, d = cc + 1; si.push(a, cc, b, b, cc, d); }
+      const sn = []; B.VertexData.ComputeNormals(sp, si, sn); const sv = new B.VertexData(); sv.positions = sp; sv.indices = si; sv.normals = sn; sv.colors = Array.from({ length: sp.length / 3 * 4 }, () => 1);
+      const tm = new B.Mesh('basinTrack', scene); sv.applyToMesh(tm); tm.material = c; tm.isPickable = false; tm.thinInstanceSetBuffer('matrix', new Float32Array(B.Matrix.Identity().m), 16, true); } catch (e) { console.error('basin track', e); } }
+    { const zm = BASIN.z0 - .8 * L, cm = basinCX(zm);          /* light shafts over the three mouths: the way out, seen from the top of the bowl */
+      [[-16, [.3, .85, 1]], [0, [1, .78, .25]], [16, [.3, .85, 1]]].forEach(([dx, cl]) => { const x = cm + dx, sh = B.MeshBuilder.CreateCylinder('basinShaft', { height: 90, diameterTop: 3, diameterBottom: 6, tessellation: 16, cap: B.Mesh.NO_CAP }, scene), sm = new B.StandardMaterial('basinShaftM', scene);
+        sm.disableLighting = true; sm.emissiveColor = new B.Color3(cl[0], cl[1], cl[2]); sm.alpha = .2; sm.backFaceCulling = false; sm.fogEnabled = false; sh.material = sm; sh.isPickable = false; sh.position.set(x, basinH(x, zm) + 45, zm); }); } }
 
   // obstacles (trees, rocks), ramps (swirls), pads, pickups
   const OG = new Map(), VXS = (phys.vx || []).filter((k) => k.trail && -k.z < -END + 400), PADS = [], BUFFS = [], ORBS = [], key8 = (x, z) => Math.floor(x / 8) + ',' + Math.floor(z / 8);
@@ -886,6 +905,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     vortexStep(dt, sIn);
     PH.vz = Math.min(PH.vz, -3); PH.x += PH.vx * dt; PH.z = Math.min(PH.z + PH.vz * dt, 0); lipStep();
     { const WHz = WHAt(PH.z); if (Math.abs(PH.x) >= WHz - 2.5) { PH.x = clamp(PH.x, -(WHz - 2.5), WHz - 2.5); PH.vx *= -.2; } }
+    if (inBasin(PH.z) && bT(PH.z) > .8) { const sp = Math.hypot(PH.vx, PH.vz), cap = 56; if (sp > cap) { const k = 1 - (1 - cap / sp) * (1 - Math.exp(-1.5 * dt)); PH.vx *= k; PH.vz *= k; } }          /* the funnel eases you back to road speed, so the road's first crest doesn't throw you */
     const gh = th(PH.x, PH.z), gvy = clamp((gh - PH.gh_prev) / Math.max(dt, 1e-4), -60, 60); PH.gh_prev = gh;
     if (PH.grounded) { const vg = (gh - prevY) / Math.max(dt, 1e-4); PH.stickT = Math.max(0, PH.stickT - dt);
       if (vg < PH.vy - GV * dt - .15 - .012 * Math.hypot(PH.vx, PH.vz) - (PH.stickT > 0 ? 14 * SPK : 0)) { PH.grounded = false; PH.air_t = 0; PH.vy = PH.vy - GV * dt; PH.y = prevY + PH.vy * dt; } else { PH.y = gh; PH.vy = Math.min(vg, C.JUMP_LAUNCH); } }          /* a CAR: it follows the road over small dips, and a crest at speed lifts it for a moment (the road falls away faster than gravity pulls it); it settles without bouncing (the glue comes back on landing) */
@@ -2464,10 +2484,11 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function progSave(world) { try { const P = JSON.parse(localStorage.getItem('dl_prog') || '{}'); P.worlds = P.worlds || {}; const w = P.worlds[world] || {}, g = solGrade(), rank = { NONE: 0, BRONZE: 1, SILVER: 2, GOLD: 3 }; if ((rank[g] || 0) >= (rank[w.best] || 0)) w.best = g; w.runs = (w.runs || 0) + 1; w.bestFaces = Math.max(w.bestFaces || 0, SOL.faces); w.max = SOL.max; P.worlds[world] = w; P.icosa = (P.icosa || 0) + SOL.got.icosa; P.faces = (P.faces || 0) + SOL.faces; localStorage.setItem('dl_prog', JSON.stringify(P)); return { g, w, P }; } catch (e) { return { g: solGrade() }; } }
   function tutStep(dt) {
     if (BASIN && !BASIN.made && PH.z < -700) { BASIN.made = true; const R = mulbK(41), zt = (t) => BASIN.z0 - t * (BASIN.z0 - BASIN.z1), put = (k, x, t) => solPut(k, x, zt(t));          /* the basin's content: three lines, a pocket prize, a pad in each mouth */
-      try { makePad(-70, zt(.2), R); for (let k = 0; k < 8; k++) put('tetra', -70 + 6 * Math.sin(k * .8), .24 + k * .02); makePad(-70, zt(.42), R); put('octa', -60, .48);          /* left line: pads and a weaving trail */
-        for (let k = 0; k < 4; k++) put('tetra', -35, .44 + k * .02); makePad(-35, zt(.5), R); put('dodeca', -35, .7);          /* centre line: crystals up to a pad into the kicker, the prize where you land */
-        for (let k = 0; k < 8; k++) put('tetra', 40 + k * 11, .2 + k * .028); put('icosa', 126, .43);          /* right line: a trail that swings out into the pocket (no steeper than the board can turn), the big one at its end wall */
-        for (const x of [-16, 0, 16]) makePad(x, zt(.8), R); } catch (e) { console.error('basin', e); } }
+      const LX = (side, t) => window.__BASINX(side, zt(t));
+      try { makePad(LX(-1, .24), zt(.24), R); for (let k = 0; k < 8; k++) put('tetra', LX(-1, .28 + k * .02) + 5 * Math.sin(k * .8), .28 + k * .02); makePad(LX(-1, .46), zt(.46), R); put('octa', LX(-1, .52), .52);          /* left track: pads and a weaving trail */
+        for (let k = 0; k < 4; k++) put('tetra', LX(0, .44 + k * .02), .44 + k * .02); makePad(LX(0, .5), zt(.5), R); put('dodeca', LX(0, .7), .7);          /* the road: crystals up to a pad into the kicker, the prize where you land */
+        for (let k = 0; k < 8; k++) put('tetra', LX(1, .2 + k * .028), .2 + k * .028); put('icosa', 120, .43);          /* right track: a trail that swings out into the pocket, the big one at its end wall */
+        for (const sd of [-1, 0, 1]) makePad(LX(sd, .8), zt(.8), R); } catch (e) { console.error('basin', e); } }
     if (Q.has('story') && !TUT.sb && PH.z < -200) { TUT.sb = true; const R = mulbK(23); try { makePad(trailX(-760), -760, R); solPut('octa', trailX(-820), -820); solTrail('tetra', -870, 0, 5, 14, 3); solTrail('tetra', -1450, 4, 6, 14, -3); solPut('dodeca', trailX(-2790) + 4, -2790); } catch (e) { console.error('story items', e); } }          /* a few real items in the quiet gaps of Route Zero (never inside a message window) */
     if (ST.beatEnd && performance.now() < ST.beatEnd) clearAhead((ST.beatEnd - performance.now()) / 1000 + 1.6);          /* the message rule, enforced every frame (speed can change while you read) */
     if (!TUT.on || TUT.done) return;
@@ -2568,7 +2589,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function tutHaz(kind, z, dx, mode) { if (LAB.chl) return null; const g = GEAR; if (!g.T || !g.T.length) return false; const q = g.T.find((p) => (p.dead || p.z > PH.z + 30) && !p.tutLive) || g.T.find((p) => p.dead); if (!q) return false; gearPlaceAt(q, z, kind, dx); q.tutLive = true; q.mode = mode || null; return true; }
   /* THE MESSAGE RULE: while a message is on screen the road ahead is empty. Any hazard inside the window (speed x seconds + 60 m) is moved to just past it. */
   function clearAhead(sec) { try { const g = GEAR; if (!g.T) return; const sp = Math.max(18, Math.hypot(PH.vx, PH.vz)), lim = PH.z - sp * sec - 60; let k = 0; for (const q of g.T) if (!q.dead && q.z < PH.z && q.z > lim) { gearPlaceAt(q, lim - 30 - 45 * k++, q.kind, q.x - trailX(q.z)); } } catch (e) { } }
-  function gearPlace(q, z) { for (const k in q.ms) q.ms[k].setEnabled(false); q.kind = ['drone', 'mine', 'rock'][Math.floor(Math.random() * 3)]; q.m = q.ms[q.kind]; const x = trailX(z) + (Math.random() - .5) * 5, g = th(x, z), gr = Number.isFinite(g) ? g : PH.y, y = gr + (q.kind === 'drone' ? 2.2 + Math.random() * 1.1 : q.kind === 'mine' ? .3 : 1.2); q.x = x; q.y = y; q.by = y; q.z = z; q.dead = !gearWin(z); q.m.position.set(x, y, z); q.m.setEnabled(!q.dead); }
+  function gearPlace(q, z) { for (const k in q.ms) q.ms[k].setEnabled(false); q.kind = ['drone', 'mine', 'rock'][Math.floor(Math.random() * 3)]; q.m = q.ms[q.kind]; const x = trailX(z) + (Math.random() - .5) * 5, g = th(x, z), gr = Number.isFinite(g) ? g : PH.y, y = gr + (q.kind === 'drone' ? 2.2 + Math.random() * 1.1 : q.kind === 'mine' ? .3 : 1.2); q.x = x; q.y = y; q.by = y; q.z = z; q.dead = !gearWin(z) || inBasin(z);          /* no hazards inside the basin */ q.m.position.set(x, y, z); q.m.setEnabled(!q.dead); }
   function gearKill(q, base) { q.dead = true; q.m.setEnabled(false); GEAR.hits++; gearEvent(); if (q.lane) { q.lane.got = true; q.lane.reel = false; const S = window.__ST; if (S && S.got) S.got[q.lane.kind]++; gearBig(GCFG.prize[q.lane.kind], q.lane.kind === 'gold' ? 'GOLD DRONE' : 'CARGO CRATE'); try { FXB.E.blast([q.m.position.x, q.m.position.y, q.m.position.z]); SFX.orb(); } catch (e) { } return; } const gn = gearAward(base); U.beat = 1; const nm = GLINES[Math.floor(Math.random() * GLINES.length)]; gearPop('+' + gn + ' ' + nm + ' deleted'); try { FXB.E.blast([q.m.position.x, q.m.position.y, q.m.position.z]); FXB.E.orb([q.m.position.x, q.m.position.y, q.m.position.z]); SFX.orb(); } catch (e) { } }
   function gearBuild() {
     const g = GEAR, d = document.createElement('div'); d.style.cssText = 'position:fixed;left:50%;top:max(8px,env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:30;pointer-events:none;text-align:center;font:800 18px system-ui,sans-serif;color:#fff;background:rgba(10,20,45,.8);border:3px solid #38e8ff;border-radius:14px;padding:5px 14px;min-width:190px;max-width:92vw;line-height:1.25'; d.id = 'gearHud'; d.innerHTML = '<div style="font-size:10px;letter-spacing:.16em;color:#9fd8ff">SCORE</div><div id="gsc" style="font-size:30px;line-height:1.05"></div><div style="height:9px;background:#0b1a33;border-radius:5px;margin:3px 0;overflow:hidden"><div id="gbf" style="height:100%;width:0;background:linear-gradient(90deg,#38e8ff,#ffd23a)"></div></div><div id="gln" style="font-size:14px;color:#9fd8ff"></div>'; document.body.appendChild(d); g.hud = d; g.sc = d.querySelector('#gsc'); g.bf = d.querySelector('#gbf'); g.ln = d.querySelector('#gln');
@@ -2691,7 +2712,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   }
   function deckStep(dt) {
     const j1 = Math.max(1, Math.floor(-PH.z / 180) - 1);
-    for (let j = j1; j <= j1 + 5 && j < NROWS; j++) { const rr = phys.rows[String(j)], zn = zoneOf(j); if (!rr) continue; const z0 = -180 * j;
+    for (let j = j1; j <= j1 + 5 && j < NROWS; j++) { const rr = phys.rows[String(j)], zn = zoneOf(j); if (!rr) continue; const z0 = -180 * j; if (BASIN && j >= BASIN.j0 && j <= BASIN.j1) continue;          /* the basin holds only its own content */
       if (zn === 'slalom') { if (!SLNDONE.has(j)) { SLNDONE.add(j); try { buildSlalom(j, rr, z0); } catch (e) { } } continue; }
       if (BUILT.has(j)) continue; BUILT.add(j); try { buildRow(j, rr, z0, spansOf(j, rr)); if ((PLAN[j] || {}).phrase === 'warm') buildSingles(j, rr, z0); } catch (e) { } }
     bankStep(dt); try { dopStep(dt); tutStep(dt); journeyStep(); lvlStep(); hudStep(); try { ufoStep(dt); ufoTick(dt); introStep(); } catch (e) { if (!UFO.err) { UFO.err = 1; console.error('ufo', e); } } try { if (P3) mae3Tick(dt); } catch (e) { } try { if (DOSE.on) tripStep(dt); } catch (e) { if (!DOSE.err) { DOSE.err = 1; console.error('trip', e); } } solStep(dt); lensStep(dt); exStep(); lensLookStep(); } catch (e) { if (!DOP.err) { DOP.err = 1; console.error('dop', e); } } try { gearStep(dt); } catch (e) { if (!GEAR.err) { GEAR.err = 1; console.error('gear', e); } } debStep(dt); try { fragStep(dt); poleStep(dt); poleSelfStep(); } catch (e) { } kitVisStep(); beaconTick(); sbStep(dt); spillStep(dt); beatpStep(dt); storyStep(dt); if (!PH.rail) { try { SFX.grindOff(); } catch (e) { } }

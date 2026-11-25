@@ -17,7 +17,7 @@ const DRIVE = (lineX) => `(async () => { const G = __G, PH = G.PH; const set = (
   const got0 = (G.SOL && G.SOL.faces) || 0, out = { line: ${JSON.stringify(lineX)}, minV: 999, maxV: 0, air: 0, maxAir: 0, frames: 0, slow: 0, xMax: 0, wipe: 0 }; let last = performance.now(), L = null, Rk = null;
   const oc = console.log; const crashT = []; const t0 = performance.now();
   while (PH.z > -2260 && performance.now() - t0 < 40000) { await new Promise((r) => requestAnimationFrame(r)); const now = performance.now(), dt = now - last; last = now; out.frames++; if (dt > 50) out.slow++;
-    const t = (-1440 - PH.z) / 720, tx = t < .1 ? 0 : t > .74 ? (${JSON.stringify(lineX)} === 'right' ? 16 : ${JSON.stringify(lineX)} === 'left' ? -16 : 0) : ${lineX === 'left' ? -70 : lineX === 'centre' ? -35 : `(t > .18 && t < .45 ? Math.min(128, 40 + (t - .2) * 393) : 30)`};
+    const t = (-1440 - PH.z) / 720, tx = window.__BASINX(${lineX === 'left' ? -1 : lineX === 'right' ? 1 : 0}, PH.z - Math.hypot(PH.vx, PH.vz) * .4);
     const px = PH.x + PH.vx * .5, want = px < tx - 4 ? 'ArrowRight' : px > tx + 4 ? 'ArrowLeft' : null; for (const k of ['ArrowLeft', 'ArrowRight']) set(k, k === want);
     const v = Math.hypot(PH.vx, PH.vz); if (t > .05 && t < .95) { out.minV = Math.min(out.minV, v); out.maxV = Math.max(out.maxV, v); } if (!PH.grounded) { out.air += dt / 1000; } out.xMax = Math.max(out.xMax, Math.abs(PH.x)); if (PH.hurt > 0.5) out.wipe++; if (out.frames % 45 === 0) (out.tr = out.tr || []).push([Math.round(PH.z), Math.round(PH.x), +(PH.y - G.th(PH.x, PH.z)).toFixed(1), PH.grounded ? 1 : 0, Math.round(v)]); }
   for (const k of ['ArrowLeft', 'ArrowRight']) set(k, false);
@@ -34,6 +34,6 @@ try {
     await sleep(3000);
     try { await ev(`(async () => { const PH = __G.PH; PH.z = -760; for (let i = 0; i < 40; i++) await new Promise((r) => requestAnimationFrame(r)); })()`); } catch (e) { }          /* past -700 so the basin's content is placed */
     console.log(basin ? '\nWITH BASIN' : '\nWITHOUT BASIN (same stretch)');
-    for (const line of basin ? (process.env.LINES || 'left,centre,right').split(',') : ['centre']) { try { { const o = await ev(DRIVE(line)); const tr = o.tr; delete o.tr; console.log(JSON.stringify(o)); if (process.env.TRACE) console.log(JSON.stringify(tr)); } } catch (e) { console.log(line, 'ERR', String(e).slice(0, 300)); } }
+    for (const line of basin ? (process.env.LINES || 'left,centre,right').split(',') : ['centre']) { try { { const o = await ev(DRIVE(line)); if (process.env.LIST) console.log(JSON.stringify(await ev(`((L) => [L.length, L.slice(0, 40)])(__G.SOL.list.map((o) => [o.kind, Math.round(o.x), Math.round(o.z), +(o.y - __G.th(o.x, o.z)).toFixed(1), o.got ? 1 : 0, o.m && !o.m.isDisposed() ? 1 : 0]))`))); const tr = o.tr; delete o.tr; console.log(JSON.stringify(o)); if (process.env.TRACE) console.log(JSON.stringify(tr)); } } catch (e) { console.log(line, 'ERR', String(e).slice(0, 300)); } }
   }
 } finally { try { chrome.kill(); } catch { } process.exit(0); }
