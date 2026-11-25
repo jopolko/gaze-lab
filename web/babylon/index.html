@@ -920,7 +920,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     const gh = th(PH.x, PH.z), gvy = clamp((gh - PH.gh_prev) / Math.max(dt, 1e-4), -60, 60); PH.gh_prev = gh;
     if (PH.grounded) { const vg = (gh - prevY) / Math.max(dt, 1e-4); PH.stickT = Math.max(0, PH.stickT - dt);
       if (vg < PH.vy - GV * dt - .15 - .03 * Math.hypot(PH.vx, PH.vz) - (PH.stickT > 0 ? 14 * SPK : 0)) { PH.grounded = false; PH.air_t = 0; PH.crest = true; PH.vy = PH.vy - GV * dt; PH.y = prevY + PH.vy * dt; } else { PH.y = gh; PH.vy = Math.min(vg, C.JUMP_LAUNCH); } }          /* a CAR: it follows the road over small dips, and a crest at speed lifts it for a moment (the road falls away faster than gravity pulls it); it settles without bouncing (the glue comes back on landing) */
-    else { PH.vy -= GV * dt * C.AIR_G_K; if (PH.crest) PH.vy -= GV * dt * 3.2 * Math.min(1, PH.air_t / .15);          /* (a crest: back down to the road fast) */ if (PH.air_t > 1.3) PH.vy -= 30 * SPK * (PH.air_t - 1.3) * dt; PH.vy = Math.max(PH.vy, -90 * SPK); PH.y += PH.vy * dt;
+    else { PH.vy -= GV * dt * C.AIR_G_K; if (PH.crest && !PH.ram) PH.vy -= GV * dt * 3.2 * Math.min(1, PH.air_t / .15);          /* (a crest: back down to the road fast) */ if (PH.air_t > 1.3) PH.vy -= 30 * SPK * (PH.air_t - 1.3) * dt; PH.vy = Math.max(PH.vy, -90 * SPK); PH.y += PH.vy * dt;
       if (PH.y <= gh + .05) { const wasCrest = PH.crest; PH.crest = false; const impact = wasCrest ? 0 : Math.max(gvy - PH.vy, 0); if (wasCrest) PH.vy = gvy; PH.landT = PH.air_t; PH.grounded = true; PH.y = gh; PH.vy = Math.min(gvy, 3 * SPK); PH.air_t = 0; PH.stickT = .35; PH.mom = 2.6; shake = Math.min(.8, impact / (60 * SPK)); if (PH.landT > .2 && performance.now() - (window.__goAt || 0) > 900) AW.onLand(impact / SPK, PH.landT);          /* (only a real landing thumps: the car is spawned a hair above the road, and its first touch-down at the start was a thud with nothing there) */
         if (impact > 18 * SPK) crash('WIPEOUT!'); else if (impact > 12 * SPK) { PH.vx *= .97; PH.vz *= .97; } else if (PH.landT > .5) { const kick = (4 + 3 * Math.min(PH.landT, 3)) * SPK; PH.vx += Math.sin(PH.heading) * kick; PH.vz -= Math.cos(PH.heading) * kick; PH.boost_t = Math.max(PH.boost_t, 1.1); PH.vxa = Math.max(PH.vxa, .8); chainHit(); big(impact < 5 * SPK ? 'SMOOTH LANDING!' : 'LANDED'); try { FXB.E.landSmooth([PH.x, PH.y, PH.z]); } catch (e) { } U.beat = 1; } } }          // a landing after a real flight is a boost and a link in the chain
     railStep(dt, sIn); toysStep(dt, sIn); KITL.step(dt); deckStep(dt); finStep(dt);
@@ -1032,7 +1032,7 @@ void main() {
   gl_FragColor = vec4(col, 1.0);
 }`;
   const FXO = window.__FXO = { L: [{}, {}, {}], sky: {}, pp: {}, rec: Q.has('fxlab') };          /* (?fxlab: values the effects lab is holding; empty = the game's own) */
-  const lookApplyFor = (k) => (e) => { const q0 = LOOK.L[k], o = FXO.L[k], q = { ev: o.ev ?? q0.ev, ea: o.ea ?? q0.ea, sty: o.sty ?? q0.sty, mix: o.mix ?? q0.mix }, w = engine.getRenderWidth(), h = engine.getRenderHeight(); e.setFloat2('uTexel', 1 / w, 1 / h); e.setFloat2('uRes', w, h); e.setFloat('uCell', Math.max(6, Math.round(w / 110))); e.setFloat('uVec', q.ev); e.setFloat('uAsc', q.ea); e.setFloat('uTime', U.time); e.setFloat('uSty', q.sty); e.setFloat('uMix', Math.max(1, q.mix)); };
+  const lookApplyFor = (k) => (e) => { const q0 = LOOK.L[k], o = FXO.L[k], q = { ev: o.ev ?? q0.ev, ea: o.ea ?? q0.ea, sty: o.sty ?? q0.sty, mix: o.mix ?? q0.mix }, w = engine.getRenderWidth(), h = engine.getRenderHeight(); e.setFloat2('uTexel', 1 / w, 1 / h); e.setFloat2('uRes', w, h); e.setFloat('uCell', Math.max(4, Math.round(w / (WORLD0 === 'matrix' ? 190 : 110)))); e.setFloat('uVec', q.ev); e.setFloat('uAsc', q.ea); e.setFloat('uTime', U.time); e.setFloat('uSty', q.sty); e.setFloat('uMix', Math.max(1, q.mix)); };
   /* A MOLECULE gives about one second of a look, a different one each time (a shuffled bag of all fifteen: vector, ascii, line, pastel, oil, cel, doodle, felt, halftone, kaleidoscope, thermal, mosaic, glass, melt, neon), swelling in and out at a random strength. It also swells the surfaces' psychedelic layer (the headset has no picture pass for the rest). */
   /* the looks that leave the game visible linger: a quick rise, then a slow fade with a couple of minor waves (the strength dips to half and swells back) before they go */
   const LOOKLINGER = [5, 6, 11, 14, 17, 18, 19], LOOKHEAVY = [1, 2, 3, 7, 8, 9, 10, 12, 15];          /* HEAVY: the looks that hide the game (vector, ascii, line, doodle, felt, halftone, kaleidoscope, mosaic, stained glass, neon): a short flash only */
@@ -1072,7 +1072,7 @@ void main() {
   function lookStep(dt) {
     PSYPb.pulse = Math.max(0, PSYPb.pulse - dt / 2.6); try { syncXRPass(); syncWarp(); if (pipeline) pipeline.bloomWeight = .32 * (PSY.uniforms().glowIntensityMul || 1); } catch (e) { }
     if (Q.has('testburst') && !LOOK.evs.length && performance.now() - LOOK.last > 2500) lookPulse();          /* (&testburst: a look burst every 2.5 s, as if a molecule were picked up) */
-    LOOK.pv = Math.max(0, LOOK.pv - dt / LOOK.dur); LOOK.pa = Math.max(0, LOOK.pa - dt / LOOK.dur); const k = 1 - Math.exp(-dt / .45); LOOK.vec += ((WORLD0 === 'synthwave' ? .5 : 0) - LOOK.vec) * k; LOOK.asc += ((WORLD0 === 'matrix' ? .5 : 0) - LOOK.asc) * k; if (LOOK.vec < .004 && WORLD0 !== 'synthwave') LOOK.vec = 0; if (LOOK.asc < .004 && WORLD0 !== 'matrix') LOOK.asc = 0;
+    LOOK.pv = Math.max(0, LOOK.pv - dt / LOOK.dur); LOOK.pa = Math.max(0, LOOK.pa - dt / LOOK.dur); const k = 1 - Math.exp(-dt / .45); LOOK.vec += ((WORLD0 === 'synthwave' ? .5 : 0) - LOOK.vec) * k; LOOK.asc += ((WORLD0 === 'matrix' ? .2 : 0) - LOOK.asc) * k; if (LOOK.vec < .004 && WORLD0 !== 'synthwave') LOOK.vec = 0; if (LOOK.asc < .004 && WORLD0 !== 'matrix') LOOK.asc = 0;
     const kk = 1 - Math.exp(-dt / .35); LOOK.sv += ((LK() === 1 ? 1 : 0) - LOOK.sv) * kk; LOOK.sa += ((LK() === 2 ? 1 : 0) - LOOK.sa) * kk; LOOK.sty += ((LK() >= 3 ? 1 : 0) - LOOK.sty) * kk; if (LOOK.sv < .004) LOOK.sv = 0; if (LOOK.sa < .004) LOOK.sa = 0; if (LOOK.sty < .004) LOOK.sty = 0;
     const L = LOOK.L; for (const q of L) { q.ev = 0; q.ea = 0; q.sty = 0; } L[0].ev = Math.max(LOOK.vec, LOOK.sv); L[0].ea = Math.max(LOOK.asc, LOOK.sa); L[0].sty = LOOK.sty; L[0].mix = Math.max(1, LK() - 2);
     LOOK.clock += dt; if (LOOKSEL === 99) psychStep(dt); else if (LOOK.ps) LOOK.ps = null; if (LOOK.evs.length) { const envL = [0, 0, 0], idxL = [0, 0, 0]; for (let i = LOOK.evs.length - 1; i >= 0; i--) { const e = LOOK.evs[i], lt = LOOK.clock - e.t0; if (lt > e.len) { LOOK.evs.splice(i, 1); continue; } if (lt < 0) continue; const env = Math.min(1, (e.shape ? shapeEnv(e, lt) : (e.breath ? Math.pow(Math.max(0, Math.sin(Math.PI * lt / e.len)), .6) * (.8 + .2 * Math.sin(lt * 2.4)) : (e.linger ? lingerEnv(lt / e.len) : Math.sin(Math.PI * lt / e.len)))) * e.amp * (1 + (LOOK.ps ? LOOK.ps.gain : 0))); if (env > envL[e.layer]) { envL[e.layer] = env; idxL[e.layer] = e.idx; } }
@@ -2860,7 +2860,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     root.position.set(x, y, z); RAID.gpus.push({ root, v: new B.Vector3(Math.cos(a) * sp, 6 + Math.random() * 5, Math.sin(a) * sp - 4 - fwd), t: 0, land: false, spin: Math.random() * 8 - 4 }); } }
   const EXITS = ['accelerate', 'warp', 'light', 'hyper'];
   function raidStart() { const kind = WCRAFT[WORLD0], C = CRAFT[kind], root = new B.TransformNode('raid', scene); C.build(root); const bg = C.big || 1; root.scaling.setAll(bg);
-    RAID.cur = { kind, root, big: bg, side: Math.random() < .5 ? -1 : 1, rt: 0, phase: 'arrive', hp: 3, rock: 0, nextV: 0, parts: root.getChildMeshes(), name: C.name, exit: EXITS[Math.floor(Math.random() * EXITS.length)], ex: 0, pos: null, lead0: -24 }; }
+    RAID.cur = { kind, root, big: bg, side: Math.random() < .5 ? -1 : 1, rt: 0, phase: 'arrive', hp: 3, rock: 0, nextV: 0, parts: root.getChildMeshes(), seed: Math.random() * 10, name: C.name, exit: EXITS[Math.floor(Math.random() * EXITS.length)], ex: 0, pos: null, lead0: -24 }; }
   function raidBoom(R) { const p = R.root.position.clone(); try { FXB.E.blast([p.x, p.y, p.z]); FXB.E.blast([p.x + 2, p.y + 1, p.z - 2]); FXB.confetti([p.x, p.y, p.z], 80, 1.4); SFX.levelup && SFX.levelup(); } catch (e) { } shake = Math.max(shake, .4); PH.score += 900; try { chainHit(); dopAdd('mol'); } catch (e) { }
     for (const m of R.parts) { m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * (6 + Math.random() * 10), 4 + Math.random() * 10, Math.sin(a) * 10 - 10), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }
     if (AMMO[CRAFT[R.kind].ammo].gpus) raidGpus(p.x, p.y, p.z, 10, 6);
@@ -2868,14 +2868,14 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function raidStep(dt) {
     if (!raidOn()) return; RAID.t += dt; RAID.debris = RAID.debris || [];
     if (!RAID.cur && RAID.t > RAID.next && PH.z < -300 && PH.z > END + 900) raidStart();
-    const R = RAID.cur; try { junkStep(dt, R); } catch (e) { if (!JUNK.err) { JUNK.err = 1; console.error('junk', e); } }
-    if (R) { R.rt += dt; const rt = R.rt, big = R.big > 1, L0 = big ? 50 : 34, L1 = big ? 15 : 9.5, A0 = big ? 11 : 6.5;
+    const R = RAID.cur; try { junkStep(dt, R); rampStep(dt); } catch (e) { if (!JUNK.err) { JUNK.err = 1; console.error('junk', e); } }
+    if (R) { R.rt += dt; const rt = R.rt, big = R.big > 1, L0 = big ? 66 : 48, L1 = big ? 19 : 13, A0 = big ? 10 : 6.5, wn = (t, k) => .6 * Math.sin(.23 * t + k) + .3 * Math.sin(.61 * t + 2.1 * k) + .1 * Math.sin(1.37 * t + 3.3 * k);
       if (R.phase === 'arrive' && rt > 2.4) { R.phase = 'arm'; try { SFX.bell && SFX.bell(); } catch (e) { } }
       if (R.phase === 'arm' && rt > 3.4) { R.phase = 'attack'; R.nextV = rt; }
       if (R.phase === 'attack' && rt > 24) { R.phase = 'exit'; R.ex = 0; }
       // station: ahead and to one side of you, in your own frame (so it stays on its side of the screen through the bends)
-      const arr = sstep(0, 2.4, rt), lead = R.lead0 + (L0 - R.lead0) * arr + (R.phase === 'attack' || R.phase === 'arm' ? 4 * Math.sin(rt * .9) + 1.8 * Math.sin(rt * 2.3) : 0) + R.rock * 3, lat = R.side * (L1 + (R.phase === 'arrive' ? 0 : 1.6 * Math.sin(rt * 1.2) + .6 * Math.sin(rt * 3.1)));
-      const F = rFrame(); let x = PH.x + F.f[0] * lead + F.r[0] * lat, z = PH.z + F.f[1] * lead + F.r[1] * lat, y = Math.max(PH.y, rGround(x, z)) + A0 + .8 * Math.sin(rt * 1.7) - (R.phase === 'arm' ? .8 * sstep(2.4, 3, rt) : 0);
+      const arr = sstep(0, 2.4, rt), wk = sstep(1.5, 4, rt), lead = R.lead0 + (L0 - R.lead0) * arr + 12 * wk * wn(rt, R.seed) + R.rock * 4, lat = R.side * (L1 + 4 * wk * wn(rt * 1.1, R.seed + 2));
+      const F = rFrame(); let x = PH.x + F.f[0] * lead + F.r[0] * lat, z = PH.z + F.f[1] * lead + F.r[1] * lat, y = Math.max(PH.y, rGround(x, z)) + A0 + 2.2 * wk * wn(rt * .9, R.seed + 5) - (R.phase === 'arm' ? .8 * sstep(2.4, 3, rt) : 0);
       let sc = R.big, spinY = 0, hide = false;
       if (R.phase === 'exit') { R.ex += dt / 1.6; const e = Math.min(1, R.ex);
         if (R.exit === 'accelerate') { x += F.f[0] * 700 * e * e; z += F.f[1] * 700 * e * e; y += 25 * e; }
@@ -2883,12 +2883,12 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
         else if (R.exit === 'light') { if (e < .4) { R.root.scaling.set(sc, sc, sc * (1 + 3 * e)); x += (Math.random() - .5) * .6; } else { if (!R.flash) { R.flash = 1; try { FXB.E.blast([R.root.position.x, R.root.position.y, R.root.position.z]); } catch (er) { } } hide = true; } }
         else { spinY = 22 * e * e; const k = Math.max(0, 1 - e * e); R.root.scaling.setAll(sc * k); if (e > .92 && !R.flash) { R.flash = 1; try { FXB.E.pillEat([R.root.position.x, R.root.position.y, R.root.position.z], [.7, .5, 1]); } catch (er) { } } }
         if (e >= 1 || hide) { R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; } }
-      if (RAID.cur) { const prev = R.pos || [x, y, z]; R.root.position.set(x, y, z); R.pos = [x, y, z]; R.rock = Math.max(0, R.rock - dt * 1.6);
+      if (RAID.cur) { const prev = R.pos || [x, y, z]; if (R.phase !== 'exit') { if (PH.ram && PH.ram.R === R) { x = prev[0]; y = prev[1]; z = prev[2]; } else { const k2 = 1 - Math.exp(-dt * 3.5); x = prev[0] + (x - prev[0]) * k2; y = prev[1] + (y - prev[1]) * k2; z = prev[2] + (z - prev[2]) * k2; } } R.root.position.set(x, y, z); R.pos = [x, y, z]; R.rock = Math.max(0, R.rock - dt * 1.6);
         const latV = ((x - prev[0]) * F.r[0] + (z - prev[2]) * F.r[1]) / Math.max(dt, 1e-3), yaw = Math.atan2(F.f[0], -F.f[1]);
-        R.root.rotation.set(-.06 + .3 * Math.sin(rt * 30) * R.rock * .4, -yaw + spinY, clamp(-latV * .03, -.5, .5) + Math.sin(rt * 26) * R.rock * .6);
+        R.root.rotation.set(-.06 - clamp((y - prev[1]) / Math.max(dt, 1e-3) * .04, -.25, .25) + .3 * Math.sin(rt * 30) * R.rock * .4, -yaw + spinY, clamp(-latV * .03, -.5, .5) + Math.sin(rt * 26) * R.rock * .6);
         const armK = R.phase === 'arm' ? 1 : 0;
         for (const m of R.parts) { if (m.__tag === 'rotor') m.rotation.y += dt * 30; else if (m.__tag === 'trotor') m.rotation.x += dt * 40; else if (m.__tag === 'spin') m.rotation.y += dt * (4 + 10 * armK); else if (m.__tag === 'pulse') { const k = 1 + .08 * Math.sin(rt * 5); m.scaling.set(8 * k, 5 / k, 8 * k); } else if (m.__tag === 'tent') m.rotation.x = .35 * Math.sin(rt * 4 + m.position.x); else if (m.__tag === 'blink' || m.__tag === 'glow') m.visibility = armK ? (Math.sin(rt * 30) > 0 ? 1 : .3) : .55 + .45 * Math.sin(rt * 8 + m.position.x + m.position.y); }
-        if (R.phase === 'attack' && rt >= R.nextV) { R.nextV = rt + 2.4 + Math.random() * .8; raidVolley(R); } } }
+        if (R.phase === 'attack' && rt >= R.nextV && !RAMP.cur && !PH.ram) { R.nextV = rt + 2.4 + Math.random() * .8; raidVolley(R); } } }
     for (let i = RAID.bombs.length - 1; i >= 0; i--) { const b = RAID.bombs[i]; b.t += dt; b.v.y -= b.g * dt; b.root.position.addInPlace(b.v.scale(dt)); b.root.rotation.addInPlace(b.spin.scale(dt));
       const k = Math.min(1, b.t / b.T); b.mk.scaling.setAll(.45 + .55 * k); b.mk.visibility = .45 + .45 * Math.abs(Math.sin(b.t * 9));
       if (b.t >= b.T || b.root.position.y <= rGround(b.root.position.x, b.root.position.z)) { raidBurst(b); RAID.bombs.splice(i, 1); } }
@@ -2911,8 +2911,30 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   const junkRet = () => { if (JUNK.ret) return JUNK.ret; const d = document.createElement('div'); d.id = 'junkRet'; d.style.cssText = 'position:fixed;left:0;top:0;width:110px;height:110px;margin:-55px 0 0 -55px;z-index:30;pointer-events:none;opacity:0;transition:opacity .25s,color .1s;will-change:transform;filter:drop-shadow(0 0 6px currentColor)';
     d.innerHTML = '<svg viewBox="0 0 110 110" width="110" height="110"><circle cx="55" cy="55" r="40" fill="none" stroke="currentColor" stroke-width="5" stroke-dasharray="20 11"/><circle cx="55" cy="55" r="22" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M55 2v22M55 86v22M2 55h22M86 55h22" stroke="currentColor" stroke-width="5"/><circle cx="55" cy="55" r="4" fill="currentColor"/></svg>';
     d.style.color = '#9fe8ff'; document.body.appendChild(d); const a = document.createElement('div'); a.id = 'junkArrow'; a.style.cssText = 'position:fixed;left:50%;top:60%;transform:translate(-50%,-50%);z-index:31;pointer-events:none;opacity:0;transition:opacity .12s;text-align:center;font:400 clamp(30px,7vmin,64px)/1 "Bebas Neue",Impact,sans-serif;letter-spacing:.1em;color:#ff4a3a;text-shadow:0 0 18px rgba(255,74,58,.7),0 2px 0 #000;white-space:nowrap'; document.body.appendChild(a); JUNK.arrow = a; return (JUNK.ret = d); };
-  function junkReward(R) { const ret = junkRet(); JUNK.lockT = 1.1; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE</div><div>LOCKED ON · FIRING</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
-    setTimeout(() => { if (RAID.cur === R) junkFire(R); }, 650); }
+  /* THE STRIKE RAMP: a clean dodge puts a glowing ramp on the road ahead, in the craft's lane. Hit it squarely and it throws you up in an arc straight into the craft:
+     chunks fly off it and you drop back to the road. Three rams and it is wrecked. Miss the ramp and the chance is gone (dodge the next volley for another). */
+  const RAMP = { cur: null };
+  function junkReward(R) { if (RAMP.cur || PH.ram) return; const ret = junkRet(); JUNK.lockT = 3.4; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE \u00B7 LOCKED ON</div><div>HIT THE RAMP!</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
+    const sp = Math.max(25, Math.hypot(PH.vx, PH.vz)), F = rFrame(); let z = PH.z + F.f[1] * sp * 2.6, x0 = PH.x + F.f[0] * sp * 2.6; const tr = trailX(z), x = clamp(tr + R.side * 4, tr - 8, tr + 8), g = rGround(x, z);
+    const root = new B.TransformNode('ramp', scene); const ang = .32;
+    rPart(root, 'box', { s: [5.2, .35, 7], p: [0, 1.1, 0], r: [ang, 0, 0], c: [1, .78, .25] }); rPart(root, 'box', { s: [5.2, 2.4, .3], p: [0, 1.2, -3.35], c: [.55, .38, .15] });
+    for (let i = 0; i < 3; i++) rPart(root, 'box', { s: [3.2, .06, .5], p: [0, .95 + i * .55, 2.2 - i * 1.6], r: [ang, 0, 0], c: [1, .25, .2], tag: 'blink' });
+    const bm = B.MeshBuilder.CreateCylinder('rampbeam', { height: 40, diameter: .5, tessellation: 8 }, scene); bm.material = rMat([2.6, 1.9, .3]); bm.parent = root; bm.position.y = 20; bm.isPickable = false;
+    root.position.set(x, g, z); root.rotation.y = -Math.atan2(F.f[0], -F.f[1]); RAMP.cur = { root, x, z, R, parts: root.getChildMeshes() }; }
+  function rampStep(dt) { const M = RAMP.cur;
+    if (M) { for (const m of M.parts) if (m.__tag === 'blink') m.visibility = Math.sin(performance.now() / 70) > 0 ? 1 : .35;
+      const F = rFrame(), ahead = (M.x - PH.x) * F.f[0] + (M.z - PH.z) * F.f[1], side = (M.x - PH.x) * F.r[0] + (M.z - PH.z) * F.r[1];
+      if (ahead < 1.5 && ahead > -3 && Math.abs(side) < 3 && !PH.ram && RAID.cur === M.R) { rampLaunch(M.R); M.root.dispose(); RAMP.cur = null; }
+      else if (ahead < -12 || RAID.cur !== M.R) { M.root.dispose(); RAMP.cur = null; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; JUNK.lockT = 0; } }
+    const Rm = PH.ram; if (Rm) { Rm.t += dt; if (!RAID.cur || RAID.cur !== Rm.R || Rm.t > 2.4) { PH.ram = null; PH.crest = true; return; }
+      const c = Rm.R.root.position; if (Math.hypot(PH.x - c.x, PH.y + 1 - c.y, PH.z - c.z) < 5.5 * (Rm.R.big || 1)) { rampHit(Rm.R); PH.ram = null; } } }
+  function rampLaunch(R) { const c = R.root.position, T = 1.05, g = GV * C.AIR_G_K; PH.grounded = false; PH.air_t = 0; PH.rail = null; PH.crest = false;
+    PH.vx = (c.x - PH.x) / T; PH.vz = (c.z - PH.z) / T; PH.vy = (c.y - 1 - PH.y) / T + .5 * g * T; PH.heading = Math.atan2(PH.vx, -PH.vz); PH.ram = { R, t: 0 };
+    JUNK.arrow.style.opacity = '0'; try { SFX.powerup && SFX.powerup(); FXB.E.landSmooth([PH.x, PH.y, PH.z]); } catch (e) { } window.__railAir = performance.now() + 250; }
+  function rampHit(R) { const p = R.root.position; try { FXB.E.blast([p.x, p.y, p.z]); FXB.confetti([p.x, p.y, p.z], 40, 1); } catch (e) { } shake = Math.max(shake, .5); R.rock = 1; R.hp--; PH.score += 500; try { chainHit(); dopAdd('mol'); } catch (e) { }
+    const loose = R.parts.filter((m) => !m.isDisposed() && m.parent === R.root); for (let i = 0; i < Math.min(2, loose.length - 2); i++) { const m = loose[Math.floor(Math.random() * loose.length)]; if (m.parent !== R.root) continue; m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * 8, 6 + Math.random() * 6, Math.sin(a) * 8 - 6), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }          /* (chunks blasted off) */
+    const F = rFrame(), back = -R.side; PH.vx = F.f[0] * 34 + F.r[0] * back * 7; PH.vz = F.f[1] * 34 + F.r[1] * back * 7; PH.vy = 3; PH.crest = true; PH.heading = Math.atan2(PH.vx, -PH.vz);          /* (you bounce off and drop back to the road, softly) */
+    if (R.hp <= 0) raidBoom(R); }
   function junkStep(dt, R) {
     const ret = junkRet(), on = R && (R.phase === 'attack' || JUNK.lockT > 0);
     JUNK.lockT = Math.max(0, JUNK.lockT - dt); if (JUNK.lockT <= 0) { ret.style.color = '#9fe8ff'; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; }
@@ -2930,7 +2952,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function junkFire(R) { const root = new B.TransformNode('junkshot', scene); junkMk(root); root.scaling.setAll(1.3); const F = rFrame(); root.position.set(PH.x + F.f[0] * 3, PH.y + 1.8, PH.z + F.f[1] * 3); JUNK.shots.push({ root, R, t: 0, ph: Math.random() * 6, v: new B.Vector3(F.f[0] * 22 + F.r[0] * R.side * 4, 13, F.f[1] * 22 + F.r[1] * R.side * 4) }); try { SFX.powerup && SFX.powerup(); } catch (e) { } }
   function junkHit(R) { const p = R.root.position; try { FXB.E.blast([p.x, p.y, p.z]); } catch (e) { } shake = Math.max(shake, .25); R.rock = 1; R.hp--; PH.score += 300; try { chainHit(); dopAdd('pad'); } catch (e) { }
     if (R.hp <= 0) raidBoom(R); }
-  window.__RAID = { start: () => { RAID.t = RAID.next + 1; }, R: RAID, J: JUNK, reward: () => RAID.cur && junkReward(RAID.cur), exit: (k) => { if (RAID.cur) { RAID.cur.exit = k; RAID.cur.phase = 'exit'; RAID.cur.ex = 0; } } };
+  window.__RAMP = RAMP; window.__RAID = { start: () => { RAID.t = RAID.next + 1; }, R: RAID, J: JUNK, reward: () => RAID.cur && junkReward(RAID.cur), exit: (k) => { if (RAID.cur) { RAID.cur.exit = k; RAID.cur.phase = 'exit'; RAID.cur.ex = 0; } } };
   function deckStep(dt) {
     const j1 = Math.max(1, Math.floor(-PH.z / 180) - 1);
     for (let j = j1; j <= j1 + 5 && j < NROWS; j++) { const rr = phys.rows[String(j)], zn = zoneOf(j); if (!rr) continue; const z0 = -180 * j; if (BASIN && j >= BASIN.j0 && j <= BASIN.j1) continue;          /* the basin holds only its own content */
