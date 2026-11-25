@@ -2972,7 +2972,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   }
   let IRS = null; const IRD = { cp: null, t0: 0 };
   function irBegin() { if (IRS || !OPEN.on) return; try {
-    IRS = createIntro({ B, scene, OPEN, BEATFX, COMP, hex, signTex, molGeo, steer: () => clamp(K.r - K.l + (typeof headSteer === 'number' ? headSteer : 0) + (typeof padSteer === 'number' ? padSteer : 0), -1, 1),
+    IRS = createIntro({ B, scene, OPEN, BEATFX, COMP, HOOK: STRAIN_HOOK, hex, signTex, molGeo, steer: () => clamp(K.r - K.l + (typeof headSteer === 'number' ? headSteer : 0) + (typeof padSteer === 'number' ? padSteer : 0), -1, 1),
       onPad: () => { try { SFX.mol(1); } catch (e) { } U.beat = 1; },
       onHit: (cp) => { const C = COMP[cp]; IRD.cp = cp; IRD.t0 = performance.now(); tlook(C.looks[0], 1, 0, 3.2, .78, 'snap'); tlook(rndOf(LOOKHEAVY), 2, 0, .6, .5, 'snap'); BEATFX.glass = 1; U.beat = 1; try { SFX.mol(2); } catch (e) { } },
       sky: (id) => { try { if (id) sky.material = skyFor(id); else applyBiome(); } catch (e) { } BEATFX.glass = 1; },
