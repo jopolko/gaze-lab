@@ -2858,6 +2858,28 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     b.root.dispose(); b.mk.dispose(); }
   function raidGpus(x, y, z, n, fwd) { for (let i = 0; i < n; i++) { const root = new B.TransformNode('raidgpu', scene); rPart(root, 'box', { s: [1.1, .14, .7], c: [.12, .45, .2] }); rPart(root, 'cyl', { h: .1, d: .45, p: [-.2, .1, 0], c: [.08, .08, .1] }); rPart(root, 'box', { s: [.3, .1, .5], p: [.35, .1, 0], c: [.85, .75, .3] }); const a = Math.random() * 6.283, sp = 4 + Math.random() * 6;
     root.position.set(x, y, z); RAID.gpus.push({ root, v: new B.Vector3(Math.cos(a) * sp, 6 + Math.random() * 5, Math.sin(a) * sp - 4 - fwd), t: 0, land: false, spin: Math.random() * 8 - 4 }); } }
+
+  /* THE HOARD: every craft is stuffed with the old internet's junk. Each ram knocks a burst of it loose (floppy disks, CDs, VHS tapes, cartridges, USB keys) to tumble,
+     bounce and skitter down the road (drive through it: small points). Damage shows: smoke, then lurching. The third ram sends it careening into the road AHEAD OF YOU,
+     marked by a red ring: swerve, or the blast catches you. */
+  function junkSpill(p, n) { const F = rFrame(), sp = Math.hypot(PH.vx, PH.vz) * .55;
+    for (let i = 0; i < n; i++) { const root = new B.TransformNode('raidjunk', scene); junkMk(root); root.scaling.setAll(.9 + Math.random() * .5); root.position.set(p.x + (Math.random() - .5) * 2, p.y, p.z + (Math.random() - .5) * 2); const a = Math.random() * 6.283, o = 5 + Math.random() * 9;
+      RAID.gpus.push({ root, v: new B.Vector3(F.f[0] * sp + Math.cos(a) * o, 3 + Math.random() * 8, F.f[1] * sp + Math.sin(a) * o), t: 0, land: false, spin: Math.random() * 14 - 7, pts: 15 }); } }
+  function raidDown(R) { R.phase = 'down'; R.d0 = R.rt; const F = rFrame(), sp = Math.max(25, Math.hypot(PH.vx, PH.vz)), T = 2.4, tz = PH.z + F.f[1] * sp * T, tr = trailX(tz), tx = tr + clamp(PH.x - trailX(PH.z), -9, 9);          /* (your line on the road: it comes down where you are driving) */
+    R.from = R.root.position.clone(); R.to = new B.Vector3(tx, rGround(tx, tz), tz); R.T = T;
+    const mk = B.MeshBuilder.CreateDisc('raidmark', { radius: 6.5, tessellation: 36 }, scene); mk.material = RAID.mats.mark || (RAID.mats.mark = (() => { const m = new B.StandardMaterial('raidmarkM', scene); m.disableLighting = true; m.emissiveColor = new B.Color3(1, .35, .25); m.alpha = .5; m.backFaceCulling = false; return m; })()); mk.rotation.x = Math.PI / 2; mk.position.set(tx, R.to.y + .2, tz); mk.isPickable = false; R.mark = mk;
+    try { SFX.bell && SFX.bell(); } catch (e) { } }
+  function raidAfter(R, dt) { const rt = R.rt, p = R.root.position;
+    if (R.hp < 3 && Math.random() < (R.hp === 2 ? .25 : .6)) try { FXB.E.pillEat([p.x + (Math.random() - .5) * 2, p.y + 1, p.z], [.3, .3, .33]); } catch (e) { }          /* smoke: thin, then thick */
+    if (R.phase !== 'down') { if (R.hp <= 1) { R.root.rotation.z += Math.sin(rt * 6.5) * .35; R.root.rotation.x += Math.sin(rt * 4.1) * .12; if (Math.random() < .02) R.lurch = 1; } if (R.lurch) { R.lurch = Math.max(0, R.lurch - dt * 2); p.y -= 2.5 * Math.sin(R.lurch * Math.PI); } return; }
+    // careening down: a spiralling dive onto the marked spot ahead of you
+    const u = Math.min(1, (rt - R.d0) / R.T), e = u * u; p.x = R.from.x + (R.to.x - R.from.x) * u + Math.sin(u * 9) * 3 * (1 - u); p.z = R.from.z + (R.to.z - R.from.z) * u; p.y = R.from.y + (R.to.y + 1 - R.from.y) * e;
+    R.root.rotation.z += dt * 7; R.root.rotation.x = .3 + u * .9; R.mark.visibility = .45 + .45 * Math.abs(Math.sin(rt * 10));
+    if (u >= 1) { const q = R.to; try { FXB.E.blast([q.x, q.y + 1, q.z]); FXB.E.blast([q.x + 3, q.y + 2, q.z - 2]); FXB.E.blast([q.x - 3, q.y + 1.5, q.z + 2]); FXB.confetti([q.x, q.y + 2, q.z], 120, 1.6); SFX.levelup && SFX.levelup(); } catch (er) { } shake = Math.max(shake, .7);
+      if (Math.hypot(PH.x - q.x, PH.z - q.z) < 7.5 && PH.y - q.y < 6) { try { crash('KABOOM!', 'rock', true); } catch (er) { } } else PH.score += 300;          /* (it came down on you, or you swerved clear) */
+      PH.score += 900; try { chainHit(); dopAdd('mol'); } catch (er) { } junkSpill(new B.Vector3(q.x, q.y + 2, q.z), 18); if (AMMO[CRAFT[R.kind].ammo].gpus) raidGpus(q.x, q.y + 1, q.z, 10, 0);
+      for (const m of R.parts) { if (m.isDisposed() || m.parent !== R.root) continue; m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * 12, 6 + Math.random() * 12, Math.sin(a) * 12), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }
+      R.mark.dispose(); R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; } }
   const EXITS = ['accelerate', 'warp', 'light', 'hyper'];
   function raidStart() { const kind = WCRAFT[WORLD0], C = CRAFT[kind], root = new B.TransformNode('raid', scene); C.build(root); const bg = C.big || 1; root.scaling.setAll(bg);
     RAID.cur = { kind, root, big: bg, side: Math.random() < .5 ? -1 : 1, rt: 0, phase: 'arrive', hp: 3, rock: 0, nextV: 0, parts: root.getChildMeshes(), seed: Math.random() * 10, name: C.name, exit: EXITS[Math.floor(Math.random() * EXITS.length)], ex: 0, pos: null, lead0: -24 }; }
@@ -2883,19 +2905,20 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
         else if (R.exit === 'light') { if (e < .4) { R.root.scaling.set(sc, sc, sc * (1 + 3 * e)); x += (Math.random() - .5) * .6; } else { if (!R.flash) { R.flash = 1; try { FXB.E.blast([R.root.position.x, R.root.position.y, R.root.position.z]); } catch (er) { } } hide = true; } }
         else { spinY = 22 * e * e; const k = Math.max(0, 1 - e * e); R.root.scaling.setAll(sc * k); if (e > .92 && !R.flash) { R.flash = 1; try { FXB.E.pillEat([R.root.position.x, R.root.position.y, R.root.position.z], [.7, .5, 1]); } catch (er) { } } }
         if (e >= 1 || hide) { R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; } }
-      if (RAID.cur) { const prev = R.pos || [x, y, z]; if (R.phase !== 'exit') { if (PH.ram && PH.ram.R === R) { x = prev[0]; y = prev[1]; z = prev[2]; } else { const k2 = 1 - Math.exp(-dt * 3.5); x = prev[0] + (x - prev[0]) * k2; y = prev[1] + (y - prev[1]) * k2; z = prev[2] + (z - prev[2]) * k2; } } R.root.position.set(x, y, z); R.pos = [x, y, z]; R.rock = Math.max(0, R.rock - dt * 1.6);
+      if (RAID.cur) { const prev = R.pos || [x, y, z]; if (R.phase !== 'exit' && R.phase !== 'down') { if (PH.ram && PH.ram.R === R) { x = prev[0]; y = prev[1]; z = prev[2]; } else { const k2 = 1 - Math.exp(-dt * 3.5); x = prev[0] + (x - prev[0]) * k2; y = prev[1] + (y - prev[1]) * k2; z = prev[2] + (z - prev[2]) * k2; } } R.root.position.set(x, y, z); R.pos = [x, y, z]; R.rock = Math.max(0, R.rock - dt * 1.6);
         const latV = ((x - prev[0]) * F.r[0] + (z - prev[2]) * F.r[1]) / Math.max(dt, 1e-3), yaw = Math.atan2(F.f[0], -F.f[1]);
         R.root.rotation.set(-.06 - clamp((y - prev[1]) / Math.max(dt, 1e-3) * .04, -.25, .25) + .3 * Math.sin(rt * 30) * R.rock * .4, -yaw + spinY, clamp(-latV * .03, -.5, .5) + Math.sin(rt * 26) * R.rock * .6);
         const armK = R.phase === 'arm' ? 1 : 0;
         for (const m of R.parts) { if (m.__tag === 'rotor') m.rotation.y += dt * 30; else if (m.__tag === 'trotor') m.rotation.x += dt * 40; else if (m.__tag === 'spin') m.rotation.y += dt * (4 + 10 * armK); else if (m.__tag === 'pulse') { const k = 1 + .08 * Math.sin(rt * 5); m.scaling.set(8 * k, 5 / k, 8 * k); } else if (m.__tag === 'tent') m.rotation.x = .35 * Math.sin(rt * 4 + m.position.x); else if (m.__tag === 'blink' || m.__tag === 'glow') m.visibility = armK ? (Math.sin(rt * 30) > 0 ? 1 : .3) : .55 + .45 * Math.sin(rt * 8 + m.position.x + m.position.y); }
         if (R.phase === 'attack' && rt >= R.nextV && !RAMP.cur && !PH.ram) { R.nextV = rt + 2.4 + Math.random() * .8; raidVolley(R); } } }
+    if (RAID.cur) try { raidAfter(RAID.cur, dt); } catch (e) { if (!RAID.err2) { RAID.err2 = 1; console.error('raidAfter', e); } }
     for (let i = RAID.bombs.length - 1; i >= 0; i--) { const b = RAID.bombs[i]; b.t += dt; b.v.y -= b.g * dt; b.root.position.addInPlace(b.v.scale(dt)); b.root.rotation.addInPlace(b.spin.scale(dt));
       const k = Math.min(1, b.t / b.T); b.mk.scaling.setAll(.45 + .55 * k); b.mk.visibility = .45 + .45 * Math.abs(Math.sin(b.t * 9));
       if (b.t >= b.T || b.root.position.y <= rGround(b.root.position.x, b.root.position.z)) { raidBurst(b); RAID.bombs.splice(i, 1); } }
     for (let i = RAID.debris.length - 1; i >= 0; i--) { const q = RAID.debris[i]; q.t += dt; q.v.y -= 16 * dt; q.m.position.addInPlace(q.v.scale(dt)); q.m.rotation.addInPlace(q.s.scale(dt)); if (q.t > 2.2) { q.m.dispose(); RAID.debris.splice(i, 1); } }
     for (let i = RAID.gpus.length - 1; i >= 0; i--) { const q = RAID.gpus[i]; q.t += dt; const p = q.root.position;
       if (!q.land) { q.v.y -= 16 * dt; p.addInPlace(q.v.scale(dt)); q.root.rotation.y += q.spin * dt; q.root.rotation.x += q.spin * .6 * dt; const g = rGround(p.x, p.z); if (p.y <= g + .1) { p.y = g + .1; if (q.v.y < -4) { q.v.y *= -.35; q.v.x *= .5; q.v.z *= .5; } else { q.land = true; q.root.rotation.x = 0; } } }
-      if (Math.hypot(PH.x - p.x, PH.z - p.z) < 2.8 && Math.abs(PH.y - p.y) < 4) { PH.score += 40; try { FXB.E.orb([p.x, p.y + .5, p.z]); chainHit(); dopAdd('pad'); } catch (e) { } q.root.dispose(); RAID.gpus.splice(i, 1); continue; }
+      if (Math.hypot(PH.x - p.x, PH.z - p.z) < 2.8 && Math.abs(PH.y - p.y) < 4) { PH.score += q.pts || 40; try { FXB.E.orb([p.x, p.y + .5, p.z]); chainHit(); dopAdd('pad'); } catch (e) { } q.root.dispose(); RAID.gpus.splice(i, 1); continue; }
       if (q.t > 9 || p.z > PH.z + 30) { q.root.dispose(); RAID.gpus.splice(i, 1); } } }
 
   /* THE SHOT, hands-free: dodge a whole volley and you earn a shot. The reticle (drifting round the craft all through the attack) snaps onto it and LOCKS with a chime,
@@ -2903,7 +2926,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
      finds the craft. Three clean dodges destroy it. Get hit three times in one encounter and it escapes. */
   const JUNK = { shots: [], ret: null, lockT: 0, ph: Math.random() * 10,
     kind: (() => { try { const ch = JSON.parse(localStorage.getItem('dl_char') || 'null') || {}, M = { mirror: 1, robot: 3, gas: 2, grin: 0 }; if (M[ch.mask] !== undefined) return M[ch.mask]; const t = JSON.stringify(ch); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return Math.abs(h) % 4; } catch (e) { return 0; } })() };          /* (0 floppy, 1 CD, 2 VHS, 3 cartridge) */
-  const junkMk = (root) => { const k = JUNK.kind;
+  const junkMk = (root, kk) => { const k = kk ?? Math.floor(Math.random() * 5); if (k === 4) { rPart(root, 'box', { s: [.45, .18, 1.1], c: [.92, .92, .95] }); rPart(root, 'box', { s: [.36, .12, .4], p: [0, 0, -.7], c: [.75, .76, .8] }); return; }          /* USB key */
     if (k === 0) { rPart(root, 'box', { s: [1.3, .12, 1.3], c: [.15, .2, .55] }); rPart(root, 'box', { s: [.6, .14, .5], p: [0, 0, -.38], c: [.8, .82, .86] }); rPart(root, 'box', { s: [.9, .13, .4], p: [0, 0, .35], c: [.95, .95, .9] }); }          /* floppy disk */
     else if (k === 1) { rPart(root, 'cyl', { h: .06, d: 1.6, c: [.85, .88, .95], t: 28 }); rPart(root, 'cyl', { h: .08, d: .3, c: [.3, .3, .35] }); }          /* CD */
     else if (k === 2) { rPart(root, 'box', { s: [1.9, .25, 1.1], c: [.08, .08, .1] }); rPart(root, 'box', { s: [1.3, .27, .4], p: [0, 0, -.1], c: [.9, .9, .85] }); }          /* VHS tape */
@@ -2934,7 +2957,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function rampHit(R) { const p = R.root.position; try { FXB.E.blast([p.x, p.y, p.z]); FXB.confetti([p.x, p.y, p.z], 40, 1); } catch (e) { } shake = Math.max(shake, .5); R.rock = 1; R.hp--; PH.score += 500; try { chainHit(); dopAdd('mol'); } catch (e) { }
     const loose = R.parts.filter((m) => !m.isDisposed() && m.parent === R.root); for (let i = 0; i < Math.min(2, loose.length - 2); i++) { const m = loose[Math.floor(Math.random() * loose.length)]; if (m.parent !== R.root) continue; m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * 8, 6 + Math.random() * 6, Math.sin(a) * 8 - 6), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }          /* (chunks blasted off) */
     const F = rFrame(), back = -R.side; PH.vx = F.f[0] * 34 + F.r[0] * back * 7; PH.vz = F.f[1] * 34 + F.r[1] * back * 7; PH.vy = 3; PH.crest = true; PH.heading = Math.atan2(PH.vx, -PH.vz);          /* (you bounce off and drop back to the road, softly) */
-    if (R.hp <= 0) raidBoom(R); }
+    junkSpill(p.clone(), 10 + Math.floor(Math.random() * 5)); if (R.hp <= 0) raidDown(R); }
   function junkStep(dt, R) {
     const ret = junkRet(), on = R && (R.phase === 'attack' || JUNK.lockT > 0);
     JUNK.lockT = Math.max(0, JUNK.lockT - dt); if (JUNK.lockT <= 0) { ret.style.color = '#9fe8ff'; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; }
