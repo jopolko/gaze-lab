@@ -24,6 +24,6 @@ try {
     // the probe may return {shots:[...]} steps: each a JS snippet run before a screenshot saved to $SHOTDIR/probe_<i>.png
     const out = await ev('(async()=>{' + readFileSync(file, 'utf8') + '})()'); console.log(out);
     try { const o = JSON.parse(out); if (o && o.shots) for (let i = 0; i < o.shots.length; i++) { await ev('(async()=>{' + o.shots[i] + '})()'); await sleep(+(process.env.SHOTWAIT || 700)); const png = (await send('Page.captureScreenshot', { format: 'png' })).result.data; (await import('node:fs')).writeFileSync(join(process.env.SHOTDIR || '.', 'probe_' + i + '.png'), Buffer.from(png, 'base64')); } } catch { } }
-  console.log('errors:', JSON.stringify(errors.slice(0, 8)));
+  console.log('errors:', JSON.stringify((process.env.ERRALL ? errors.filter((e) => /ERROR|rror:/.test(e)).map((e) => e.slice(-600)) : errors.slice(0, 8))));
 } catch (e) { console.log('PROBE FAILED', String(e).slice(0, 400)); }
 finally { try { ws && ws.close(); } catch { } chrome.kill(); }
