@@ -1361,7 +1361,7 @@ void main() {
     btn('Restart', () => { location.reload(); });
     if (!Q.has('story') && !Q.has('tutorial')) { const w = PZ('pzW'); if (w) { w.title = 'World'; G.appendChild(w); } }
     btn('Quit to menu', () => { location.href = 'menu.html'; });
-    const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = 'Developer'; dv.style.gridColumn = '1/-1'; dv.onclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { if (localStorage.getItem('dl_dev') === '1') document.body.classList.add('devmenu'); } catch (e) { }
+    const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = 'Developer'; dv.style.gridColumn = '1/-1'; dv.onclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
     return { set(v) { el.classList.toggle('on', v); if (!v) T.hidden = true; } };
   })();
   pzb.onclick = () => setPause(!PAUSED); PZ('pzR').onclick = () => setPause(false);
@@ -1885,8 +1885,8 @@ const CFG = {
   function zoneRow(rr, j) {
     const z = zoneOf(j), dens = z === 'content' ? (BDEFB.density === undefined ? .5 : BDEFB.density) : 0, keep = (i, salt) => ((((i * 2654435761 + j * 40503 + salt * 977) >>> 0) % 1000) / 1000) < dens;
     const gone = (q) => { q.used = true; q.zoneHid = true; const bp = PADSRC.get(q); if (bp) bp.used = true; };
-    (rr.pads || []).forEach((q) => { if (!q.used && !q.lk) { if (!hideWhole(q) && q.gem) hideName(q.gem); gone(q); } });          /* the course's own pads: all hidden (the phrase deck places the boosts on purpose) */
-    (rr.pads || []).forEach((q, i) => { if (q.lk && !q.used && ((((i + 3) * 2654435761 + j * 40503 + 5 * 977) >>> 0) % 1000) / 1000 >= ((Q.has('story') && j <= 17) || (Q.has('tutorial') && j <= 36) ? 0 : Q.has('wild') ? .65 : 2)) { if (!hideWhole(q) && q.gem) hideName(q.gem); gone(q); } });          /* springs: about 65 % are kept (the diamond at the start of an arc that picks you up and carries you along it) */
+    if (!Q.has('story')) (rr.pads || []).forEach((q) => { if (!q.used && !q.lk) { if (!hideWhole(q) && q.gem) hideName(q.gem); gone(q); } });          /* (Route Zero keeps the course's own boost pads: its story places none until late, so its first kilometres had no speed at all) */          /* the course's own pads: all hidden (the phrase deck places the boosts on purpose) */
+    (rr.pads || []).forEach((q, i) => { if (q.lk && !q.used && ((((i + 3) * 2654435761 + j * 40503 + 5 * 977) >>> 0) % 1000) / 1000 >= ((Q.has('tutorial') && j <= 36) ? 0 : Q.has('wild') ? .65 : 2)) { if (!hideWhole(q) && q.gem) hideName(q.gem); gone(q); } });          /* springs: about 65 % are kept (the diamond at the start of an arc that picks you up and carries you along it) */
     (rr.buffs || []).forEach((b) => { if (!b.taken) { if (!hideWhole(b)) hideName(b.n); for (const o of (b.orbs || [])) hideName(o.n); b.thin = true; b.taken = true; const bb = BUFSRC.get(b); if (bb) bb.taken = true; for (const o of (b.orbs || [])) { const oo = ORBSRC.get(nameOfN(o.n)); if (oo) oo.taken = true; } } });          /* the course's own powerups: all hidden (the deck places them) */
     for (const t of (rr.toys || [])) if (t.kind === 'pill' && t.dupe && !t.gone) { if (!hideWhole(t)) hideName(t.n); t.eaten = true; t.hid = true; t.gone = true; }
     for (const t of (rr.toys || [])) if (t.kind !== 'pill' && !t.gone && (z === 'slalom' || z === 'clear' || t.kind === 'sling' || !keep((t.x * 7 + t.z) | 0, 3))) { if (!hideWhole(t)) hideName(t.n); t.done = true; t.used = true; t.t = 1e15; t.gone = true; }          /* bumpers, colour gates and slings: gone from clear and slalom stretches, thinned in the others */

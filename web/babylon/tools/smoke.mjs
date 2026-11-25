@@ -60,7 +60,7 @@ try {
     check('the opening hands back to the road', JSON.parse(await ev(`JSON.stringify(!document.getElementById('stOpen') && !document.body.classList.contains('stOpening'))`)));
     const cl = JSON.parse(await ev(`JSON.stringify((()=>{const G=window.__G; let zones=[]; for(let j=0;j<=12;j++) zones.push(G.ZM[j]); const springs=G.PADS.filter(p=>p.lk&&!p.used&&!p.zoneHid&&p.z<-20&&p.z>-2340).length; return {allClear: zones.every(z=>z==='clear'), springs};})())`));
     check('Route Zero reading stretch has no slalom or obstacle rows', cl.allClear);
-    check('Route Zero reading stretch has no spring arcs', cl.springs === 0, cl.springs + ' left');
+    check('Route Zero keeps its spring arcs (the intro road teaches now, so the opening stretch is not emptied)', cl.springs > 0, cl.springs + ' arcs');
 
     check('no script errors in Route Zero', errors.length === 0, errors.slice(0, 2).join(' | '));
   }
