@@ -41,6 +41,9 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @keyframes pulse { 50% { box-shadow:0 0 40px rgba(56,232,255,.55); border-color:rgba(56,232,255,.95); } }
 #strain { margin-bottom:clamp(8px,2vh,18px); font:700 clamp(11px,1.6vmin + 6px,15px) "Barlow Condensed",sans-serif; letter-spacing:.2em; text-transform:uppercase; text-align:center; color:var(--dim); min-height:1.3em; transition:opacity .5s; }
 #strain b { color:var(--c,#38e8ff); }
+#strain .fx { margin-top:3px; font:500 italic clamp(12px,1.5vmin + 7px,16px) Georgia,serif; letter-spacing:0; text-transform:none; color:#e8dcc0; text-shadow:0 0 6px #000,0 1px 2px #000; }
+#strain.in { animation:sin .7s ease-out; } @keyframes sin { from { opacity:0; transform:translateY(6px); } }
+@media (prefers-reduced-motion:reduce) { #strain.in { animation:none; } }
 #ticker { width:100%; overflow:hidden; white-space:nowrap; margin-top:clamp(8px,1.8vh,16px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.16em; color:rgba(185,194,212,.8);
   border-top:1px solid rgba(185,194,212,.18); padding-top:6px; }
 #ticker div { display:inline-block; padding-left:100%; animation:tick 38s linear infinite; }
@@ -77,27 +80,39 @@ let PANES = [];
 function buildSun() { PANES = []; let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const rings = [0, .28, .52, .76, 1], wedges = [5, 9, 13, 17];
   for (let r = 0; r < 4; r++) { const n = wedges[r], off = rnd() * 6.28; for (let k = 0; k < n; k++) { const a0 = off + k / n * 6.283, a1 = off + (k + 1) / n * 6.283; PANES.push({ ring: r, r0: rings[r], r1: rings[r + 1], a0, a1, ci: Math.floor(rnd() * PAL.length), ph: rnd() * 6.28 }); } } }
-const RSPD = [.05, -.08, .11, -.065].map((v) => v * (CALM ? .4 : 1));
+/* each ring swings back and forth, its neighbours the other way */
+const SWING = [.22, .3, .26, .34].map((v) => v * (CALM ? .5 : 1)), SWF = [.31, .27, .23, .19];
+const ringRot = (r, t) => (r % 2 ? -1 : 1) * SWING[r] * Math.sin(t * SWF[r] + r * 1.3);
 const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
-/* the trip wave: 0 (calm) to 1 (peak), rising and settling over about twenty seconds, never quite the same twice */
+/* the trip wave (0 calm to 1 peak) for the sky, stars and glow */
 const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
-function paneColour(p, t, k) { const f = (t * .18 + p.ph / 6.283) % 1, a = PAL[(p.ci + Math.floor(t * .18 + p.ph / 6.283)) % PAL.length], b = PAL[(p.ci + 1 + Math.floor(t * .18 + p.ph / 6.283)) % PAL.length];
-  return k > .05 ? mix(a, b, f * f * (3 - 2 * f) * Math.min(1, k * 1.4)) : PAL[p.ci]; }
-function sunPath(p, cxm, sy, R, rot, br) { const r1 = p.r1 * R * br, r0 = Math.max(.01, p.r0 * R * br); cx.beginPath(); cx.arc(cxm, sy, r1, p.a0 + rot, p.a1 + rot); cx.arc(cxm, sy, r0, p.a1 + rot, p.a0 + rot, true); cx.closePath(); }
-function drawSun(t, cxm, sy, R, hz, k) {
-  // rays behind it, turning slowly, stronger in the wave
-  cx.save(); cx.globalCompositeOperation = 'lighter'; const nr = 18, rr = RM ? 0 : t * .035;
-  for (let i = 0; i < nr; i++) { const a = rr + i / nr * 6.283, c = PAL[i % PAL.length]; cx.beginPath(); cx.moveTo(cxm, sy); cx.arc(cxm, sy, R * 3.2, a - .05, a + .05); cx.closePath(); cx.fillStyle = `rgba(${c},${.025 + .07 * k})`; cx.fill(); }
-  // ripples spreading out of it (the moire the game paints on its ground)
-  for (let i = 0; i < 6; i++) { const f = RM ? i / 6 : (t * .12 + i / 6) % 1, c = PAL[(i + Math.floor(t * .12)) % PAL.length]; cx.beginPath(); cx.arc(cxm, sy, R * (1.04 + f * 1.6), 0, 6.283); cx.strokeStyle = `rgba(${c},${(.05 + .2 * k) * (1 - f)})`; cx.lineWidth = 1.5 + 2 * (1 - f); cx.stroke(); }
-  cx.restore();
-  const rot = (r) => RM ? 0 : t * RSPD[r] * (1 + .7 * k) + Math.sin(t * .3 + r * 1.7) * .18 * k, br = (r) => 1 + (RM ? 0 : .03 * k * Math.sin(t * 1.25 + r * 1.1));
-  // the tracer: the panes a moment ago, faint, behind the panes now
-  if (k > .1 && !RM) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (const p of PANES) { const c = paneColour(p, t - .5, k); sunPath(p, cxm, sy, R * 1.04, rot(p.ring) - .16 * Math.sign(RSPD[p.ring]), br(p.ring)); cx.fillStyle = `rgba(${c},${.16 * k})`; cx.fill(); } cx.restore(); }
-  for (const p of PANES) { const c = paneColour(p, t, k), g = .55 + .45 * Math.sin(t * .9 + p.ph); sunPath(p, cxm, sy, R, rot(p.ring), br(p.ring)); cx.fillStyle = `rgba(${c},${.55 + .4 * g})`; cx.fill(); }
-  cx.strokeStyle = '#0b0712'; cx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { sunPath(p, cxm, sy, R, rot(p.ring), br(p.ring)); cx.stroke(); }
+/* THE LOOKS on the glass: each comes and goes on its own slow cycle, so one or two are strong at a time, each at a different strength each time round */
+const LOOKS = ['flow', 'melt', 'tracer', 'split', 'mirror', 'tunnel'];
+function looks(t) { const o = {}; LOOKS.forEach((n, i) => { const s = Math.sin(t * .16 + i * 1.05), env = s > 0 ? s * s : 0, peak = .55 + .45 * Math.sin(t * .047 + i * 2.1); o[n] = CALM ? (n === 'flow' ? .3 : 0) : env * peak; }); o.flow = Math.max(o.flow, .25); return o; }
+function paneColour(p, t, f) { const u = t * .18 + p.ph / 6.283, j = Math.floor(u), q = u - j, a = PAL[(p.ci + j) % PAL.length], b = PAL[(p.ci + j + 1) % PAL.length];
+  return mix(a, b, q * q * (3 - 2 * q) * Math.min(1, f * 1.6)); }
+/* a pane's outline; under MELT its edges ripple like wet paint */
+function sunPath(p, X, Y, R, rot, melt, t) { const n = Math.max(4, Math.ceil((p.a1 - p.a0) / .07)), r1 = p.r1 * R, r0 = Math.max(.5, p.r0 * R), wob = (r, a) => r * (1 + melt * .07 * Math.sin(a * 7 + t * 1.7 + p.ring * 2) * Math.sin(t * .9 + a * 3));
+  cx.beginPath(); for (let i = 0; i <= n; i++) { const a = p.a0 + (p.a1 - p.a0) * i / n + rot, r = wob(r1, a); i ? cx.lineTo(X + Math.cos(a) * r, Y + Math.sin(a) * r) : cx.moveTo(X + Math.cos(a) * r, Y + Math.sin(a) * r); }
+  for (let i = n; i >= 0; i--) { const a = p.a0 + (p.a1 - p.a0) * i / n + rot, r = wob(r0, a); cx.lineTo(X + Math.cos(a) * r, Y + Math.sin(a) * r); } cx.closePath(); }
+function glass(X, Y, R, t, L, alpha, tint, lead, spin) {
+  for (const p of PANES) { const c = tint ? tint : paneColour(p, t, L.flow), g = .55 + .45 * Math.sin(t * .9 + p.ph); sunPath(p, X, Y, R, ringRot(p.ring, t) + (spin || 0), L.melt, t); cx.fillStyle = `rgba(${c},${alpha * (.55 + .4 * g)})`; cx.fill(); }
+  if (lead) { cx.strokeStyle = '#0b0712'; cx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { sunPath(p, X, Y, R, ringRot(p.ring, t) + (spin || 0), L.melt, t); cx.stroke(); } } }
+function drawSun(t, cxm, sy, R, hz, k) { const L = looks(t);
+  // faint rays behind it
+  cx.save(); cx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 18; i++) { const a = t * .02 + i / 18 * 6.283, c = PAL[i % PAL.length]; cx.beginPath(); cx.moveTo(cxm, sy); cx.arc(cxm, sy, R * 3, a - .045, a + .045); cx.closePath(); cx.fillStyle = `rgba(${c},${.02 + .04 * k})`; cx.fill(); } cx.restore();
+  // TRACER: the glass a moment ago, twice, fading behind it
+  if (L.tracer > .02) { cx.save(); cx.globalCompositeOperation = 'lighter'; glass(cxm, sy, R * 1.03, t - .45, L, .22 * L.tracer, null, false); glass(cxm, sy, R * 1.06, t - .9, L, .12 * L.tracer, null, false); cx.restore(); }
+  // SPLIT: the colours pull apart, a cyan copy one way and an amber copy the other
+  if (L.split > .02) { const d = R * .035 * L.split; cx.save(); cx.globalCompositeOperation = 'lighter'; glass(cxm - d, sy, R, t, L, .45 * L.split, [56, 232, 255], false); glass(cxm + d, sy, R, t, L, .45 * L.split, [255, 177, 74], false); cx.restore(); }
+  glass(cxm, sy, R, t, L, 1, null, true);
+  // MIRROR: the glass folded over itself, so it turns symmetrical and flowers where the halves meet
+  if (L.mirror > .02) { cx.save(); cx.translate(cxm, sy); cx.scale(-1, 1); cx.globalCompositeOperation = 'lighter'; glass(0, 0, R, t + 3.1, L, .3 * L.mirror, null, false); cx.restore(); }
+  // TUNNEL: the sun again inside its own heart, and again inside that, turning the other way and slowly falling inward
+  if (L.tunnel > .02) { const z = (t * .12) % 1; cx.save(); cx.beginPath(); cx.arc(cxm, sy, R * .28, 0, 6.283); cx.clip();
+    for (let d = 0; d < 3; d++) { const sc = .28 * Math.pow(.3, d - z) ; if (sc > .5 || sc < .004) continue; cx.globalAlpha = L.tunnel * Math.min(1, (.5 - sc) * 6); glass(cxm, sy, R * sc, t, L, 1, null, true, -t * .4 * (d % 2 ? -1 : 1)); } cx.restore(); cx.globalAlpha = 1; }
   // the glass catches the light: a soft sheen sweeps across
-  if (!RM) { const sx = cxm - R * 1.4 + ((t * .09) % 1) * R * 2.8, sh = cx.createLinearGradient(sx - R * .3, 0, sx + R * .3, 0); sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(.5, `rgba(255,255,255,${.06 + .1 * k})`); sh.addColorStop(1, 'rgba(255,255,255,0)'); cx.save(); cx.beginPath(); cx.arc(cxm, sy, R, 0, 6.283); cx.clip(); cx.fillStyle = sh; cx.fillRect(cxm - R, sy - R, R * 2, R * 2); cx.restore(); }
+  if (!CALM) { const sx = cxm - R * 1.4 + ((t * .09) % 1) * R * 2.8, sh = cx.createLinearGradient(sx - R * .3, 0, sx + R * .3, 0); sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(.5, `rgba(255,255,255,${.06 + .08 * k})`); sh.addColorStop(1, 'rgba(255,255,255,0)'); cx.save(); cx.beginPath(); cx.arc(cxm, sy, R, 0, 6.283); cx.clip(); cx.fillStyle = sh; cx.fillRect(cxm - R, sy - R, R * 2, R * 2); cx.restore(); }
 }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
@@ -105,7 +120,10 @@ const KEYS = ['lucid', 'embrace', 'velocity', 'haze', 'drift', 'hollow', 'fold',
 const EL_C = { C: null, N: [90, 140, 255], O: [255, 80, 70], F: [140, 255, 140], S: [255, 220, 60] };
 let si = 0, sT = 0;
 const strainEl = document.getElementById('strain');
-function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255)); strainEl.style.setProperty('--c', `rgb(${c})`); strainEl.innerHTML = ''; const b = document.createElement('b'); b.textContent = p.name; strainEl.append(b, document.createTextNode(' · wild ' + p.plant)); }
+const WORLDOF = { lucid: 'Route Zero', haze: 'Sugarfall', hollow: 'The Safe Peaks', fold: 'Tomb of the Old Servers', embrace: 'Neon Accord', velocity: 'The Undertow', deep: 'Cold Rack', drift: 'Neon Accord, rarely' };          /* (as the menu's Strains codex) */
+function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255)); strainEl.style.setProperty('--c', `rgb(${c})`); strainEl.innerHTML = ''; strainEl.classList.remove('in'); void strainEl.offsetWidth; strainEl.classList.add('in');
+  const b = document.createElement('b'), n = document.createElement('div'), d = document.createElement('div'); b.textContent = p.name; n.append(b, document.createTextNode(' · wild ' + p.plant));
+  const fx = p.does.split(';')[0].trim(); d.className = 'fx'; d.textContent = fx.charAt(0).toUpperCase() + fx.slice(1) + (WORLDOF[KEYS[si]] ? ' · found: ' + WORLDOF[KEYS[si]] : ''); strainEl.append(n, d); }
 
 function draw(t) {
   const hz = H * (W > H ? .68 : .62), cxm = W / 2, k = wave(t);
@@ -133,7 +151,7 @@ function draw(t) {
   // the column of light, with a strain turning in it
   const colH = (hz - H * .1), cw = Math.min(W, H) * .07, p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
   g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},.32)`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .1, cw * 2, colH + (H - hz) * .08);
-  drawMol(p, cxm, hz - Math.min(W, H) * .06, Math.min(W, H) * .036, RM ? .6 : t * .9, RM ? .5 : .5 + Math.sin(t * .45) * .55, c, Math.min(1, sT / .6) * Math.min(1, (5 - sT) / .6), k);
+  drawMol(p, cxm, hz - Math.min(W, H) * (W > H ? .13 : .06), Math.min(W, H) * (W > H ? .024 : .036), RM ? .6 : t * .9, RM ? .5 : .5 + Math.sin(t * .45) * .55, c, Math.min(1, sT / .6) * Math.min(1, (6.5 - sT) / .6), k);
 }
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
 function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
@@ -169,7 +187,7 @@ setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time
 let t0 = performance.now(), last = t0;
 let errs = 0;
 function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now;          /* (next frame booked first: one bad frame never stops it) */
-  sT += dt; if (sT > 5) { sT = 0; si = (si + 1) % KEYS.length; showStrain(); }
+  sT += dt; if (sT > 6.5) { sT = 0; si = (si + 1) % KEYS.length; showStrain(); }
   try { draw(t); dial(t); } catch (e) { if (errs++ < 3) console.error('splash', e); } }
 addEventListener('resize', () => { size(); if (RM) draw(0); });
 size(); showStrain(); requestAnimationFrame(frame);
