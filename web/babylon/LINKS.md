@@ -2,6 +2,9 @@
 
 The same list lives online at https://joshuaopolko.com/gaze-lab/three/babylon/links.html (bookmark that one).
 
+## App
+- Downfall, the app (fullscreen stays on across pages; on a phone use Add to Home Screen): https://joshuaopolko.com/gaze-lab/three/babylon/app.html
+
 ## Play
 - Route Zero with the intro road (five scenes on "Legalize"; skip after the first hit): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?story=1&nointake=1
 - Main menu: https://joshuaopolko.com/gaze-lab/three/babylon/menu.html
