@@ -109,11 +109,12 @@ PANTRY = {
     'fold':     ('Spirocurcumin-4Z', '(4Z)-4-spirocyclopropyl-curcuminoid', 'curcumin', 'turmeric', [0.75, 1.0, 0.3], curcumin()),
     'deep':     ('13-Azacapsaicin', 'N-vanillyl-13-aza-8-methylnon-6-enamide', 'capsaicin', 'chilli', [0.55, 0.4, 1.0], capsaicin()) }
 # compound key -> (effect, what it does, ACCORD's shelf version (satire), the wild strain's line)
+# RULE: 'does' and the wild line must match what the game does (index.html COMP table, tripStep, LOOKNAMES). Change the words, never the effects.
 TEXT = {
-    'lucid':    ('LUCID', 'Tracers double; hidden roads show in the waves', 'Shelf version: ACCORD Green Tea™, now with Focus. Focus is sold separately.', 'Patterns everywhere. The patterns have patterns.'),
+    'lucid':    ('LUCID', 'Tracers almost double; on the Trip level, hidden roads show in the waves', 'Shelf version: ACCORD Green Tea™, now with Focus. Focus is sold separately.', 'Patterns everywhere. The patterns have patterns.'),
     'embrace':  ('EMBRACE', 'Crystals come to you; a warm glow over everything', 'Shelf version: ACCORD Hug Blend™ cocoa. Contains trace amounts of hug.', 'You love everyone. Even the drones. Especially the drones.'),
     'velocity': ('VELOCITY', 'You keep your boost; time slows when something is right ahead', 'Shelf version: homeopathic coffee. One bean per reservoir. Feel nothing, faster.', 'Time is a suggestion. You declined it.'),
-    'haze':     ('HAZE', 'The afterglow lasts half as long again; the bass goes deep', 'Shelf version: ACCORD ginger chews. Settles the stomach. Unsettles nothing else.', 'The bass has opinions. You agree with all of them.'),
+    'haze':     ('HAZE', 'The afterglow lasts half as long again; the world melts like wet paint', 'Shelf version: ACCORD ginger chews. Settles the stomach. Unsettles nothing else.', 'Everything melts. You agree with all of it.'),
     'drift':    ('DRIFT', 'Hits don’t hurt; everything slows a little', 'Shelf version: chamomile. Clinically proven to be a plant.', 'Nothing can hurt you. That’s the problem.'),
     'hollow':   ('HOLLOW', 'A wider, out-of-body view; cold and clear', 'Shelf version: ACCORD Peppermint Detachment™. Cool sensation. Slight existential draught.', 'You’re watching yourself drive. You’re doing great.'),
     'fold':     ('FOLD', 'The edges fold like pages; stained glass at the seams', 'Shelf version: turmeric. ACCORD stains everything yellow too.', 'Reality has pages. You’re reading ahead.'),
