@@ -272,15 +272,15 @@ vec3 finish(vec3 lin, float dist) { lin = mix(lin, uFogC, 1. - exp(-uFogD * dist
 #endif
   float lum = dot(vc, vec3(0.34)); lum = mix(lum, 0.55, smoothstep(70.0, 240.0, dist));
   float hue = fract(vW.z * 0.012 + vW.x * 0.007 + uTime * 0.07 + lum * 0.2); vec3 neon = hsv(hue, 0.85, 1.0);
-  vec3 alb = s2l(mix(vec3(0.03, 0.0, 0.06), neon * 0.75, smoothstep(0.1, 0.9, lum))); vec3 emi = neon * smoothstep(0.35, 1.0, lum) * 0.75;
-  gl_FragColor = vec4(finish(psyfx(lit(alb, N) + emi, vW, N, dist), dist), 1.); }`,
+  vec3 alb = s2l(mix(neon * 0.2, neon * 0.75, smoothstep(0.1, 0.9, lum))); vec3 emi = neon * smoothstep(0.35, 1.0, lum) * 0.75;
+  gl_FragColor = vec4(finish(psyfx(max(lit(alb, N), neon * .035) + emi, vW, N, dist), dist), 1.); }`,          /* (never black: the shadow side of a tree is a deep shade of its own colour) */
     back: GW_H + `uniform vec3 uAlb; void main() { float dist = distance(vW, uCam);
 #ifdef HASCOL
   vec3 bc = vC.rgb;
 #else
   vec3 bc = vec3(.5);
 #endif
-  gl_FragColor = vec4(finish(psyfx(s2l(bc * uAlb), vW, normalize(vN), dist), dist), 1.); }`,
+  gl_FragColor = vec4(finish(max(psyfx(s2l(bc * uAlb), vW, normalize(vN), dist), normalize(uAlb + .002) * .05), dist), 1.); }`,          /* (never black: the darkest backdrop hill is a deep shade of its own colour) */
     gpsy: GW_H + `uniform float grid, gglow, m_tri, m_rad, m_warp, w_mix, k_sq, k_edge, k_apron, m_cell, m_ang, m_ratio, m_depth, m_sat, m_hue, detail, path_on, path_half; uniform vec2 gcen, m_drift, m_rc; uniform vec3 w_a, w_b, w_line;
 void main() { vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N;
 
@@ -419,6 +419,7 @@ void main(){ vec3 wp = vW; float dist = distance(wp, uCam); float speed = uSpeed
           else if (uRoadK < 3.5) { roadc *= 1. + .07 * sin(wp.z * 1.4) * nk; roadc *= 1. - .35 * lz(wp.z, 9., .08, fz) * road * nk; }
           else { float gz = lz(wp.z, 6., .05, fz); roadc += hsv(fract(floor(wp.z / 6. + .5) * .13 + .55), .9, 1.) * gz * road * .5 * nk; }
         }
+        ground = max(ground, normalize(ea + .002) * .17);          /* never black ground: the darkest a world's land goes is a deep shade of its own earth colour (black reads as a glitch) */
         vec3 col = mix(ground, ea * .75 * lit, shoulder * .65); col = mix(col, roadc, road);
         float fw = fwidth(off) + 1e-4, edgeL = (1. - smoothstep(.05, .05 + fw, abs(ao - (uRoadHalf - .7)))) * step(ao, uRoadHalf), dash = step(fract(wp.z / 9.), .5), cl = (1. - smoothstep(.045, .045 + fw, ao)) * dash;
         float lineK = max(edgeL, cl) * road * (1. - smoothstep(.3, .9, fw)) * (1. - uDirt); col = mix(col, uLineC * (1. + uGlow * (.9 + .6 * uBeat)), lineK * .92);
@@ -701,7 +702,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   const optSave = () => { try { localStorage.setItem('bab_opts2', JSON.stringify(OPT)); } catch (e) { } };
   // ---- the biomes (biomes.js skies + the gv.js palettes): a palette gradient-mapped onto every surface (moire, dots and rim glow come out in the biome's colours), a fog colour, and the biome's own sky shader
   const V3 = (r, g, b) => new B.Vector3(r, g, b);
-  const BDEF = { psychedelic: { k: 0, a: V3(0, 0, 0), b: V3(.5, .5, .5), c: V3(1, 1, 1), fog: [.28, .12, .5] }, alpine: { k: .55, a: V3(.25, .3, .4), b: V3(.6, .7, .85), c: V3(.95, .97, 1), fog: [.62, .74, .9] }, candy: { gid: 1, k: .7, a: V3(.55, .3, .55), b: V3(1, .55, .75), c: V3(1, .95, .85), fog: [.95, .7, .85] }, egypt: { gid: 2, k: .7, a: V3(.1, .2, .35), b: V3(.85, .6, .25), c: V3(1, .9, .55), fog: [.9, .65, .4] }, tunnel: { gid: 3, k: .8, a: V3(.02, 0, .08), b: V3(.1, .5, .95), c: V3(.2, 1, 1), fog: [.04, 0, .1] }, desert: { gid: 4, k: .7, a: V3(.35, .1, .12), b: V3(.93, .35, .25), c: V3(1, .8, .45), fog: [.85, .4, .3] }, matrix: { gid: 5, k: .85, a: V3(0, .03, .01), b: V3(.05, .5, .18), c: V3(.4, 1, .55), fog: [0, .06, .02] }, synthwave: { gid: 6, k: .8, a: V3(.1, 0, .25), b: V3(1, .15, .6), c: V3(.2, .9, 1), fog: [.3, .05, .4] } };
+  const BDEF = { psychedelic: { k: 0, a: V3(0, 0, 0), b: V3(.5, .5, .5), c: V3(1, 1, 1), fog: [.28, .12, .5] }, alpine: { k: .55, a: V3(.25, .3, .4), b: V3(.6, .7, .85), c: V3(.95, .97, 1), fog: [.62, .74, .9] }, candy: { gid: 1, k: .7, a: V3(.55, .3, .55), b: V3(1, .55, .75), c: V3(1, .95, .85), fog: [.95, .7, .85] }, egypt: { gid: 2, k: .7, a: V3(.1, .2, .35), b: V3(.85, .6, .25), c: V3(1, .9, .55), fog: [.9, .65, .4] }, tunnel: { gid: 3, k: .8, a: V3(.02, 0, .08), b: V3(.1, .5, .95), c: V3(.2, 1, 1), fog: [.16, .06, .28] }, desert: { gid: 4, k: .7, a: V3(.35, .1, .12), b: V3(.93, .35, .25), c: V3(1, .8, .45), fog: [.85, .4, .3] }, matrix: { gid: 5, k: .85, a: V3(0, .03, .01), b: V3(.05, .5, .18), c: V3(.4, 1, .55), fog: [.03, .17, .09] }, synthwave: { gid: 6, k: .8, a: V3(.1, 0, .25), b: V3(1, .15, .6), c: V3(.2, .9, 1), fog: [.3, .05, .4] } };
   const SKYB = {
   candy: `vec3 top = vec3(.62, .50, .96), hor = vec3(1., .78, .78); float k = pow(clamp(1. - abs(d.y), 0., 1.), 2.2); vec3 col = mix(top, hor, k); col *= col;
     vec3 sd = normalize(vec3(.25, .30, -1.)); float r = acos(clamp(dot(d, sd), -1., 1.)); col = mix(col, vec3(1., .97, .9), 1. - smoothstep(.13, .14, r)); col += vec3(1., .6, .8) * (1. - smoothstep(.13, .6, r)) * .2;`,
@@ -2770,16 +2771,16 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   }
 
   // ================================================================ RAILS (gv_trip.js railStep): the course's own rails (21 of them). Line up with one and you are on it (within .9 m, 1.5 m near its start, and low); you ride its line with a little freedom from the head; steer hard away for .3 s to drop off, or ride it to the end for a lift and a slingshot of speed. Glass is fast, wood slow, rust rough; the length ridden is the score.
-  const RAILS = []; for (const rr0 of Object.values(phys.rows)) for (const f of (rr0.feats || [])) if (f.kind === 'rail') RAILS.push(f);
-  const FEAT_OFF = meta.feat_off || 15, featX = (f, z) => trailX(z) + f.sd * FEAT_OFF, railY = (f, z) => th(featX(f, z), z) + (.15 + (.9 - .15) * sstep(0, 4, f.za - z));
+  const RAILS = []; for (const rr0 of Object.values(phys.rows)) for (const f of (rr0.feats || [])) if (f.kind === 'rail') { f.sd0 = f.sd; RAILS.push(f); }
+  const FEAT_OFF = meta.feat_off || 15, featX = (f, z) => { if (f.chain && PH.rail !== f && f.kdx !== undefined) { f.chain = false; f.kdx = undefined; if (f.sd0 !== undefined) f.sd = f.sd0; } if (f.chain) { if (f.kdx === undefined) f.kdx = PH.x - trailX(PH.z); return trailX(z) + f.kdx; } return trailX(z) + f.sd * FEAT_OFF; }, railY = (f, z) => th(featX(f, z), z) + (.15 + (.9 - .15) * sstep(0, 4, f.za - z));
   function railStep(dt, sIn) {
     if (PH.rail) {
       const f = PH.rail; if (PH.hurt > 0) { PH.rail = null; f.done = true; return; }
-      const off = (how) => { const m = PH.rail_z0 - PH.z; PH.rail = null; f.done = true; AW.onRailEnd({ m, dropped: how === 'drop', sling: how === 'drop' ? 0 : Math.min(1, m / 36) }); if (how !== 'drop') { PH.grounded = false; PH.air_t = 0; if (how === 'end') { questSet('rail'); PH.vy += 13; PH.boost_t = Math.max(PH.boost_t, 2.5); window.__railAir = performance.now() + 1700 * LAB.hng / 100; try { lookPulse('asc'); FXB.E.cheer([PH.x, PH.y + 2, PH.z]); } catch (e) { } } } try { FXB.E.railEnd([PH.x, PH.y, PH.z]); } catch (e) { } if (m < 6) return; PH.rails = (PH.rails || 0) + 1; PH.score += Math.floor(m * 7) * (f.mat === 'neon' ? 2 : 1); chainHit(); try { PSY.events.onRail(m, how, 0, false, 1); } catch (e) { } const sl = Math.max(0, Math.min(1, m / 36)); if (sl > .2 && how !== 'drop') { PH.vz -= (3 + 13 * sl) * SPK * .6; PH.boost_t = Math.max(PH.boost_t, .7 + 1.8 * sl); PH.vxa = .7; } };
+      const off = (how) => { const m = PH.rail_z0 - PH.z; PH.rail = null; f.done = true; if (f.chain) { f.chain = false; f.kdx = undefined; if (f.sd0 !== undefined) f.sd = f.sd0; } AW.onRailEnd({ m, dropped: how === 'drop', sling: how === 'drop' ? 0 : Math.min(1, m / 36) }); if (how !== 'drop') { PH.grounded = false; PH.air_t = 0; if (how === 'end') { questSet('rail'); PH.vy += 13; PH.boost_t = Math.max(PH.boost_t, 2.5); window.__railAir = performance.now() + 1700 * LAB.hng / 100; try { lookPulse('asc'); FXB.E.cheer([PH.x, PH.y + 2, PH.z]); } catch (e) { } } } try { FXB.E.railEnd([PH.x, PH.y, PH.z]); } catch (e) { } if (m < 6) return; PH.rails = (PH.rails || 0) + 1; PH.score += Math.floor(m * 7) * (f.mat === 'neon' ? 2 : 1); chainHit(); try { PSY.events.onRail(m, how, 0, false, 1); } catch (e) { } const sl = Math.max(0, Math.min(1, m / 36)); if (sl > .2 && how !== 'drop') { PH.vz -= (3 + 13 * sl) * SPK * .6; PH.boost_t = Math.max(PH.boost_t, .7 + 1.8 * sl); PH.vxa = .7; } };
       if (PH.z <= f.zb) { off('end'); return; }
       PH.rail_out = (sIn * f.sd < -.85) ? PH.rail_out + dt : 0; if (PH.rail_out > .55) { off('drop'); return; }
       if (f.mat === 'glass') PH.vz -= 11 * SPK * dt; else if (f.mat === 'wood') PH.vz *= Math.exp(-.35 * dt); else if (f.mat === 'rust') PH.vz *= Math.exp(-.2 * dt);
-      const slope = (featX(f, PH.z - 1) - featX(f, PH.z + 1)) * .5; PH.rail_dx += PH.slide * dt; PH.slide *= Math.exp(-dt / .1); { const tgtR = Math.max(-1, Math.min(1, sIn)) * 1.6; PH.rail_dx += (tgtR - PH.rail_dx) * (1 - Math.exp(-dt / .18)); }
+      const slope = (featX(f, PH.z - 1) - featX(f, PH.z + 1)) * .5; PH.rail_dx += (PH.slide || 0) * dt; PH.slide = (PH.slide || 0) * Math.exp(-dt / .1);          /* (a tube hands you on without a slide: never NaN) */ { const tgtR = Math.max(-1, Math.min(1, sIn)) * 1.6; PH.rail_dx += (tgtR - PH.rail_dx) * (1 - Math.exp(-dt / .18)); }
       PH.x = featX(f, PH.z) + PH.rail_dx; const ry = railY(f, PH.z); PH.vy = PH.rail_ok ? Math.max(-40, Math.min(10, (ry - PH.rail_py) / Math.max(dt, 1e-4))) : PH.vy; PH.rail_py = ry; PH.rail_ok = true; PH.y = ry;
       PH.vx = slope * -PH.vz; PH.heading = Math.atan(slope) + Math.max(-1, Math.min(1, sIn)) * .1; PH.steer = Math.max(-1, Math.min(1, PH.heading / C.THETA_MAX)); PH.sv = 0; PH.grounded = true; PH.gh_prev = th(PH.x, PH.z);
       PH.railSparkT = (PH.railSparkT || 0) - dt; if (PH.railSparkT <= 0) { PH.railSparkT = .14; try { FXB.E.railSpark([PH.x, PH.y, PH.z]); } catch (e) { } } return;

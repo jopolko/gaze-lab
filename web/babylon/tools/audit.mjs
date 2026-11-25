@@ -50,7 +50,7 @@ try {
       o.unreachN=o.unreach.length; o.unreach=o.unreach.slice(0,10);
       return JSON.stringify(o); })()`));
     // 2. rails: ride each one hands-off and see how it lets you off
-    const rails = JSON.parse(await ev(`(async()=>{ const G=window.__G, PH=G.PH, out=[];
+    const rails = process.env.FAST ? [] : JSON.parse(await ev(`(async()=>{ const G=window.__G, PH=G.PH, out=[];
       for(const f of G.RAILS.slice(0,40)){ f.done=false; G.warp(f.za+3); PH.x=G.featX(f,PH.z); PH.y=G.railY(f,PH.z)+.5; PH.gh_prev=G.th(PH.x,PH.z); PH.vz=-55; PH.vx=0; PH.vy=0; PH.hurt=0; PH.rail=null;
         let got=false, how='never mounted', maxOff=0, endZ=null, endX=null, startZ=null;
         for(let i=0;i<220;i++){ await new Promise(r=>setTimeout(r,33)); if(PH.rail===f){ if(!got){got=true; startZ=PH.z;} maxOff=Math.max(maxOff,Math.abs(PH.x-G.featX(f,PH.z))); } else if(got){ endZ=PH.z; endX=PH.x; how = PH.z<=f.zb+1 ? 'end' : 'dropped early'; break; } }
