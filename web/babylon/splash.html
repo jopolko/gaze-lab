@@ -104,19 +104,32 @@ const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * 
    and the view sways with it. The molecule hangs in front of the sky's sun. Tuning the spectrum washes that sun in the chosen light. */
 const skyc = document.getElementById('sky');
 const GROUND = `
-uniform vec4 uTune; uniform vec4 uDrive; uniform vec2 uWH2;          /* uDrive: distance travelled (m), camera side offset (m), camera height (m), angle per css pixel */
+uniform vec4 uTune; uniform vec4 uDrive; uniform vec2 uWH2; uniform vec4 uFx;          /* uDrive: distance travelled (m), camera side offset (m), camera height (m), angle per css pixel */
 float roadC(float z) { return 7. * sin(z * .006) + 3. * sin(z * .017 + 1.3); }
 vec3 gpal(float f) { f = fract(f) * 5.; vec3 a = vec3(.22, .91, 1.), b = vec3(1., .82, .23), c = vec3(1., .69, .29), d = vec3(.62, .55, 1.), e = vec3(.49, 1., .54);
   return f < 1. ? mix(a, b, f) : f < 2. ? mix(b, c, f - 1.) : f < 3. ? mix(c, d, f - 2.) : f < 4. ? mix(d, e, f - 3.) : mix(e, a, f - 4.); }
 /* the painted look (in the shader, never a CSS filter): contrast eased, colours muted toward a warm wash, faint canvas grain, dimmed, darker at the edges
    so the title and the molecule stand forward */
+vec3 skyAt(vec3 d) { SD = d; skyMain(); return gl_FragColor.rgb; }
 float cgrain(vec2 p) { return fract(sin(dot(floor(p), vec2(12.9898, 78.233))) * 43758.5453); }
 vec3 paint(vec3 c) { c = pow(max(c, 0.), vec3(.8)); float l = dot(c, vec3(.3, .5, .2)); c = mix(vec3(l), c, .62); c = mix(c, vec3(.55, .36, .27) * (.35 + l), .22);
   vec2 sp = gl_FragCoord.xy; float gr = (cgrain(sp * .5) + cgrain(sp * .25 + 7.)) * .5 - .5; c *= 1. + gr * .06;
   vec2 v = gl_FragCoord.xy / uWH2 - .5; float vg = 1. - smoothstep(.25, .85, length(v * vec2(1., .8))) * .55; return c * .58 * vg; }
 void main() {
-  if (vP.y >= 0.) { skyMain(); gl_FragColor.rgb = paint(gl_FragColor.rgb);          /* (dimmed here, not with a CSS filter: phones apply those in tiles and the seams show) */
-    if (uTune.w > .001) { vec3 sd = normalize(vec3(.12, .28, -1.)); float a = acos(clamp(dot(normalize(vS), sd), -1., 1.)), m = 1. - smoothstep(0., .7, a); gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * .35 + uTune.rgb * .95, m * uTune.w * .85); }
+  if (vP.y >= 0.) { vec3 d = vS;
+    if (uFx.z > .001) { float band = floor(d.y * 14. + floor(uTime * 9.) * 3.1);          /* distortion: a wobble, and now and then bands of sky slip sideways */
+      d.xy += uFx.z * vec2(.035 * sin(d.y * 38. + uTime * 7.), .025 * sin(d.x * 31. - uTime * 6.));
+      d.x += uFx.z * .07 * (fract(sin(band * 12.9898) * 43758.5453) - .5) * step(.6, fract(sin(band * 78.233) * 9631.7)); }
+    vec3 c = skyAt(d);
+    if (uFx.y > .001) { vec3 c1 = skyAt(d + vec3(uFx.w, 0., 0.)), c2 = skyAt(d + vec3(0., uFx.w, 0.));          /* the art looks, from the sky's own edges */
+      float L = dot(c, vec3(.3, .5, .2)), e = length(vec2(dot(c1, vec3(.3, .5, .2)) - L, dot(c2, vec3(.3, .5, .2)) - L)), ed = smoothstep(.015, .07, e); vec3 rr;
+      if (uFx.x < 1.5) rr = mix(floor(c * 4. + .5) / 4. * 1.1, vec3(.02, .02, .05), ed);          /* VECTOR: flat colour fills, inked outlines */
+      else if (uFx.x < 2.5) rr = mix(c * .1, normalize(c + .001) * 1.5, ed);          /* LINE: the sky drawn in glowing lines on black */
+      else rr = clamp(c + (c - (c1 + c2) * .5) * 4., 0., 1.6);          /* SHARPEN: every ripple and pane edge cut crisp */
+      c = mix(c, rr, uFx.y); }
+    if (uTune.w > .001) { vec3 sd = normalize(vec3(.12, .28, -1.)); float a = acos(clamp(dot(normalize(vS), sd), -1., 1.)), m = 1. - smoothstep(0., .9, a), l = dot(c, vec3(.3, .5, .2));
+      c = mix(c, uTune.rgb * (.2 + 1.6 * l) + uTune.rgb * m * .45, uTune.w * (.6 + .3 * m)); }          /* the spectrum: the whole sky and its sun in that light */
+    gl_FragColor = vec4(paint(c), 1.);
     return; }
   float tt = uDrive.z / max(-vP.y, 1e-4), zw = uDrive.x + tt, X = (vP.x - .12) * tt + uDrive.y, aa = tt * uDrive.w * 1.3 + .015;
   vec2 p = vec2(X, zw); float sc = 1. / 6., g1 = sin(p.x * sc * 6.283) * sin(p.y * sc * 6.283);
@@ -134,13 +147,19 @@ void main() {
 }`;
 const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antialias: false }); if (!gl) return null;
   const vs = 'attribute vec2 p; uniform vec2 uWH; uniform vec4 uMap; varying vec3 vP; varying vec3 vS; void main(){ float px = (p.x * .5 + .5) * uWH.x, py = (.5 - .5 * p.y) * uWH.y; vP = vec3(.12 + (px - uMap.x) * uMap.z, (uMap.y - py) * uMap.z, -1.); vS = vec3(.12 + (px - uMap.x) * uMap.w, (uMap.y - py) * uMap.w, -1.); gl_Position = vec4(p, 0., 1.); }';
-  const fs = skyFragment('desert').replace('varying vec3 vP;', 'varying vec3 vP; varying vec3 vS;').replace('normalize(vP)', 'normalize(vS)').replace('void main(){', 'void skyMain(){') + GROUND;          /* (the sky reads its own, wider view: vS) */
+  const fs = skyFragment('desert').replace('varying vec3 vP;', 'varying vec3 vP; varying vec3 vS; vec3 SD;').replace('normalize(vP)', 'normalize(SD)').replace('void main(){', 'void skyMain(){') + GROUND;          /* (the sky reads its own, wider view: vS) */
   const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
   try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); gl.useProgram(pr);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
-    const U = {}; for (const n of ['uWH', 'uMap', 'uTime', 'uBeat', 'uGlass', 'uPsy', 'uTune', 'uDrive', 'uWH2']) U[n] = gl.getUniformLocation(pr, n); return { gl, U }; } catch (e) { console.error('splash sky', e); return null; } })();
+    const U = {}; for (const n of ['uWH', 'uMap', 'uTime', 'uBeat', 'uGlass', 'uPsy', 'uTune', 'uDrive', 'uWH2', 'uFx']) U[n] = gl.getUniformLocation(pr, n); return { gl, U }; } catch (e) { console.error('splash sky', e); return null; } })();
 const DRIVE = { z: 0 };
 const roadC = (z) => 7 * Math.sin(z * .006) + 3 * Math.sin(z * .017 + 1.3);
+const FX = { mode: 0, t0: 0, t1: 0, next: 4, warp: 0 };
+const FXF = +(new URLSearchParams(location.search).get('fx') || 0);          /* (?fx=1|2|3 holds one look on, for checking) */
+function fxNow(t) { if (FXF) return [FXF, 1, .6]; if (t > FX.next && t > FX.t1) { FX.mode = 1 + Math.floor(Math.random() * 3); FX.t0 = t; FX.t1 = t + 1.2 + Math.random() * 2.2; FX.warp = CALM ? 0 : Math.random() < .55 ? .5 + Math.random() * .5 : 0; FX.next = FX.t1 + 2.5 + Math.random() * 5.5; }
+  if (t > FX.t1 + .5) return [0, 0, 0];
+  const env = Math.min(1, (t - FX.t0) / .15) * (t < FX.t1 ? 1 : Math.max(0, 1 - (t - FX.t1) / .5)), fit = CALM ? 1 : (Math.sin(t * 23) + Math.sin(t * 37.1) > -.4 ? 1 : .25);
+  return [FX.mode, Math.max(0, env * fit), FX.warp * env * (CALM ? 0 : .5 + .5 * Math.abs(Math.sin(t * 5.3)))]; }
 function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = SKY, q = Math.min(1.25, DPR), w = Math.round(W * q), h = Math.round(H * q);
   if (skyc.width !== w || skyc.height !== h) { skyc.width = w; skyc.height = h; } gl.viewport(0, 0, w, h);
   DRIVE.z += dt * (CALM ? 18 : 42);          /* about 150 km/h */
@@ -148,7 +167,7 @@ function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = 
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
   gl.uniform2f(U.uWH, W, H); gl.uniform2f(U.uWH2, skyc.width, skyc.height); gl.uniform4f(U.uMap, cxm, hz, k, k);          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, glass * glass * (3 - 2 * glass) * .85); gl.uniform1f(U.uPsy, 0);
-  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], TUNE.k); gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
+  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], TUNE.k); { const f = fxNow(t); gl.uniform4f(U.uFx, f[0], f[1], f[2], k * 1.6); } gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
@@ -189,11 +208,10 @@ function draw(t, dt) {
     for (const q of near) { if (trc > .03 && q.dist < 120) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (let k = 3; k >= 1; k--) { const d2 = q.dist + k * 2.6 * trc; tree(Object.assign(at(q.X, d2, q.h), { dist: d2, h: q.h, n: q.n }), .22 * trc * (1 - k / 4), k); } cx.restore(); }
       tree(q, 1, 0); }
     cx.globalAlpha = 1; }
-  // the column of light, with the strain big in it
-  const p = PANTRY[KEYS[si]], c = (TUNE.k > .005 ? mix(p.c.map((v) => Math.round(v * 255)), specNow(), .6 * TUNE.k) : p.c.map((v) => Math.round(v * 255))), cw = Math.min(W, H) * .08;
-  g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},${.28 + .2 * TUNE.k})`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .08, cw * 2, hz - H * .08 + 2);
+  // the strain, big in front of the sky's sun
+  const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
   MOL.x = cxm; MOL.y = my; MOL.r = room.r; MOL.fit = room.r;
-  drawMol(p, cxm + SL.off, my, Math.min(W, H) * (short ? .05 : W > H ? .045 : .062), SPIN.yaw, SPIN.pitch, c, 1, k + .4 * TUNE.k);
+  drawMol(p, cxm + SL.off, my, Math.min(W, H) * (short ? .05 : W > H ? .045 : .062), SPIN.yaw, SPIN.pitch, c, 1, k);
 }
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
 /* the gap the molecule may fill: portrait, from under the tagline to above the strain's notes; phone landscape (words at the sides), from under the
