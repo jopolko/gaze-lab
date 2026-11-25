@@ -7,6 +7,7 @@ The same list lives online at https://joshuaopolko.com/gaze-lab/three/babylon/li
 
 ## Play
 - Route Zero with the intro road (five scenes on "Legalize"; skip after the first hit): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?story=1&nointake=1
+- Route Zero, toon look test (flat light bands, ink edges in each object's own colour): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?story=1&nointake=1&toon
 - Main menu: https://joshuaopolko.com/gaze-lab/three/babylon/menu.html
 - Strains codex: https://joshuaopolko.com/gaze-lab/three/babylon/menu.html?strains=1
 - Trip level: https://joshuaopolko.com/gaze-lab/three/babylon/index.html?biome=psychedelic&trip

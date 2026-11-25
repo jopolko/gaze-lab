@@ -432,6 +432,13 @@ void main() { vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N; vec3 V = norm
   fg = 0.;
 #endif
   gl_FragColor = vec4(mix(c, uFogC, fg), 1.); }`;
+  /* &toon (a look test): light falls in three flat bands instead of a smooth ramp, and the course's objects get a dark ink edge in their own colour (not black:
+     neon-noir, not comic). It costs nothing extra: the same shaders, no outline pass. The sky, the molecules and the psychedelic ground are left as they are. */
+  if (new URLSearchParams(location.search).has('toon')) {
+    const TOON_LIT = 'vec3 lit(vec3 alb, vec3 N) { float d = max(dot(N, uSunL), 0.); d = .45 * smoothstep(.05, .09, d) + .55 * smoothstep(.42, .47, d); float a = .35 + .45 * smoothstep(.45, .55, .5 + .5 * N.y); return alb * (uSunC * d + mix(uAmbG, uAmbS, a)); }';
+    for (const k in GW_FRAG) GW_FRAG[k] = GW_FRAG[k].replace('vec3 lit(vec3 alb, vec3 N) { return alb * (uSunC * max(dot(N, uSunL), 0.) + mix(uAmbG, uAmbS, .5 + .5 * N.y)); }', TOON_LIT);
+    GW_FRAG.std = GW_FRAG.std.replace('col = dif; } else col = lit(dif, N) + emi;', 'col = dif; } else col = lit(dif, N) + emi;\n  { float ed = 1. - abs(dot(N, V)); col = mix(col, dif * .1, smoothstep(.7, .8, ed) * (1. - smoothstep(60., 160., dist))); }');
+    window.__TOON = true; }
   for (const k in GW_FRAG) { B.Effect.ShadersStore['gw' + k + 'VertexShader'] = GW_VS; B.Effect.ShadersStore['gw' + k + 'FragmentShader'] = GW_FRAG[k]; }
   const GROUND_SIGS = ['ALBEDO = c * 0.4', 'frosting', 'dunes in flat bands', 'chevrons racing', 'flat poster colours', 'a drop runs down each column', 'A REGULAR LATTICE', 'uniform float grid'];
   const classify = (code) => (!code ? '' : ((code.includes('GROUND') || code.includes('MOIRE INTERFERENCE') || GROUND_SIGS.some((sg) => code.includes(sg))) && WORLD0 === 'psychedelic' && !code.includes('HORIZON BEND') ? 'gpsy' : ( (code.includes('HORIZON BEND') ? 'back' : (code.includes('float hue = fract(wp.z * 0.012') ? 'veg' : ((code.includes('GROUND') || code.includes('MOIRE INTERFERENCE') || GROUND_SIGS.some((sg) => code.includes(sg))) ? 'ground' : ''))))));
