@@ -4,7 +4,7 @@
 import re, os
 here = os.path.dirname(os.path.abspath(__file__)); B = os.path.dirname(here) + '/'
 s = open(B + 'musiclab.html', encoding='utf8').read()
-js = re.findall(r'<script>(.*?)</script>', s, re.S)[0]
+js = max(re.findall(r'<script>(.*?)</script>', s, re.S), key=len)          # the music script (the page also has the shell's small hop script)
 core = js.split('/* ---------- controls */')[0]
 def r(a, b):
     global core

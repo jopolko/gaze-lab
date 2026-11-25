@@ -31,11 +31,20 @@ input[type=range] { flex:1; accent-color:var(--sea); }
 #viz { flex:1; min-height:80px; width:100%; border-radius:14px; border:1px solid var(--line); background:#05070c; }
 small { color:var(--dim); }
 select { font:700 16px "Barlow Condensed",sans-serif; padding:.4em; border-radius:8px; background:#0b0f1a; color:#fff; border:1px solid var(--line); flex:1; }
+#tuner .tnh { display:flex; gap:10px; align-items:center; flex-wrap:wrap; font:700 15px "Barlow Condensed",sans-serif; letter-spacing:.1em; color:#cfe9ff; }
+#tuner .tnh small { letter-spacing:.02em; font:500 13px system-ui,sans-serif; color:var(--dim); flex:1; min-width:200px; }
+#tnRows { display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:8px; margin-top:8px; }
+.tn { display:flex; align-items:center; gap:6px; background:#0b0f1a; border:1px solid var(--line); border-radius:10px; padding:6px 8px; }
+.tn .l { font:700 12px "Barlow Condensed",sans-serif; letter-spacing:.14em; color:var(--dim); text-transform:uppercase; }
+.tn .n { flex:1; font:700 16px "Barlow Condensed",sans-serif; color:#fff; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tn button { padding:.3em .5em; font-size:15px; letter-spacing:0; }
+.tn button.on { border-color:var(--gold); color:var(--gold); }
 </style></head><body>
 <h1>MUSIC LAB</h1>
 <div class="row"><button class="pri" id="play">&#9654; Play</button><button id="newT">&#8635; New track</button><button class="dose" id="dose">&#11042; Dose</button><button id="save">&#9733; Save track</button><button id="ingame">&#9654; Play in game</button></div>
 <div class="row"><input id="seedIn" inputmode="numeric" placeholder="seed" style="width:11em;font:700 16px Barlow Condensed,sans-serif;letter-spacing:.08em;padding:.55em .8em;border-radius:10px;border:1px solid var(--line);background:#0b0f1a;color:#fff"><button id="loadSeed">Load seed</button><span id="saved" style="display:flex;gap:6px;flex-wrap:wrap"></span></div>
 <div class="card info" id="info">Press play.</div>
+<div class="card" id="tuner"><div class="tnh"><b>TUNE</b> <small>like a part to hear it more, dislike to never hear it again, swap to try another. Only that layer changes.</small> <button id="tnReset" class="chip">Reset tuning</button></div><div id="tnRows"></div></div>
 <div class="row card"><label style="min-width:200px">Style <select id="style"><option value="techno">Melodic techno / trance</option><option value="acid">Acid (303, slow build)</option><option value="jungle">Jungle (chopped breaks)</option><option value="eastern">Eastern (Hijaz, Hirajoshi)</option><option value="disco">Disco funk</option><option value="boogie">Boogie funk (80s)</option><option value="break">Breakbeat funk</option></select></label><label style="min-width:240px">Level <select id="lvl"><option value="">(free play)</option></select></label></div>
 <div class="row card"><label>Techno <input type="range" id="tr" min="0" max="100" value="55"> Trance</label><label>Energy <input type="range" id="en" min="0" max="100" value="80"></label></div>
 <div id="secs"></div>
@@ -144,6 +153,45 @@ function voice(prev, rootPc, q, lo, hi) {
   return cands.reduce((b, v) => (cost(v) < cost(b) ? v : b));
 }
 const snapTo = (n, pcs) => { for (const d of [0, -1, 1, -2, 2, -3, 3]) if (pcs.includes(md(n + d, 12))) return n + d; return n; };
+/* ---------- THE PARTS LIBRARY and THE TUNER. A track is one part per layer (chords, beat, bass, pads, melody), each from a short hand-picked list that suits
+   its genre, so every combination sounds right together. Your ratings (the Music Lab's tuner: like, dislike, swap) decide how often a part comes up:
+   a liked part more, a disliked one never; parts heard in the last few tracks rest; one track in five tries parts you have not rated (so it keeps finding new
+   ones without getting ugly). The game reads the same ratings, so tuning here shapes every level. */
+const TBEATS = [
+  { id: 'drive', name: 'Drive', hat: [0, .45, .9, .45, 0, .45, .9, .45, 0, .45, .9, .45, 0, .45, .9, .5], oh: [2, 6, 10, 14], clap: [4, 12], perc: [] },
+  { id: 'shuffle', name: 'Shuffle', hat: [0, 0, .9, .35, 0, 0, .9, .35, 0, 0, .9, .35, 0, 0, .9, .5], oh: [2, 6, 10, 14], clap: [4, 12], perc: [3, 6, 10, 14] },
+  { id: 'minimal', name: 'Minimal', hat: [0, 0, .7, 0, 0, 0, .7, 0, 0, 0, .7, 0, 0, 0, .7, 0], oh: [], clap: [12], perc: [7, 15] },
+  { id: 'rolling', name: 'Rolling', hat: [0, .5, .8, .5, 0, .5, .8, .5, 0, .5, .8, .5, 0, .5, .8, .55], oh: [2, 10], clap: [4, 12], perc: [6, 10] },
+  { id: 'broken', name: 'Broken', hat: [0, .4, .9, 0, 0, .4, 0, .5, 0, .4, .9, 0, 0, 0, .9, .4], oh: [6, 14], clap: [4, 10, 12], perc: [3, 11] },
+  { id: 'warehouse', name: 'Warehouse', hat: [0, .4, .85, .4, 0, .4, .85, .4, 0, .4, .85, .4, 0, .4, .85, .4], oh: [2, 6, 10, 14], clap: [4, 12, 15], perc: [7, 13] }];
+const TBASS = [{ id: 'roll', name: 'Roll', v: BPATS[0] }, { id: 'offbeat', name: 'Offbeat', v: BPATS[1] }, { id: 'gallop', name: 'Gallop', v: BPATS[2] }, { id: 'syncop', name: 'Syncopated', v: BPATS[3] }, { id: 'roll2', name: 'Rolling', v: BPATS[4] }];
+const ACIDS = [{ id: 'classic', name: 'Classic', v: ALINES[0] }, { id: 'climb', name: 'Octave climb', v: ALINES[1] }, { id: 'walk', name: 'Minor walk', v: ALINES[2] }, { id: 'fifth', name: 'Fifth bounce', v: ALINES[3] }, { id: 'pulse', name: 'Low pulse', v: ALINES[4] }, { id: 'high', name: 'High octave', v: ALINES[5] }];
+const JBEATS = [{ id: 'twostep', name: 'Two-step', jp: ['two', 'amen'], alt: 'half' }, { id: 'amen', name: 'Amen-style', jp: ['amen', 'chop'], alt: 'tear' }, { id: 'roll', name: 'Roller', jp: ['roll', 'two'], alt: 'step' },
+  { id: 'step', name: 'Stepper', jp: ['step', 'amen'], alt: 'chop' }, { id: 'tear', name: 'Tear-out', jp: ['tear', 'roll'], alt: 'half' }, { id: 'chop', name: 'Choppy', jp: ['chop', 'two'], alt: 'tear' }];
+const REESES = [{ id: 'push', name: 'Push', riff: [0, 6, 10], off: [0, 7, 12] }, { id: 'hold', name: 'Long hold', riff: [], off: [] }, { id: 'stab', name: 'Stabs', riff: [0, 3, 6, 10, 13], off: [0, 0, 12, 7, 0] }, { id: 'climb', name: 'Climb', riff: [0, 4, 8, 12], off: [0, 3, 5, 7] }];
+const DBEATS = Object.keys(DPAT).map((k) => ({ id: k, name: k[0].toUpperCase() + k.slice(1), v: DPAT[k] }));
+const EPROGS = ESCALES.flatMap((E) => E.progs.map((c, i) => ({ id: E.id + i, name: E.name + (i ? ' II' : ''), E, c })));
+const PADS = [{ id: 'warm', name: 'Warm saws', o: { type: 'sawtooth', count: 2, spread: 24, attack: 1.1, release: 2 }, lfo: [600, 2400] }, { id: 'glass', name: 'Glass', o: { type: 'triangle', count: 2, spread: 10, attack: .6, release: 2.6 }, lfo: [1400, 4200] },
+  { id: 'choir', name: 'Soft choir', o: { type: 'sine', count: 3, spread: 14, attack: 1.4, release: 2.8 }, lfo: [900, 3000] }, { id: 'dark', name: 'Dark', o: { type: 'square', count: 2, spread: 30, attack: 1.6, release: 3 }, lfo: [300, 1200] }];
+const MELS = [{ id: 'lift', name: 'Lift', v: [0, 3, 6, 8, 11, 14, 16, 19] }, { id: 'skip', name: 'Skip', v: [0, 2, 4, 7, 10, 12, 16, 22] }, { id: 'push', name: 'Push', v: [0, 3, 4, 8, 11, 12, 15, 24] }, { id: 'wide', name: 'Wide', v: [0, 4, 6, 8, 12, 14, 20, 22] }, { id: 'sparse', name: 'Sparse', v: [0, 6, 8, 14, 16, 22, 24, 28] }];
+const FCHORDS = FUNKP.map((p, i) => ({ id: 'v' + i, name: 'Vamp ' + (i + 1), v: p }));
+const FBEATS = [{ id: 'one', name: 'On the one', k: 0, g: 0 }, { id: 'pocket', name: 'Pocket', k: 1, g: 2 }, { id: 'push', name: 'Push', k: 2, g: 1 }, { id: 'late', name: 'Late kick', k: 3, g: 3 }, { id: 'skip', name: 'Skip', k: 4, g: 0 }, { id: 'ghost', name: 'Ghosty', k: 0, g: 3 }];
+const FBASS = ['Slap walk', 'Octave pop', 'Syncopated', 'Sparse', 'Busy'].map((name, i) => ({ id: 'b' + i, name, v: i }));
+const rdJ = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') || d; } catch (e) { return d; } }, wrJ = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
+let RATE = rdJ('dl_parts', {}), RECENT = rdJ('dl_recent', []), OVR = null;
+/* pick a part: always two random numbers (so the other layers stay put when one is swapped), your ratings, freshness, one in five a discovery */
+function choose(key, list) { const a = R(), b = R(); if (OVR && OVR[key]) { const o = list.find((x) => x.id === OVR[key]); if (o) return o; }
+  let ok = list.filter((x) => (RATE[key + '.' + x.id] || 0) > -1); if (!ok.length) ok = list;
+  if (b < .2) { const un = ok.filter((x) => !RATE[key + '.' + x.id]); const pool = un.length ? un : ok; return pool[Math.floor(a * pool.length)]; }
+  const w = ok.map((x) => (1 + 2 * Math.max(0, RATE[key + '.' + x.id] || 0)) * (RECENT.includes(key + '.' + x.id) ? .25 : 1)), tot = w.reduce((p, q) => p + q, 0); let q = a * tot;
+  for (let i = 0; i < ok.length; i++) { q -= w[i]; if (q <= 0) return ok[i]; } return ok[ok.length - 1]; }
+const LAYER = { cp: 'Chords', ec: 'Chords', fc: 'Chords', tb: 'Beat', jb: 'Beat', eb: 'Beat', fb: 'Beat', tbs: 'Bass', ac: 'Bass', rs: 'Bass', fbs: 'Bass', pd: 'Pads', ml: 'Melody' };
+const LISTS = () => ({ cp: CPROGS, ec: EPROGS, fc: FCHORDS, tb: TBEATS, jb: JBEATS, eb: DBEATS, fb: FBEATS, tbs: TBASS, ac: ACIDS, rs: REESES, fbs: FBASS, pd: PADS, ml: MELS });
+/* swap one layer, live: the same track with only that part changed (and never a part you disliked) */
+function swapPart(key) { if (!T || !T.parts) return; const cur = T.parts.find((p) => p.key === key); if (!cur) return; const list = LISTS()[key], ok = list.filter((x) => x.id !== cur.id && (RATE[key + '.' + x.id] || 0) > -1); if (!ok.length) return;
+  OVR = Object.fromEntries(T.parts.map((p) => [p.key, p.id])); OVR[key] = ok[Math.floor(Math.random() * ok.length)].id; const keep = SEED; try { makeTrack(); } finally { OVR = null; SEED = keep; } }
+function ratePart(key, v) { if (!T || !T.parts) return; const cur = T.parts.find((p) => p.key === key); if (!cur) return; const k = key + '.' + cur.id; RATE[k] = v < 0 ? -1 : Math.min(5, Math.max(0, RATE[k] || 0) + 1); wrJ('dl_parts', RATE); if (v < 0) swapPart(key); }
+function rememberParts() { if (OVR || !T || !T.parts) return; RECENT = RECENT.filter((k) => !T.parts.some((p) => p.key + '.' + p.id === k)).concat(T.parts.map((p) => p.key + '.' + p.id)).slice(-18); wrJ('dl_recent', RECENT); }
 /* ---------- the track (made from the seed) */
 let T = null;
 let STYLE = 'techno', LV = null;
@@ -152,34 +200,41 @@ function makeTrack() { R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; 
   const br = P0 ? P0[2] : STYLES[STYLE].bpm; let bpm = br[0] + Math.floor(R() * (br[1] - br[0] + 1)); if (canon) bpm = 128;
   const kit = { kick: pick(KIT.kick), clap: pick(KIT.clap), hat: pick(KIT.hat), oh: pick(KIT.oh), ride: pick(KIT.ride), perc: pick(KIT.perc), crash: KIT.crash[0] }, pmask = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 || i === 6 || i === 10) && R() < .45 ? 1 : 0);
   const hacc = Array.from({ length: 16 }, (_, i) => (i % 4 === 2 ? .9 : i % 2 ? .45 : .65) * (.85 + R() * .3));
-  const rhythms = [[0, 3, 6, 8, 11, 14, 16, 19], [0, 2, 4, 7, 10, 12, 16, 22], [0, 3, 4, 8, 11, 12, 15, 24], [0, 4, 6, 8, 12, 14, 20, 22], [0, 6, 8, 14, 16, 22, 24, 28]], rh = pick(rhythms);
+  const melP = choose('ml', MELS), rh = melP.v, parts = [];
   let d = pick([0, 2, 4]); const motif = rh.map((st, i) => { if (i) d += pick([-1, -1, 1, 1, 2, -2, 0, 3]); d = Math.max(-2, Math.min(9, d)); return { st, d, len: pick([2, 2, 3, 4]) }; });
   const secsOf = (arr) => { const secs = []; let b = 0; for (const [n, len] of arr) { secs.push({ n, b0: b, len }); b += len; } return [secs, b]; };
   if (funk) {          /* FUNK: unchanged from v2 (scale-degree 7th chords) */
-    const MODES = [['dorian', DORIAN], ['dorian', DORIAN], ['minor', MINOR]], mm = pickW(MODES, (x) => x[0], mc), mode = mm[1], prog = pickW(FUNKP, (x) => x.join(','), pc), arr = pick(FARRS);
+    const MODES = [['dorian', DORIAN], ['dorian', DORIAN], ['minor', MINOR]], mm = pickW(MODES, (x) => x[0], mc), mode = mm[1], fcP = choose('fc', FCHORDS), prog = fcP.v, arr = pick(FARRS);
     const deg = (d2, oct) => root + 12 * (oct || 0) + mode[md(d2, 7)] + 12 * Math.floor(d2 / 7), chord = (d2) => [deg(d2), deg(d2 + 2), deg(d2 + 4), deg(d2 + 6)];
     const FK = { kick: [[0, 6, 10], [0, 7, 10], [0, 3, 10], [0, 10, 13], [0, 8, 11]], ghost: [[7, 9, 14], [3, 7, 15], [7, 11, 14], [9, 14, 15]], bass: [[0, 3, 6, 8, 10, 13, 14], [0, 2, 6, 7, 10, 12, 14], [0, 3, 4, 7, 10, 11, 14], [0, 6, 8, 9, 12, 14], [0, 3, 6, 10, 11, 13]], clav: [[2, 5, 6, 10, 13, 14], [1, 3, 6, 9, 11, 14], [2, 3, 7, 10, 12, 15], [3, 6, 7, 11, 14]], keys: [[2, 6, 10, 14], [3, 6, 11, 14], [2, 7, 10, 15]] };
-    const fk = { kick: pick(FK.kick), ghost: pick(FK.ghost), bass: pick(FK.bass), clav: pick(FK.clav), keys: pick(FK.keys), boctave: FK.bass[0].map(() => R() < .3) };
+    const fbP = choose('fb', FBEATS), fbsP = choose('fbs', FBASS); parts.push({ key: 'fc', id: fcP.id, name: fcP.name }, { key: 'fb', id: fbP.id, name: fbP.name }, { key: 'fbs', id: fbsP.id, name: fbsP.name }, { key: 'ml', id: melP.id, name: melP.name });
+    const fk = { kick: FK.kick[fbP.k], ghost: FK.ghost[fbP.g], bass: FK.bass[fbsP.v], clav: pick(FK.clav), keys: pick(FK.keys), boctave: FK.bass[0].map(() => R() < .3) };
     const pent = [0, 3, 5, 7, 10], pdeg = (i, oct) => root + 12 * (oct || 0) + pent[md(i, 5)] + 12 * Math.floor(i / 5), [secs, bars] = secsOf(arr);
-    T = { style: STYLE, kind: 'funk', funk: true, fk, pdeg, modeName: mm[0], kn, root, mode, prog, bpm, deg, chord, motif, secs, bars, kit, pmask, hacc, name: kn + ' ' + mm[0] };
+    T = { style: STYLE, kind: 'funk', funk: true, parts, fk, pdeg, modeName: mm[0], kn, root, mode, prog, bpm, deg, chord, motif, secs, bars, kit, pmask, hacc, name: kn + ' ' + mm[0] };
   } else {
     const kind = STYLE; let cprog, mode, modeName, scName = null;
-    if (kind === 'eastern') { const E = pick(ESCALES); scName = E.name; mode = E.sc; modeName = E.id; cprog = { id: E.id + E.progs.indexOf(E.progs[0]), c: pick(E.progs) }; }
-    else { cprog = pickW(CPROGS, (x) => x.id, pc); if (canon) cprog = ACANON.prog; modeName = cprog.mode; mode = { minor: MINOR, dorian: DORIAN, phrygian: PHRYG }[cprog.mode]; }
+    if (kind === 'eastern') { const ep = choose('ec', EPROGS), E = ep.E; scName = E.name; mode = E.sc; modeName = E.id; cprog = { id: ep.id, c: ep.c }; parts.push({ key: 'ec', id: ep.id, name: ep.name }); }
+    else { cprog = choose('cp', CPROGS); parts.push({ key: 'cp', id: cprog.id, name: cprog.id[0].toUpperCase() + cprog.id.slice(1) }); if (canon) cprog = ACANON.prog; modeName = cprog.mode; mode = { minor: MINOR, dorian: DORIAN, phrygian: PHRYG }[cprog.mode]; }
     const n = mode.length, deg = (d2, oct) => root + 12 * (oct || 0) + mode[md(d2, n)] + 12 * Math.floor(d2 / n);
     /* the voicings, led through the loop twice so the first chord also follows the last */
     const lo = kind === 'jungle' ? 53 : 55, hi = kind === 'jungle' ? 77 : 76; let prev = null; const pv = []; for (let k = 0; k < cprog.c.length * 2; k++) { const [s, q] = cprog.c[k % cprog.c.length]; prev = voice(prev, md(root + s, 12), q, lo, hi); if (k >= cprog.c.length) pv.push(prev); }
     const bn = cprog.c.map(([s]) => 33 + md(root + s - 33, 12)), pcs = cprog.c.map(([s, q]) => CQ[q].map((i) => md(root + s + i, 12)));          /* bass roots between A1 and G#2; each chord's pitch classes */
-    const arr = pick(kind === 'jungle' ? JARRS : kind === 'acid' ? AARRS : ARRS), [secs, bars] = secsOf(arr), aline = canon ? ACANON.line : pick(ALINES);
-    const bpat = pick(BPATS), boct = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 && R() < .3 ? 12 : i === 14 && R() < .3 ? 7 : 0)), arpMode = pick(['up', 'updown', 'gate', 'up']);
+    const arr = pick(kind === 'jungle' ? JARRS : kind === 'acid' ? AARRS : ARRS), [secs, bars] = secsOf(arr), acP = choose('ac', ACIDS), aline = canon ? ACANON.line : acP.v;
+    const tbsP = choose('tbs', TBASS), bpat = tbsP.v, tbP = choose('tb', TBEATS), jbP = choose('jb', JBEATS), rsP = choose('rs', REESES), ebP = choose('eb', DBEATS), pdP = choose('pd', PADS), boct = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 && R() < .3 ? 12 : i === 14 && R() < .3 ? 7 : 0)), arpMode = pick(['up', 'updown', 'gate', 'up']);
     const gate = Array.from({ length: 16 }, (_, i) => (i % 2 === 0 || R() < .35 ? 1 : 0));
-    const jp = [pick(['two', 'amen', 'roll', 'step']), pick(['amen', 'chop', 'roll', 'tear', 'two'])], jalt = pick(['half', 'chop', 'tear', 'step']);
+    const jp = jbP.jp, jalt = jbP.alt;
+    if (kind === 'techno') parts.push({ key: 'tb', id: tbP.id, name: tbP.name }, { key: 'tbs', id: tbsP.id, name: tbsP.name });
+    if (kind === 'jungle') parts.push({ key: 'jb', id: jbP.id, name: jbP.name }, { key: 'rs', id: rsP.id, name: rsP.name });
+    if (kind === 'eastern') parts.push({ key: 'eb', id: ebP.id, name: ebP.name });
+    if (kind === 'acid' && !canon) parts.push({ key: 'ac', id: acP.id, name: acP.name });
+    parts.push({ key: 'pd', id: pdP.id, name: pdP.name }); if (kind !== 'acid') parts.push({ key: 'ml', id: melP.id, name: melP.name });
     const chop = {}; for (const c of ['K', 'S', 'H', 'G']) { const a = BRK[c].slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } chop[c] = a.slice(0, c === 'G' ? 2 : 3); }
-    const dpat = DPAT[pick(Object.keys(DPAT))], oud = (() => { const rr = pick([[0, 3, 6, 8, 10, 12, 14], [0, 2, 3, 6, 8, 11, 14], [0, 3, 4, 6, 8, 12, 15], [0, 2, 4, 6, 8, 10, 12, 14]]); let dd = 0; return rr.map((st, i) => { if (i) dd = Math.max(-2, Math.min(5, dd + pick([-1, 1, -1, 1, 2, -2, 0]))); return { st, d: dd }; }); })();
-    T = { style: STYLE, kind, funk: false, cbars: canon ? 1 : 2, aline, aroot: 33 + md(root - 33, 12), kn, root, mode, modeName, scName, cprog, pv, bn, pcs, bpm, deg, motif, secs, bars, kit, pmask, hacc, bpat, boct, arpMode, gate, jp, jalt, chop, jfill: pick(JFILL), dpat, oud, name: kn + ' ' + (scName || modeName) };
+    const dpat = ebP.v, oud = (() => { const rr = pick([[0, 3, 6, 8, 10, 12, 14], [0, 2, 3, 6, 8, 11, 14], [0, 3, 4, 6, 8, 12, 15], [0, 2, 4, 6, 8, 10, 12, 14]]); let dd = 0; return rr.map((st, i) => { if (i) dd = Math.max(-2, Math.min(5, dd + pick([-1, 1, -1, 1, 2, -2, 0]))); return { st, d: dd }; }); })();
+    T = { style: STYLE, kind, funk: false, parts, tbeat: kind === 'techno' ? tbP : null, reese: rsP, padSound: pdP, cbars: canon ? 1 : 2, aline, aroot: 33 + md(root - 33, 12), kn, root, mode, modeName, scName, cprog, pv, bn, pcs, bpm, deg, motif, secs, bars, kit, pmask, hacc, bpat, boct, arpMode, gate, jp, jalt, chop, jfill: pick(JFILL), dpat, oud, name: kn + ' ' + (scName || modeName) };
   }
+  rememberParts();
   document.getElementById('seed').textContent = SEED; drawSecs(); info(); }
-function info(extra) { if (!T) return; const roman = ['i', 'ii', 'III', 'iv', 'v', 'VI', 'VII']; const sty = { disco: 'Disco funk', boogie: 'Boogie funk', break: 'Breakbeat funk', jungle: 'Jungle', eastern: 'Eastern', techno: 'Techno' }[T.style]; document.getElementById('info').innerHTML = '<b>' + sty + '</b> &middot; <b>' + T.name + '</b> &middot; ' + T.bpm + ' BPM &middot; ' + (T.funk ? T.prog.map((x) => roman[x]).join(' &ndash; ') + ' (' + chordNames() + ')' : chordNames()) + ' &middot; ' + T.bars + ' bars' + (extra ? ' &middot; ' + extra : ''); }
+function info(extra) { if (!T) return; try { drawTuner(); } catch (e) { } const roman = ['i', 'ii', 'III', 'iv', 'v', 'VI', 'VII']; const sty = { disco: 'Disco funk', boogie: 'Boogie funk', break: 'Breakbeat funk', jungle: 'Jungle', eastern: 'Eastern', techno: 'Techno' }[T.style]; document.getElementById('info').innerHTML = '<b>' + sty + '</b> &middot; <b>' + T.name + '</b> &middot; ' + T.bpm + ' BPM &middot; ' + (T.funk ? T.prog.map((x) => roman[x]).join(' &ndash; ') + ' (' + chordNames() + ')' : chordNames()) + ' &middot; ' + T.bars + ' bars' + (extra ? ' &middot; ' + extra : ''); }
 function drawSecs() { const w = document.getElementById('secs'); w.innerHTML = ''; T.secs.forEach((s, i) => { const e = document.createElement('span'); e.textContent = s.n; e.dataset.i = i; w.appendChild(e); }); }
 /* ---------- the sound: built once */
 let S = null;
@@ -213,7 +268,7 @@ function build() {
   const pad = new Lite(padLP, { type: 'sawtooth', count: 2, spread: 24, attack: 1.1, decay: .6, sustain: .85, release: 2, peak: .42, max: 12 });
   // the riser: noise swept up before a drop (started only while it rises)
   const rn = new Tone.Noise('white'), rnBP = new Tone.BiquadFilter(400, 'bandpass'), rnG = new Tone.Gain(0); rnBP.Q.value = 2; rn.chain(rnBP, rnG, comp); rnG.connect(revS);
-  S = { drums, drumBus, kick, rumbleSrc, rumG, pad, padG, padLP, rn, rnG, rnBP, duck, revS, dlyS, comp, built: {}, ready: () => Promise.all([rev.ready].filter(Boolean)) };
+  S = { drums, drumBus, kick, rumbleSrc, rumG, pad, padG, padLP, padLFO, rn, rnG, rnBP, duck, revS, dlyS, comp, built: {}, ready: () => Promise.all([rev.ready].filter(Boolean)) };
   const MODS = {
     bass() {          // the rolling techno bass (a resonant saw) and the trance gallop (a cleaner square)
       const bass = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { Q: 4, type: 'lowpass', rolloff: -24 }, envelope: { attack: .003, decay: .16, sustain: .2, release: .08 }, filterEnvelope: { attack: .002, decay: .12, sustain: .15, release: .1, baseFrequency: 90, octaves: 3.2 } }); const baG = new Tone.Gain(0); bass.chain(baG, duck);
@@ -272,7 +327,7 @@ function kickHit(time, v) { S.kick.triggerAttackRelease(midi(T.kroot || 33), '8n
 function riserStep(time, P, sec, inSec, st, dosing, bar, big) { const riseK = P.riser ? (inSec * 16 + st) / (sec.len * 16) : dosing && bar - doseBar < 2 ? ((bar - doseBar) * 16 + st) / 32 : 0;
   if (riseK > 0 && !S.rnOn) { S.rnOn = true; S.rn.start(time); } else if (riseK <= 0 && S.rnOn) { S.rnOn = false; S.rn.stop(time + .4); }
   pT(S.rnG.gain,riseK > 0 ? .02 + (big || .16) * riseK : 0, time, riseK > 0 ? .1 : .02); pT(S.rnBP.frequency,300 + 9000 * riseK * riseK, time, .1); }
-function padChord(time, P2, bar, len) { const cb = T.cbars || 2, ci = Math.floor(bar / cb) % T.pv.length; if (P2.pad && (bar % cb === 0) && T.cst === 0) { S.pad.releaseAll(time); S.pad.triggerAttackRelease(T.pv[ci].map(midi), cb === 1 ? '1m' : (len || '2m'), time, .5 * P2.pad); } return ci; }
+function padChord(time, P2, bar, len) { if (T.padSound && S.padSnd !== T.padSound.id) { S.padSnd = T.padSound.id; Object.assign(S.pad.o, T.padSound.o); try { S.padLFO.min = T.padSound.lfo[0]; S.padLFO.max = T.padSound.lfo[1]; } catch (e) { } } const cb = T.cbars || 2, ci = Math.floor(bar / cb) % T.pv.length; if (P2.pad && (bar % cb === 0) && T.cst === 0) { S.pad.releaseAll(time); S.pad.triggerAttackRelease(T.pv[ci].map(midi), cb === 1 ? '1m' : (len || '2m'), time, .5 * P2.pad); } return ci; }
 
 /* FUNK: a drummer, a bass player, a clav, keys and horns, all on the same pocket. Kick patterns, ghost notes and comping rhythms come from real funk grooves. */
 function funkTick(time, s, bar, st, sec, inSec, lastBar, P, dosing, en) {
@@ -306,10 +361,10 @@ function technoTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
   const kickOn = P.k > 0 && st % 4 === 0 && !(lastBar && P.k < 1 && st > 8), fill = lastBar && (sec.n === 'BUILD' || sec.n === 'RISE') && st >= 12;
   if (kickOn || (fill && st % 2 === 0)) { kickHit(time, kickOn ? .95 + .05 * en : .7); if (inSec === 0 && st === 0 && (sec.n === 'DROP' || sec.n === 'GROOVE')) hit(T.kit.crash, time, .5); if (P.ru * en > .1) S.rumbleSrc.triggerAttackRelease(midi(bn - 12 > 24 ? bn - 12 : bn), '8n', time, .7); pump(time, .25, .2); }
   pT(S.rumG.gain,P.ru * (1 - tr * .7) * en * .5, time, .1);
-  if (P.h && st % 4 !== 0 && R() < P.h * (.6 + .4 * en)) hit(T.kit.hat, time, T.hacc[st] * (.5 + .4 * en));
-  if (P.oh && st % 4 === 2) hit(T.kit.oh, time, .55 + .15 * en);
-  if (P.cl && (st === 4 || st === 12) && R() < P.cl) hit(T.kit.clap, time, .8);
-  if ((sec.n === 'GROOVE' || sec.n === 'DROP') && T.pmask[st]) hit(T.kit.perc, time, .32 + .2 * en);
+  { const hv = T.tbeat ? T.tbeat.hat[st] : (st % 4 !== 0 ? T.hacc[st] : 0); if (P.h && hv > 0 && R() < P.h * (.6 + .4 * en)) hit(T.kit.hat, time, hv * (.5 + .4 * en)); }
+  if (P.oh && (T.tbeat ? T.tbeat.oh.includes(st) : st % 4 === 2)) hit(T.kit.oh, time, .55 + .15 * en);
+  if (P.cl && (T.tbeat ? T.tbeat.clap.includes(st) : (st === 4 || st === 12)) && R() < P.cl) hit(T.kit.clap, time, .8);
+  if ((sec.n === 'GROOVE' || sec.n === 'DROP') && (T.tbeat ? T.tbeat.perc.includes(st) : T.pmask[st])) hit(T.kit.perc, time, .32 + .2 * en);
   if (P.ri && st % 4 === 2 && tr < .8) hit(T.kit.ride, time, .25 * (1 - tr));
   if (P.ba) { const techno = T.bpat[st] && R() < 1 - tr * .7, trance = st % 4 !== 0 && R() < tr * 1.1;
     if (techno) { S.bass.filterEnvelope.octaves = 2.4 + 2.2 * en * (.6 + .4 * Math.sin(bar * .7)); S.bass.triggerAttackRelease(midi(bn + T.boct[st]), '16n', time, .75); }
@@ -337,7 +392,7 @@ function jungleTick(time, bar, st, sec, inSec, lastBar, P, P2, tr, en, dosing) {
   if (inSec === 0 && st === 0 && (sec.n === 'DROP' || sec.n === 'SWITCH')) hit(T.kit.crash, time, .5);
   if (firstOfChord && P.sub) S.sub.triggerAttackRelease(midi(bn), '2m', time, .9);
   pT(S.subG.gain,.26 * P.sub, time, .1);
-  if (P.rs) { const riff = [0, 6, 10]; if (firstOfChord) S.reese.triggerAttackRelease(midi(bn + 12), '1m', time, .8); else if (bar % 2 === 1 && riff.includes(st)) S.reese.triggerAttackRelease(midi(bn + 12 + (st === 6 ? 7 : st === 10 ? 12 : 0)), st === 10 ? '4n' : '8n', time, .7); }
+  if (P.rs) { const RZ = T.reese || REESES[0], k = RZ.riff.indexOf(st); if (firstOfChord) S.reese.triggerAttackRelease(midi(bn + 12), RZ.riff.length ? '1m' : '2m', time, .8); else if (bar % 2 === 1 && k > 0) S.reese.triggerAttackRelease(midi(bn + 12 + RZ.off[k]), k === RZ.riff.length - 1 ? '4n' : '8n', time, .7); }
   pT(S.rsG.gain,.26 * P.rs * (.6 + .4 * en), time, .15);
   pT(S.padG.gain,.13 * P2.pad, time, .4);
   try { if (S.atm.loaded && S.atm.state !== 'started') { S.atm.playbackRate = T.bpm / 170; S.atm.start(time); } } catch (e) { }
@@ -409,6 +464,14 @@ async function renderOffline(o) { const keep = [S, T, step, lastSec, STYLE, LV, 
 function chordNames() { const N = (['E', 'B'].includes(T.kn) || (T.mode === DORIAN && ['A', 'E', 'B'].includes(T.kn))) ? ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'] : ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
   if (!T.funk) return T.cprog.c.map(([s, q]) => N[md(T.root + s, 12)] + CLAB[q]).join(' – ');
   return T.prog.map((d) => { const c = T.chord(d), third = (c[1] - c[0] + 12) % 12, fifth = (c[2] - c[0] + 12) % 12; const sev = (c[3] - c[0] + 12) % 12 === 10 ? '7' : (c[3] - c[0] + 12) % 12 === 11 ? 'maj7' : ''; return N[c[0] % 12] + (third === 3 ? (fifth === 6 ? 'dim' : 'm') : '') + sev; }).join(' – '); }
+/* THE TUNER (lab only): one row per layer of the playing track */
+let tnSig = '';
+function drawTuner(force) { if (!T || !T.parts) return; const sig = T.parts.map((p) => p.key + p.id).join('|') + JSON.stringify(RATE); if (!force && sig === tnSig) return; tnSig = sig; const w = document.getElementById('tnRows'); w.textContent = '';
+  for (const p of T.parts) { const row = document.createElement('div'); row.className = 'tn'; const sc = RATE[p.key + '.' + p.id] || 0;
+    const l = document.createElement('span'); l.className = 'l'; l.textContent = LAYER[p.key]; const n = document.createElement('span'); n.className = 'n'; n.textContent = p.name + (sc > 0 ? '  \u2605' + sc : ''); n.title = p.name;
+    const mk = (t, title, fn, on) => { const b = document.createElement('button'); b.textContent = t; b.title = title; if (on) b.className = 'on'; b.onclick = () => { fn(); drawTuner(true); info(); }; return b; };
+    row.append(l, n, mk('\uD83D\uDC4D', 'More of this', () => ratePart(p.key, 1), sc > 0), mk('\uD83D\uDC4E', 'Never again (and swap it now)', () => ratePart(p.key, -1)), mk('\u27F3', 'Swap: try another', () => swapPart(p.key))); w.appendChild(row); } }
+document.getElementById('tnReset').onclick = () => { RATE = {}; RECENT = []; wrJ('dl_parts', RATE); wrJ('dl_recent', RECENT); drawTuner(true); };
 /* ---------- controls */
 let started = false, loopId = null;
 async function start() { if (!S && Tone.getContext().latencyHint !== 'playback') { try { Tone.setContext(new Tone.Context({ latencyHint: 'playback', lookAhead: .2 })); } catch (e) { } } await Tone.start(); if (!S) build(); if (!T) makeTrack(); need(T.kind); document.getElementById('info').textContent = 'Loading…'; await Tone.loaded(); await S.ready(); Tone.Transport.bpm.value = T.bpm; Tone.Transport.swing = swingOf(); Tone.Transport.swingSubdivision = '16n'; if (loopId === null) loopId = Tone.Transport.scheduleRepeat(tick, '16n'); Tone.Transport.start('+0.1'); started = true; document.getElementById('play').innerHTML = '&#10074;&#10074; Stop'; }
