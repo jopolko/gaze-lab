@@ -436,7 +436,7 @@ function drawTuner(force) { if (!T || !T.parts) return; const sig = T.parts.map(
     const l = document.createElement('span'); l.className = 'l'; l.textContent = LAYER[p.key]; const n = document.createElement('span'); n.className = 'n'; n.textContent = p.name + (sc > 0 ? '  \u2605' + sc : ''); n.title = p.name;
     const mk = (t, title, fn, on) => { const b = document.createElement('button'); b.textContent = t; b.title = title; if (on) b.className = 'on'; b.onclick = () => { fn(); drawTuner(true); info(); }; return b; };
     row.append(l, n, mk('\uD83D\uDC4D', 'More of this', () => ratePart(p.key, 1), sc > 0), mk('\uD83D\uDC4E', 'Never again (and swap it now)', () => ratePart(p.key, -1)), mk('\u27F3', 'Swap: try another', () => swapPart(p.key))); w.appendChild(row); } }
-document.getElementById('tnReset').onclick = () => { RATE = {}; RECENT = []; wrJ('dl_parts', RATE); wrJ('dl_recent', RECENT); drawTuner(true); };
+{ const tr0 = document.getElementById('tnReset'); if (tr0) tr0.onclick = () => { RATE = {}; RECENT = []; wrJ('dl_parts', RATE); wrJ('dl_recent', RECENT); drawTuner(true); }; }
 
 /* ---------- THE GAME'S HANDLE (window.ME). The level's preset picks the style, tempo and blend; your saved tracks for that level (and the curated ones below)
    are played first, so a level opens on a track someone chose; otherwise a fresh seed. The game moves the mood: a dose (riser, hook), RUSH and fights (harder),
