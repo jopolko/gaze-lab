@@ -18,6 +18,7 @@ const SCENES = [
   { t: 42.0, src: 'Field notes', col: '#59d9ff', q: '4R-Hydroxytheanine: tracers almost double, the world warps.', ex: 'Drive into a column of light to take a wild strain. Each changes what you see and do. They’re all on the Strains page.', art: 'strain' },
   { t: 52.8, src: 'The Abliterati', col: '#7dff8a', q: 'Take the light. Choose your exit.', ex: 'Chain rings to fill RUSH. Dodge the bombs, hit the ramp, ram the raider. Finish missions to earn shards.', art: 'play' }];
 const HOLD = 5.8, END_FADE = 60.2;
+try { window.DAILY && window.DAILY.then((D) => { if (D && D.murmur) SCENES[1].q = D.murmur; }); } catch (e) { }          /* (the Daily Frequency: today's Murmur message) */
 /* THE TASTE: in the road's gaps the car flies through a strain; its own look snaps on and the whole sky cuts to another world's (impressive on purpose: this is
    what the game is), then back to the desert's before the fade */
 /* each strain flies you into its home world (WORLDOF in menu.html, JNAME in index.html), with a two-line tag at the top while the sky holds */

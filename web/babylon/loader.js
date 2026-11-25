@@ -167,7 +167,8 @@
   const shuf = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   const nextClue = () => { if (!cbag.length) { const own = shuf((LEVEL[lvl] || []).slice()), rest = shuf(ALL.slice()); cbag = rest.concat(own); } return cbag.pop(); };          /* (the level's own lines come first) */
   const next = () => { flip = !flip; if (!flip && CLUES.length) return { t: nextClue(), clue: true }; return { t: nextStatus() + '…', clue: false }; };
-  const nextStatus = () => { if (!bag.length) { bag = LINES.slice(); for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; } } return bag.pop(); };
+  let DLY = []; try { window.DAILY && window.DAILY.then((D) => { if (D && D.loading) DLY = D.loading.slice(); }); } catch (e) { }          /* (today's lines come first) */
+  const nextStatus = () => { if (DLY.length) return DLY.shift(); if (!bag.length) { bag = LINES.slice(); for (let i = bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [bag[i], bag[j]] = [bag[j], bag[i]]; } } return bag.pop(); };
 
   const css = document.createElement('style');
   css.textContent = `#ldr { position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(10px, 2.4vmin, 22px);

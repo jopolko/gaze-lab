@@ -20,7 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/babylonjs-gui@7.0.0/babylon.gui.min.js"></script>
 <script src="charfx.js"></script>
 </head><body>
-<script src="loader.js"></script>
+<script src="daily.js"></script><script src="loader.js"></script>
 <canvas id="c"></canvas>
 <div id="big"></div>
 <div id="ui"><div id="status" data-k="1">loading Babylon.js...</div><div id="enter">ENTER VR</div><select id="biomeSel" title="biome"></select></div>
@@ -1458,7 +1458,7 @@ void main() {
     const css = document.createElement('style');
     css.textContent = (Q.has('hud') ? '' : '#gearHud,.gpop,#dopBar,#stSee{display:none!important}') + '#pz{display:none!important}body.devmenu #pz{display:flex!important}#back{display:none!important}#stBtns{display:none!important}#pm{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:flex-end;padding:0 max(10px,var(--sa-right, env(safe-area-inset-right,0px))) 0 0;box-sizing:border-box;background:rgba(5,8,16,.14);font-family:system-ui,sans-serif}#pm.on{display:flex}#pm .cd{width:min(64vw,300px);max-height:94vh;background:rgba(13,16,32,.92);border:1px solid rgba(56,232,255,.35);border-radius:14px;padding:10px 10px 8px;color:#f2efe6;box-shadow:0 6px 24px rgba(0,0,0,.45);display:flex;flex-direction:column;gap:6px}#pm h2{margin:0;font:700 15px/1 "Barlow Condensed",Impact,"Arial Narrow",sans-serif;letter-spacing:.24em;text-align:center;color:#9fd8ff}#pm .gr{display:grid;grid-template-columns:1fr 1fr;gap:5px}#pm button,#pm select{min-height:34px;border-radius:9px;border:1px solid rgba(255,255,255,.14);background:#1a2340;color:#fff;font:700 13px system-ui,sans-serif;cursor:pointer;padding:4px 8px}#pm button.pri{grid-column:1/-1;background:#38e8ff;color:#06101f;border:0;font-size:14px}#pm button:focus-visible,#pm select:focus-visible{outline:3px solid #ffd23a}#pm .sm{background:transparent;border:0;min-height:24px;font:600 11px system-ui;color:#8a93a6;justify-self:center}#pm .tx{background:#070a14;border-radius:8px;padding:7px 9px;font:12px/1.4 system-ui;max-height:44vh;overflow:auto;color:#dfe9f5}#pm .tx b{color:#38e8ff}';
     document.head.appendChild(css);
-    const el = document.createElement('div'); el.id = 'pm'; el.innerHTML = '<div class="cd"><h2>PAUSED</h2><div class="gr" id="pmG"></div><div class="tx" id="pmT" hidden></div></div>'; document.body.appendChild(el);
+    const el = document.createElement('div'); el.id = 'pm'; el.innerHTML = '<div class="cd"><h2>PAUSED</h2><div id="pmDaily" style="margin:-2px 0 2px;text-align:center;font:italic 500 12px/1.3 Georgia,serif;color:#c9d2e3;opacity:.85"></div><div class="gr" id="pmG"></div><div class="tx" id="pmT" hidden></div></div>'; document.body.appendChild(el);
     const G = el.querySelector('#pmG'), T = el.querySelector('#pmT');
     const btn = (txt, fn, cls) => { const b = document.createElement('button'); b.textContent = txt; if (cls) b.className = cls; b.onclick = fn; G.appendChild(b); return b; };
     const show = (html) => { T.innerHTML = html; T.hidden = false; };
@@ -2208,7 +2208,10 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
       const pl = B.MeshBuilder.CreatePlane('accSign', { width: 9.6, height: 6 }, scene); pl.material = m; pl.position.set(x, y, z); pl.rotation.y = side * .25;          /* (a plane's readable face looks down -z, toward the rider coming downhill)*/ pl.isPickable = false;
       for (const dx of [-3, 3]) { const p = B.MeshBuilder.CreateBox('accPost', { width: .3, height: 7.6, depth: .3 }, scene); p.material = post; p.position.set(x + dx * Math.cos(side * .25), y - 4.3 + .6, z + dx * Math.sin(side * .25)); p.isPickable = false; }
       ACC.list.push({ z, i, m, truth: false, until: 0, glitch: Math.random() < (i === 1 ? .55 : .2), done: false }); } }
-  ACC.init = true; try { accInit(); } catch (e) { console.error('accord signs', e); }          /* built with the level, so the first frame of the run doesn't hitch */
+  ACC.init = true; try { accInit(); } catch (e) { console.error('accord signs', e); }
+  /* the Daily Frequency: the first ACCORD sign of the run shows today's slogan (and today's truth when it glitches); today's line in the pause menu */
+  try { window.DAILY && window.DAILY.then((D) => { if (!D) return; if (D.sign && ACC.list[0]) { ACC.pairs[5] = D.sign; const o = ACC.list[0]; o.i = 5; o.m.emissiveTexture = o.m.diffuseTexture = accTex(5, false); }
+    if (D.title) { const el = document.getElementById('pmDaily'); if (el) el.textContent = D.title; } }); } catch (e) { }          /* built with the level, so the first frame of the run doesn't hitch */
   window.__ACC = ACC;
   function accordStep() { const now = performance.now(), all = (LENS.t > 0 && (LENS.kind === 'TRUTH' || LENS.kind === 'MERGE')) || DOP.on;
     for (const s of ACC.list) { const d = PH.z - s.z; if (d < -20 || d > 400) { if (s.truth && !all) { s.truth = false; s.m.emissiveTexture = s.m.diffuseTexture = accTex(s.i, false); } continue; }
