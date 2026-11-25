@@ -15,7 +15,7 @@ const ev = async (e) => { const r = (await send('Runtime.evaluate', { expression
 const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log((ok ? 'PASS ' : 'FAIL ') + name + (detail ? '  (' + detail + ')' : '')); };
 const port = 9800 + Math.floor(Math.random() * 150), dir = mkdtempSync(join(tmpdir(), 'dl-smoke-'));
-const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=' + port, '--user-data-dir=' + dir, '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--use-gl=angle', '--enable-unsafe-swiftshader', '--window-size=924,412', 'about:blank'], { stdio: 'ignore' });
+const chrome = spawn(CHROME, ['--headless=new', '--mute-audio', '--remote-debugging-port=' + port, '--user-data-dir=' + dir, '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--use-gl=angle', '--enable-unsafe-swiftshader', '--window-size=924,412', 'about:blank'], { stdio: 'ignore' });
 async function open(url, ready = 'window.__G && window.__G.DOP') {
   await send('Page.navigate', { url: url + (url.includes('?') ? '&' : '?') + 'smoke=' + Date.now() });
   for (let i = 0; i < 120; i++) { await sleep(1000); try { if (await ev('!!(' + ready + ')')) { await sleep(3000); return true; } } catch { } }
