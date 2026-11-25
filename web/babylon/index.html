@@ -2211,6 +2211,11 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
       for (const dx of [-3, 3]) { const p = B.MeshBuilder.CreateBox('accPost', { width: .3, height: 7.6, depth: .3 }, scene); p.material = post; p.position.set(x + dx * Math.cos(side * .25), y - 4.3 + .6, z + dx * Math.sin(side * .25)); p.isPickable = false; }
       ACC.list.push({ z, i, m, truth: false, until: 0, glitch: Math.random() < (i === 1 ? .55 : .2), done: false }); } }
   ACC.init = true; try { accInit(); } catch (e) { console.error('accord signs', e); }
+  if (BASIN && !Q.has('story')) try { const a = BASIN.z0 + 280, b = BASIN.z0 + 6, T = stTunnel(a, b); T.m.setEnabled(true); T.wake = .6; T.lamp = .5; window.__TUNW = { z0: a, z1: b, fun: 90 };
+    for (const sd of [-1, 1]) { const pts = []; for (let d = 90; d >= -2; d -= 4) { const z = a + d, u = Math.min(1, Math.max(0, (90 - d) / 90)), half = 15 + 25 * (1 - u * u * (3 - 2 * u)), x = trailX(z) + sd * (half + .6), g = th(x, z); pts.push(new B.Vector3(x, (Number.isFinite(g) ? g : 0) + 1.1, z)); }
+      const rail = B.MeshBuilder.CreateTube('bFunnel', { path: pts, radius: .45, tessellation: 8 }, scene); rail.material = solidMat([2.2, 1.6, .4], 'bFunnel'); rail.isPickable = false; }
+    scene.onBeforeRenderObservable.add(() => { const on = PH.z < a + 500 && PH.z > b - 80; if (T.m.isEnabled() !== on) T.m.setEnabled(on); if (!on) return; const cp = scene.activeCamera.globalPosition || scene.activeCamera.position;
+      T.mt.setFloat('uTime', U.time); T.mt.setFloat('uBeat', Math.max(BEATFX.pulse || 0, U.beat * .6)); T.mt.setFloat('uWake', T.wake); T.mt.setFloat('uLamp', T.lamp); T.mt.setFloat('uRun', -PH.z); T.mt.setVector3('uCam', cp); }); } catch (e) { console.error('basin tunnel', e); }
   /* the Daily Frequency: the first ACCORD sign of the run shows today's slogan (and today's truth when it glitches); today's line in the pause menu */
   try { window.DAILY && window.DAILY.then((D) => { if (!D) return; if (D.sign && ACC.list[0]) { ACC.pairs[5] = D.sign; const o = ACC.list[0]; o.i = 5; o.m.emissiveTexture = o.m.diffuseTexture = accTex(5, false); }
     if (D.title) { const el = document.getElementById('pmDaily'); if (el) el.textContent = D.title; } }); } catch (e) { }          /* built with the level, so the first frame of the run doesn't hitch */
@@ -3281,8 +3286,8 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   /* THE TUNNEL (Route Zero): a real one now, an arched tube 36 m wide and 15 m high that follows the road for 450 m. Its walls are the show, because in a tube the walls ARE
      the view: rings of light race at you along it, the lining twists into a spiral, two dot grids beat against each other (the game's moire) and the whole tube breathes
      and squeezes in on the beat. In the dark it barely glows (a deep blue, never black); SEE wakes the patterns; the lamp lets everything loose. */
-  function stTunnel() {
-    const z0 = ZIN - 1, z1 = ZOUT - 30, NZ = Math.ceil((z0 - z1) / 3), NA = 30, RX = 18, RY = 15, pos = [], uv = [], idx = [];
+  function stTunnel(z0a, z1a) {
+    const z0 = z0a ?? ZIN - 1, z1 = z1a ?? ZOUT - 30, NZ = Math.ceil((z0 - z1) / 3), NA = 30, RX = 18, RY = 15, pos = [], uv = [], idx = [];
     for (let i = 0; i <= NZ; i++) { const z = z0 - (z0 - z1) * i / NZ, cx = trailX(z), g = th(cx, z), gy = Number.isFinite(g) ? g : 0;
       for (let j = 0; j <= NA; j++) { const a = -.1 + (Math.PI + .2) * j / NA; pos.push(cx + RX * Math.cos(a), gy - 1.2 + RY * Math.sin(a), z); uv.push(j / NA, z0 - z); } }
     for (let i = 0; i < NZ; i++) for (let j = 0; j < NA; j++) { const a = i * (NA + 1) + j, b = a + NA + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
@@ -3318,7 +3323,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
         gl_FragColor = vec4(col, 1.); }`;
     const mt = new B.ShaderMaterial('stTunM', scene, 'stTun', { attributes: ['position', 'uv'], uniforms: ['worldViewProjection', 'uTime', 'uBeat', 'uWake', 'uLamp', 'uRun', 'uCam'] });
     mt.backFaceCulling = false; me.material = mt; me.isPickable = false; me.alwaysSelectAsActiveMesh = true; me.setEnabled(false);
-    ST.tun = { m: me, mt, wake: 0, lamp: 0 }; }
+    const T = { m: me, mt, wake: 0, lamp: 0 }; if (z0a === undefined) ST.tun = T; return T; }
   /* INTRO CARDS (Borderlands' freeze-frame introductions): the first time each thing shows up, time drops to slow motion, the sky breaks into stained glass and its
      name slams in with one dry line. Once per device each (localStorage dl_intros); never over the opening's own cards or another card. Every line is true to the game. */
   const INTRO = { seen: (() => { try { return new Set(JSON.parse(localStorage.getItem('dl_intros') || '[]')); } catch (e) { return new Set(); } })(), busy: 0, el: null };
