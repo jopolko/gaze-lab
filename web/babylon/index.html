@@ -851,7 +851,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     if (txt === 'WIPEOUT!') { PH.vx *= .5; PH.vz *= .6; PH.hurt = .8; try { FXB.E.treeHit(PH.x, th(PH.x, PH.z), PH.z - 2, Math.hypot(PH.vx, PH.vz) / SPK); } catch (e) { } }
   }
   /* the lip: the swirl lets go (RunRig._update_ramps, crossed). It must run AFTER the board has moved this frame (PH.zPrev is where it was at the start of the step): before the move both are equal and the blast never fired, so no ramp threw anyone through its ring arc */
-  function lipStep() { for (const k of VXS) { if (!k.trail) continue; const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5; if (PH.zPrev > lipz && PH.z <= lipz && Math.abs(PH.x - kx) < half) { PH.vy += C.JUMP_BLAST; PH.boost_t = Math.max(PH.boost_t, 1.2); try { KITL.launch(); } catch (e) { } if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } try { FXB.E.blast([PH.x, PH.y, PH.z]); } catch (e) { } AW.onRampBlast(); PH.jumps++; PH.score += 150; chainHit(); big('BLAST!'); U.beat = 1; shake = .5; } } }
+  function lipStep() { const TW = window.__TUNW; for (const k of VXS) { if (!k.trail) continue; if (TW && k.z - k.len < TW.z0 + 20 && k.z - k.len > TW.z1 - 20) continue; const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5; if (PH.zPrev > lipz && PH.z <= lipz && Math.abs(PH.x - kx) < half) { PH.vy += C.JUMP_BLAST; PH.boost_t = Math.max(PH.boost_t, 1.2); try { KITL.launch(); } catch (e) { } if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } try { FXB.E.blast([PH.x, PH.y, PH.z]); } catch (e) { } AW.onRampBlast(); PH.jumps++; PH.score += 150; chainHit(); big('BLAST!'); U.beat = 1; shake = .5; } } }
   function vortexStep(dt, sIn) {          // the swirl ramps: they pull a nearby board to their mouth, speed it up, and let go with a hard blast at the lip
     PH.vlock = null;
     for (const k of VXS) { const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5, dxk = kx - PH.x, onIt = PH.z < kz + 4 && Math.abs(dxk) < half + 1.5, want = Math.sign(sIn) === Math.sign(dxk) && Math.abs(sIn) > .15;
@@ -918,6 +918,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     if (!inBasin(PH.z) && !PH.rail && !(PH.ram)) { let room = openW - 1.5; try { for (const e of (LV.exits || [])) if (!e.gone && PH.z < e.z0 && PH.z > e.z0 - EXL) room = Math.max(room, Math.abs(exX(e, PH.z) - trailX(PH.z)) + 6); } catch (er) { }
       const off = PH.x - trailX(PH.z); if (Math.abs(off) > room) { const sg = Math.sign(off); PH.x = trailX(PH.z) + sg * room; if (PH.vx * sg > 0) PH.vx = -PH.vx * .45 - sg * 3 * SPK; PH.heading *= .7; shake = Math.max(shake, .12); } }          /* (the treeline bounce) */
     { const WHz = WHAt(PH.z); if (Math.abs(PH.x) >= WHz - 2.5) { PH.x = clamp(PH.x, -(WHz - 2.5), WHz - 2.5); PH.vx *= -.2; } }
+    try { const W = window.__TUNW; if (W && PH.z < W.z0 + 4 && PH.z > W.z1 - 4) { const gy = th(PH.x, PH.z); if (Number.isFinite(gy) && PH.y > gy + 7) { PH.y = gy + 7; PH.vy = Math.min(PH.vy, 0); } } } catch (e) { }          /* (the roof: nothing throws you through it) */
     try { const W = window.__TUNW; if (W && PH.z < W.z0 + W.fun && PH.z > W.z1) { const u = clamp((W.z0 + W.fun - PH.z) / W.fun, 0, 1), half = PH.z > W.z0 ? 15 + 25 * (1 - u * u * (3 - 2 * u)) : 13.5, off = PH.x - trailX(PH.z);
       if (Math.abs(off) > half) { PH.x = trailX(PH.z) + Math.sign(off) * half; const fx2 = Math.cos(PH.heading || 0); PH.vx -= Math.sign(off) * Math.max(0, Math.sign(off) * PH.vx) * 1.2; PH.heading *= .85; shake = Math.max(shake, .08); } } } catch (e) { }          /* (the tunnel's walls and the funnel into it) */
     if (inBasin(PH.z) && bT(PH.z) > .8) { const sp = Math.hypot(PH.vx, PH.vz), cap = 56; if (sp > cap) { const k = 1 - (1 - cap / sp) * (1 - Math.exp(-1.5 * dt)); PH.vx *= k; PH.vz *= k; } }          /* the funnel eases you back to road speed, so the road's first crest doesn't throw you */
@@ -2908,6 +2909,33 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
       PH.score += 900; try { chainHit(); dopAdd('mol'); } catch (er) { } junkSpill(new B.Vector3(q.x, q.y + 2, q.z), 18); if (AMMO[CRAFT[R.kind].ammo].gpus) raidGpus(q.x, q.y + 1, q.z, 10, 0);
       for (const m of R.parts) { if (m.isDisposed() || m.parent !== R.root) continue; m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * 12, 6 + Math.random() * 12, Math.sin(a) * 12), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }
       R.mark.dispose(); R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; } }
+
+  /* THE DIMMERS: shade-eaters. The sun of the hot future cooks them, so they live in the tunnels and run on the dark (the opposite of solar: they drink shade).
+     Little wheeled scuttlers, low and round, two pale eyes, they skitter back and forth across the lane. Hit one and you stumble; plough one (Bull Bar, a RUSH,
+     or the Shield soaking it) and it bursts into loot: orbs and a spray of old junk it was hoarding in the dark. */
+  const DIMR = { list: [], built: false };
+  function dimBuild(W) { if (DIMR.built) return; DIMR.built = true; const body = solidMat([.12, .08, .2], 'dimB'), eye = solidMat([2.4, 2.2, 1.6], 'dimE'), whl = solidMat([.05, .05, .06], 'dimW'), rim = solidMat([.5, .3, 1.6], 'dimR');
+    const n = Math.max(4, Math.round((W.z0 - W.z1) / 45));
+    for (let i = 0; i < n; i++) { const z = W.z0 - 40 - i * (W.z0 - W.z1 - 60) / Math.max(1, n - 1), root = new B.TransformNode('dimmer', scene);
+      const b = B.MeshBuilder.CreateSphere('dimpart', { diameter: 1, segments: 10 }, scene); b.scaling.set(2.6, 1.3, 2.2); b.position.y = .95; b.material = body; b.parent = root;
+      const rb = B.MeshBuilder.CreateTorus('dimpart', { diameter: 2.5, thickness: .15, tessellation: 20 }, scene); rb.position.y = .75; rb.material = rim; rb.parent = root;
+      for (const ex of [-.45, .45]) { const e = B.MeshBuilder.CreateSphere('dimpart', { diameter: .38, segments: 8 }, scene); e.position.set(ex, 1.25, -1); e.material = eye; e.parent = root; }
+      const wh = []; for (const [wx, wz] of [[-1.1, -.7], [1.1, -.7], [-1.1, .7], [1.1, .7]]) { const w = B.MeshBuilder.CreateCylinder('dimpart', { height: .3, diameter: .7, tessellation: 10 }, scene); w.rotation.z = Math.PI / 2; w.position.set(wx, .35, wz); w.material = whl; w.parent = root; wh.push(w); }
+      root.getChildMeshes().forEach((m) => (m.isPickable = false));
+      DIMR.list.push({ root, wh, z, ph: Math.random() * 6.28, sp: .7 + Math.random() * .9, amp: 6 + Math.random() * 5, dead: false, pause: 0 }); } }
+  function dimStep(dt) { const W = window.__TUNW; if (!W) return; if (!DIMR.built && PH.z < W.z0 + 600) dimBuild(W); if (!DIMR.built) return;
+    const t = performance.now() / 1000;
+    for (const d of DIMR.list) { if (d.dead) continue; const near = Math.abs(PH.z - d.z) < 200; d.root.setEnabled(near); if (!near) continue;
+      // skitter: quick dashes across the lane with little stops, never a regular beat
+      d.pause -= dt; if (d.pause <= 0 && Math.random() < dt * .35) d.pause = .25 + Math.random() * .5;
+      if (d.pause <= 0) d.ph += dt * d.sp * 1.7; const lx = d.amp * Math.sin(d.ph) * (.8 + .2 * Math.sin(d.ph * 2.3)), x = trailX(d.z) + lx, g = th(x, d.z), vx = d.amp * Math.cos(d.ph) * d.sp;
+      d.root.position.set(x, (Number.isFinite(g) ? g : 0), d.z); d.root.rotation.y = d.pause > 0 ? Math.sin(t * 18) * .25 : Math.sign(vx) * .9; for (const w of d.wh) w.rotation.x += dt * vx * 2;
+      if (Math.abs(PH.z - d.z) < 2.2 && Math.abs(PH.x - x) < 2.4 && PH.y - d.root.position.y < 3) { d.dead = true; const p = d.root.position.clone();
+        const smash = DOP.on || GEAR.id === 'bull' || (GEAR.id === 'shield' && GEAR.sh > 0) || PH.ram;
+        if (!smash) { try { crash('DIMMED!', 'rock', true); } catch (e) { } }
+        try { FXB.E.blast([p.x, p.y + 1, p.z]); FXB.confetti([p.x, p.y + 1.5, p.z], 40, 1); } catch (e) { } PH.score += smash ? 250 : 60; try { junkSpill(new B.Vector3(p.x, p.y + 1.5, p.z), smash ? 9 : 4); if (smash) { chainHit(); dopAdd('pad'); } } catch (e) { }
+        d.root.dispose(); } } }
+  window.__DIM = DIMR;
   const EXITS = ['accelerate', 'warp', 'light', 'hyper'];
   function raidStart() { const kind = WCRAFT[WORLD0], C = CRAFT[kind], root = new B.TransformNode('raid', scene); C.build(root); const bg = C.big || 1; root.scaling.setAll(bg);
     RAID.cur = { kind, root, big: bg, side: Math.random() < .5 ? -1 : 1, rt: 0, phase: 'arrive', hp: 3, rock: 0, nextV: 0, parts: root.getChildMeshes(), seed: Math.random() * 10, name: C.name, exit: EXITS[Math.floor(Math.random() * EXITS.length)], ex: 0, pos: null, lead0: -24 }; }
@@ -2916,7 +2944,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     if (AMMO[CRAFT[R.kind].ammo].gpus) raidGpus(p.x, p.y, p.z, 10, 6);
     R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; }
   function raidStep(dt) {
-    if (!raidOn()) return; RAID.t += dt; RAID.debris = RAID.debris || [];
+    try { dimStep(dt); } catch (e) { if (!DIMR.err) { DIMR.err = 1; console.error('dimmers', e); } } if (!raidOn()) return; RAID.t += dt; RAID.debris = RAID.debris || [];
     if (!RAID.cur && RAID.t > RAID.next && PH.z < -300 && PH.z > END + 900) raidStart();
     const R = RAID.cur; try { junkStep(dt, R); rampStep(dt); } catch (e) { if (!JUNK.err) { JUNK.err = 1; console.error('junk', e); } }
     if (R) { R.rt += dt; const rt = R.rt, big = R.big > 1, L0 = big ? 66 : 48, L1 = big ? 19 : 13, A0 = big ? 10 : 6.5, wn = (t, k) => .6 * Math.sin(.23 * t + k) + .3 * Math.sin(.61 * t + 2.1 * k) + .1 * Math.sin(1.37 * t + 3.3 * k);
