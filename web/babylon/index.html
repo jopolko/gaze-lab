@@ -87,6 +87,11 @@ const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a)
   say('loading the course (' + NROWS + ' rows)...');
   const [meta, phys] = await Promise.all([fetch(DIR + 'meta.json').then((r) => r.json()), fetch(DIR + 'physics.json').then((r) => r.json())]), rows = [];
   for (let j = 0; j < NROWS; j += 4) { const part = await Promise.all([0, 1, 2, 3].filter((k) => j + k < NROWS).map((k) => fetch(DIR + 'row_' + String(j + k).padStart(2, '0') + '.json').then((r) => r.json()))); rows.push(...part); say('loading the course... ' + rows.length + ' / ' + NROWS); }
+  /* ?basin=1 (a prototype, docs/BASINS_PLAN.md): rows 8-11 (z -1440 to -2160) become one open bowl 300 m wide. Their content is cleared and their ground
+     is replaced by the basin's own (their ground meshes are kept only so the heightfield can blend the basin into the road at both ends). */
+  const BASIN = Q.has('basin') ? { j0: 8, j1: 11, z0: -1440, z1: -2160 } : null;
+  if (BASIN) for (let j = BASIN.j0; j <= BASIN.j1; j++) { const rw = rows[j]; if (rw) rw.nodes = (rw.nodes || []).filter((n) => { const def = n.mesh && ((rw.meshes || {})[n.mesh] || meta.meshes[n.mesh]); return !!(def && def.surfaces && def.surfaces[0] && def.surfaces[0].v && def.surfaces[0].v.length === 2135); });
+    const pr = phys.rows[String(j)]; if (pr) for (const k of ['trees', 'obs', 'pads', 'buffs', 'orbs', 'toys', 'feats']) if (pr[k]) pr[k] = []; }
   /* FLATTER ROAD: every drop is made gentler. The hill's profile (meta.pitch: a height and a slope for each 180 m) is replaced by one with the slopes pulled toward the middle (s' = .14 + .38 s, so .75 becomes .43 and .19 becomes .21), and the difference between the new profile and the old one is added to the height of everything in the world: the ground's vertices, every node, and every y the course data carries (pads, orbs, rings, gates, powerups). OFF by default (it broke the road): &flat turns it on, &flatb= / &flatk= tune it. */
   const FLATC = { b: Q.has('flatb') ? +Q.get('flatb') : .14, k: Q.has('flatk') ? +Q.get('flatk') : .38 };
   if (Q.has('flat') && meta.pitch && meta.pitch.length) (function flattenWorld() {
@@ -647,6 +652,8 @@ void main() { vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N; vec3 V = norm
     }
   }
   for (const k in SRC) { const s = SRC[k]; s.__buf = new Float32Array(s.__m); s.thinInstanceSetBuffer('matrix', s.__buf, 16, false); s.thinInstanceRefreshBoundingInfo(false); s.alwaysSelectAsActiveMesh = false; s.freezeWorldMatrix(); s.isPickable = true; s.thinInstanceEnablePicking = true; delete s.__m; }
+  if (BASIN) { let gm = null; for (const k in SRC) { const s = SRC[k]; if (s.__cat !== 'ground') continue; const bb = s.getBoundingInfo().boundingBox, zc = (bb.minimumWorld.z + bb.maximumWorld.z) / 2; if (zc < BASIN.z0 && zc > BASIN.z1) { s.setEnabled(false); gm = gm || s.material; } }
+    window.__BASIN_MAT = gm; }
   // (no freezeActiveMeshes: in a headset the frozen list is empty for the headset cameras and nothing but the sky was drawn)
   // ---- the sky: a shifting, breathing dome with moire shells (follows you)
   B.Effect.ShadersStore['skyVertexShader'] = 'precision highp float; attribute vec3 position; uniform mat4 worldViewProjection; varying vec3 vP; void main(){ vP = position; gl_Position = worldViewProjection * vec4(position, 1.); }';
@@ -729,8 +736,34 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   const trailX = (z) => { const i = clamp(-z / PER, 0, trailx.length - 2), a = Math.floor(i), f = i - a; return trailx[a] * (1 - f) + trailx[a + 1] * f; };
   const pitchY = (z) => { const j = clamp(Math.floor(-z / meta.ROW_GAP), 0, pitch.length - 1), p = pitch[j]; return p.h + p.s * (z - p.z); };
   const PH = { x: 0, y: 0, z: -6, vx: 0, vy: 0, vz: -22 * SPK, heading: 0, steer: 0, sv: 0, grounded: true, air_t: 0, boost_t: 0, mom: 0, vxa: 0, stickT: 0, gh_prev: 0, vlock: null, hurt: 0, grade: 0, lastGh: null, score: 0, chain: 0, landT: 0, jumps: 0, ready: false };
-  const th = (x, z) => { const g = HF.height(x, z); if (g !== null) { PH.lastGh = g; return g; } return PH.lastGh === null ? pitchY(z) : PH.lastGh; };
+  /* THE BASIN'S SHAPE. t runs 0 to 1 down the bowl. It blends out of the road (t < .13) and back into it (t > .87). A floor that keeps falling,
+     a rim that banks you back in, a pocket on the right with a steep end wall (it throws you back out at speed), a kicker, and two ridges that split the way out into three mouths. */
+  let BAS = null;
+  function basinH(x, z) {
+    if (!BAS) { const h0 = HF.height(trailX(BASIN.z0), BASIN.z0), h1 = HF.height(trailX(BASIN.z1), BASIN.z1); BAS = { h0: h0 === null ? pitchY(BASIN.z0) : h0, h1: h1 === null ? pitchY(BASIN.z1) : h1 }; }
+    const t = (BASIN.z0 - z) / (BASIN.z0 - BASIN.z1), we = Math.max(1 - sstep(0, .13, t), sstep(.87, 1, t)), ax = Math.abs(x);
+    const base = BAS.h0 + (BAS.h1 - BAS.h0) * t;
+    let rs = 34 + 66 * sstep(.05, .22, t) - 66 * sstep(.68, .87, t), rw = 46;
+    const pk = x > 0 ? sstep(.30, .33, t) * (1 - sstep(.43, .46, t)) : 0; if (pk > 0) { rs += 28 * pk; rw -= 30 * pk; }          /* the pocket: the floor runs out to 128 m, then a steep wall */
+    let lift = 30 * sstep(rs, Math.min(rs + rw, 149), ax) + 1.4 * Math.sin(x * .05) * Math.sin(z * .031) * (1 - sstep(rs - 10, rs, ax));
+    { const kz = BASIN.z0 - .55 * (BASIN.z0 - BASIN.z1), d = kz - z, sx = 1 - sstep(6, 10, Math.abs(x + 35)); if (d > 0 && d < 18 && sx > 0) lift += 4.5 * Math.pow(d / 18, 1.5) * sx; }          /* the kicker */
+    lift += 7 * Math.exp(-Math.pow((ax - 16) / 4, 2)) * sstep(.72, .76, t) * (1 - sstep(.86, .9, t));          /* the ridges between the three mouths */
+    const g = HF.height(x, z), road = g === null ? base : g;
+    return we * road + (1 - we) * (base + lift);
+  }
+  const inBasin = (z) => !!BASIN && z < BASIN.z0 && z > BASIN.z1;
+  const WHAt = (z) => { if (!inBasin(z)) return C.W_HALF; const t = (BASIN.z0 - z) / (BASIN.z0 - BASIN.z1), we = Math.max(1 - sstep(0, .13, t), sstep(.87, 1, t)); return C.W_HALF + 110 * (1 - we); };
+  const th = (x, z) => { if (inBasin(z)) { const b = basinH(x, z); PH.lastGh = b; return b; } const g = HF.height(x, z); if (g !== null) { PH.lastGh = g; return g; } return PH.lastGh === null ? pitchY(z) : PH.lastGh; };
   PH.y = th(0, PH.z); PH.gh_prev = PH.y;
+  if (BASIN) { const W = 300, L = BASIN.z0 - BASIN.z1, nx = 120, nz = 288, pos = [], nrm = [], idx = [], col = [];          /* the basin's ground: one mesh, a 2.5 m grid */
+    for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = -W / 2 + W * i / nx, z = BASIN.z0 - L * j / nz; pos.push(x, basinH(x, z), z); }
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+    B.VertexData.ComputeNormals(pos, idx, nrm); for (let k = 0; k < pos.length / 3; k++) { const ny = nrm[k * 3 + 1], sh = .78 + .22 * ny; col.push(.93 * sh, .62 * sh, .38 * sh, 1); }
+    const vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.normals = nrm; vd.colors = col; const bm = new B.Mesh('basin', scene); vd.applyToMesh(bm); bm.isPickable = false;
+    let mt = window.__BASIN_MAT; if (!mt) { mt = new B.StandardMaterial('basinM', scene); mt.diffuseColor = new B.Color3(1, 1, 1); mt.specularColor = new B.Color3(0, 0, 0); } bm.material = mt; bm.__cat = 'ground';
+    if (mt.getClassName && mt.getClassName() === 'ShaderMaterial') { bm.thinInstanceSetBuffer('matrix', new Float32Array(B.Matrix.Identity().m), 16, true); }
+    window.__BASINMESH = bm; }
+
   // obstacles (trees, rocks), ramps (swirls), pads, pickups
   const OG = new Map(), VXS = (phys.vx || []).filter((k) => k.trail && -k.z < -END + 400), PADS = [], BUFFS = [], ORBS = [], key8 = (x, z) => Math.floor(x / 8) + ',' + Math.floor(z / 8);
   for (let j = 0; j < NROWS; j++) { const r = phys.rows[String(j)]; if (!r) continue;
@@ -818,7 +851,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
         for (const o of a) { const dzz = PH.z - o.z; if (dzz < -1 || dzz > look) continue; const tt = Math.max(dzz, 0) / spd, xp = PH.x + PH.vx * tt * .8, clr = o.r + C.SLED_R + 2.2, d = xp - o.x; if (Math.abs(d) >= clr) continue;
           const side = Math.sign(d) || Math.sign(PH.x - o.x) || (o.x > 0 ? -1 : 1), urg = Math.max(.25, 1 - dzz / look), need = Math.min(1, (clr - Math.abs(d)) / 3); push += side * need * urg * 1.4; if (Math.sign(sIn) === -side && Math.abs(sIn) > .05) block = Math.max(block, urg); } }
       if (push) sIn = clamp(sIn * (1 - .85 * block) + clamp(push, -1.1, 1.1), -1, 1); }
-    { const ex = Math.abs(PH.x), edge = sstep(C.W_HALF - 16, C.W_HALF - 4, ex); sIn = clamp(sIn - Math.sign(PH.x) * edge * .9, -1, 1); }          // the banked walls turn you back
+    { const ex = Math.abs(PH.x), WHz = WHAt(PH.z), edge = sstep(WHz - 16, WHz - 4, ex); sIn = clamp(sIn - Math.sign(PH.x) * edge * .9, -1, 1); }          // the banked walls turn you back
     if (PH.vlock !== null && PH.grounded) sIn = clamp(sIn + clamp((PH.vlock - PH.x) / 12, -1, 1) * .35 * (1 - sstep(.08, .35, Math.abs(headSteer + K.r - K.l))), -1, 1);
     let steer = sIn; if (Math.abs(sIn) < .3) steer = clamp(steer - .1 * clamp(PH.vx / (10 * SPK), -1, 1), -1, 1);
     const spd01 = clamp((Math.hypot(PH.vx, PH.vz) / SPK - 14) / 40, 0, 1);
@@ -849,7 +882,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     if (-PH.z < 450 && PH.hurt <= 0) PH.boost_t = Math.max(PH.boost_t, .4); if (PH.vxa > 0 || PH.boost_t > 0) PH.mom = Math.max(PH.mom, 1.2); PH.vxa = Math.max(0, PH.vxa - dt * (PH.grounded ? 1 : 0));
     vortexStep(dt, sIn);
     PH.vz = Math.min(PH.vz, -3); PH.x += PH.vx * dt; PH.z = Math.min(PH.z + PH.vz * dt, 0); lipStep();
-    if (Math.abs(PH.x) >= C.W_HALF - 2.5) { PH.x = clamp(PH.x, -(C.W_HALF - 2.5), C.W_HALF - 2.5); PH.vx *= -.2; }
+    { const WHz = WHAt(PH.z); if (Math.abs(PH.x) >= WHz - 2.5) { PH.x = clamp(PH.x, -(WHz - 2.5), WHz - 2.5); PH.vx *= -.2; } }
     const gh = th(PH.x, PH.z), gvy = clamp((gh - PH.gh_prev) / Math.max(dt, 1e-4), -60, 60); PH.gh_prev = gh;
     if (PH.grounded) { const vg = (gh - prevY) / Math.max(dt, 1e-4); PH.stickT = Math.max(0, PH.stickT - dt);
       if (vg < PH.vy - GV * dt - .15 - .012 * Math.hypot(PH.vx, PH.vz) - (PH.stickT > 0 ? 14 * SPK : 0)) { PH.grounded = false; PH.air_t = 0; PH.vy = PH.vy - GV * dt; PH.y = prevY + PH.vy * dt; } else { PH.y = gh; PH.vy = Math.min(vg, C.JUMP_LAUNCH); } }          /* a CAR: it follows the road over small dips, and a crest at speed lifts it for a moment (the road falls away faster than gravity pulls it); it settles without bouncing (the glue comes back on landing) */
@@ -2905,11 +2938,12 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     drift: 'Chamomile, but it means it.', hollow: 'Peppermint. Cold enough to see through.', fold: 'Turmeric, folded like a page.', deep: 'Chilli that bites from the inside.' };
   const UFO_LINE = { cow: 'Here for the cows. Staying for the vibes.', tree: 'Collecting samples. Today: a tree.', crystal: 'Here for your crystals. Faster than you.', drone: 'Recycling the drones. No receipts.', you: 'Collecting samples. You\u2019ll do.' };
   function introCard(key, name, line, col) { if (INTRO.seen.has(key) || INTRO.busy > performance.now() || Q.has('nocards')) return false;
+    { const bt = document.getElementById('stBeat'), sb = document.getElementById('stSignB'); if ((bt && bt.classList.contains('on')) || (sb && sb.offsetParent !== null && getComputedStyle(sb).opacity > .05) || document.body.classList.contains('stVoice')) return false; }          /* one message at a time: never over a story card or banner (it shows once they're gone) */
     if (OPEN.playing && !OPEN.done && OPEN.a && OPEN.a.currentTime < 48) return false;          /* the opening's own titles come first */
     INTRO.seen.add(key); try { localStorage.setItem('dl_intros', JSON.stringify([...INTRO.seen])); } catch (e) { }
     if (!INTRO.el) { const css = document.createElement('style'); css.textContent = '#inCard{position:fixed;left:max(5vw,20px);top:max(20vh,118px);max-width:min(90vw,760px);z-index:57;pointer-events:none;color:#f2efe6;opacity:0;transform:translateX(-30px) skewX(-8deg);transition:opacity .2s,transform .3s cubic-bezier(.2,.9,.3,1.3)}#inCard.on{opacity:1;transform:none}#inCard .slab{background:rgba(3,5,10,.82);border-left:5px solid var(--ic,#38e8ff);padding:.45em .9em .55em;box-shadow:0 0 34px rgba(0,0,0,.4)}#inCard b{display:block;font:700 clamp(26px,6.5vmin + 6px,72px)/.95 "Barlow Condensed",Impact,"Arial Narrow",sans-serif;letter-spacing:.12em;text-shadow:0 0 18px var(--ic,#38e8ff)}#inCard span{display:block;margin-top:.25em;font:italic 500 clamp(13px,2.6vmin + 4px,20px) Georgia,serif;color:#d9d3c7}@media (prefers-reduced-motion:reduce){#inCard{transition:opacity .4s;transform:none!important}}'; document.head.appendChild(css); INTRO.el = document.createElement('div'); INTRO.el.id = 'inCard'; document.body.appendChild(INTRO.el); }
     const el = INTRO.el; el.style.setProperty('--ic', col || '#38e8ff'); el.innerHTML = '<div class="slab"><b></b><span></span></div>'; el.querySelector('b').textContent = name; el.querySelector('span').textContent = line;
-    requestAnimationFrame(() => el.classList.add('on')); BEATFX.glass = 1; window.__cardSlow = performance.now() + 1400; INTRO.busy = performance.now() + 3400; try { SFX.mol(2); } catch (e) { }
+    requestAnimationFrame(() => el.classList.add('on')); BEATFX.glass = 1; window.__cardSlow = performance.now() + 1400; INTRO.busy = performance.now() + 3400; try { ST.voiceEnd = Math.max(ST.voiceEnd || 0, ST.t + 3.6); } catch (e) { }          /* and the story waits for it */ try { SFX.mol(2); } catch (e) { }
     setTimeout(() => el.classList.remove('on'), 3000); return true; }
   /* each frame: the first drone close ahead; the first strain's light column on the way in (the trip level's doses, or this world's columns) */
   function introStep() { if (PAUSED || INTRO.busy > performance.now()) return;
