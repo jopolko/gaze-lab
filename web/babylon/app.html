@@ -19,6 +19,12 @@ window.__SHELL = true;          /* the pages look for this: inside the shell the
   f.src = p;
   /* the address bar follows the page inside, so a reload or a bookmark lands back on it */
   f.addEventListener('load', () => { try { const L = f.contentWindow.location, page = L.pathname.split('/').pop() + L.search + L.hash; if (/^[A-Za-z0-9_-]+\.html/.test(page)) history.replaceState(null, '', 'app.html?p=' + encodeURIComponent(page)); document.title = f.contentDocument.title || 'The Frequency'; f.contentWindow.focus(); } catch (e) { } });
+  /* THE CAMERA HOLE: env(safe-area-inset-*) is only known to the top page, so the shell measures it and gives it to the page inside as --sa-top/right/bottom/left
+     (the pages use var(--sa-left, env(safe-area-inset-left)), so they also work on their own). Measured again on every turn, resize and fullscreen change. */
+  const probe = document.createElement('div'); probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)'; document.body.appendChild(probe);
+  const insets = () => { try { const cs = getComputedStyle(probe), r = f.contentDocument && f.contentDocument.documentElement; if (!r) return; for (const k of ['top', 'right', 'bottom', 'left']) r.style.setProperty('--sa-' + k, cs['padding' + k[0].toUpperCase() + k.slice(1)]); } catch (e) { } };
+  f.addEventListener('load', insets); for (const ev of ['resize', 'orientationchange', 'fullscreenchange', 'webkitfullscreenchange']) addEventListener(ev, () => { insets(); setTimeout(insets, 300); });
+  try { screen.orientation && screen.orientation.addEventListener('change', () => setTimeout(insets, 300)); } catch (e) { } setInterval(insets, 2000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });          /* makes it installable (Add to Home Screen); it caches nothing */
 })();
 </script>

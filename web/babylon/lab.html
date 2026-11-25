@@ -11,7 +11,7 @@
 :root { --bg:#07050b; --wood:#1a110d; --line:rgba(255,170,80,.28); --fg:#f6efe3; --dim:#c9b9a3; --amber:#ffb14a; --sea:#38e8ff; --hot:#ff5a3c; --lime:#c6ff4d; --tt:"Bebas Neue",Impact,"Arial Narrow",sans-serif; --lb:"Barlow Condensed","Arial Narrow",sans-serif; color-scheme:dark; }
 * { box-sizing:border-box; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:600 clamp(13px,1.4vmin + 7px,17px)/1.25 system-ui,sans-serif; overflow:hidden; }
-body { display:flex; flex-direction:column; gap:1.2vmin; padding:max(10px,env(safe-area-inset-top,0px)) max(14px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px)); position:relative; isolation:isolate; }
+body { display:flex; flex-direction:column; gap:1.2vmin; padding:max(10px,var(--sa-top, env(safe-area-inset-top,0px))) max(14px,var(--sa-right, env(safe-area-inset-right,0px))) max(10px,var(--sa-bottom, env(safe-area-inset-bottom,0px))) max(14px,var(--sa-left, env(safe-area-inset-left,0px))); position:relative; isolation:isolate; }
 /* the lava lamps */
 .lava { position:fixed; inset:0; z-index:-2; overflow:hidden; opacity:.5; }          /* (no blur or blend modes: the gradients are already soft, and a full-screen blur every frame starved the audio) */
 .lava i { position:absolute; border-radius:50%; will-change:transform; animation:float 22s ease-in-out infinite alternate; }

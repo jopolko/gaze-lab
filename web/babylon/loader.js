@@ -168,7 +168,7 @@
 
   const css = document.createElement('style');
   css.textContent = `#ldr { position:fixed; inset:0; z-index:90; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:clamp(10px, 2.4vmin, 22px);
-    padding:0 max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px)); background:radial-gradient(ellipse at 50% 60%, #1a0f2c, #07050f 70%); color:#f4f1ea;
+    padding:0 max(16px, var(--sa-right, env(safe-area-inset-right, 0px))) 0 max(16px, var(--sa-left, env(safe-area-inset-left, 0px))); background:radial-gradient(ellipse at 50% 60%, #1a0f2c, #07050f 70%); color:#f4f1ea;
     transition:opacity .6s; pointer-events:none; font-family:'Barlow Condensed', system-ui, sans-serif; }
   #ldr.out { opacity:0; }
   #ldr .k { font:700 13px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.34em; color:#9fe8ff; }
