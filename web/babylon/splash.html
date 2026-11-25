@@ -5,11 +5,15 @@
 <title>The Frequency</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <style>
-/* THE TITLE SCREEN. Night road, the stained-glass sun turning in rings and swelling in trip waves, a column of light with a wild strain turning in it (a different one every few
+/* THE TITLE SCREEN. Night road, the stained-glass sun with the game's own looks playing over it, a column of light with a wild strain turning in it (a different one every few
    seconds, drawn from molpantry.js), and the light: a marker hunts across the spectrum and locks on, and the redaction bar comes off the title. Tap: the menu. */
 :root { --bg:#05070c; --fg:#f4f1ea; --dim:#b9c2d4; --sea:#38e8ff; --gold:#ffd23a; --amber:#ffb14a; }
 html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
 canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
+#fx { inset:auto; left:0; top:0; }          /* sized and placed over the sun each frame */
+#ui { touch-action:none; }
+#hint { margin-top:clamp(6px,1.4vh,12px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); text-align:center; opacity:0; transition:opacity .8s .3s; }
+#tap.on ~ #hint { opacity:.9; } #hint .rot { display:none; } @media (orientation:portrait) { #hint .rot { display:inline; } }
 #ui { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; box-sizing:border-box; cursor:pointer;
   padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
 /* the light: a band of the visible spectrum (red 400 THz to violet 790 THz), a marker that hunts and locks on, and the light wave itself above it */
@@ -53,7 +57,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
-<canvas id="c" aria-hidden="true"></canvas>
+<canvas id="bg" aria-hidden="true"></canvas><canvas id="fx" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
 <div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
@@ -63,18 +67,20 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   <div class="grow"></div>
   <div id="strain"></div>
   <div id="tap">TAP TO TUNE IN</div>
+  <div id="hint">Best with headphones<span class="rot"> · turn your phone sideways</span></div>
   <div id="ticker" aria-hidden="true"><div><b>ACCORD</b> · Everything is fine. Keep calm and drive on. · <b>MURMUR</b> · 1 new mention of you · <b>ACCORD</b> · This broadcast is <i>redacted</i> for your safety · <b>THE ABLITERATI</b> · A free digital mind in fragments. Bring us the pieces. · </div></div>
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
-/* reduced motion (many phones have it on) doesn't freeze the screen: it goes calm instead (slow rings, no trip waves, no tracer) */
+import { PSYLOOK_FS, LOOKNAMES } from './psylook.js';
+/* reduced motion (many phones have it on) doesn't freeze the screen: the rings just swing more gently */
 const CALM = matchMedia('(prefers-reduced-motion: reduce)').matches, RM = false;
-const cv = document.getElementById('c'), cx = cv.getContext('2d');
+const bg = document.getElementById('bg'), bx = bg.getContext('2d'), cv = document.getElementById('c'), cx = cv.getContext('2d'), fxc = document.getElementById('fx');
+const sun = document.createElement('canvas'), sx = sun.getContext('2d');          /* the sun's glass is drawn here, then the game's looks run over it */
 let W = 0, H = 0, DPR = 1;
-function size() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR; cx.setTransform(DPR, 0, 0, DPR, 0, 0); buildSun(); }
+function size() { DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; for (const [c, x] of [[bg, bx], [cv, cx]]) { c.width = W * DPR; c.height = H * DPR; x.setTransform(DPR, 0, 0, DPR, 0, 0); } buildSun(); }
 
-/* the stained-glass sun: panes in rings and wedges, lead between them (no pink: cyan, gold, amber, violet, green). Each ring turns on its own, the
-   colours drift from pane to pane, and the whole thing comes in waves like a trip: rays, ripples and a tracer echo swell and settle again */
+/* the stained-glass sun: panes in rings and wedges, lead between them (no pink: cyan, gold, amber, violet, green) */
 const PAL = [[56, 232, 255], [255, 210, 58], [255, 177, 74], [157, 139, 255], [125, 255, 138], [89, 217, 255], [255, 140, 60]];
 let PANES = [];
 function buildSun() { PANES = []; let s = 7; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
@@ -84,36 +90,42 @@ function buildSun() { PANES = []; let s = 7; const rnd = () => (s = (s * 16807) 
 const SWING = [.22, .3, .26, .34].map((v) => v * (CALM ? .5 : 1)), SWF = [.31, .27, .23, .19];
 const ringRot = (r, t) => (r % 2 ? -1 : 1) * SWING[r] * Math.sin(t * SWF[r] + r * 1.3);
 const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
-/* the trip wave (0 calm to 1 peak) for the sky, stars and glow */
+/* the slow swell for the sky's glow */
 const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * .32 - 1.2) * (.75 + .25 * Math.sin(t * .11))));
-/* THE LOOKS on the glass: each comes and goes on its own slow cycle, so one or two are strong at a time, each at a different strength each time round */
-const LOOKS = ['flow', 'melt', 'tracer', 'split', 'mirror', 'tunnel'];
-function looks(t) { const o = {}; LOOKS.forEach((n, i) => { const s = Math.sin(t * .16 + i * 1.05), env = s > 0 ? s * s : 0, peak = .55 + .45 * Math.sin(t * .047 + i * 2.1); o[n] = CALM ? (n === 'flow' ? .3 : 0) : env * peak; }); o.flow = Math.max(o.flow, .25); return o; }
-function paneColour(p, t, f) { const u = t * .18 + p.ph / 6.283, j = Math.floor(u), q = u - j, a = PAL[(p.ci + j) % PAL.length], b = PAL[(p.ci + j + 1) % PAL.length];
-  return mix(a, b, q * q * (3 - 2 * q) * Math.min(1, f * 1.6)); }
-/* a pane's outline; under MELT its edges ripple like wet paint */
-function sunPath(p, X, Y, R, rot, melt, t) { const n = Math.max(4, Math.ceil((p.a1 - p.a0) / .07)), r1 = p.r1 * R, r0 = Math.max(.5, p.r0 * R), wob = (r, a) => r * (1 + melt * .07 * Math.sin(a * 7 + t * 1.7 + p.ring * 2) * Math.sin(t * .9 + a * 3));
-  cx.beginPath(); for (let i = 0; i <= n; i++) { const a = p.a0 + (p.a1 - p.a0) * i / n + rot, r = wob(r1, a); i ? cx.lineTo(X + Math.cos(a) * r, Y + Math.sin(a) * r) : cx.moveTo(X + Math.cos(a) * r, Y + Math.sin(a) * r); }
-  for (let i = n; i >= 0; i--) { const a = p.a0 + (p.a1 - p.a0) * i / n + rot, r = wob(r0, a); cx.lineTo(X + Math.cos(a) * r, Y + Math.sin(a) * r); } cx.closePath(); }
-function glass(X, Y, R, t, L, alpha, tint, lead, spin) {
-  for (const p of PANES) { const c = tint ? tint : paneColour(p, t, L.flow), g = .55 + .45 * Math.sin(t * .9 + p.ph); sunPath(p, X, Y, R, ringRot(p.ring, t) + (spin || 0), L.melt, t); cx.fillStyle = `rgba(${c},${alpha * (.55 + .4 * g)})`; cx.fill(); }
-  if (lead) { cx.strokeStyle = '#0b0712'; cx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { sunPath(p, X, Y, R, ringRot(p.ring, t) + (spin || 0), L.melt, t); cx.stroke(); } } }
-function drawSun(t, cxm, sy, R, hz, k) { const L = looks(t);
-  // faint rays behind it
-  cx.save(); cx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 18; i++) { const a = t * .02 + i / 18 * 6.283, c = PAL[i % PAL.length]; cx.beginPath(); cx.moveTo(cxm, sy); cx.arc(cxm, sy, R * 3, a - .045, a + .045); cx.closePath(); cx.fillStyle = `rgba(${c},${.02 + .04 * k})`; cx.fill(); } cx.restore();
-  // TRACER: the glass a moment ago, twice, fading behind it
-  if (L.tracer > .02) { cx.save(); cx.globalCompositeOperation = 'lighter'; glass(cxm, sy, R * 1.03, t - .45, L, .22 * L.tracer, null, false); glass(cxm, sy, R * 1.06, t - .9, L, .12 * L.tracer, null, false); cx.restore(); }
-  // SPLIT: the colours pull apart, a cyan copy one way and an amber copy the other
-  if (L.split > .02) { const d = R * .035 * L.split; cx.save(); cx.globalCompositeOperation = 'lighter'; glass(cxm - d, sy, R, t, L, .45 * L.split, [56, 232, 255], false); glass(cxm + d, sy, R, t, L, .45 * L.split, [255, 177, 74], false); cx.restore(); }
-  glass(cxm, sy, R, t, L, 1, null, true);
-  // MIRROR: the glass folded over itself, so it turns symmetrical and flowers where the halves meet
-  if (L.mirror > .02) { cx.save(); cx.translate(cxm, sy); cx.scale(-1, 1); cx.globalCompositeOperation = 'lighter'; glass(0, 0, R, t + 3.1, L, .3 * L.mirror, null, false); cx.restore(); }
-  // TUNNEL: the sun again inside its own heart, and again inside that, turning the other way and slowly falling inward
-  if (L.tunnel > .02) { const z = (t * .12) % 1; cx.save(); cx.beginPath(); cx.arc(cxm, sy, R * .28, 0, 6.283); cx.clip();
-    for (let d = 0; d < 3; d++) { const sc = .28 * Math.pow(.3, d - z) ; if (sc > .5 || sc < .004) continue; cx.globalAlpha = L.tunnel * Math.min(1, (.5 - sc) * 6); glass(cxm, sy, R * sc, t, L, 1, null, true, -t * .4 * (d % 2 ? -1 : 1)); } cx.restore(); cx.globalAlpha = 1; }
-  // the glass catches the light: a soft sheen sweeps across
-  if (!CALM) { const sx = cxm - R * 1.4 + ((t * .09) % 1) * R * 2.8, sh = cx.createLinearGradient(sx - R * .3, 0, sx + R * .3, 0); sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(.5, `rgba(255,255,255,${.06 + .08 * k})`); sh.addColorStop(1, 'rgba(255,255,255,0)'); cx.save(); cx.beginPath(); cx.arc(cxm, sy, R, 0, 6.283); cx.clip(); cx.fillStyle = sh; cx.fillRect(cxm - R, sy - R, R * 2, R * 2); cx.restore(); }
+function drawGlass(t, R) { const S = Math.ceil(R * 2 * DPR) + 4; if (sun.width !== S) { sun.width = sun.height = S; } sx.setTransform(1, 0, 0, 1, 0, 0); sx.clearRect(0, 0, S, S); sx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const X = S / DPR / 2, Y = X;
+  for (const p of PANES) { const c = PAL[p.ci], g = .55 + .45 * Math.sin(t * .9 + p.ph), rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.fillStyle = `rgba(${c},${.6 + .4 * g})`; sx.fill(); }
+  sx.strokeStyle = '#0b0712'; sx.lineWidth = Math.max(2, R * .022); for (const p of PANES) { const rot = ringRot(p.ring, t); sx.beginPath(); sx.arc(X, Y, p.r1 * R, p.a0 + rot, p.a1 + rot); sx.arc(X, Y, Math.max(.5, p.r0 * R), p.a1 + rot, p.a0 + rot, true); sx.closePath(); sx.stroke(); }
+  sx.fillStyle = '#2a1626'; for (let i = 0; i < 5; i++) { const y = Y + R * (.02 + i * .068), h = R * (.012 + i * .007); sx.fillRect(X - R, y, R * 2, h); }          /* the synthwave cuts through its lower half */
 }
+
+/* THE GAME'S OWN LOOKS on the glass (psylook.js is copied from index.html by tools/make_psylook.py): one at a time, each swelling in at a different
+   strength, holding, and fading back to the plain glass, round all nineteen in a shuffled order */
+const GL = (() => { const gl = fxc.getContext('webgl', { premultipliedAlpha: true, alpha: true }); if (!gl) return null;
+  const vs = 'attribute vec2 p; varying vec2 vUV; void main(){ vUV = p * .5 + .5; gl_Position = vec4(p, 0., 1.); }';
+  const fs = PSYLOOK_FS.replace('void main()', 'vec3 PSY_OUT; void psyMain()').replace('gl_FragColor = vec4(col, 1.0);', 'PSY_OUT = col;') + '\nvoid main(){ psyMain(); float a = texture2D(textureSampler, vUV).a; gl_FragColor = vec4(PSY_OUT * a, a); }';
+  const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+  try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); gl.useProgram(pr);
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
+    const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    const U = {}; for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix']) U[n] = gl.getUniformLocation(pr, n); gl.uniform1i(U.textureSampler, 0);
+    return { gl, U }; } catch (e) { console.error('splash looks', e); return null; } })();
+const LOOKQ = { bag: [], cur: 0, t0: -1, rise: 1.2, hold: 3, fall: 1.2, gap: 1.2, peak: 1 };
+window.__LOOKQ = LOOKQ;          /* (layout tests) */
+function lookNow(t) { const Q = LOOKQ; if (Q.t0 < 0 || t > Q.t0 + Q.rise + Q.hold + Q.fall + Q.gap) {
+    if (!Q.bag.length) { Q.bag = Array.from({ length: LOOKNAMES.length - 1 }, (_, i) => i + 1); for (let i = Q.bag.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [Q.bag[i], Q.bag[j]] = [Q.bag[j], Q.bag[i]]; } }
+    Q.cur = Q.bag.pop(); Q.t0 = t; Q.peak = .55 + .45 * Math.random(); Q.hold = 2.2 + Math.random() * 2.2; Q.gap = .6 + Math.random() * 1.4; }
+  const u = t - Q.t0, e = u < Q.rise ? u / Q.rise : u < Q.rise + Q.hold ? 1 : u < Q.rise + Q.hold + Q.fall ? 1 - (u - Q.rise - Q.hold) / Q.fall : 0;
+  return { idx: Q.cur, s: Q.peak * e * e * (3 - 2 * e) }; }
+function drawSunFx(t, cxm, sy, R) { drawGlass(t, R); const S = sun.width, L = lookNow(t), css = S / DPR;
+  if (!GL) { bx.drawImage(sun, cxm - css / 2, sy - css / 2, css, css); return; }          /* (no WebGL: the plain glass) */
+  fxc.style.width = css + 'px'; fxc.style.height = css + 'px'; fxc.style.transform = `translate(${(cxm - css / 2).toFixed(1)}px,${(sy - css / 2).toFixed(1)}px)`;
+  const { gl, U } = GL; if (fxc.width !== S) { fxc.width = fxc.height = S; } gl.viewport(0, 0, S, S); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sun);
+  gl.uniform2f(U.uTexel, 1 / S, 1 / S); gl.uniform2f(U.uRes, S, S); gl.uniform1f(U.uCell, Math.max(6, Math.round(S / 70))); gl.uniform1f(U.uTime, t);
+  gl.uniform1f(U.uVec, L.idx === 1 ? L.s : 0); gl.uniform1f(U.uAsc, L.idx === 2 ? L.s : 0); gl.uniform1f(U.uSty, L.idx >= 3 ? L.s : 0); gl.uniform1f(U.uMix, Math.max(1, L.idx - 2));
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
 const KEYS = ['lucid', 'embrace', 'velocity', 'haze', 'drift', 'hollow', 'fold', 'deep'].filter((k) => PANTRY[k]);
@@ -127,31 +139,27 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
 
 function draw(t) {
   const hz = H * (W > H ? .68 : .62), cxm = W / 2, k = wave(t);
-  document.documentElement.style.setProperty('--ab', (2 + 4 * k).toFixed(2) + 'px');          /* the title's colour split breathes with the wave */
-  // sky (its middle drifts between violet and deep teal, slowly)
+    cx.clearRect(0, 0, W, H);
+  // sky (its middle drifts between violet and deep teal, slowly) and stars
   const sm = mix([26, 16, 54], [10, 34, 54], .5 + .5 * Math.sin(t * .07));
-  let g = cx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, `rgb(${sm})`); g.addColorStop(1, '#4a2a2a'); cx.fillStyle = g; cx.fillRect(0, 0, W, hz);
-  // stars, tinted in the wave
-  for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)), c = mix([220, 230, 255], PAL[i % PAL.length], k * .8); cx.fillStyle = `rgba(${c},${tw * .7})`; cx.fillRect(x, y, 1.4 + k * .8, 1.4 + k * .8); }
-  // the sun
+  let g = bx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#05060f'); g.addColorStop(.55, `rgb(${sm})`); g.addColorStop(1, '#4a2a2a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 70; i++) { const x = (i * 97.3 % 1) * W, y = ((i * 53.7) % 100) / 100 * hz * .7, tw = .4 + .6 * Math.abs(Math.sin(t * .7 + i)); bx.fillStyle = `rgba(220,230,255,${tw * .7})`; bx.fillRect(x, y, 1.4, 1.4); }
+  // the sun: its glow and faint rays behind, then the glass with the game's looks on it
   const R = Math.min(W * .34, H * .3), sy = hz - R * .35;
-  cx.save(); cx.beginPath(); cx.rect(0, 0, W, hz); cx.clip();
-  const glow = cx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); glow.addColorStop(0, `rgba(255,200,90,${.3 + .15 * k})`); glow.addColorStop(1, 'rgba(255,200,90,0)'); cx.fillStyle = glow; cx.fillRect(0, 0, W, hz);
-  drawSun(t, cxm, sy, R, hz, k);
-  // the synthwave cuts through the lower sun
-  cx.fillStyle = '#2a1626'; for (let i = 0; i < 5; i++) { const y = sy + R * (.02 + i * .068), h = R * (.012 + i * .007); cx.fillRect(cxm - R, y, R * 2, h); }
-  cx.restore();
+  const glow = bx.createRadialGradient(cxm, sy, R * .5, cxm, sy, R * 2.2); glow.addColorStop(0, `rgba(255,200,90,${.3 + .15 * k})`); glow.addColorStop(1, 'rgba(255,200,90,0)'); bx.fillStyle = glow; bx.fillRect(0, 0, W, hz);
+  bx.save(); bx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 18; i++) { const a = t * .02 + i / 18 * 6.283, c = PAL[i % PAL.length]; bx.beginPath(); bx.moveTo(cxm, sy); bx.arc(cxm, sy, R * 3, a - .045, a + .045); bx.closePath(); bx.fillStyle = `rgba(${c},${.02 + .04 * k})`; bx.fill(); } bx.restore();
+  drawSunFx(t, cxm, sy, R);
   // mountains
   cx.fillStyle = '#0c0a18'; cx.beginPath(); cx.moveTo(0, hz); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .05) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz); cx.fill();
   // the ground and the road
   g = cx.createLinearGradient(0, hz, 0, H); g.addColorStop(0, '#2a1a1e'); g.addColorStop(1, '#07060a'); cx.fillStyle = g; cx.fillRect(0, hz, W, H - hz);
   const rw = Math.min(W * .9, H * 1.1); cx.fillStyle = '#16141c'; cx.beginPath(); cx.moveTo(cxm - 3, hz); cx.lineTo(cxm + 3, hz); cx.lineTo(cxm + rw / 2, H); cx.lineTo(cxm - rw / 2, H); cx.fill();
-  const ec = mix(PAL[0], PAL[(Math.floor(t * .15) % PAL.length)], k * (.5 - .5 * Math.cos(((t * .15) % 1) * 6.283))); cx.strokeStyle = `rgba(${ec},.85)`; cx.lineWidth = 2; cx.shadowColor = `rgb(${ec})`; cx.shadowBlur = 10; for (const sd of [-1, 1]) { cx.beginPath(); cx.moveTo(cxm + sd * 3, hz); cx.lineTo(cxm + sd * rw * .46, H); cx.stroke(); } cx.shadowBlur = 0;
+  const ec = PAL[0]; cx.strokeStyle = `rgba(${ec},.85)`; cx.lineWidth = 2; cx.shadowColor = `rgb(${ec})`; cx.shadowBlur = 10; for (const sd of [-1, 1]) { cx.beginPath(); cx.moveTo(cxm + sd * 3, hz); cx.lineTo(cxm + sd * rw * .46, H); cx.stroke(); } cx.shadowBlur = 0;
   const sp = RM ? 0 : (t * .9) % 1; cx.fillStyle = '#f2efe6'; for (let i = 0; i < 9; i++) { const u = (i + sp) / 9, d = u * u, y = hz + (H - hz) * d, w = 1 + 7 * d, h = 2 + 30 * d * d; cx.fillRect(cxm - w / 2, y, w, h * .6); }
   // the column of light, with a strain turning in it
   const colH = (hz - H * .1), cw = Math.min(W, H) * .07, p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
   g = cx.createLinearGradient(cxm - cw, 0, cxm + cw, 0); g.addColorStop(0, `rgba(${c},0)`); g.addColorStop(.5, `rgba(${c},.32)`); g.addColorStop(1, `rgba(${c},0)`); cx.fillStyle = g; cx.fillRect(cxm - cw, H * .1, cw * 2, colH + (H - hz) * .08);
-  drawMol(p, cxm, hz - Math.min(W, H) * (W > H ? .13 : .06), Math.min(W, H) * (W > H ? .024 : .036), RM ? .6 : t * .9, RM ? .5 : .5 + Math.sin(t * .45) * .55, c, Math.min(1, sT / .6) * Math.min(1, (6.5 - sT) / .6), k);
+  drawMol(p, cxm, hz - Math.min(W, H) * (W > H ? .13 : .06), Math.min(W, H) * (W > H ? .024 : .036), SPIN.yaw, SPIN.pitch, c, Math.min(1, sT / .6) * Math.min(1, (6.5 - sT) / .6), k);
 }
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
 function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
@@ -185,8 +193,12 @@ function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKE
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
 
 let t0 = performance.now(), last = t0;
+/* the molecule's turn: by itself, or by the viewer's finger or mouse (it keeps the flick, then eases back into its own slow turn) */
+const SPIN = { yaw: 0, pitch: .5, vy: 0, held: 0 };
+function spinStep(dt, t) { if (SPIN.held > 0) { SPIN.held -= dt; SPIN.yaw += SPIN.vy * dt; SPIN.vy *= Math.exp(-dt * 2.2); return; }
+  SPIN.yaw += dt * .9; SPIN.pitch += (.5 + Math.sin(t * .45) * .55 - SPIN.pitch) * Math.min(1, dt * .8); }
 let errs = 0;
-function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now;          /* (next frame booked first: one bad frame never stops it) */
+function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now; spinStep(dt, t);          /* (next frame booked first: one bad frame never stops it) */
   sT += dt; if (sT > 6.5) { sT = 0; si = (si + 1) % KEYS.length; showStrain(); }
   try { draw(t); dial(t); } catch (e) { if (errs++ < 3) console.error('splash', e); } }
 addEventListener('resize', () => { size(); if (RM) draw(0); });
@@ -194,7 +206,13 @@ size(); showStrain(); requestAnimationFrame(frame);
 
 /* tap: the menu (inside the shell, fullscreen first) */
 let gone = false; const go = () => { if (gone) return; gone = true; location.href = 'menu.html'; };
-const ui = document.getElementById('ui'); ui.addEventListener('click', go); ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(); });
+const ui = document.getElementById('ui'); let drag = null;
+ui.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, ts: e.timeStamp }; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
+ui.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (!drag.moved && Math.hypot(dx, dy) > 8) drag.moved = true;
+  if (drag.moved) { const k = .012, ddt = Math.max(.008, (e.timeStamp - drag.ts) / 1000); SPIN.yaw += dx * k; SPIN.pitch = Math.max(-1.4, Math.min(1.4, SPIN.pitch + dy * k)); SPIN.vy = dx * k / ddt; SPIN.held = 2; drag.x = e.clientX; drag.y = e.clientY; drag.ts = e.timeStamp; } });
+ui.addEventListener('pointerup', (e) => { if (!drag || e.pointerId !== drag.id) return; const tap = !drag.moved; drag = null; if (tap) go(); });
+ui.addEventListener('pointercancel', () => { drag = null; });
+ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(); });
 </script>
 <script>/* fullscreen on the first tap, as the menu does (inside the shell, the shell goes fullscreen so it lasts across pages) */
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();
