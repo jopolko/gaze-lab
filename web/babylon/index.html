@@ -45,6 +45,10 @@ import { createSfx } from '../downhill-three/sfxset.js';
 import { createAudioWire } from '../downhill-three/audiowire.js';
 const WORLD0 = (() => { const q = new URLSearchParams(location.search); const list = ['psychedelic', 'alpine', 'candy', 'egypt', 'tunnel', 'desert', 'matrix', 'synthwave']; if (list.includes(q.get('biome'))) return q.get('biome'); if (q.has('story')) return 'desert'; try { const o = JSON.parse(localStorage.getItem('bab_opts2') || '{}'); if (o.biome !== undefined && list[o.biome]) return list[o.biome]; } catch (e) { } return 'alpine'; })();
 /* the level's music settings (the start card's tap uses them; ME.preload builds the music with them while the level loads) */
+/* THE OPENING TRACK: "Legalize" by MalreDeszik ft. Synomo & IAComplexe (ccMixter 71331, CC BY 4.0; credited on screen and in CREDITS.md).
+   Route Zero opens on it like a film: titles cut to its hits, then it steps back under the driving and hands over to the generated music at the first dose. */
+const OPEN = { on: new URLSearchParams(location.search).has('story') && !new URLSearchParams(location.search).has('noopen') && !new URLSearchParams(location.search).has('mseed') };
+if (OPEN.on) { OPEN.a = new Audio('music/legalize.mp3'); OPEN.a.preload = 'auto'; } window.__OPEN = OPEN;
 const ME_OPTS = () => (Q.has('mseed') ? { seed: +Q.get('mseed'), style: Q.get('mstyle') || 'techno', level: Q.get('mlv') || undefined, tr: +(Q.get('mtr') || 55) / 100, en: +(Q.get('men') || 80) / 100, strong: false, lookAhead: .5 } : { level: Q.has('story') || Q.has('tutorial') || WORLD0 === 'desert' ? 'routezero' : WORLD0, style: LAB.sty || undefined, trAdd: (LAB.trn - 55) / 100, enMul: LAB.nrg / 80 * (LAB.chl ? .6 : 1), strong: !LAB.chl, lookAhead: .5 });
 const PSY = createPsyFx({ fx: { x_level: parseFloat(new URLSearchParams(location.search).get('level') || '0.6') }, seed: 7, sessionMin: +(new URLSearchParams(location.search).get('min') || 10), cfgTrip: 1, journey: !new URLSearchParams(location.search).has('plain'), onCheer: () => { }, onToast: () => { } });          /* the real trip director: the molecules, the come-up / peak / comedown arc, the moment of clarity */
 import { MOL_EL_COL, MOL_EL_R, MOL_STICK, MOL_SC } from '../downhill-three/molmesh.js';
@@ -1225,7 +1229,7 @@ void main() {
       + '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center"><button data-c="0" style="' + bs + (lastCam ? 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)' : 'background:#38e8ff;color:#06101f;border:0;box-shadow:0 0 24px rgba(56,232,255,.4)') + '">\u25B6 Tap to drive</button>'
       + (hasCam ? '<button data-c="1" style="' + bs + (lastCam ? 'background:#38e8ff;color:#06101f;border:0;box-shadow:0 0 24px rgba(56,232,255,.4)' : 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)') + '">\u25C9 Steer with your head</button>' : '') + '</div>'
       + '<div style="font:600 14px/1.3 system-ui,sans-serif;color:#c9d2e3">Sound on. The music starts with the road.</div>';
-    const go = (cam) => { if (window.__go) return; window.__go = true; d.style.transition = 'opacity .5s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 520); try { acx(); } catch (e) { } try { if (window.ME && !Q.has('oldmusic') && !Q.has('nomusic')) { window.__bt = window.__bt || { pause() { }, play() { return Promise.resolve(); } }; ME.start(ME_OPTS()); ME.volume(-3); } else gmStart(); } catch (e) { gmStart(); } try { localStorage.setItem('dl_cam', cam ? '1' : '0'); } catch (e) { } if (cam && !camOn) { try { camBtn.onclick(); } catch (e) { } } };
+    const go = (cam) => { if (window.__go) return; window.__go = true; d.style.transition = 'opacity .5s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 520); try { acx(); } catch (e) { } try { if (window.ME && !Q.has('oldmusic') && !Q.has('nomusic')) { window.__bt = window.__bt || { pause() { }, play() { return Promise.resolve(); } }; if (OPEN.on) { try { Tone.start(); } catch (e) { } } else { ME.start(ME_OPTS()); ME.volume(-3); }; } else gmStart(); } catch (e) { gmStart(); } try { localStorage.setItem('dl_cam', cam ? '1' : '0'); } catch (e) { } if (cam && !camOn) { try { camBtn.onclick(); } catch (e) { } } };
     d.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); go(b ? b.dataset.c === '1' : lastCam && hasCam); });
     addEventListener('keydown', (e) => { if (!window.__go && (e.key === 'Enter' || e.key === ' ')) go(false); });
     document.body.appendChild(d); })();
@@ -1280,7 +1284,7 @@ void main() {
   });
   engine.runRenderLoop(() => {
     pillsUpdate(); scene.render(); nf++; const now = performance.now();
-    if (!PAUSED) { { const dt0 = Math.min(.1, engine.getDeltaTime() / 1000), bp = gmOn ? GM.beatPos() : (window.ME && ME.on && !ME.paused ? ME.beatPos() : 0); if (bp > 0) { const ph = bp - Math.floor(bp), bar = (Math.floor(bp) % 4 === 0) ? 1 : .55, kick = Math.exp(-ph * 7) * bar; BEATFX.pulse += (kick - BEATFX.pulse) * Math.min(1, dt0 * 40); const bar4 = Math.floor(bp / 4); if (bar4 !== BEATFX.bar) { if (BEATFX.bar >= 0 && bar4 % 4 === 0) BEATFX.glass = 1; BEATFX.bar = bar4; } } else if (!(window.__BEAT && window.__BEAT.b)) BEATFX.pulse *= Math.exp(-dt0 * 6); BEATFX.fov = (1 + .018 * BEATFX.pulse) * (1 + (DOSE.fovK || 0)); }
+    if (!PAUSED) { { const dt0 = Math.min(.1, engine.getDeltaTime() / 1000), bp = gmOn ? GM.beatPos() : (window.ME && ME.on && !ME.paused ? ME.beatPos() : 0); if (OPEN.an && OPEN.playing && !OPEN.done && !PAUSED) { BEATFX.pulse += (openKick() - BEATFX.pulse) * Math.min(1, dt0 * 30); } else if (bp > 0) { const ph = bp - Math.floor(bp), bar = (Math.floor(bp) % 4 === 0) ? 1 : .55, kick = Math.exp(-ph * 7) * bar; BEATFX.pulse += (kick - BEATFX.pulse) * Math.min(1, dt0 * 40); const bar4 = Math.floor(bp / 4); if (bar4 !== BEATFX.bar) { if (BEATFX.bar >= 0 && bar4 % 4 === 0) BEATFX.glass = 1; BEATFX.bar = bar4; } } else if (!(window.__BEAT && window.__BEAT.b)) BEATFX.pulse *= Math.exp(-dt0 * 6); BEATFX.fov = (1 + .018 * BEATFX.pulse) * (1 + (DOSE.fovK || 0)); }
       const dtS = Math.min(.1, engine.getDeltaTime() / 1000), spd = Math.hypot(PH.vx, PH.vz), sp01 = Math.min(1, speedS / (57 * SPK));
       try { PSY.tick(dtS, { speed: spd / SPK, speedY: -PH.vz / SPK, chain: PH.chain, boosting: PH.boost_t > 0, links: 0, wave: .5, inAir: !PH.grounded, vy: PH.vy / SPK, alt: PH.y - th(PH.x, PH.z), hurtT: PH.hurt, rail: false, tube: false }); U.trip = Math.max(.25, Math.min(1, PSY.state.trip)); WORLDW = PSY.world(); } catch (e) { }
       if (gmOn) { try { const fl = PSY.state && PSY.state.mbody ? PSY.state.mbody.map((v) => Math.min(1, v / 6)) : [0, 0, 0, 0, 0, 0]; GM.tick(dtS, Object.assign({ chill: false, phase: PSY.pacer ? PSY.pacer.phaseName() : undefined, u: PSY.pacer ? Math.min(1, PSY.pacer.t / PSY.pacer.session_s) : 0, tripOn: !!(PSY.state && PSY.state.trip_on) || fl.reduce((x, y) => x + y, 0) / 6 >= .03, clarityK: PSY.state ? PSY.state.clr_k : 1, sharp: PSY.state ? PSY.state.sharp : 0, felt: fl, excitement: Math.min(1, .3 + sp01 * .42 + (PH.chain > 1 ? .2 : 0) + (PH.boost_t > 0 ? .15 : 0)), chain: PH.chain, airborne: !PH.grounded, speed01: sp01 }, DOSE.trip ? DOSE.music() : {})); } catch (e) { } } }
@@ -1329,7 +1333,7 @@ void main() {
   const J = (o) => JSON.stringify(o, null, 1);
   function copyText(t) { try { navigator.clipboard.writeText(t).catch(() => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) { } a.remove(); }); } catch (e) { } }
   function refreshDiag() { const o = diag(); return o; }
-  function setPause(v) { PAUSED = v; try { AW.onPause(v); } catch (e) { } try { const bt = window.__bt; if (bt) { if (v) bt.pause(); else { const pr = bt.play && bt.play(); if (pr && pr.catch) pr.catch(() => { }); } } } catch (e) { } pz.style.display = v ? 'flex' : 'none'; try { PMENU.set(v); } catch (e) { } pzb.textContent = v ? '> resume' : 'II pause'; if (gmOn) try { GM.setPaused(v); } catch (e) { } try { if (window.ME) ME.pause(v); } catch (e) { } if (v) refreshDiag(); }
+  function setPause(v) { PAUSED = v; try { AW.onPause(v); } catch (e) { } try { const bt = window.__bt; if (bt) { if (v) bt.pause(); else { const pr = bt.play && bt.play(); if (pr && pr.catch) pr.catch(() => { }); } } } catch (e) { } pz.style.display = v ? 'flex' : 'none'; try { PMENU.set(v); } catch (e) { } pzb.textContent = v ? '> resume' : 'II pause'; if (gmOn) try { GM.setPaused(v); } catch (e) { } try { if (window.ME) ME.pause(v); } catch (e) { } try { if (OPEN.playing && !OPEN.done) { if (v) OPEN.a.pause(); else { const p = OPEN.a.play(); if (p && p.catch) p.catch(() => { }); } } } catch (e) { } if (v) refreshDiag(); }
 
   /* PLAYER MENU: everything that is not driving lives here (driving is head-only). Resume, Hint, Log, Look, World, Restart, Quit; the old diagnostics panel sits behind "Developer". */
   let STORYON = (() => { try { return localStorage.getItem('dl_story') !== '0'; } catch (e) { return true; } })();
@@ -2166,7 +2170,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     PH.boost_t = Math.max(PH.boost_t, 2.6); window.__railAir = performance.now() + 1100 * LAB.hng / 100; shake = Math.max(shake, .45); U.beat = 1; U.trip = 1; PH.score += 1000;
     tlook(rndOf(LOOKHEAVY), 2, 0, .7, .5 * D.ceil + .15, 'snap');          /* the flash of chaos: under a second */
     tlook(C.looks[0], 1, .15, 3.4, .55 + .35 * D.ceil, 'snap');
-    try { flyTo('dose', compIcon(cp), [x, y, z]); itemCard('comp.' + cp, hex(C.col)); } catch (e) { } if (STRAINS) strainFound(cp); try { if (window.ME) ME.dose(); } catch (e) { } BEATFX.glass = 1;
+    try { flyTo('dose', compIcon(cp), [x, y, z]); itemCard('comp.' + cp, hex(C.col)); } catch (e) { } if (STRAINS) strainFound(cp); try { if (window.ME) ME.dose(); } catch (e) { } BEATFX.glass = 1; openHandoff('dose');
   }
   function tripStep(dt) {
     const D = DOSE; D.t += dt; D.warn = Math.max(0, D.warn - dt);
@@ -2890,6 +2894,31 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     const pil = (dx, nm) => { const b = B.MeshBuilder.CreateBox(nm, { width: 2, height: 15, depth: 2 }, scene); b.material = solidMat([.05, .05, .08], 'starch'); return stThing(b, ZIN, dx, 7.5, 'arch'); };
     pil(-18, 'stpl'); pil(18, 'stpr'); const lin = B.MeshBuilder.CreateBox('stlin', { width: 38, height: 2.4, depth: 2 }, scene); lin.material = solidMat([.05, .05, .08], 'starch'); stThing(lin, ZIN, 0, 15.5, 'arch');
   }
+  /* THE OPENING TRACK'S SEQUENCE. Times are the track's own (measured: first hit 9.9 s, verse 20.3 s, hook drop 42 s, the first hook ends at 75 s).
+     Cards are Borderlands-style title slams in the neon-noir dress: a name and one dry line, held for a beat, gone; the road stays drivable underneath. */
+  function openPlay() { const O = OPEN; if (!O.on || !O.a || O.playing) return; O.playing = true;
+    try { const ctx = Tone.getContext().rawContext, src = ctx.createMediaElementSource(O.a), g = ctx.createGain(), an = ctx.createAnalyser(); an.fftSize = 512; g.gain.value = .9; src.connect(g); g.connect(an); an.connect(ctx.destination); O.g = g; O.an = an; O.buf = new Uint8Array(an.frequencyBinCount); O.avg = .3; } catch (e) { O.a.volume = .9; }
+    try { O.a.currentTime = 0; const p = O.a.play(); if (p && p.catch) p.catch(() => { }); } catch (e) { }
+    O.a.addEventListener('ended', () => openHandoff('end'));
+    const css = document.createElement('style'); css.textContent = '#opCard{position:fixed;left:max(5vw,20px);top:max(20vh,118px);max-width:min(90vw,760px);z-index:57;pointer-events:none;color:#f2efe6;opacity:0;transform:translateX(-30px) skewX(-8deg);transition:opacity .25s,transform .35s cubic-bezier(.2,.9,.3,1.3)}#opCard.on{opacity:1;transform:none}#opCard .slab{background:rgba(3,5,10,.82);border-left:5px solid #38e8ff;padding:.45em .9em .55em;box-shadow:0 0 34px rgba(56,232,255,.25)}#opCard b{display:block;font:700 clamp(26px,6.5vmin + 6px,72px)/.95 "Barlow Condensed",Impact,"Arial Narrow",sans-serif;letter-spacing:.12em;text-shadow:0 0 18px rgba(56,232,255,.45)}#opCard span{display:block;margin-top:.25em;font:italic 500 clamp(13px,2.6vmin + 4px,20px) Georgia,serif;color:#d9d3c7}#opCard.big{left:50%;top:38%;transform:translate(-50%,-50%) scale(1.3)}#opCard.big.on{transform:translate(-50%,-50%) scale(1)}#opCard.big .slab{border-left:0;border-top:4px solid #ffd23a;border-bottom:4px solid #ffd23a;text-align:center;padding:.4em 1.1em}#opCard.big b{font-size:clamp(40px,11vmin + 8px,128px);letter-spacing:.22em;text-shadow:0 0 30px rgba(255,210,58,.5)}#opCredit{position:fixed;left:max(4vw,16px);bottom:max(15vh,96px);z-index:57;pointer-events:none;opacity:0;transition:opacity 1s;font:600 clamp(12px,2.6vw,15px)/1.35 system-ui,sans-serif;color:#e9e4da;background:rgba(3,5,10,.7);padding:.45em .75em;border-radius:6px;max-width:min(88vw,520px)}#opCredit.on{opacity:1}#opCredit i{color:#ffd23a;font-style:normal}@media (prefers-reduced-motion:reduce){#opCard,#opCard.big{transition:opacity .4s;transform:none!important}}';
+    document.head.appendChild(css);
+    const card = document.createElement('div'); card.id = 'opCard'; document.body.appendChild(card); const cr = document.createElement('div'); cr.id = 'opCredit'; cr.innerHTML = '<i>\u266A</i> \u201CLegalize\u201D \u00B7 MalreDeszik ft. Synomo &amp; IAComplexe <span style="opacity:.7">\u00B7 CC BY 4.0</span>'; document.body.appendChild(cr);
+    const who = (() => { try { return (CHAR ? (String(CHAR.name || '').replace(/[^A-Za-z0-9 _.'-]/g, '').slice(0, 16) || { a1: 'Compliant Citizen #4471', a2: 'Definitely Not The Courier', a3: 'Error 403', a4: 'Probably Fine' }[CHAR.alias] || '') : ''); } catch (e) { return ''; } })();
+    const show = (name, line, big) => { card.className = big ? 'big' : ''; card.innerHTML = '<div class="slab"><b></b><span></span></div>'; card.querySelector('b').textContent = name; card.querySelector('span').textContent = line; requestAnimationFrame(() => card.classList.add('on')); BEATFX.glass = 1; };
+    const hide = () => card.classList.remove('on');
+    const at = (sec, fn) => { const w = () => { if (O.done) return; const t = O.a.currentTime; if (t >= sec) { try { fn(); } catch (e) { } } else setTimeout(w, Math.max(16, (sec - t) * 1000 - 8)); }; setTimeout(w, 0); };          /* timed to the track itself (pauses with it) */
+    at(5.5, () => cr.classList.add('on')); at(13, () => cr.classList.remove('on'));
+    at(9.9, () => { BEATFX.glass = 1; });
+    at(20.3, () => show('MURMUR', 'Your assistant. Their informant.')); at(24.6, hide);
+    at(26.8, () => show('ACCORD', 'They sell calm. Calm sells you.')); at(31.1, hide);
+    at(33.3, () => show((who || 'YOU').toUpperCase(), 'Thinking about leaving.')); at(37.6, hide);
+    at(42.0, () => show('DOWNFALL', 'Legalize the peace.', true)); at(47.5, hide);
+    at(75, () => openLevel(.32, 1.5));          /* the first hook is over: it steps back under the driving */
+  }
+  function openLevel(v, tc) { const O = OPEN; try { if (O.g) O.g.gain.setTargetAtTime(v, O.g.context.currentTime, tc); else O.a.volume = Math.max(0, Math.min(1, v)); } catch (e) { } }
+  function openKick() { const O = OPEN; O.an.getByteFrequencyData(O.buf); const lo = (O.buf[1] + O.buf[2] + O.buf[3]) / 765; O.avg = O.avg * .985 + lo * .015; return Math.max(0, Math.min(1, (lo - O.avg * 1.04) * 7)); }
+  function openHandoff(why) { const O = OPEN; if (!O.on || !O.playing || O.done) return; O.done = true; openLevel(0, why === 'end' ? .05 : 1.2); setTimeout(() => { try { O.a.pause(); } catch (e) { } }, 5000);
+    try { if (window.ME && !ME.on && !Q.has('nomusic')) ME.start(ME_OPTS()).then(() => { try { const v = Tone.getDestination().volume; v.value = -40; v.rampTo(-3, 4); } catch (e) { } }); } catch (e) { } }
   /* THE OPENING (storyboard frames 1-5, first person, in the car): black with the engine running; at 3 s the Murmur arrives as a notification on the phone on the dash, holds, fades; at 9.8 s the lights come up over 3 s;
      at 12.8 s a small ROUTE ZERO title sits in the lower third for 3 s; then nothing for the eye but the road. Nothing else may speak until 17 s. */
   function stOpening(msg) {
@@ -2907,7 +2936,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     at(12.8, () => ti.classList.add('on'));
     at(15.8, () => ti.classList.remove('on'));
     at(16.6, () => { document.body.classList.remove('stOpening'); ov.remove(); });
-    ST.opening = true;
+    ST.opening = true; openPlay();
   }
   function stComplete() {
     ST.lamp = true; ST.stage = 4; ST.hint = 0; ST.done = true; ST.laneBeat = true; stQ(() => stBeatNow('Route Zero', 'The lamp is lit.<br>Four lanes ahead. Gold is yours.', 5200), 7, 2); stObj('Route Zero complete. Keep driving, or open the Logbook.'); stSay('You found a lamp. Someone left it for you. (Someone always leaves one.)', 'Route Zero'); try { SFX.mol(0); } catch (e) { } try { FXB.E.cheer([PH.x, PH.y, PH.z]); } catch (e) { } U.beat = 1; PH.score += 500;
