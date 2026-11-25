@@ -72,7 +72,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #title.glitch h1, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
-<iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><div id="dim" aria-hidden="true"></div><canvas id="c" aria-hidden="true"></canvas>
+<iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
 <div id="ui" role="button" tabindex="0" aria-label="The Frequency. Tap to tune in.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
@@ -141,7 +141,7 @@ function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = 
   const camX = roadC(DRIVE.z + 14) + .7 * Math.sin(t * .63), camH = 1.7 + .035 * Math.sin(t * 7.3) + .02 * Math.sin(t * 11.1);          /* the car follows the road a little behind the curve, with a gentle sway and a road hum */
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
-  gl.uniform2f(U.uWH, W, H); gl.uniform4f(U.uMap, cxm, hz, k, .29 / (Math.min(W, H) * .15));          /* (the sky's sun about 15% of the short side across, sitting on the horizon) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, glass * glass * (3 - 2 * glass) * .85); gl.uniform1f(U.uPsy, 0);
+  gl.uniform2f(U.uWH, W, H); gl.uniform4f(U.uMap, cxm, hz, k, k);          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, glass * glass * (3 - 2 * glass) * .85); gl.uniform1f(U.uPsy, 0);
   gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], TUNE.k); gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 
@@ -156,7 +156,7 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
   const fx = p.does.split(';')[0].trim(); d.className = 'fx'; d.textContent = fx.charAt(0).toUpperCase() + fx.slice(1) + (WORLDOF[KEYS[si]] ? ' · found: ' + WORLDOF[KEYS[si]] : ''); strainEl.append(n, d); }
 
 const GAME = { el: document.getElementById('game'), ready: false, tint: '' };
-if (!/[?&]painted/.test(location.search)) GAME.el.src = GAME.el.dataset.src;          /* (&painted: the painted scene only, no real level behind) */
+if (/[?&]real(&|$)/.test(location.search)) GAME.el.src = GAME.el.dataset.src;          /* (the painted scene; &real puts the real level behind it) */
 setInterval(() => { if (GAME.ready) return; try { const w = GAME.el.contentWindow; if (w && w.__splashReady && w.__G && w.__G.PH && w.__G.PH.z < -30) { GAME.ready = true; GAME.el.classList.add('on'); setTimeout(() => { skyc.style.display = 'none'; }, 1500); } } catch (e) { } }, 400);
 function gameTint() { if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
 function draw(t, dt) {
