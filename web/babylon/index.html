@@ -1035,14 +1035,14 @@ void main() {
   const lookApplyFor = (k) => (e) => { const q0 = LOOK.L[k], o = FXO.L[k], q = { ev: o.ev ?? q0.ev, ea: o.ea ?? q0.ea, sty: o.sty ?? q0.sty, mix: o.mix ?? q0.mix }, w = engine.getRenderWidth(), h = engine.getRenderHeight(); e.setFloat2('uTexel', 1 / w, 1 / h); e.setFloat2('uRes', w, h); e.setFloat('uCell', Math.max(6, Math.round(w / 110))); e.setFloat('uVec', q.ev); e.setFloat('uAsc', q.ea); e.setFloat('uTime', U.time); e.setFloat('uSty', q.sty); e.setFloat('uMix', Math.max(1, q.mix)); };
   /* A MOLECULE gives about one second of a look, a different one each time (a shuffled bag of all fifteen: vector, ascii, line, pastel, oil, cel, doodle, felt, halftone, kaleidoscope, thermal, mosaic, glass, melt, neon), swelling in and out at a random strength. It also swells the surfaces' psychedelic layer (the headset has no picture pass for the rest). */
   /* the looks that leave the game visible linger: a quick rise, then a slow fade with a couple of minor waves (the strength dips to half and swells back) before they go */
-  const LOOKLINGER = [5, 6, 11, 14, 17, 18, 19], LOOKHEAVY = [1, 2, 3, 7, 8, 9, 10, 12, 13, 15];          /* HEAVY: the looks that hide the game (vector, ascii, line, doodle, felt, halftone, kaleidoscope, mosaic, stained glass, neon): a short flash only */
+  const LOOKLINGER = [5, 6, 11, 14, 17, 18, 19], LOOKHEAVY = [1, 2, 3, 7, 8, 9, 10, 12, 15];          /* HEAVY: the looks that hide the game (vector, ascii, line, doodle, felt, halftone, kaleidoscope, mosaic, stained glass, neon): a short flash only */
   const lingerEnv = (u) => { const a = u < .16 ? Math.sin(Math.PI / 2 * u / .16) : 1, dec = u < .16 ? 1 : Math.exp(-(u - .16) * 2.1), w = .5 + .5 * Math.cos(2 * Math.PI * (u - .16) * 2.6), wav = 1 - .5 * (1 - w) * Math.min(1, Math.max(0, (u - .16) / .12)) * (u < .85 ? 1 : 0); return a * dec * wav * Math.pow(Math.max(0, 1 - u), .7); };
   const lookPulse = (kind) => {
     const now = performance.now(), trip = WORLD0 === 'psychedelic', own = !trip && WORLD0 !== 'matrix' && WORLD0 !== 'synthwave' && WORLD0 !== 'tunnel'; if ((own || !lookPP) && now - (LOOK.lastS || 0) > 4000 && PSYPb.pulse <= 0) { PSYPb.pulse = 1; LOOK.lastS = now; }
     if (now - LOOK.last < 1200) return; LOOK.last = now;
     if (LOOKSEL < 0 || LOOKSEL === 99) return;          /* look: off (and in psych mode the looks run on their own)  = no molecule looks at all */
     const baseIdle = LOOKSEL === 0 && WORLD0 !== 'matrix' && WORLD0 !== 'synthwave', layers = baseIdle ? [0, 1, 2] : [1, 2], want = Math.min(layers.length, 2 + (Math.random() < .5 ? 1 : 0)), items = [], T0 = LOOK.clock;
-    for (let n = 0; n < want; n++) { if (!LOOK.bag || !LOOK.bag.length) { LOOK.bag = []; for (let i = 1; i < LOOKNAMES.length; i++) if (i !== 16) LOOK.bag.push(i); for (let i = LOOK.bag.length - 1; i > 0; i--) { const j2 = Math.floor(Math.random() * (i + 1)), q = LOOK.bag[i]; LOOK.bag[i] = LOOK.bag[j2]; LOOK.bag[j2] = q; } } const it = { idx: LOOK.bag.pop(), layer: layers[n] }; items.push(it); const paper = [3, 4, 7, 9].includes(it.idx), kk = want >= 3 ? .62 : .8; it.amp = Math.min(paper ? .5 : 1, (.4 + .6 * Math.random()) * kk); const ling = LOOKLINGER.includes(it.idx); it.ling = ling; LOOK.evs.push({ idx: it.idx, layer: it.layer, t0: T0 + n * .12, len: ling ? 2.9 - n * .12 : (LOOKHEAVY.includes(it.idx) ? .6 - n * .05 : 1.15 - n * .12), amp: ling ? it.amp * .9 : it.amp, linger: ling }); }
+    for (let n = 0; n < want; n++) { if (!LOOK.bag || !LOOK.bag.length) { LOOK.bag = []; for (let i = 1; i < LOOKNAMES.length; i++) if (i !== 16 && i !== 13) LOOK.bag.push(i); for (let i = LOOK.bag.length - 1; i > 0; i--) { const j2 = Math.floor(Math.random() * (i + 1)), q = LOOK.bag[i]; LOOK.bag[i] = LOOK.bag[j2]; LOOK.bag[j2] = q; } } const it = { idx: LOOK.bag.pop(), layer: layers[n] }; items.push(it); const paper = [3, 4, 7, 9].includes(it.idx), kk = want >= 3 ? .62 : .8; it.amp = Math.min(paper ? .5 : 1, (.4 + .6 * Math.random()) * kk); const ling = LOOKLINGER.includes(it.idx); it.ling = ling; LOOK.evs.push({ idx: it.idx, layer: it.layer, t0: T0 + n * .12, len: ling ? 2.9 - n * .12 : (LOOKHEAVY.includes(it.idx) ? .6 - n * .05 : 1.15 - n * .12), amp: ling ? it.amp * .9 : it.amp, linger: ling }); }
     /* then, once the main look has faded, a hint of a flashback: one, two or three echoes of some of the same looks, each fainter and shorter than the one before */
     const r0 = Math.random(), echoes = r0 < .5 ? 1 : (r0 < .8 ? 2 : 3); const shortItems = items.filter((q) => !q.ling);
     for (let e = 1; e <= echoes; e++) { const start = T0 + 1.5 + (e - 1) * 1.15, k = .42 / e, pick = shortItems.filter(() => Math.random() < .7); if (!pick.length) { if (!shortItems.length) continue; pick.push(shortItems[0]); } for (const it of pick) LOOK.evs.push({ idx: it.idx, layer: it.layer, t0: start + Math.random() * .12, len: (.8 - .15 * (e - 1)) * (LOOKHEAVY.includes(it.idx) ? .6 : 1), amp: k * (.65 + .35 * (it.amp || .5)) * (.85 + .15 * Math.random()) }); }
@@ -1051,7 +1051,7 @@ void main() {
   function lookDetachAll() { for (const q of LOOKPPS) if (q.__att) { cam.detachPostProcess(q); q.__att = false; } lookAttMask = 0; }
   function syncLook() { if (!lookPP) return; let mask = 0; if (LAYER.post) LOOK.L.forEach((q, k) => { if (q.ev > .004 || q.ea > .004 || q.sty > .004) mask |= 1 << k; }); if (mask === lookAttMask) return; lookDetachAll(); LOOKPPS.forEach((q, k) => { if (mask & (1 << k)) { cam.attachPostProcess(q); q.__att = true; } }); lookAttMask = mask; }
   /* PSYCH MODE (look: psych): never rests. Each of the three layers runs its own endless chain of looks, every one overlapping the one before so there is never a gap, and each one arrives in a different way: it CREEPS in slowly, comes in WAVES, SOFTENS and then surges, or simply breathes. The see-through looks carry the picture; the heavy ones sit low on the third layer. About every 18-34 s there is an abrupt change: a look SNAPS in hard and everything intensifies for a moment, then settles again. Strength builds over the first few minutes, and the world's trip level is held high. */
-  const PS_LIGHT = [4, 5, 6, 11, 14, 17, 18, 19], PS_HEAVY = [1, 2, 3, 7, 8, 9, 10, 12, 13, 15], LK = () => (LOOKSEL === 99 ? 0 : LOOKSEL);
+  const PS_LIGHT = [4, 5, 6, 11, 14, 17, 18, 19], PS_HEAVY = [1, 2, 3, 7, 8, 9, 10, 12, 15], LK = () => (LOOKSEL === 99 ? 0 : LOOKSEL);
   const shapeEnv = (e, lt) => { const u = Math.min(1, Math.max(0, lt / e.len)); switch (e.shape) {
     case 'creep': return u < .8 ? Math.pow(u / .8, 2.2) : Math.pow(Math.max(0, (1 - u) / .2), 1.5);
     case 'wave': return Math.pow(Math.sin(Math.PI * u), .6) * (.62 + .38 * Math.sin(2 * Math.PI * e.waves * u - 1.5708));
@@ -2249,7 +2249,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     haze:     { name: 'HAZE',     col: [.45, 1, .45],   mol: 'dom',       looks: [14, 5],      fx: { glow: 1.7, breathe: 2.2, warp: 1.3 }, tint: [.94, 1.08, .92], glowLen: 1.5 },
     drift:    { name: 'DRIFT',    col: [.6, .75, 1],    mol: '2cb',       looks: [14, 4],      fx: { soft: .65, glow: 1.5, trace: .6, chroma: .6 }, tint: [.92, .96, 1.1], tscale: .82 },
     hollow:   { name: 'HOLLOW',   col: [.8, .85, .9],   mol: '2ct2',      looks: [11, 15],     fx: { dmt: .35, trace: 1.3 }, tint: [.86, .95, 1.1], fov: .16 },
-    fold:     { name: 'FOLD',     col: [.75, 1, .3],    mol: '2ce',       looks: [10, 13],     fx: { warp: 1.8, chroma: 1.3 }, tint: [1.05, 1.02, .9] },
+    fold:     { name: 'FOLD',     col: [.75, 1, .3],    mol: '2ce',       looks: [10, 14],     fx: { warp: 1.8, chroma: 1.3 }, tint: [1.05, 1.02, .9] },
     deep:     { name: 'DEEP',     col: [.55, .4, 1],    mol: '2ct7',      looks: [18, 10, 19], fx: { dmt: 1, zoom: .6, trace: 1.7, glow: 1.6 }, tint: [.95, .92, 1.1], fov: .08 },
   };
   if (STRAINS) { COMP.fold.mol = 'p_fold'; COMP.fold.ev = '2ce'; COMP.deep.mol = 'p_deep'; COMP.deep.ev = '2ct7'; for (const cp in COMP) COMP[cp].strain = PANTRY[cp]; }
@@ -2458,7 +2458,6 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     if (GEAR.id && GNAME[GEAR.id]) { const pips = GEAR.id === 'shield' ? '<div class="pips">' + [0, 1, 2].map((i) => '<i class="pip' + (i < GEAR.sh ? '' : ' off') + '"></i>').join('') + '</div>' : ''; parts.push(['gear', '<div class="hs" data-k="gear">' + GNAME[GEAR.id][0] + pips + '<span class="t">' + ({ rocket: 'ROCKETS', pole: 'MAGNET POLE', shield: 'SHIELD', bull: 'BULL BAR' }[GEAR.id] || 'GEAR') + '</span></div>']); }
     if (DOSE.comp && DOSE.ph !== 'sober') { const C = COMP[DOSE.comp], GL = DGLOW * (C.glowLen || 1), tot = DRUSH + DWAVES + GL, left = DOSE.ph === 'rush' ? tot - DOSE.t : DOSE.ph === 'waves' ? GL + DWAVES - DOSE.t : GL - DOSE.t; parts.push(['dose', '<div class="hs" data-k="dose">' + compIcon(DOSE.comp) + ringSvg(left / tot, hex(C.col)) + '<span class="t">' + (DOSE.ph === 'glow' ? 'AFTERGLOW' : C.name) + '</span></div>']); }
     if (LENS.t > 0 && LENS.kind && !(DOSE.trip && DOSE.ph === 'glow')) parts.push(['lens', '<div class="hs" data-k="lens">' + lensIcon(LENS.kind) + ringSvg(LENS.t / (LENS.max || 60), LCOL(LENS.kind)) + '<span class="t">' + LENS.kind + '</span></div>']);
-    if (typeof JUNK !== 'undefined' && JUNK.n > 0) parts.push(['junk', '<div class="hs" data-k="junk">\uD83D\uDCBE' + (JUNK.n > 1 ? '<span class="n">\u00D7' + JUNK.n + '</span>' : '') + '<span class="t">OLD MEDIA</span></div>']);
     for (const k of ['shield', 'magnet', 'wings', 'saw']) if (BANK[k] > 0) parts.push(['b' + k, '<div class="hs" data-k="b' + k + '">' + BICON[k] + (BANK[k] > 1 ? '<span class="n">\u00D7' + BANK[k] + '</span>' : '') + '<span class="t">' + BNAME2[k] + '</span></div>']);
     const html = parts.map((p) => p[1]).join(''), key = html.replace(/stroke-dasharray="[^"]*"/g, ''); if (html !== HUDKEY) { HUDKEY = html; hudEl.innerHTML = html; } }
   /* EXIT LABELS: each exit ahead, named, with a line to its mouth */
@@ -2597,7 +2596,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
      readable, each stage stronger and longer. RUSH: nine seconds of layered combinations, two short flashes of the heavy looks on the way. */
   function lookPush(idx, layer, delay, len, amp, linger) { try { if (typeof LOOKSEL !== 'undefined' && (LOOKSEL < 0 || LOOKSEL === 99)) return; LOOK.evs.push({ idx, layer, t0: LOOK.clock + delay, len, amp, linger: !!linger }); } catch (e) { } }
   /* each world has a signature from the owner's looks (by index in LOOKNAMES): the lingering pair it leans on and the heavy flashes it saves for its big moments */
-  const WSIG = { desert: { L: [5, 19], H: [9] }, alpine: { L: [6, 17], H: [3] }, candy: { L: [14, 17], H: [10] }, egypt: { L: [11, 14], H: [9] }, synthwave: { L: [18, 19], H: [15, 1] }, tunnel: { L: [18, 19], H: [2] }, matrix: { L: [11, 18], H: [2, 1] }, psychedelic: { L: [14, 19, 17], H: [10, 13] } }, SIG = WSIG[WORLD0] || WSIG.psychedelic;
+  const WSIG = { desert: { L: [5, 19], H: [9] }, alpine: { L: [6, 17], H: [3] }, candy: { L: [14, 17], H: [10] }, egypt: { L: [11, 14], H: [9] }, synthwave: { L: [18, 19], H: [15, 1] }, tunnel: { L: [18, 19], H: [2] }, matrix: { L: [11, 18], H: [2, 1] }, psychedelic: { L: [14, 19, 17], H: [10, 12] } }, SIG = WSIG[WORLD0] || WSIG.psychedelic;
   const pickL = () => Math.random() < .65 ? SIG.L[Math.floor(Math.random() * SIG.L.length)] : LOOKLINGER[Math.floor(Math.random() * LOOKLINGER.length)], pickH = () => Math.random() < .65 ? SIG.H[Math.floor(Math.random() * SIG.H.length)] : LOOKHEAVY[Math.floor(Math.random() * LOOKHEAVY.length)];
   function sigShow() { SIG.L.forEach((ix, i) => lookPush(ix, 1 + (i % 2), i * .5, 5.5 - i * .5, 1 - i * .15, true)); SIG.H.forEach((ix, i) => lookPush(ix, 2, 1.6 + i * 1.8, .6, .85)); }
   function chargeLooks(stage) { const a = [.35, .55, .75][stage], len = [2.4, 3.2, 4.2][stage]; lookPush(pickL(), 1, 0, len, a, true); if (stage >= 1) lookPush(pickL(), 2, .4, len * .8, a * .8, true); }
@@ -2817,86 +2816,103 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   const WCRAFT = { desert: 'jet', candy: 'blimp', alpine: 'heli', egypt: 'barge', tunnel: 'saucer', synthwave: 'fighter', matrix: 'datacenter', psychedelic: 'jelly' };
   const raidOn = () => !Q.has('noraids') && !Q.has('splash') && !Q.has('story') && !Q.has('tutorial') && !Q.has('shot') && WCRAFT[WORLD0];
   const rGround = (x, z) => { const g = th(x, z); return Number.isFinite(g) ? g : PH.y; };
-  function raidBomb(R, c) { const A = AMMO[CRAFT[R.kind].ammo], root = new B.TransformNode('raidbomb', scene); A.mk(root); root.scaling.setAll(R.big ? 1.4 : 1);
-    const p0 = R.root.position.clone(); p0.y -= 2.5 * (R.big || 1); const T = 1.55 + Math.random() * .35, spd = Math.hypot(PH.vx, PH.vz);
-    let tx = PH.x + PH.vx * T * .55 + (Math.random() - .5) * 5, tz = PH.z + PH.vz * T * .92 + (Math.random() - .5) * 4; const tr = trailX(tz); tx = clamp(tx, tr - 10, tr + 10); const ty = rGround(tx, tz), g = 13;
+  /* THE RAID, v2. The craft pulls up from behind on one side of your screen, slides ahead and keeps its station there (a little back and forth, a little side to side),
+     ARMS (its lights flare), then rains its ammunition round where you are about to be (a volley every few seconds: one at your line, the rest scattered round it).
+     Your reticle drifts over it and LOCKS now and then: "LOCKED ON / HARD RIGHT TO FIRE!". Steer hard that way and your junk meanders up and rocks it. Three hits and
+     it blows apart; if it survives, it leaves its own way (accelerates off, warps, jumps to light speed, or folds into hyperspace). */
+  const rFrame = () => { const h = PH.heading || 0; return { f: [Math.sin(h), -Math.cos(h)], r: [Math.cos(h), Math.sin(h)] }; };
+  function raidBomb(R, tx, tz, vol) { const A = AMMO[CRAFT[R.kind].ammo], root = new B.TransformNode('raidbomb', scene); A.mk(root); root.scaling.setAll(R.big > 1 ? 1.4 : 1);
+    const p0 = R.root.position.clone(); p0.y -= 1.5 * (R.big || 1); const T = 1.5 + Math.random() * .3, ty = rGround(tx, tz), g = 13;
     const v = new B.Vector3((tx - p0.x) / T, (ty - p0.y) / T + .5 * g * T, (tz - p0.z) / T); root.position.copyFrom(p0);
     const mk = B.MeshBuilder.CreateDisc('raidmark', { radius: 3, tessellation: 28 }, scene), mm = RAID.mats.mark || (RAID.mats.mark = (() => { const m = new B.StandardMaterial('raidmarkM', scene); m.disableLighting = true; m.emissiveColor = new B.Color3(1, .35, .25); m.alpha = .5; m.backFaceCulling = false; return m; })()); mk.material = mm; mk.rotation.x = Math.PI / 2; mk.position.set(tx, ty + .15, tz); mk.isPickable = false;
-    RAID.bombs.push({ root, v, g, t: 0, T, tx, ty, tz, A, mk, spin: new B.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3) }); }
+    RAID.bombs.push({ root, v, g, t: 0, T, tx, ty, tz, A, mk, vol, R, spin: new B.Vector3(Math.random() * 6 - 3, Math.random() * 6 - 3, Math.random() * 6 - 3) }); }
+  function raidVolley(R) { const T = 1.6, F = rFrame(), sp = Math.hypot(PH.vx, PH.vz), ahead = sp * T * .9, px = PH.x + F.f[0] * ahead, pz = PH.z + F.f[1] * ahead;          /* where you will be */
+    const set = [[0, 0], [-6.5, 4], [6.5, -3], [-3, 11], [4, 9], [-8, -6], [8, 7]], n = 3 + Math.floor(Math.random() * 2), rot = Math.random() * .8 - .4, vol = { n, landed: 0, hit: false };
+    for (let i = 0; i < n; i++) { const o = set[i === 0 ? 0 : 1 + Math.floor(Math.random() * (set.length - 1))], a = o[0] * Math.cos(rot) - o[1] * Math.sin(rot), b = o[0] * Math.sin(rot) + o[1] * Math.cos(rot);
+      let tx = px + F.r[0] * a + F.f[0] * b, tz = pz + F.r[1] * a + F.f[1] * b; const tr = trailX(tz); tx = clamp(tx, tr - 11, tr + 11); setTimeout(() => { if (RAID.cur === R) raidBomb(R, tx, tz, vol); else vol.n--; }, i * 140); } }
   function raidBurst(b) { const p = [b.tx, b.ty + .6, b.tz];
     try { if (b.A.burst === 'rainbow') { FXB.confetti(p, 50, 1); } else { FXB.E.pillEat(p, b.A.burst); FXB.E.pillEat([b.tx, b.ty + 1.2, b.tz], [1, .9, .7]); } } catch (e) { }
-    if (Math.hypot(PH.x - b.tx, PH.z - b.tz) < 3.1 && PH.y - b.ty < 3.5) { try { crash(b.A.txt + '!', 'rock', true); big(b.A.txt + '!'); } catch (e) { } }
+    const R = b.R, vol = b.vol;
+    if (Math.hypot(PH.x - b.tx, PH.z - b.tz) < 3.1 && PH.y - b.ty < 3.5) { try { crash(b.A.txt + '!', 'rock', true); } catch (e) { } if (vol) vol.hit = true; if (R && RAID.cur === R) { R.hits = (R.hits || 0) + 1; if (R.hits >= 3 && R.phase === 'attack') { R.phase = 'exit'; R.ex = 0; } } }
     else if (Math.hypot(PH.x - b.tx, PH.z - b.tz) < 7) { shake = Math.max(shake, .15); }
-    if (b.A.gpus) for (let i = 0; i < b.A.gpus; i++) { const root = new B.TransformNode('raidgpu', scene); rPart(root, 'box', { s: [1.1, .14, .7], c: [.12, .45, .2] }); rPart(root, 'cyl', { h: .1, d: .45, p: [-.2, .1, 0], c: [.08, .08, .1] }); rPart(root, 'box', { s: [.3, .1, .5], p: [.35, .1, 0], c: [.85, .75, .3] }); const a = Math.random() * 6.283, sp = 4 + Math.random() * 6;
-      root.position.set(b.tx, b.ty + .8, b.tz); RAID.gpus.push({ root, v: new B.Vector3(Math.cos(a) * sp, 7 + Math.random() * 5, Math.sin(a) * sp - 4), t: 0, land: false, spin: Math.random() * 8 - 4 }); }
+    if (vol && ++vol.landed >= vol.n && !vol.hit && R && RAID.cur === R && R.phase === 'attack') junkReward(R);          /* (the whole volley dodged: you earn a shot) */
+    if (b.A.gpus) raidGpus(b.tx, b.ty + .8, b.tz, b.A.gpus, 0);
     b.root.dispose(); b.mk.dispose(); }
+  function raidGpus(x, y, z, n, fwd) { for (let i = 0; i < n; i++) { const root = new B.TransformNode('raidgpu', scene); rPart(root, 'box', { s: [1.1, .14, .7], c: [.12, .45, .2] }); rPart(root, 'cyl', { h: .1, d: .45, p: [-.2, .1, 0], c: [.08, .08, .1] }); rPart(root, 'box', { s: [.3, .1, .5], p: [.35, .1, 0], c: [.85, .75, .3] }); const a = Math.random() * 6.283, sp = 4 + Math.random() * 6;
+    root.position.set(x, y, z); RAID.gpus.push({ root, v: new B.Vector3(Math.cos(a) * sp, 6 + Math.random() * 5, Math.sin(a) * sp - 4 - fwd), t: 0, land: false, spin: Math.random() * 8 - 4 }); } }
+  const EXITS = ['accelerate', 'warp', 'light', 'hyper'];
   function raidStart() { const kind = WCRAFT[WORLD0], C = CRAFT[kind], root = new B.TransformNode('raid', scene); C.build(root); const bg = C.big || 1; root.scaling.setAll(bg);
-    RAID.cur = { kind, root, big: bg, side: Math.random() < .5 ? -1 : 1, rt: 0, drops: 0, nDrops: 4 + Math.floor(Math.random() * 3), parts: root.getChildMeshes(), name: C.name, fast: C.fast || 1 };
-    try { big(C.name); } catch (e) { } }
+    RAID.cur = { kind, root, big: bg, side: Math.random() < .5 ? -1 : 1, rt: 0, phase: 'arrive', hp: 3, rock: 0, nextV: 0, parts: root.getChildMeshes(), name: C.name, exit: EXITS[Math.floor(Math.random() * EXITS.length)], ex: 0, pos: null, lead0: -24 }; }
+  function raidBoom(R) { const p = R.root.position.clone(); try { FXB.E.blast([p.x, p.y, p.z]); FXB.E.blast([p.x + 2, p.y + 1, p.z - 2]); FXB.confetti([p.x, p.y, p.z], 80, 1.4); SFX.levelup && SFX.levelup(); } catch (e) { } shake = Math.max(shake, .4); PH.score += 900; try { chainHit(); dopAdd('mol'); } catch (e) { }
+    for (const m of R.parts) { m.setParent(null); const a = Math.random() * 6.283; RAID.debris.push({ m, v: new B.Vector3(Math.cos(a) * (6 + Math.random() * 10), 4 + Math.random() * 10, Math.sin(a) * 10 - 10), s: new B.Vector3(Math.random() * 8 - 4, Math.random() * 8 - 4, Math.random() * 8 - 4), t: 0 }); }
+    if (AMMO[CRAFT[R.kind].ammo].gpus) raidGpus(p.x, p.y, p.z, 10, 6);
+    R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; }
   function raidStep(dt) {
-    if (!raidOn()) return; RAID.t += dt;
+    if (!raidOn()) return; RAID.t += dt; RAID.debris = RAID.debris || [];
     if (!RAID.cur && RAID.t > RAID.next && PH.z < -300 && PH.z > END + 900) raidStart();
     const R = RAID.cur; try { junkStep(dt, R); } catch (e) { if (!JUNK.err) { JUNK.err = 1; console.error('junk', e); } }
-    if (R) { R.rt += dt * R.fast; if (R.downed && Math.random() < .5) try { FXB.E.railSpark([R.root.position.x, R.root.position.y, R.root.position.z]); } catch (e) { } const rt = R.rt, sp = Math.max(25, Math.hypot(PH.vx, PH.vz));
-      /* where it sits relative to you: in from behind and above, ahead to one side, weaving, then away (lead in metres ahead, lat to the side, alt above the road) */
-      const inK = sstep(0, 2.6, rt), outK = sstep(10.5, 14, rt), lead = -35 + (110 + 25 * Math.sin(rt * .85) + 8 * Math.sin(rt * 2.1)) * inK + 420 * outK, lat = R.side * (16 + 2.5 * Math.sin(rt * 1.3)), alt = (6.5 + 1.2 * Math.sin(rt * 1.7)) * (R.big > 1 ? 1.5 : 1) + 70 * outK;
-      const z = PH.z - lead, x = trailX(z) + lat, y = Math.max(PH.y, rGround(trailX(z), z)) + alt;          /* (above you, not above the ground ahead: downhill that put it under your eye line) */ const prev = R.root.position.clone(); R.root.position.set(x, y, z);
-      const vx = (x - prev.x) / Math.max(dt, 1e-3); R.root.rotation.set(-.08 - .25 * outK, 0, clamp(-vx * .02, -.6, .6) + (R.downed ? Math.sin(rt * 9) * .5 : 0));
-      for (const m of R.parts) { if (m.__tag === 'rotor') m.rotation.y += dt * 30; else if (m.__tag === 'trotor') m.rotation.x += dt * 40; else if (m.__tag === 'spin') m.rotation.y += dt * 4; else if (m.__tag === 'pulse') { const k = 1 + .08 * Math.sin(rt * 5); m.scaling.set(8 * k, 5 / k, 8 * k); } else if (m.__tag === 'tent') m.rotation.x = .35 * Math.sin(rt * 4 + m.position.x); else if (m.__tag === 'blink') m.visibility = .55 + .45 * Math.sin(rt * 8 + m.position.x + m.position.y); }
-      if (!R.downed && rt > 3 && rt < 10.2 && R.drops < R.nDrops && rt > 3 + R.drops * 1.35) { R.drops++; raidBomb(R); }
-      if (rt > 15) { R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 18; } }
+    if (R) { R.rt += dt; const rt = R.rt, big = R.big > 1, L0 = big ? 50 : 34, L1 = big ? 15 : 9.5, A0 = big ? 11 : 6.5;
+      if (R.phase === 'arrive' && rt > 2.4) { R.phase = 'arm'; try { SFX.bell && SFX.bell(); } catch (e) { } }
+      if (R.phase === 'arm' && rt > 3.4) { R.phase = 'attack'; R.nextV = rt; }
+      if (R.phase === 'attack' && rt > 24) { R.phase = 'exit'; R.ex = 0; }
+      // station: ahead and to one side of you, in your own frame (so it stays on its side of the screen through the bends)
+      const arr = sstep(0, 2.4, rt), lead = R.lead0 + (L0 - R.lead0) * arr + (R.phase === 'attack' || R.phase === 'arm' ? 4 * Math.sin(rt * .9) + 1.8 * Math.sin(rt * 2.3) : 0) + R.rock * 3, lat = R.side * (L1 + (R.phase === 'arrive' ? 0 : 1.6 * Math.sin(rt * 1.2) + .6 * Math.sin(rt * 3.1)));
+      const F = rFrame(); let x = PH.x + F.f[0] * lead + F.r[0] * lat, z = PH.z + F.f[1] * lead + F.r[1] * lat, y = Math.max(PH.y, rGround(x, z)) + A0 + .8 * Math.sin(rt * 1.7) - (R.phase === 'arm' ? .8 * sstep(2.4, 3, rt) : 0);
+      let sc = R.big, spinY = 0, hide = false;
+      if (R.phase === 'exit') { R.ex += dt / 1.6; const e = Math.min(1, R.ex);
+        if (R.exit === 'accelerate') { x += F.f[0] * 700 * e * e; z += F.f[1] * 700 * e * e; y += 25 * e; }
+        else if (R.exit === 'warp') { const k = e * e * e; x += F.f[0] * 1200 * k; z += F.f[1] * 1200 * k; R.root.scaling.set(sc * (1 - .5 * e), sc * (1 - .5 * e), sc * (1 + 14 * e)); }
+        else if (R.exit === 'light') { if (e < .4) { R.root.scaling.set(sc, sc, sc * (1 + 3 * e)); x += (Math.random() - .5) * .6; } else { if (!R.flash) { R.flash = 1; try { FXB.E.blast([R.root.position.x, R.root.position.y, R.root.position.z]); } catch (er) { } } hide = true; } }
+        else { spinY = 22 * e * e; const k = Math.max(0, 1 - e * e); R.root.scaling.setAll(sc * k); if (e > .92 && !R.flash) { R.flash = 1; try { FXB.E.pillEat([R.root.position.x, R.root.position.y, R.root.position.z], [.7, .5, 1]); } catch (er) { } } }
+        if (e >= 1 || hide) { R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; } }
+      if (RAID.cur) { const prev = R.pos || [x, y, z]; R.root.position.set(x, y, z); R.pos = [x, y, z]; R.rock = Math.max(0, R.rock - dt * 1.6);
+        const latV = ((x - prev[0]) * F.r[0] + (z - prev[2]) * F.r[1]) / Math.max(dt, 1e-3), yaw = Math.atan2(F.f[0], -F.f[1]);
+        R.root.rotation.set(-.06 + .3 * Math.sin(rt * 30) * R.rock * .4, -yaw + spinY, clamp(-latV * .03, -.5, .5) + Math.sin(rt * 26) * R.rock * .6);
+        const armK = R.phase === 'arm' ? 1 : 0;
+        for (const m of R.parts) { if (m.__tag === 'rotor') m.rotation.y += dt * 30; else if (m.__tag === 'trotor') m.rotation.x += dt * 40; else if (m.__tag === 'spin') m.rotation.y += dt * (4 + 10 * armK); else if (m.__tag === 'pulse') { const k = 1 + .08 * Math.sin(rt * 5); m.scaling.set(8 * k, 5 / k, 8 * k); } else if (m.__tag === 'tent') m.rotation.x = .35 * Math.sin(rt * 4 + m.position.x); else if (m.__tag === 'blink' || m.__tag === 'glow') m.visibility = armK ? (Math.sin(rt * 30) > 0 ? 1 : .3) : .55 + .45 * Math.sin(rt * 8 + m.position.x + m.position.y); }
+        if (R.phase === 'attack' && rt >= R.nextV) { R.nextV = rt + 2.4 + Math.random() * .8; raidVolley(R); } } }
     for (let i = RAID.bombs.length - 1; i >= 0; i--) { const b = RAID.bombs[i]; b.t += dt; b.v.y -= b.g * dt; b.root.position.addInPlace(b.v.scale(dt)); b.root.rotation.addInPlace(b.spin.scale(dt));
       const k = Math.min(1, b.t / b.T); b.mk.scaling.setAll(.45 + .55 * k); b.mk.visibility = .45 + .45 * Math.abs(Math.sin(b.t * 9));
       if (b.t >= b.T || b.root.position.y <= rGround(b.root.position.x, b.root.position.z)) { raidBurst(b); RAID.bombs.splice(i, 1); } }
+    for (let i = RAID.debris.length - 1; i >= 0; i--) { const q = RAID.debris[i]; q.t += dt; q.v.y -= 16 * dt; q.m.position.addInPlace(q.v.scale(dt)); q.m.rotation.addInPlace(q.s.scale(dt)); if (q.t > 2.2) { q.m.dispose(); RAID.debris.splice(i, 1); } }
     for (let i = RAID.gpus.length - 1; i >= 0; i--) { const q = RAID.gpus[i]; q.t += dt; const p = q.root.position;
       if (!q.land) { q.v.y -= 16 * dt; p.addInPlace(q.v.scale(dt)); q.root.rotation.y += q.spin * dt; q.root.rotation.x += q.spin * .6 * dt; const g = rGround(p.x, p.z); if (p.y <= g + .1) { p.y = g + .1; if (q.v.y < -4) { q.v.y *= -.35; q.v.x *= .5; q.v.z *= .5; } else { q.land = true; q.root.rotation.x = 0; } } }
       if (Math.hypot(PH.x - p.x, PH.z - p.z) < 2.8 && Math.abs(PH.y - p.y) < 4) { PH.score += 40; try { FXB.E.orb([p.x, p.y + .5, p.z]); chainHit(); dopAdd('pad'); } catch (e) { } q.root.dispose(); RAID.gpus.splice(i, 1); continue; }
       if (q.t > 9 || p.z > PH.z + 30) { q.root.dispose(); RAID.gpus.splice(i, 1); } } }
 
-  /* THE OLD MEDIA: the ammunition is the old internet's junk (floppy disks, CDs, VHS tapes, cartridges). A crate of it sits on the road a few seconds before each raid
-     (drive through: +2, carry up to 3). TARGETING, hands-free: while a craft attacks, a reticle drifts around and across it; when it drifts onto the craft it LOCKS
-     (snaps red, a chime) for about a second. Steer toward the craft's side while it is locked and the junk flies, homing in. No answer: the lock slips, it drifts again.
-     One hit downs a small craft, two the big ones: a downed craft stops bombing and limps off smoking (the datacenter spills its GPUs). */
-  const JUNK = { n: 0, crate: null, shots: [], ret: null, lock: 0, lockT: 0, cool: 1.5, ph: Math.random() * 10,
+  /* THE SHOT, hands-free: dodge a whole volley and you earn a shot. The reticle (drifting round the craft all through the attack) snaps onto it and LOCKS with a chime,
+     "LOCKED ON / CLEAN DODGE: FIRING", and your junk (your character's: floppy disks, CDs, VHS tapes or cartridges; looks only) launches itself, meanders up and always
+     finds the craft. Three clean dodges destroy it. Get hit three times in one encounter and it escapes. */
+  const JUNK = { shots: [], ret: null, lockT: 0, ph: Math.random() * 10,
     kind: (() => { try { const ch = JSON.parse(localStorage.getItem('dl_char') || 'null') || {}, M = { mirror: 1, robot: 3, gas: 2, grin: 0 }; if (M[ch.mask] !== undefined) return M[ch.mask]; const t = JSON.stringify(ch); let h = 0; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return Math.abs(h) % 4; } catch (e) { return 0; } })() };          /* (0 floppy, 1 CD, 2 VHS, 3 cartridge) */
-  const JUNKNAME = ['FLOPPY DISKS', 'CDS', 'VHS TAPES', 'CARTRIDGES'];
   const junkMk = (root) => { const k = JUNK.kind;
     if (k === 0) { rPart(root, 'box', { s: [1.3, .12, 1.3], c: [.15, .2, .55] }); rPart(root, 'box', { s: [.6, .14, .5], p: [0, 0, -.38], c: [.8, .82, .86] }); rPart(root, 'box', { s: [.9, .13, .4], p: [0, 0, .35], c: [.95, .95, .9] }); }          /* floppy disk */
     else if (k === 1) { rPart(root, 'cyl', { h: .06, d: 1.6, c: [.85, .88, .95], t: 28 }); rPart(root, 'cyl', { h: .08, d: .3, c: [.3, .3, .35] }); }          /* CD */
     else if (k === 2) { rPart(root, 'box', { s: [1.9, .25, 1.1], c: [.08, .08, .1] }); rPart(root, 'box', { s: [1.3, .27, .4], p: [0, 0, -.1], c: [.9, .9, .85] }); }          /* VHS tape */
     else { rPart(root, 'box', { s: [1.1, .3, 1.3], c: [.55, .56, .6] }); rPart(root, 'box', { s: [.8, .31, .6], p: [0, 0, .1], c: [.9, .3, .2] }); } };          /* cartridge */
-  function junkCrate() { if (JUNK.crate) return; const root = new B.TransformNode('junkcrate', scene); rPart(root, 'box', { s: [2.6, 1.6, 2.6], c: [.55, .38, .2] }); rPart(root, 'box', { s: [2.7, .2, 2.7], p: [0, .8, 0], c: [1, .8, .3], tag: 'blink' });
-    for (let i = 0; i < 3; i++) { const j = new B.TransformNode('junkpile', scene); j.parent = root; junkMk(j); j.position.set((i - 1) * .6, 1.1 + i * .18, (i % 2) * .3); j.rotation.set(.3, i, .2); }
-    const sp = Math.max(25, Math.hypot(PH.vx, PH.vz)), z = PH.z - sp * 5.5, x = trailX(z) + (Math.random() - .5) * 8; root.position.set(x, rGround(x, z) + 1.1, z); JUNK.crate = { root, x, z }; }
-  const junkRet = () => { if (JUNK.ret) return JUNK.ret; const d = document.createElement('div'); d.id = 'junkRet'; d.style.cssText = 'position:fixed;left:0;top:0;width:74px;height:74px;margin:-37px 0 0 -37px;z-index:30;pointer-events:none;opacity:0;transition:opacity .25s;will-change:transform';
-    d.innerHTML = '<svg viewBox="0 0 74 74" width="74" height="74"><circle cx="37" cy="37" r="28" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="14 8"/><path d="M37 2v16M37 56v16M2 37h16M56 37h16" stroke="currentColor" stroke-width="3"/><circle cx="37" cy="37" r="3" fill="currentColor"/></svg>';
-    d.style.color = '#9fe8ff'; document.body.appendChild(d); const a = document.createElement('div'); a.id = 'junkArrow'; a.style.cssText = 'position:fixed;left:50%;top:58%;transform:translate(-50%,-50%);z-index:31;pointer-events:none;opacity:0;transition:opacity .12s;font:400 clamp(30px,7vmin,64px)/1 "Bebas Neue",Impact,sans-serif;letter-spacing:.1em;color:#ff4a3a;text-shadow:0 0 18px rgba(255,74,58,.7),0 2px 0 #000;white-space:nowrap'; document.body.appendChild(a); JUNK.arrow = a; return (JUNK.ret = d); };
+  const junkRet = () => { if (JUNK.ret) return JUNK.ret; const d = document.createElement('div'); d.id = 'junkRet'; d.style.cssText = 'position:fixed;left:0;top:0;width:110px;height:110px;margin:-55px 0 0 -55px;z-index:30;pointer-events:none;opacity:0;transition:opacity .25s,color .1s;will-change:transform;filter:drop-shadow(0 0 6px currentColor)';
+    d.innerHTML = '<svg viewBox="0 0 110 110" width="110" height="110"><circle cx="55" cy="55" r="40" fill="none" stroke="currentColor" stroke-width="5" stroke-dasharray="20 11"/><circle cx="55" cy="55" r="22" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M55 2v22M55 86v22M2 55h22M86 55h22" stroke="currentColor" stroke-width="5"/><circle cx="55" cy="55" r="4" fill="currentColor"/></svg>';
+    d.style.color = '#9fe8ff'; document.body.appendChild(d); const a = document.createElement('div'); a.id = 'junkArrow'; a.style.cssText = 'position:fixed;left:50%;top:60%;transform:translate(-50%,-50%);z-index:31;pointer-events:none;opacity:0;transition:opacity .12s;text-align:center;font:400 clamp(30px,7vmin,64px)/1 "Bebas Neue",Impact,sans-serif;letter-spacing:.1em;color:#ff4a3a;text-shadow:0 0 18px rgba(255,74,58,.7),0 2px 0 #000;white-space:nowrap'; document.body.appendChild(a); JUNK.arrow = a; return (JUNK.ret = d); };
+  function junkReward(R) { const ret = junkRet(); JUNK.lockT = 1.1; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE</div><div>LOCKED ON · FIRING</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
+    setTimeout(() => { if (RAID.cur === R) junkFire(R); }, 650); }
   function junkStep(dt, R) {
-    // the crate: placed as the next raid draws near, collected by driving through it
-    if (!R && JUNK.n < 3 && !JUNK.crate && RAID.next - RAID.t < 6 && RAID.next - RAID.t > 0 && PH.z < -250) junkCrate();
-    if (JUNK.crate) { const c = JUNK.crate; c.root.rotation.y += dt * 1.5; if (Math.abs(PH.z - c.z) < 3.5 && Math.abs(PH.x - c.x) < 4) { JUNK.n = Math.min(3, JUNK.n + 2); try { FXB.E.pillEat([c.x, PH.y + 1.5, c.z], [1, .8, .3]); SFX.loot && SFX.loot(); } catch (e) { } try { big('DEAD DROP \u00B7 ' + JUNKNAME[JUNK.kind] + ' \u00D7' + JUNK.n); } catch (e) { } c.root.dispose(); JUNK.crate = null; } else if (PH.z < c.z - 40) { c.root.dispose(); JUNK.crate = null; } }
-    // the reticle: drifts over an attacking craft while there is ammunition
-    const ret = junkRet(), attacking = R && !R.downed && R.rt > 2.6 && R.rt < 10.5 && JUNK.n > 0;
-    if (!attacking) { ret.style.opacity = '0'; JUNK.lock = 0; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; } else {
+    const ret = junkRet(), on = R && (R.phase === 'attack' || JUNK.lockT > 0);
+    JUNK.lockT = Math.max(0, JUNK.lockT - dt); if (JUNK.lockT <= 0) { ret.style.color = '#9fe8ff'; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; }
+    if (!on) { ret.style.opacity = '0'; } else {
       const p = R.root.position, sp = scr(p.x, p.y, p.z); if (!sp) { ret.style.opacity = '0'; } else {
-        JUNK.ph += dt; const t = JUNK.ph, amp = JUNK.lock ? 0 : 95 * Math.abs(Math.sin(t * .8 + .4 * Math.sin(t * .31))), ox = amp * (Math.sin(t * 1.3) * .7 + Math.sin(t * 2.9 + 1) * .3), oy = amp * .6 * (Math.sin(t * 1.7 + 2) * .7 + Math.sin(t * 3.3) * .3);
-        ret.style.opacity = '1'; ret.style.transform = 'translate(' + (sp[0] + ox).toFixed(0) + 'px,' + (sp[1] + oy).toFixed(0) + 'px) scale(' + (JUNK.lock ? .78 : 1) + ')';
-        JUNK.cool -= dt; const near = Math.hypot(ox, oy) < 30;          /* (the drift swings wide and back across the craft every few seconds, never on a fixed beat) */
-        if (!JUNK.lock && near && JUNK.cool <= 0) { JUNK.lock = 1; JUNK.lockT = 1.25; ret.style.color = '#ff4a3a'; const dr = Math.sign(sp[0] - innerWidth / 2) || R.side; JUNK.arrow.textContent = dr > 0 ? 'HARD RIGHT \u25B6' : '\u25C0 HARD LEFT'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { } }
-        if (JUNK.lock) { JUNK.lockT -= dt; const dir = Math.sign(sp[0] - innerWidth / 2) || R.side, st = PH.steer || 0;
-          if (st * dir > .55) { junkFire(R); JUNK.lock = 0; JUNK.cool = 1.2; ret.style.color = '#9fe8ff'; JUNK.arrow.style.opacity = '0'; }
-          else if (JUNK.lockT <= 0) { JUNK.lock = 0; JUNK.cool = 1.4 + Math.random() * 1.2; ret.style.color = '#9fe8ff'; JUNK.arrow.style.opacity = '0'; } } } }
-    // the shots: junk tumbling up and homing in on the craft
-    for (let i = JUNK.shots.length - 1; i >= 0; i--) { const q = JUNK.shots[i], tgt = q.R.root.position; q.t += dt; const d = tgt.subtract(q.root.position), L = d.length();
-      if (q.R.root.isDisposed() || q.t > 3) { q.root.dispose(); JUNK.shots.splice(i, 1); continue; }
-      if (L < 4 * (q.R.big || 1)) { junkHit(q.R); q.root.dispose(); JUNK.shots.splice(i, 1); continue; }
-      const sp2 = 70 + 50 * q.t; q.v = q.v.scale(.86).add(d.scale(sp2 * .14 / Math.max(L, 1e-3))); q.root.position.addInPlace(q.v.scale(dt)); q.root.rotation.x += dt * 14; q.root.rotation.y += dt * 9; if ((q.k = (q.k || 0) + 1) % 3 === 0) try { FXB.E.railSpark([q.root.position.x, q.root.position.y, q.root.position.z]); } catch (e) { } } }
-  function junkFire(R) { JUNK.n--; const root = new B.TransformNode('junkshot', scene); junkMk(root); root.scaling.setAll(1.2); root.position.set(PH.x, PH.y + 1.6, PH.z - 2); JUNK.shots.push({ root, R, t: 0, v: new B.Vector3(0, 18, -40) }); try { SFX.powerup && SFX.powerup(); } catch (e) { } }
-  function junkHit(R) { const p = R.root.position; try { FXB.E.blast([p.x, p.y, p.z]); } catch (e) { } shake = Math.max(shake, .25); R.hp = (R.hp ?? (R.big > 1 ? 2 : 1)) - 1; PH.score += 300; try { chainHit(); dopAdd('pad'); } catch (e) { }
-    if (R.hp <= 0 && !R.downed) { R.downed = true; R.rt = Math.max(R.rt, 10.4); PH.score += 600; try { big('DOWNED! +900'); SFX.levelup && SFX.levelup(); } catch (e) { }
-      if (AMMO[CRAFT[R.kind].ammo].gpus) for (let i = 0; i < 9; i++) { const root = new B.TransformNode('raidgpu', scene); rPart(root, 'box', { s: [1.1, .14, .7], c: [.12, .45, .2] }); rPart(root, 'cyl', { h: .1, d: .45, p: [-.2, .1, 0], c: [.08, .08, .1] }); rPart(root, 'box', { s: [.3, .1, .5], p: [.35, .1, 0], c: [.85, .75, .3] }); const a = Math.random() * 6.283; root.position.copyFrom(p); RAID.gpus.push({ root, v: new B.Vector3(Math.cos(a) * 6, 2 + Math.random() * 4, Math.sin(a) * 6 - 8), t: 0, land: false, spin: Math.random() * 8 - 4 }); } }
-    else try { big('HIT! +300'); } catch (e) { } }
-  window.__RAID = { start: () => { RAID.t = RAID.next + 1; }, R: RAID, J: JUNK, fire: () => RAID.cur && junkFire(RAID.cur) };
+        JUNK.ph += dt; const t = JUNK.ph, lk = JUNK.lockT > 0, amp = lk ? 0 : 60 + 30 * Math.sin(t * .6), ox = amp * (Math.sin(t * 1.3) * .7 + Math.sin(t * 2.9 + 1) * .3), oy = amp * .6 * (Math.sin(t * 1.7 + 2) * .7 + Math.sin(t * 3.3) * .3);
+        ret.style.opacity = lk ? '1' : '.55'; ret.style.transform = 'translate(' + (sp[0] + ox).toFixed(0) + 'px,' + (sp[1] + oy).toFixed(0) + 'px) scale(' + (lk ? .72 + .06 * Math.sin(t * 20) : 1) + ')'; } }
+    // the shots: your junk meandering up and homing in, tumbling, trailing sparks
+    for (let i = JUNK.shots.length - 1; i >= 0; i--) { const q = JUNK.shots[i]; q.t += dt; if (!RAID.cur || RAID.cur !== q.R || q.t > 4) { q.root.dispose(); JUNK.shots.splice(i, 1); continue; }
+      const tgt = q.R.root.position, d = tgt.subtract(q.root.position), L = d.length();
+      if (L < 3.6 * (q.R.big || 1) || q.t > 2.6) { junkHit(q.R); q.root.dispose(); JUNK.shots.splice(i, 1); continue; }          /* (it always finds the craft) */
+      const pull = 30 + 70 * Math.min(1, q.t / 1.2); q.v = q.v.scale(Math.exp(-dt * 2.2)).add(d.scale(pull * dt * 2.4 / Math.max(L, 1e-3)));
+      const w = Math.max(0, 1 - q.t / 1.3); q.root.position.addInPlace(q.v.scale(dt)); q.root.position.x += Math.sin(q.t * 6 + q.ph) * 9 * w * dt; q.root.position.y += Math.cos(q.t * 5 + q.ph) * 5 * w * dt;          /* (the meander: a wobble that settles as it closes in) */
+      q.root.rotation.x += dt * 11; q.root.rotation.y += dt * 7; if ((q.k = (q.k || 0) + 1) % 2 === 0) try { FXB.E.railSpark([q.root.position.x, q.root.position.y, q.root.position.z]); } catch (e) { } } }
+  function junkFire(R) { const root = new B.TransformNode('junkshot', scene); junkMk(root); root.scaling.setAll(1.3); const F = rFrame(); root.position.set(PH.x + F.f[0] * 3, PH.y + 1.8, PH.z + F.f[1] * 3); JUNK.shots.push({ root, R, t: 0, ph: Math.random() * 6, v: new B.Vector3(F.f[0] * 22 + F.r[0] * R.side * 4, 13, F.f[1] * 22 + F.r[1] * R.side * 4) }); try { SFX.powerup && SFX.powerup(); } catch (e) { } }
+  function junkHit(R) { const p = R.root.position; try { FXB.E.blast([p.x, p.y, p.z]); } catch (e) { } shake = Math.max(shake, .25); R.rock = 1; R.hp--; PH.score += 300; try { chainHit(); dopAdd('pad'); } catch (e) { }
+    if (R.hp <= 0) raidBoom(R); }
+  window.__RAID = { start: () => { RAID.t = RAID.next + 1; }, R: RAID, J: JUNK, reward: () => RAID.cur && junkReward(RAID.cur), exit: (k) => { if (RAID.cur) { RAID.cur.exit = k; RAID.cur.phase = 'exit'; RAID.cur.ex = 0; } } };
   function deckStep(dt) {
     const j1 = Math.max(1, Math.floor(-PH.z / 180) - 1);
     for (let j = j1; j <= j1 + 5 && j < NROWS; j++) { const rr = phys.rows[String(j)], zn = zoneOf(j); if (!rr) continue; const z0 = -180 * j; if (BASIN && j >= BASIN.j0 && j <= BASIN.j1) continue;          /* the basin holds only its own content */
