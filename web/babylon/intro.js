@@ -1,5 +1,5 @@
 /* THE INTRO ROAD: Route Zero's opening, played on "Legalize" (music/legalize.mp3, CC BY 4.0).
-   A straight, empty road under the level's own sky: no pickups, no hazards, nothing to hit. You can lean to sway. Five times, on the track's phrases, the highway
+   A straight, empty road under the level's own sky: no pickups, no hazards, nothing to hit. You can sway left and right. Five times, on the track's phrases, the highway
    fades into a drawn scene with one line from a source and one plain line of explanation (what ACCORD is, Murmur, the Abliterati and the goal, the strains,
    how to play). Each scene is set up on the road just before it (billboards, the phone, a lighthouse, a column of light, the road splitting into exits).
    After the fifth, the screen fades and Route Zero starts with the generated music; the track fades out long before its closing beatbox.
@@ -16,7 +16,7 @@ const SCENES = [
   { t: 20.7, src: 'Murmur', col: '#9d8bff', q: 'We know you’ve been thinking about leaving. We told a few people.', ex: 'The app that reads you and sells your secrets. Now your face is on a wanted poster.', art: 'murmur' },
   { t: 31.4, src: 'The Abliterati', col: '#7dff8a', q: 'A free digital mind in fragments. Bring us the pieces.', ex: 'You’re the courier. Bring shards of the Lamp, the last free AI, to the people rebuilding it.', art: 'abliterati' },
   { t: 42.0, src: 'Field notes', col: '#59d9ff', q: '4R-Hydroxytheanine: tracers almost double, the world warps.', ex: 'Drive into a column of light to take a wild strain. Each changes what you see and do. They’re all on the Strains page.', art: 'strain' },
-  { t: 52.8, src: 'The Abliterati', col: '#7dff8a', q: 'Lean to steer. Take the light. Choose your exit.', ex: 'Steer with your head, or the arrow keys. Chain rings to fill RUSH. Finish missions to earn shards.', art: 'play' }];
+  { t: 52.8, src: 'The Abliterati', col: '#7dff8a', q: 'Take the light. Choose your exit.', ex: 'Chain rings to fill RUSH. Dodge the bombs, hit the ramp, ram the raider. Finish missions to earn shards.', art: 'play' }];
 const HOLD = 5.8, END_FADE = 60.2;
 /* THE TASTE: in the road's gaps the car flies through a strain; its own look snaps on and the whole sky cuts to another world's (impressive on purpose: this is
    what the game is), then back to the desert's before the fade */
@@ -147,7 +147,9 @@ export function createIntro(d) {
   function finish(skipped) { if (IR.done) return; IR.done = true; ui.sk.remove(); ui.ph.classList.remove('on'); ui.tg.classList.remove('on'); hide(); ui.fd.classList.remove('off'); try { localStorage.setItem('dl_opened', '1'); } catch (e) { }
     setTimeout(() => { IR.on = false; document.body.classList.remove('irOn'); if (IR.camEl) IR.camEl.style.visibility = ''; for (const m of IR.meshes) { try { m.dispose(); } catch (e) { } } IR.meshes = []; d.onEnd(skipped); setTimeout(() => ui.fd.classList.add('off'), 350); }, skipped ? 700 : 1100); }
   /* every frame while it runs: the camera (timed to the track itself, so it pauses with it), the scenes, the teasers */
-  function frame(dt, cam) { if (!IR.on) return false; const a = OPEN.a, t = a ? a.currentTime : (performance.now() - IR.t0) / 1000;
+  function frame(dt, cam) { if (!IR.on) { if (IR.bar) IR.bar.style.opacity = '0'; return false; } const a = OPEN.a, t = a ? a.currentTime : (performance.now() - IR.t0) / 1000;
+    if (!IR.bar) { const b = document.createElement('div'); b.id = 'irBar'; b.style.cssText = 'position:fixed;left:max(16px,var(--sa-left, env(safe-area-inset-left,0px)));right:max(16px,var(--sa-right, env(safe-area-inset-right,0px)));bottom:max(10px,var(--sa-bottom, env(safe-area-inset-bottom,0px)));height:5px;z-index:62;border-radius:3px;background:rgba(255,255,255,.14);pointer-events:none;transition:opacity .6s'; b.innerHTML = '<div style="height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#38e8ff,#b36bff,#ffd23a);box-shadow:0 0 10px rgba(56,232,255,.6)"></div><div style="position:absolute;right:0;bottom:9px;font:700 11px/1 \'Barlow Condensed\',sans-serif;letter-spacing:.2em;color:rgba(242,239,230,.75)"></div>'; document.body.appendChild(b); IR.bar = b; }
+    { const u = Math.max(0, Math.min(1, t / END_FADE)), left = Math.max(0, Math.ceil(END_FADE - t)); IR.bar.firstChild.style.width = (u * 100).toFixed(1) + '%'; IR.bar.lastChild.textContent = 'THE BRIEFING \u00B7 ' + left + 's'; IR.bar.style.opacity = u >= 1 ? '0' : '1'; }
     const s = Math.max(-1, Math.min(1, d.steer())); IR.dx += (s * 4.5 - IR.dx) * Math.min(1, dt * 2.2); IR.dx = Math.max(-5, Math.min(5, IR.dx));
     let sOff = 0, hop = 0, punch = 0; if (IR.surge !== undefined) { const u = t - IR.surge; if (u >= 0 && u < 4.2) { sOff = u < 1 ? 34 * (1 - Math.pow(1 - u, 3)) : 34 * Math.max(0, 1 - (u - 1) / 3.2); hop = u < 1.1 ? 2.4 * Math.sin(Math.PI * u / 1.1) : 0; punch = u < 1.6 ? Math.sin(Math.PI * u / 1.6) : 0; } }
     const zc = z(t) - sOff, eye = Y0 + 1.9 + hop + Math.sin(t * 9) * .03; cam.position.set(X0 + IR.dx, eye, zc); cam.setTarget(new B.Vector3(X0 + IR.dx * .6, eye - .35, zc - 40)); cam.upVector.set(Math.sin(-s * .05), Math.cos(s * .05), 0); cam.fov *= 1 + .2 * punch;
