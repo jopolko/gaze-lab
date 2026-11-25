@@ -378,9 +378,9 @@ void main(){ vec3 wp = vW; float dist = distance(wp, uCam); float speed = uSpeed
           ground = mix(gr * (.82 + .36 * fine), ea * (.85 + .3 * mid), earthK); vec3 snt = sn * (.82 + .28 * mid) * mix(vec3(.88, .93, 1.12), vec3(1.07, .97, .93), big); snt *= .92 + .08 * (.5 + .5 * sin(wp.x * .9 + vn(wp.xz * .35) * 7.)); snt *= .93 + .12 * fine; snt = min(snt, vec3(.9, .9, .94)); ground = mix(ground, snt, snowK); ground *= lit;
           forest = smoothstep(uOpen - 3., uOpen + 5., ao); ground = mix(ground, ea * .45, forest * .5) * mix(1., .6, forest);
         } else if (uStyle < 1.5) {
-          float rip = .5 + .5 * sin(wp.x * .13 + sin(wp.z * .035) * 3. + sin(wp.x * .04) * 2.), band = floor(rip * 3.); vec3 fr = band < 1. ? vec3(1., .62, .80) : (band < 2. ? vec3(.98, .88, .84) : vec3(.66, .92, .84));
+          float rip = .5 + .5 * sin(wp.x * .13 + sin(wp.z * .035) * 3. + sin(wp.x * .04) * 2.), band = floor(rip * 3.); vec3 fr = band < 1. ? vec3(1., .62, .80) : (band < 2. ? vec3(.88, .76, .76) : vec3(.66, .92, .84)); fr = mix(fr, vec3(.80, .68, .76), far * .7);
           vec2 cc = floor(wp.xz * .8); float hh = h21(cc), ang = hh * 6.2831, ca_ = cos(ang), sa_ = sin(ang); vec2 l = fract(wp.xz * .8) - .5; l = vec2(ca_ * l.x + sa_ * l.y, -sa_ * l.x + ca_ * l.y);
-          float spr = step(.8, hh) * step(abs(l.x), .34) * step(abs(l.y), .10) * (1. - far); ground = mix(fr, candyc(hh * 7.3), spr) * (.8 + .28 * lam); ea = vec3(.98, .88, .84); ground *= ground;
+          float spr = step(.8, hh) * step(abs(l.x), .34) * step(abs(l.y), .10) * (1. - far); ground = min(mix(fr, candyc(hh * 7.3), spr) * (.8 + .28 * lam), vec3(.9)); ea = vec3(.88, .78, .76); ground *= ground;
         } else if (uStyle < 2.5) {
           float rip = .5 + .5 * sin(wp.x * .22 + sin(wp.z * .045) * 3.2 + sin(wp.x * .05) * 2.), band = floor(rip * 3.) / 3.; vec3 sand = mix(vec3(.72, .46, .22), vec3(.92, .70, .38), band);
           float dash = step(.93, h21(floor(vec2(wp.x * .5, wp.z * .12)))) * step(.5, fract(wp.z * .12 + .2)) * .5 * (1. - far); sand = mix(sand, vec3(.42, .22, .10), dash); sand *= .96 + .06 * h21(floor(wp.xz * 3.)) * (1. - far);
