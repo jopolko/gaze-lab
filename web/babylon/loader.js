@@ -93,9 +93,9 @@
     'Every molecule you take: a rush, then waves, then the afterglow',
     'Taking a molecule column pays 1000. The cupboard was always this rich',
     'Fake crystals exist. Only TRUTH shows which',
-    'The Abliterati leave dead drops on the road. Old media: ACCORD can\'t scan what it can\'t read',
-    'A crate before every raid. Drive through it. Your junk is your ammunition',
-    'When the reticle locks, the arrow tells you which way. Steer hard and the junk flies',
+    'Dodge a raider\'s whole volley and a gold ramp appears. Hit it square and you ram the raider',
+    'Three rams bring a raider down. It usually comes down on your lane. Swerve',
+    'Every raider is stuffed with old media. Knock it loose and drive through it',
     'Your score title starts at Unpaid Intern. It ends at Founder (Allegedly)',
   ];
   const LEVEL = {
