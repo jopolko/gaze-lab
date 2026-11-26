@@ -106,6 +106,17 @@ try { const m = navigator.userAgent.match(/Android [\d.]+; ([^;)]+?)(?: Build|\)
 try { if (navigator.getBattery) navigator.getBattery().then((b) => { ME.bat = Math.round(b.level * 100); }).catch(() => { }); } catch (e) { }
 const CITYL = [['ACCORD', 'Courier located near {city}. Units are enjoying the weather.'], ['MURMUR', '3 people in {city} are talking about you rn \u263A\uFE0E'], ['ACCORD', '{city} curfew moved to whenever you leave the house.'],
   ['MURMUR', '{city} forecast: watched, with a chance of you.'], ['ACCORD', 'Roadblocks are up around {city}. For your convenience.'], ['MURMUR', 'u were trending in {city} for 4 min. we screenshotted it']];
+/* WIDGET COLOURS, as a real service shows them (from the service's own point of view, which is the joke): g = good (green), w = caution (amber), b = warning (red) */
+const TONE = { 'Air quality': 'b', 'AGI ETA': 'w', Forecast: 'b', 'Datacenter weather': 'b', 'Sea level': 'b', Water: 'b', 'Tap water': 'w', 'Power grid': 'g', Markets: 'g', 'Last glacier': 'w',
+  'Your data': 'g', 'Trust score': 'w', Rent: 'b', 'Implant battery': 'b', Steps: 'b', Memories: 'w', Sun: 'w', 'Cloud cover': 'g', Moon: 'g', Ocean: 'b', Wildfire: 'b', Snow: 'w',
+  'Carbon credits': 'b', Compute: 'w', 'Your job': 'b', Billionaires: 'g', 'Mars colony': 'w', 'Brain chip': 'b', 'Free speech': 'w', Friends: 'b', Mood: 'g', Eggs: 'b', Rain: 'w',
+  'Robot uprising': 'g', Truth: 'b', 'Attention span': 'b', Election: 'g', Datacenter: 'g', Paperclips: 'g', 'Polar bears': 'b', 'Ad-free tier': 'w', 'GPU shortage': 'b', 'Heat index': 'b',
+  'Model update': 'g', 'Outage map': 'b', 'Social credit': 'g', 'Disposable income': 'b', Wellness: 'g', Bees: 'w', Lifespan: 'w',
+  'Live odds': 'w', Traffic: 'w', Bounty: 'b', Pharmacy: 'w', Spectrum: 'w', 'Car insurance': 'b', 'Camera network': 'b', 'Last seen': 'w', 'Altitude permit': 'b', Glucose: 'g', Signal: 'b',
+  'Facial match': 'g', 'Server temp': 'g', Archaeology: 'w', Filter: 'b', 'Driving record': 'w' };
+const TONEC = { g: '#5fd37e', w: '#f2c14e', b: '#ff5f56' };
+const toneOf = (q) => { if (q[0] === 'Spectrum') { const f = parseFloat(q[1]); return f > 790 ? 'b' : f > 560 ? 'w' : 'g'; } if (q[0] === 'Car insurance' && /Flagged/.test(q[1])) return 'w'; return TONE[q[0]] || ''; };
+const paintW = (w, q) => { w.querySelector('b').textContent = q[0]; const big = w.querySelector('big'); big.textContent = q[1]; const t = toneOf(q); big.style.color = t ? TONEC[t] : ''; w.querySelector('small').textContent = q[2]; };
 const LK = { on: false, el: null, t: 0, done: null, hold: null };
 const BIOPC = ['Mouse detected. Scanning it anyway.', 'Mouse accepted. Now your left elbow, flat on the desk.', 'Elbow accepted. Exhale onto the webcam.', 'Breath print accepted. Final step: lick the spacebar.', 'Spacebar print accepted. Sharing with 14 partners\u2026'];
 const BIO = ['Place your left elbow flat on the screen.', 'Elbow accepted. Now the right earlobe. Gently.', 'Earlobe accepted. Exhale onto the screen for a breath print.', 'Breath print accepted. Final step: tongue print.', 'Tongue print accepted. Sharing with 14 partners\u2026'];
@@ -133,7 +144,7 @@ function show(o) { o = o || {}; if (LK.on) return; const kind = o.kind || KIND()
     ? '<div class="wp-in"><div class="mid"><div class="tm">' + hm + AP + '</div><div class="dt">' + dt + '</div></div>' + wg + stk + '<div class="tray"><span>ACCORD-Guest \u2022 Connected, watched</span>' + BARS + '<span class="bat"></span></div><div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div>' + DIS + BIOP + '</div>'
     : '<div class="wp-in"><div class="sb"><span>' + (kind === 'ios' ? 'StarLeash \u2726' : hm + ' ' + ap + '  StarLeash 6G') + BARS + '</span><span>' + BAT + '<span class="bat" style="--bl:' + BAT + '"></span></span></div><div class="mid">' + (kind === 'ios' ? PAD + '<div class="dt">' + dt + '</div><div class="tm">' + hm + AP + '</div>' : '<div class="tm">' + hh + '\n' + mm + AP + '</div><div class="dt">' + dt + '</div>') + wg + stk + '</div>'
       + (kind === 'ios' ? '<div class="ft"><span class="rb">\u25C9</span><span class="rb">\u25A3</span></div><i class="hb"></i>' : '') + DIS + '<div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div>' + BIOP + '</div>');
-  el.querySelectorAll('.w').forEach((w, i) => { w.querySelector('b').textContent = ws[i][0]; w.querySelector('big').textContent = ws[i][1]; w.querySelector('small').textContent = ws[i][2]; });
+  el.querySelectorAll('.w').forEach((w, i) => paintW(w, ws[i]));
   const inner = el.querySelector('.wp-in'); inner.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity .3s'; LK.kind = kind; document.body.appendChild(el); LK.on = true; LK.el = el; LK.t = performance.now();
           /* (the screen is off from the first frame: a sudden lock) */
   setTimeout(() => { if (LK.el !== el) return; el.classList.remove('sleep'); el.classList.add('wake'); inner.style.opacity = '1';          /* (and wakes up for a notification) */
@@ -170,7 +181,7 @@ function paint(box, o) { o = o || {}; if (disabled() && !o.force) { box.innerHTM
   el.innerHTML = '<div class="wp"></div><div class="wp-in"><div class="sb"><span>' + (kind === 'pc' ? 'ACCORD-Guest \u2022 Connected, watched' : kind === 'vr' ? 'Headset OS' : 'StarLeash \u2726') + '</span><span>' + BAT + '<span class="bat" style="--bl:' + BAT + '"></span></span></div>'
     + '<div class="mid"><div class="tm">' + h12 + ':' + mm + '<small style="font-size:.32em;font-weight:500;margin-left:.2em">' + ap + '</small></div><div class="dt">' + dt + '</div><div class="wg">' + M.w.map(() => '<div class="w"><b></b><big></big><small></small></div>').join('') + '</div><div class="stk"></div>' + '</div></div>';
   const MW = M.w.slice(); if (M.rw >= 0 && R.W.length) MW[0] = R.W[Math.min(M.rw, R.W.length - 1)];
-  el.querySelectorAll('.w').forEach((w, i) => { w.querySelector('b').textContent = MW[i][0]; w.querySelector('big').textContent = MW[i][1]; w.querySelector('small').textContent = MW[i][2]; });
+  el.querySelectorAll('.w').forEach((w, i) => paintW(w, MW[i]));
   const S = el.querySelector('.stk'); notes.forEach((q, i) => { const n = document.createElement('div'); n.className = 'nt on'; n.innerHTML = '<i class="ic"></i><div class="nb"><div class="nh"><b></b><span>' + (i ? Math.max(2, (M.n * 7) % 50) + 'm ago' : 'now') + '</span></div><strong></strong><p></p></div>';
     const ic = n.querySelector('.ic'); ic.style.background = ICON[q[0]] || HUE(q[0]); ic.textContent = SYM[q[0]] || q[0][0]; n.querySelector('b').textContent = q[0] === 'ACCORD' ? 'ACCORD Civic' : q[0]; n.querySelector('strong').textContent = q[1]; n.querySelector('p').textContent = String(q[2]).replace('{s}', '30'); S.appendChild(n); });
   box.appendChild(el); return el; }
