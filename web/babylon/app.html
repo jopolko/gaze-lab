@@ -9,7 +9,7 @@
 /* THE SHELL: the game's one page. Every other page (menu, levels, the Dial, the character, the Music Lab) runs inside it, so going fullscreen once
    lasts for the whole session (a browser always leaves fullscreen when the top page changes). Also the start page of the installed app. */
 html, body { margin:0; height:100%; background:#05070c; overflow:hidden; }
-iframe { position:fixed; inset:0; width:100%; height:100%; border:0; display:block; background:#05070c; }
+iframe { position:fixed; left:0; top:0; width:100%; height:100%; height:100dvh; border:0; display:block; background:#05070c; }          /* (the visible screen, windowed or fullscreen: a phone's address bar never hides the bottom of the page) */
 </style></head><body>
 <iframe id="f" title="Afterglow" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
 <script>

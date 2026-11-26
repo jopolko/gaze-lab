@@ -90,15 +90,17 @@ const SFX = createSfx(() => acx(), null), AW = createAudioWire({ SFX, GM, PSY })
 for (const ev of ['pointerdown', 'keydown', 'touchstart', 'click']) addEventListener(ev, () => { acx(); }, { passive: true });
 setTimeout(() => { try { SFX.preload && SFX.preload(); } catch (e) { } }, 3000);
 const LAB = (() => { const d = { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, cmp: '', len: 'full', chl: false, sty: '', trn: 55, nrg: 80 }; try { return Object.assign(d, JSON.parse(localStorage.getItem('dl_lab') || '{}') || {}); } catch (e) { return d; } })();          /* THE FREQUENCY (lab.html): the player's own tuning, read at the start of every level */
-/* YOUR SIGNAL (the title screen's light slider, 400-790 THz, saved as dl_freq): warm red is chill, violet is intense. 540 THz (where it locks by default) plays exactly as before.
-   It sets your signal colour (window.__SIG, CSS --sig: the Courier car's underglow, accents), how hard the trip's effects hit (LAB.int) and the music's energy and drive (LAB.nrg, LAB.trn). */
-const SIG = (() => { let f = 540; try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 790) f = v; } catch (e) { } const u = (f - 400) / 390, n = (540 - 400) / 390, k = u < n ? -(1 - u / n) : (u - n) / (1 - n);          /* k: -1 at red, 0 at 540, +1 at violet */
-  const hue = 270 * u, hex = (() => { const l = .6, sat = 1, a = sat * Math.min(l, 1 - l), g = (m) => { const q = (m + hue / 30) % 12, c = l - a * Math.max(-1, Math.min(q - 3, 9 - q, 1)); return Math.round(c * 255).toString(16).padStart(2, '0'); }; return '#' + g(0) + g(8) + g(4); })();
-  return { f, u, k, hex }; })();
+/* MAX INTENSITY (the title screen's dial, 400-950 THz, saved as dl_freq): the CEILING of the trip. Every level still eases in from calm; this sets how far it can go.
+   400 chill (half strength) . 460 the default (gentle) . 560 as designed . 790 intense . 790-950 ULTRAVIOLET, the absolute trip (twice the effects, colour and warp pushed, the hardest music).
+   It also sets your signal colour (window.__SIG, CSS --sig). */
+const SIG = (() => { let f = 460; try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 950) f = v; } catch (e) { }
+  const K = [[400, .5], [460, .72], [560, 1], [790, 1.4], [950, 2]], c = (() => { for (let i = 1; i < K.length; i++) if (f <= K[i][0]) { const u = (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * u; } return 2; })();
+  const uv = Math.max(0, (f - 790) / 160), u = Math.min(1, (f - 400) / 390), hue = 270 * u, l = .6 + .3 * uv, hex = (() => { const sat = 1, a = sat * Math.min(l, 1 - l), g = (m) => { const q = (m + hue / 30) % 12, cc = l - a * Math.max(-1, Math.min(q - 3, 9 - q, 1)); return Math.round(cc * 255).toString(16).padStart(2, '0'); }; return '#' + g(0) + g(8) + g(4); })();
+  const k = c < 1 ? (c - 1) / .5 : Math.min(1, (c - 1) / .4);          /* (music: -1 chill ... +1 intense, ultraviolet stays at the top) */
+  return { f, c, uv, k, hex }; })();
 window.__SIG = SIG; try { document.documentElement.style.setProperty('--sig', SIG.hex); } catch (e) { }
-/* THE TRAIL (read by the splash's bulletins): the level you're on and the last time you played */
-if (!Q.has('splash') && !Q.has('tutorial')) { const lv = Q.has('story') ? 'routezero' : WORLD0, stamp = () => { try { localStorage.setItem('dl_lastlv', lv); localStorage.setItem('dl_lastseen', String(Date.now())); } catch (e) { } }; stamp(); setInterval(stamp, 60000); }
-LAB.int = Math.round(LAB.int * (1 + .3 * SIG.k)); LAB.nrg = Math.round(LAB.nrg * (1 + .25 * SIG.k)); LAB.trn = Math.round(LAB.trn + 12 * SIG.k);          /* (chill: 70% effects, softer and slower music; intense: 130%, harder and faster) */
+LAB.int = Math.round(LAB.int * SIG.c); LAB.nrg = Math.round(LAB.nrg * (1 + .25 * SIG.k)); LAB.trn = Math.round(LAB.trn + 12 * SIG.k);
+if (SIG.c > 1) { const x = 1 + .5 * (SIG.c - 1); LAB.col = Math.round(LAB.col * x); LAB.wrp = Math.round(LAB.wrp * x); LAB.trc = Math.round(LAB.trc * Math.min(1.4, x)); }          /* (above 'as designed', colour, warp and tracers rise too, by half as much: balanced, never a smear) */
 const Q = new URLSearchParams(location.search), $ = (id) => document.getElementById(id), say = (t) => { $('status').textContent = t; };
 /* THE WILD STRAINS (molpantry.js, tools/make_pantry.py): kitchen-cupboard molecules, each with one made-up mutation (its atoms drawn lit). They take the old molecules' ids. */
 const STRAINS = !Q.has('classicmols'), STRAIN_ID = { lucid: '2ce', embrace: 'mescaline', velocity: '2ct7', haze: 'dom', drift: '2cb', hollow: '2ct2', fold: 'p_fold', deep: 'p_deep' };
@@ -1246,7 +1248,7 @@ void main() {
     Fd.onApply = (e) => { e._bindTexture('uScene', Br.inputTexture.texture); e._bindTexture('uPrev', ch.prev && ch.prev.texture ? ch.prev.texture : Br.inputTexture.texture); };
     M.onApply = (e) => {
       e._bindTexture('screenTex', Br.inputTexture.texture); e._bindTexture('gA', D1.inputTexture.texture); e._bindTexture('gB', D2.inputTexture.texture); e._bindTexture('gC', Fd.inputTexture.texture);
-      const u = PSY.uniforms(), PK = psyK(), I = Math.min(1.3, LAB.int / 100), LK = { amount: I, trip: I, dmt: I, buzz: I, sharp: I, k_trace: LAB.trc / 100 * Math.min(1, I), k_chroma: LAB.col / 100, k_punch: LAB.col / 100, k_wash: LAB.col / 100, breathe: LAB.wrp / 100, k_warp: LAB.wrp / 100, k_pulse: LAB.wrp / 100, mA: LAB.wrp / 100, mB: LAB.wrp / 100 }, lk = (n) => (LK[n] === undefined ? 1 : LK[n]), f = (n) => (+u[n] || 0) * PK * lk(n), v3 = (n) => { const a = u[n] || [0, 0, 0], PK0 = PK; { const PK = PK0 * lk(n); e.setFloat3(n, (a[0] || 0) * PK, (a[1] || 0) * PK, (a[2] || 0) * PK); } };
+      const u = PSY.uniforms(), PK = psyK(), I = Math.min(2, LAB.int / 100), LK = { amount: I, trip: I, dmt: I, buzz: I, sharp: I, k_trace: LAB.trc / 100 * Math.min(1, I), k_chroma: LAB.col / 100, k_punch: LAB.col / 100, k_wash: LAB.col / 100, breathe: LAB.wrp / 100, k_warp: LAB.wrp / 100, k_pulse: LAB.wrp / 100, mA: LAB.wrp / 100, mB: LAB.wrp / 100 }, lk = (n) => (LK[n] === undefined ? 1 : LK[n]), f = (n) => (+u[n] || 0) * PK * lk(n), v3 = (n) => { const a = u[n] || [0, 0, 0], PK0 = PK; { const PK = PK0 * lk(n); e.setFloat3(n, (a[0] || 0) * PK, (a[1] || 0) * PK, (a[2] || 0) * PK); } };
       e.setFloat('TIME', U.time); e.setFloat('exposure', expo()); e.setFloat('mae', MAE3.v); e.setFloat('use_trail', Q.has('trail') ? +Q.get('trail') : 1);
       for (const n of ['amount', 'breathe', 'trip', 'dmt', 'buzz', 'sharp', 'k_warp', 'k_pulse', 'k_chroma', 'k_trace', 'k_punch', 'k_wash']) e.setFloat(n, f(n)); v3('mA'); v3('mB');
       e.setFloat('glowI', (POST.level >= 2 ? .35 * (u.glowIntensityMul === undefined ? 1 : u.glowIntensityMul) : 0) * LAB.col / 100); e.setFloat('lv4', .8); e.setFloat('lv8', .4); e.setFloat('lv16', .1); e.setFloat('tmWhite', 1); e.setFloat3('bcs', 1, 1, 1);

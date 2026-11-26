@@ -20,13 +20,13 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #hint .rot { display:none; } @media (orientation:portrait) { #hint .rot { display:inline-flex; } }
 #hint .ph { animation:tip 3.2s ease-in-out infinite; } @keyframes tip { 0%, 30% { transform:rotate(0); } 50%, 80% { transform:rotate(-90deg); } 100% { transform:rotate(0); } }
 @media (prefers-reduced-motion:reduce) { #hint .ph { animation:none; transform:rotate(-90deg); } }
-#ui { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; box-sizing:border-box; cursor:pointer;
+#ui { position:fixed; inset:0; height:100%; height:100dvh; bottom:auto; display:flex; flex-direction:column; align-items:center; box-sizing:border-box; cursor:pointer;
   padding:max(14px,var(--sa-top, env(safe-area-inset-top))) max(16px,var(--sa-right, env(safe-area-inset-right))) max(12px,var(--sa-bottom, env(safe-area-inset-bottom))) max(16px,var(--sa-left, env(safe-area-inset-left))); }
 /* the light: a band of the visible spectrum (red 400 THz to violet 790 THz), a marker that hunts and locks on, and the light wave itself above it */
 #dial { cursor:ew-resize; touch-action:none; padding:4px 0; width:100%; box-sizing:border-box; font:700 clamp(10px,1.6vmin + 6px,14px) "Barlow Condensed","Arial Narrow",sans-serif; letter-spacing:.12em; color:var(--dim); }
 #wave { display:block; width:100%; height:clamp(22px,5vmin,38px); overflow:visible; }
 #dial .scale { position:relative; height:clamp(8px,1.6vmin,12px); border-radius:3px;
-  background:linear-gradient(90deg,#ff2a00 0%,#ff7a00 18%,#ffd400 32%,#9dff2a 42%,#2aff7a 52%,#00e5ff 62%,#2f6bff 78%,#7a3dff 100%);
+  background:repeating-linear-gradient(135deg,rgba(0,0,0,0) 0 5px,rgba(10,0,20,.35) 5px 8px) 70.9% 0/29.1% 100% no-repeat,linear-gradient(90deg,#ff2a00 0%,#ff7a00 12.8%,#ffd400 22.7%,#9dff2a 29.8%,#2aff7a 36.9%,#00e5ff 44%,#2f6bff 55.3%,#7a3dff 70.9%,#b040ff 80%,#d68cff 90%,#f6e4ff 100%);          /* (the ultraviolet zone hatched, like a red line) */
   box-shadow:0 0 14px rgba(255,255,255,.12); }
 #dial .nums { display:flex; justify-content:space-between; margin-top:4px; }
 #needle { position:absolute; top:-5px; bottom:-5px; width:3px; margin-left:-1.5px; background:#fff; border-radius:2px; box-shadow:0 0 8px #fff,0 0 18px var(--lc,#fff); left:20%; }
@@ -81,7 +81,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   #title h1 { font-size:clamp(38px,15vh,96px); } #title h1 span { margin-right:0; } .mk { align-items:flex-start; } #sun { width:auto; height:clamp(33px,14vh,89px); } #mark { margin:0; width:auto; height:clamp(35px,15vh,97px); }
   #tag { top:calc(30% + 36vh) !important; }
   #tag { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); top:calc(30% + 19vh); max-width:30vw; text-align:left; font-size:clamp(12px,3.6vh,18px); }
-  #strain { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); bottom:calc(max(10px,var(--sa-bottom, env(safe-area-inset-bottom))) + 22px); max-width:34vw; text-align:left; }
+  #strain { position:absolute; margin:0; left:50%; transform:translateX(-50%); bottom:calc(max(10px,var(--sa-bottom, env(safe-area-inset-bottom))) + 22px); width:max-content; max-width:44vw; text-align:center; }          /* (centred under the molecule) */
   #tap { position:absolute; right:max(18px,var(--sa-right, env(safe-area-inset-right))); bottom:24%; margin-right:0; font-size:clamp(13px,4vh,20px); }
   #hint { position:absolute; margin:0; right:max(18px,var(--sa-right, env(safe-area-inset-right))); bottom:calc(24% - 3.2em); max-width:30vw; text-align:right; } }
 @media (prefers-reduced-motion:reduce) { #title h1 { opacity:1; } .gw .gc { display:none; } #title.open h1, #title.open #mark, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
@@ -142,7 +142,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   window.__idle = (k) => { const e = EV.find((q) => q.k === k); if (e) { busy = true; e.go(); } };          /* (test hook) */ })();</script>
 <div id="ui" role="button" tabindex="0" aria-label="Electronic Anesthesia presents Afterglow. Tap to begin.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
-    <div class="nums"><span>400 · CHILL</span><span>480</span><span>560</span><span>640</span><span>720</span><span>INTENSE · 790 THz</span></div>
+    <div class="nums"><span>400 · CHILL</span><span>520</span><span>650</span><span>790</span><span>ULTRAVIOLET · 950 THz</span></div>
     <div id="rd"><span id="mhz">400 THz</span><span class="lock" id="lock">SEARCHING</span></div></div>
   <div id="title" class="glitch"><h1><span style="font-size:.17em;letter-spacing:.42em;margin-right:-.42em;margin-bottom:.9em">ELECTRONIC ANESTHESIA PRESENTS</span><span class="mk"><img id="sun" src="art/afterglow_sun.png" alt=""><span class="gw"><img id="mark" src="art/afterglow_word.png" alt="AFTERGLOW"><img class="gc g1" src="art/afterglow_word.png" alt="" aria-hidden="true"><img class="gc g2" src="art/afterglow_word.png" alt="" aria-hidden="true"><i class="snow" aria-hidden="true"></i></span></span></h1></div>
   <div id="tag">Out of Alignment</div><script src="daily.js"></script><script>/* THE LAUNCH LINE: a different one every launch. The first launch ever gets the first line; then a shuffled deck, no repeats until it runs out. A dated line (a holiday) wins once that day. */
@@ -173,9 +173,20 @@ window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 
   for (let i = T.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [T[i], T[j]] = [T[j], T[i]]; }
   const L = HEAT.concat(T).slice(0, 7), away = G.hrs >= 1 ? (G.hrs < 24 ? ['MURMUR', 'We tried to reach you ' + Math.max(3, Math.round(G.hrs * 3)) + ' times today'] : G.hrs < 24 * 7 ? ['ACCORD', Math.round(G.hrs / 24) + ' days without a check-in. Accounts frozen for your protection'] : ['MURMUR', 'Missing ' + Math.round(G.hrs / 24) + ' days. A memorial page has been prefilled']) : null;
   const where = !G.last ? ['ACCORD', 'New citizen detected. No record found. Stay where you are'] : ['ACCORD', 'Courier last seen: ' + G.last + (G.next ? '. Expected next: ' + G.next : '. Whereabouts: everywhere')];
-  const el = document.querySelector('#ticker div'), html = [where].concat(away ? [away] : [], L).map(([w, t]) => '<b>' + w + '</b> \u00B7 ' + t + ' \u00B7 ').join(''); el.innerHTML = html + html;          /* (twice, so the loop has no seam) */
-  let x = 0, t0 = performance.now(); const sp = matchMedia('(prefers-reduced-motion: reduce)').matches ? 28 : 62;          /* (px a second; slower, never stopped, on reduced motion) */
-  const run = (t) => { const dt = Math.min(.1, (t - t0) / 1000); t0 = t; const half = el.scrollWidth / 2; x -= sp * dt; if (half > 0 && -x >= half) x += half; el.style.transform = 'translateX(' + x.toFixed(1) + 'px)'; requestAnimationFrame(run); }; requestAnimationFrame(run); })();</script>
+  /* THE FEED: bulletins arrive one at a time like a live wire, each at its own speed (urgent ones faster), with uneven gaps (sometimes two crowd in, sometimes a beat
+     of quiet); never a loop. The first two are already on screen at load. Where you were last seen comes first; after that the pool is reshuffled as it runs out. */
+  const box = document.querySelector('#ticker'), first = [where].concat(away ? [away] : []); let pool = [], seq = 0; const all = HEAT.concat(T);
+  if (getComputedStyle(box).position === 'static') box.style.position = 'relative'; box.style.height = '1.7em';          /* (keep the landscape strip's own placement) */ box.firstElementChild && box.firstElementChild.remove();
+  const nextMsg = () => { if (first.length) return first.shift(); if (!pool.length) { pool = all.slice(); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } } return pool.shift(); };
+  const live = []; const slow = matchMedia('(prefers-reduced-motion: reduce)').matches ? .5 : 1;
+  const spawn = (x0) => { const [w, t] = nextMsg(), e = document.createElement('div'); e.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;will-change:transform;padding-top:6px'; e.innerHTML = '<b>' + w + '</b> \u00B7 ' + t; box.appendChild(e);
+    const urgent = /!|\u203C|now|Do not|Final|All units|on its way|Explain/i.test(t), v = (urgent ? 95 + Math.random() * 40 : 48 + Math.random() * 34) * slow; live.push({ e, x: x0, v, w: 0, gap: Math.random() < .25 ? 20 + Math.random() * 40 : 90 + Math.random() * 320 }); };
+  spawn(box.clientWidth * .08); { const a0 = live[0]; a0.w = a0.e.offsetWidth; spawn(box.clientWidth * .08 + a0.w + 60); }          /* (already moving when the page appears) */
+  let t0 = performance.now(), quiet = 0; const run = (tt) => { const dt = Math.min(.1, (tt - t0) / 1000); t0 = tt; const W = box.clientWidth;
+    for (let i = live.length - 1; i >= 0; i--) { const m = live[i]; if (!m.w) m.w = m.e.offsetWidth; m.x -= m.v * dt; m.e.style.transform = 'translateX(' + m.x.toFixed(1) + 'px)'; if (m.x + m.w < -10) { m.e.remove(); live.splice(i, 1); } }
+    const last = live[live.length - 1]; if (quiet > 0) quiet -= dt; else if (!last || last.x + last.w + last.gap < W) { if (Math.random() < .08) quiet = .6 + Math.random() * 1.8; else spawn(W + 4); }          /* (now and then the wire goes quiet for a beat) */
+    for (let i = 1; i < live.length; i++) { const a = live[i - 1], b = live[i]; if (b.x < a.x + a.w + 24) { b.x = a.x + a.w + 24; b.v = Math.min(b.v, a.v); } }          /* (a fast one catches up, never overlaps) */
+    requestAnimationFrame(run); }; requestAnimationFrame(run); })();</script>
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
@@ -196,7 +207,7 @@ const wave = (t) => CALM ? .12 : Math.max(0, Math.min(1, .5 + .5 * Math.sin(t * 
    and the view sways with it. The molecule hangs in front of the sky's sun. Tuning the spectrum washes that sun in the chosen light. */
 const skyc = document.getElementById('sky');
 const GROUND = `
-uniform vec4 uTune; uniform vec4 uDrive; uniform vec2 uWH2; uniform vec4 uFx;          /* uDrive: distance travelled (m), camera side offset (m), camera height (m), angle per css pixel */
+uniform vec4 uTune; uniform vec4 uDrive; uniform vec2 uWH2; uniform vec4 uFx; uniform vec2 uInt;          /* uDrive: distance travelled (m), camera side offset (m), camera height (m), angle per css pixel */
 float roadC(float z) { return 7. * sin(z * .006) + 3. * sin(z * .017 + 1.3); }
 vec3 gpal(float f) { f = fract(f) * 5.; vec3 a = vec3(.22, .91, 1.), b = vec3(1., .82, .23), c = vec3(1., .69, .29), d = vec3(.62, .55, 1.), e = vec3(.49, 1., .54);
   return f < 1. ? mix(a, b, f) : f < 2. ? mix(b, c, f - 1.) : f < 3. ? mix(c, d, f - 2.) : f < 4. ? mix(d, e, f - 3.) : mix(e, a, f - 4.); }
@@ -204,7 +215,8 @@ vec3 gpal(float f) { f = fract(f) * 5.; vec3 a = vec3(.22, .91, 1.), b = vec3(1.
    so the title and the molecule stand forward */
 vec3 skyAt(vec3 d) { SD = d; skyMain(); return gl_FragColor.rgb; }
 float cgrain(vec2 p) { return fract(sin(dot(floor(p), vec2(12.9898, 78.233))) * 43758.5453); }
-vec3 paint(vec3 c) { c = pow(max(c, 0.), vec3(.8)); float l = dot(c, vec3(.3, .5, .2)); c = mix(vec3(l), c, .62); c = mix(c, vec3(.55, .36, .27) * (.35 + l), .22);
+vec3 hrot(vec3 c, float a) { const vec3 k = vec3(.57735); float ca = cos(a); return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1. - ca); }
+vec3 paint(vec3 c) { c = pow(max(c, 0.), vec3(.8)); float l = dot(c, vec3(.3, .5, .2)); c = mix(vec3(l), c, .62 + .5 * uInt.x + .35 * uInt.y); c = mix(c, vec3(.55, .36, .27) * (.35 + l), .22 * (1. - .7 * uInt.x)); c = clamp(hrot(c, uInt.y * 1.4 * sin(uTime * .21)), 0., 1.6);          /* (max intensity: richer colour; ultraviolet: the hues drift) */
   vec2 sp = gl_FragCoord.xy; float gr = (cgrain(sp * .5) + cgrain(sp * .25 + 7.)) * .5 - .5; c *= 1. + gr * .06;
   vec2 v = gl_FragCoord.xy / uWH2 - .5; float vg = 1. - smoothstep(.3, .9, length(v * vec2(1., v.y < 0. ? .45 : .8))) * .45; return c * .58 * vg; }
 void main() {
@@ -227,7 +239,7 @@ void main() {
   vec2 p = vec2(X, zw); float sc = 1. / 6., g1 = sin(p.x * sc * 6.283) * sin(p.y * sc * 6.283);
   vec2 q = vec2(p.x * .9994 - p.y * .035, p.x * .035 + p.y * .9994) * sc * 1.037; float g2 = sin(q.x * 6.283) * sin(q.y * 6.283), amp = g1 * g2 * .5 + .5;          /* (the second grid a shade finer and turned 2 degrees, fixed to the ground: the beats stream past with it) */
   float far = 1. - smoothstep(40., 260., tt);
-  vec3 col = vec3(.42, .21, .14) * (1. + far * (amp - .5) * 1.1) + gpal(amp * .5 + uTime * .03) * (.1 + .42 * amp) * far * (.4 + .6 * smoothstep(.25, .85, amp));
+  vec3 col = vec3(.42, .21, .14) * (1. + far * (amp - .5) * (1.1 + 1.3 * uInt.x + 1.2 * uInt.y)) + gpal(amp * .5 + uTime * (.03 + .05 * uInt.y)) * (.1 + (.42 + .35 * uInt.x) * amp) * far * (.4 + .6 * smoothstep(.25, .85, amp));
   float dx = abs(X - roadC(zw));
   col = mix(col, vec3(.24, .2, .22) * (.85 + .15 * far) + vec3(1., .66, .42) * .32 * exp(-dx * dx / 14.) * smoothstep(8., 180., tt), 1. - smoothstep(6.8 - aa, 6.8 + aa, dx));          /* asphalt, the sun's glint running up the middle */
   float edge = 1. - smoothstep(.14, .14 + aa, abs(dx - 6.3)); col = mix(col, vec3(.25, .92, 1.), edge * .95);          /* glowing edge lines */
@@ -243,7 +255,7 @@ const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antiali
   const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
   try { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); gl.useProgram(pr);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
-    const U = {}; for (const n of ['uWH', 'uMap', 'uTime', 'uBeat', 'uGlass', 'uPsy', 'uTune', 'uDrive', 'uWH2', 'uFx']) U[n] = gl.getUniformLocation(pr, n); return { gl, U }; } catch (e) { console.error('splash sky', e); return null; } })();
+    const U = {}; for (const n of ['uWH', 'uMap', 'uTime', 'uBeat', 'uGlass', 'uPsy', 'uTune', 'uDrive', 'uWH2', 'uFx', 'uInt']) U[n] = gl.getUniformLocation(pr, n); return { gl, U }; } catch (e) { console.error('splash sky', e); return null; } })();
 const DRIVE = { z: 0 };
 const roadC = (z) => 7 * Math.sin(z * .006) + 3 * Math.sin(z * .017 + 1.3);
 const FX = { mode: 0, t0: 0, t1: 0, next: 4, warp: 0 };
@@ -252,14 +264,15 @@ function fxNow(t) { if (FXF) return [FXF, 1, .6]; if (t > FX.next && t > FX.t1) 
   if (t > FX.t1 + .5) return [0, 0, 0];
   const env = Math.min(1, (t - FX.t0) / .15) * (t < FX.t1 ? 1 : Math.max(0, 1 - (t - FX.t1) / .5)), fit = CALM ? 1 : (Math.sin(t * 23) + Math.sin(t * 37.1) > -.4 ? 1 : .25);
   return [FX.mode, FX.mode ? Math.max(0, env * .55) : 0, FX.warp * env * (CALM ? 0 : .6 + .4 * Math.sin(t * 1.7))]; }          /* (gentle: a soft wobble that breathes; the vector look at half strength and steady, no flicker) */
+const SPT = { t: 0 };
 function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = SKY, q = Math.min(1.25, DPR), w = Math.round(W * q), h = Math.round(H * q);
   if (skyc.width !== w || skyc.height !== h) { skyc.width = w; skyc.height = h; } gl.viewport(0, 0, w, h);
   DRIVE.z += dt * (CALM ? 18 : 42);          /* about 150 km/h */
   const camX = roadC(DRIVE.z + 14) + .7 * Math.sin(t * .63), camH = 1.7 + .035 * Math.sin(t * 7.3) + .02 * Math.sin(t * 11.1);          /* the car follows the road a little behind the curve, with a gentle sway and a road hum */
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
-  gl.uniform2f(U.uWH, W, H); gl.uniform2f(U.uWH2, skyc.width, skyc.height); gl.uniform4f(U.uMap, cxm, hz, k, k);          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, 0);          /* (no stained glass on the title screen) */ gl.uniform1f(U.uPsy, 0);
-  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], 0);          /* (the sky keeps its own colours) */ { const f = fxNow(t); gl.uniform4f(U.uFx, f[0], f[1], f[2], k * 1.6); } gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
+  gl.uniform2f(U.uWH, W, H); gl.uniform2f(U.uWH2, skyc.width, skyc.height); gl.uniform4f(U.uMap, cxm, hz, k, k);          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ { const I = INT(); SPT.t += dt * (.7 + .9 * I.a + 1.2 * I.uv); gl.uniform1f(U.uTime, SPT.t); gl.uniform2f(U.uInt, I.a, I.uv); } gl.uniform1f(U.uBeat, beat);          /* (the sky's own clock runs faster as the dial climbs) */ gl.uniform1f(U.uGlass, 0);          /* (no stained glass on the title screen) */ gl.uniform1f(U.uPsy, 0);
+  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], 0);          /* (the sky keeps its own colours) */ { const f = fxNow(t), I = INT(), base = CALM ? 0 : .04 + .42 * I.a + .55 * I.uv; gl.uniform4f(U.uFx, f[0], f[1], Math.max(base, f[2]), k * 1.6); }          /* (a steady smooth wobble set by the dial, the episodes on top) */ gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
@@ -329,14 +342,15 @@ function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let
   cx.restore(); }
 
 /* the light: the marker hunts across the spectrum and locks on 540 THz (green-gold: the frequency the SI defines brightness by) */
-const SPEC = [[0, [255, 42, 0]], [.18, [255, 122, 0]], [.32, [255, 212, 0]], [.42, [157, 255, 42]], [.52, [42, 255, 122]], [.62, [0, 229, 255]], [.78, [47, 107, 255]], [1, [122, 61, 255]]];
+const SPEC = [[0, [255, 42, 0]], [.128, [255, 122, 0]], [.227, [255, 212, 0]], [.298, [157, 255, 42]], [.369, [42, 255, 122]], [.44, [0, 229, 255]], [.553, [47, 107, 255]], [.709, [122, 61, 255]], [.8, [176, 64, 255]], [.9, [214, 140, 255]], [1, [246, 228, 255]]];          /* (the visible spectrum to 790, then ultraviolet glowing toward white) */
 const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
 const wp = document.getElementById('wp'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
-const LOCK_AT = 2.6, TARGET = 540, F0 = 400, F1 = 790; let locked = false;
+const LOCK_AT = 2.6, TARGET = 460, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
 /* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
 const TUNE = { f: TARGET, user: false, k: 0, down: false };
 try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }
+const INT = () => ({ a: Math.max(0, Math.min(1, (TUNE.f - F0) / (FV - F0))), uv: Math.max(0, Math.min(1, (TUNE.f - FV) / (F1 - FV))) });          /* (a: 0-1 across visible light, uv: 0-1 across ultraviolet) */
 const specNow = () => specAt((TUNE.f - F0) / (F1 - F0));
 /* the digital layer, rebuilt only when the light moves: from 640 THz up the ground turns to a wire grid that tightens, and scanlines close in, by 790 it's all vector */
 const DG = { el: null, g: null, k: -1 };
@@ -347,7 +361,7 @@ function digi(u, c) { if (!DG.el) { DG.el = document.getElementById('digi'); DG.
 function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE.f; else if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
-  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`); 
+  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = 'MAX INTENSITY \u00B7 ' + Math.round(f) + ' THz' + (f > FV ? ' \u00B7 UV' : ''); dialEl.style.setProperty('--lc', `rgb(${c})`); 
   { const lam = 4200 / f * 9, ph = RM ? 0 : t * 9; let d = ''; for (let x = 0; x <= 600; x += 4) { const env = Math.sin(Math.PI * x / 600); d += (x ? 'L' : 'M') + x + ' ' + (20 + 15 * env * Math.sin(2 * Math.PI * x / lam - ph)).toFixed(1); } wp.setAttribute('d', d); wp.setAttribute('stroke', `rgb(${c})`); wp.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
 }
 { const sc = dialEl.querySelector('.scale'), setF = (e) => { const b = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); TUNE.f = F0 + u * (F1 - F0); TUNE.user = true; doLock(); };
