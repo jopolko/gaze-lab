@@ -124,6 +124,93 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
       ['MURMUR', 'ok last msg i promise \u203C\uFE0E'], ['MURMUR', 'lol where did u go'], ['MURMUR', 'u left me on read. thats ok. we saved it \u2713\uFE0E'], ['MURMUR', 'ur friends r all here. well, most of them \u2661\uFE0E'], ['MURMUR', 'typing\u2026 jk. we always know what to say']];
     for (let i = 0; i < F.length; i++) CHECKIN.splice(1 + i * 3, 0, F[i]); }          /* (the bot imitating a human, spread through the pool) */
   const CI = { i: 0 };          /* (the newest, sharpest lines first) */
+  /* THE FAKE LOCK SCREEN (the rare one, owner's idea 2026-11-26): left idle, the screen "sleeps" (black for about a second), then wakes on a lock screen dressed like
+     the device you're on (a phone in the iPhone or Android manner, or a desktop), with real notifications from made-up services: ACCORD or MURMUR checking in, and a
+     satellite or network provider joking along. No real brands or logos. The first touch or key "unlocks" it straight back to the game, as if the system tricked
+     you into coming back. Lines come from ACCORD, MURMUR or a service, never "us". */
+  const LK = { on: false, el: null, t: 0 };
+  { const c2 = document.createElement('style'); c2.textContent = `
+#lk{position:fixed;inset:0;z-index:40;pointer-events:auto;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default}
+#lk .off{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s}#lk.sleep .off{opacity:1}#lk.wake .off{opacity:0;transition:opacity .45s}
+#lk .wp{position:absolute;inset:0;opacity:0;transition:opacity .45s}#lk.wake .wp{opacity:1}#lk.bye{opacity:0;transition:opacity .3s}#lk.bye.ios .wp{transform:translateY(-100%);transition:transform .35s ease-in}
+#lk .wm{position:absolute;left:0;right:0;bottom:max(14px,3vh);text-align:center;font:600 9px/1 system-ui,sans-serif;letter-spacing:.35em;color:rgba(255,255,255,.22)}
+#lk .sb{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;padding:max(10px,env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) 0 max(22px,env(safe-area-inset-left));font:600 13px system-ui,sans-serif}
+#lk .bars{display:inline-flex;gap:2px;align-items:flex-end;margin-left:6px;vertical-align:middle}#lk .bars i{width:3px;background:#fff;border-radius:1px}#lk .bars i.x{opacity:.35}
+#lk .bat{display:inline-block;width:22px;height:11px;border:1.5px solid rgba(255,255,255,.8);border-radius:3px;position:relative;vertical-align:middle;margin-left:6px}#lk .bat:after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:30%;background:#ffd23a;border-radius:1px}
+#lk .nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:18px;background:rgba(40,36,58,.86);box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transform:translateY(-12px) scale(.97);transition:opacity .35s,transform .35s;text-align:left}
+#lk .nt.on{opacity:1;transform:none}#lk .ic{flex:0 0 auto;width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font:800 15px system-ui,sans-serif;color:#0d1020}
+#lk .nb{min-width:0;flex:1}#lk .nh{display:flex;justify-content:space-between;gap:8px;font:600 11px system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.62)}#lk .nh b{text-transform:uppercase;font-weight:600}
+#lk .nt strong{display:block;font:600 14px/1.25 system-ui,sans-serif;margin-top:2px}#lk .nt p{margin:2px 0 0;font:400 14px/1.3 system-ui,sans-serif;color:rgba(255,255,255,.9)}
+#lk .stk{display:flex;flex-direction:column;gap:8px}
+/* phone, iPhone manner: padlock, big centred clock, cards under it, two round buttons at the foot */
+#lk.ios .wp{background:radial-gradient(120% 70% at 50% 110%,#ff7a3a 0%,#b3306a 30%,#3b1d6e 62%,#120d2a 100%)}
+#lk.ios .mid{position:absolute;left:0;right:0;top:9vh;display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 max(14px,4vw)}
+#lk.ios .pl{width:18px;height:22px;margin-bottom:6px}#lk.ios .dt{font:600 clamp(16px,2.4vh,21px) system-ui,sans-serif;opacity:.9}
+#lk.ios .tm{font:700 clamp(64px,13vh,108px)/1 system-ui,-apple-system,sans-serif;letter-spacing:-.02em;margin-bottom:3vh}
+#lk.ios .stk{width:min(100%,400px)}#lk.ios .ft{position:absolute;left:0;right:0;bottom:max(26px,5vh);display:flex;justify-content:space-between;padding:0 max(40px,12vw)}
+#lk.ios .rb{width:46px;height:46px;border-radius:50%;background:rgba(30,26,46,.7);display:grid;place-items:center}#lk.ios .hb{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:rgba(255,255,255,.85)}
+/* phone, Android manner: two-line clock on the left, flat cards, a fingerprint at the foot */
+#lk.and .wp{background:linear-gradient(160deg,#0f3a4a 0%,#14254a 45%,#2a1446 100%)}
+#lk.and .mid{position:absolute;left:0;right:0;top:9vh;padding:0 max(22px,6vw)}#lk.and .tm{font:400 clamp(72px,15vh,128px)/.92 system-ui,Roboto,sans-serif;white-space:pre;color:#cfe9ff}
+#lk.and .dt{font:500 15px system-ui,sans-serif;margin:12px 0 3vh;opacity:.9}#lk.and .nt{border-radius:22px;background:rgba(22,34,52,.92)}#lk.and .stk{max-width:440px}
+#lk.and .fp{position:absolute;left:50%;bottom:max(30px,7vh);transform:translateX(-50%);width:54px;height:54px;opacity:.75}
+/* desktop: a big clock bottom left over an ACCORD wallpaper, toasts bottom right, a little tray */
+#lk.pc .wp{background:radial-gradient(70% 90% at 72% 40%,#3a6bd8 0%,#1d3a8a 35%,#0e1a44 70%,#090f26 100%)}
+#lk.pc .mid{position:absolute;left:max(28px,5vw);bottom:max(60px,11vh)}#lk.pc .tm{font:300 clamp(72px,12vh,128px)/1 "Segoe UI Light","Segoe UI",system-ui,sans-serif}#lk.pc .dt{font:300 clamp(20px,3.4vh,34px) "Segoe UI",system-ui,sans-serif;margin-top:4px}
+#lk.pc .stk{position:absolute;right:max(20px,2vw);bottom:max(60px,9vh);width:min(380px,44vw)}#lk.pc .nt{border-radius:8px;background:rgba(28,32,48,.94)}
+#lk.pc .wm{top:max(16px,3vh);bottom:auto}#lk.pc .tray{position:absolute;right:max(24px,2.5vw);bottom:max(18px,3vh);display:flex;gap:18px;align-items:center;font:400 12px "Segoe UI",system-ui,sans-serif;opacity:.85}
+/* VR headset: a floating, slightly curved panel in a dim passthrough void, a grid floor, the boundary glowing */
+#lk.vr .wp{background:radial-gradient(60% 55% at 50% 42%,#2a2f3c 0%,#151821 60%,#0a0b10 100%)}
+#lk.vr .fl{position:absolute;left:-50%;right:-50%;bottom:0;height:46%;transform-origin:50% 100%;transform:perspective(420px) rotateX(62deg);background:repeating-linear-gradient(90deg,rgba(90,200,255,.22) 0 1px,transparent 1px 60px),repeating-linear-gradient(0deg,rgba(90,200,255,.22) 0 1px,transparent 1px 60px)}
+#lk.vr .gd{position:absolute;left:8%;right:8%;bottom:6%;height:24%;border:2px solid rgba(80,180,255,.55);border-radius:50%/40%;transform:perspective(420px) rotateX(62deg)}
+#lk.vr .pn{position:absolute;left:50%;top:50%;width:min(92vw,560px);transform:translate(-50%,-54%) perspective(900px) rotateX(4deg);background:rgba(24,26,36,.92);border:1px solid rgba(255,255,255,.12);border-radius:26px;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+#lk.vr .ph{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font:500 12px system-ui,sans-serif;color:rgba(255,255,255,.65);margin-bottom:12px}#lk.vr .tm{font:300 clamp(36px,8vh,60px)/1 system-ui,sans-serif;color:#fff}
+#lk.vr .ht{position:absolute;left:0;right:0;bottom:max(16px,4vh);text-align:center;font:500 12px system-ui,sans-serif;letter-spacing:.12em;color:rgba(255,255,255,.55)}
+@media (max-height:480px){#lk.ios .mid,#lk.and .mid{top:13vh}#lk.ios .ft,#lk.and .fp,#lk.ios .hb{display:none}#lk.ios .tm{font-size:clamp(44px,15vh,70px);margin-bottom:2vh}#lk.and .tm{font-size:clamp(44px,14vh,70px)}#lk .ft,#lk .fp{display:none}
+  #lk.ios .mid,#lk.and .mid{display:grid;grid-template-columns:auto minmax(0,400px);column-gap:5vw;align-items:start;justify-content:center}#lk.ios .mid>.stk,#lk.and .mid>.stk{grid-column:2;grid-row:1/5}#lk.ios .mid{align-items:center}}`;
+    document.head.appendChild(c2); }
+  const KIND = () => { const ua = navigator.userAgent; if (/OculusBrowser|Quest|Pico|VR|Wolvic|PlayStation VR|Vision/i.test(ua) && !/iPhone|Android.*Mobile/.test(ua)) return 'vr'; if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios'; if (/Android/.test(ua)) return 'and'; return navigator.maxTouchPoints > 0 && Math.min(innerWidth, innerHeight) < 600 ? 'and' : 'pc'; };
+  const SERV = {
+    all: [['StarLeash', 'Dish repositioned', 'Your dish now faces you. Signal improved 12%.'], ['StarLeash', 'Clear skies tonight', 'Perfect conditions for being seen.'], ['StarLeash', 'Coverage update', '4,412 satellites overhead. One of them is assigned to you.'],
+      ['Comcastle', 'Outage in your area', 'Internet down until Tuesday. Your camera stayed online.'], ['Comcastle', 'Speed test complete', 'Download: slow. Upload: mostly you.'], ['Orbital Mobile', 'Plan renewed', 'Unlimited location sharing included at no extra cost.'],
+      ['Weather', 'Today', '0% chance of privacy. Light surveillance after noon.'], ['Find My Everything', 'Item found', 'Your keys, your wallet and you. Shared with 3 contacts.'], ['Screen Time', 'Weekly report', 'You were away {s} seconds. Your guardian was notified.'],
+      ['Wallet', 'Payment declined', 'Citizen score charged 2 points for idling.'], ['Battery', 'Low power mode', 'Unavailable. ACCORD needs the GPS.'], ['Health', 'Heart rate', 'Elevated while you weren\u2019t looking. Shared with your insurer.']],
+    vr: [['Guardian', 'Boundary breached', 'You stepped 2 cm toward freedom. Step back.'], ['Face Tracking', 'Expression captured', 'Your eyebrows have been monetised.'], ['Plaza Social', 'Your plaza is empty', '0 friends online. 14 ads are waiting for you.'],
+      ['PixMAX 14000K', 'Super Wrap-Around enabled', '240° view. Now includes the back of your own head.'], ['Cortical Insert', 'Optional plug detected', 'Firmware update requires you to lie very still.'], ['Peek-o Cloud', 'Room scan uploaded', 'Nice couch. Shared with partners.'],
+      ['Headset', 'Battery 12%', 'Your face will be returned when charged.'], ['Hands-Free Power Pack', 'Insertable pack at 4%', 'Low charge. Please remain seated and do not panic.'], ['Hands-Free Power Pack', 'Charging reminder', 'Pack removal is not covered by warranty.'], ['Mirage Quest', 'Passthrough paused', 'Reality is a premium feature. Upgrade to see your room.'], ['Xiaomoon VisionBox', 'Region update', 'Your thoughts now comply with 3 governments.'],
+      ['Eye Tracking', 'Gaze report', 'You looked at the exit 41 times. Noted.']],
+    pc: [['Alignment Update', 'Restart required', 'Installing update 14 of 9,000. Stay where you are.'], ['Defender of the Realm', 'Threat removed', 'An unapproved thought was quarantined.'], ['Cloud Backup', 'Backup complete', 'Your memories are 98% backed up. The rest were flagged.'],
+      ['Webcam', 'Camera in use', 'The light is off. The camera is not.'], ['Accounts', 'Sign-in required', 'Your account now requires a face. Look here to continue.']] };
+  const ICON = { ACCORD: '#ffb14a', MURMUR: '#9d8bff', StarLeash: '#e8ecff', Comcastle: '#ff5a4a', 'Orbital Mobile': '#38e8ff', Weather: '#6ec3ff', 'Find My Everything': '#7dff8a', 'Screen Time': '#b36bff', Wallet: '#ffd23a', Battery: '#7dff8a', Health: '#ff6a8a', 'Alignment Update': '#4aa3ff', 'Defender of the Realm': '#4aa3ff', Guardian: '#4ab4ff', 'Hands-Free Power Pack': '#ff3a2a', 'Face Tracking': '#ff9a5a', 'Plaza Social': '#5a7bff', 'PixMAX 14000K': '#ff5a4a', 'Cortical Insert': '#ff6a8a', 'Peek-o Cloud': '#38e8ff', Headset: '#7dff8a', 'Mirage Quest': '#cfd6e8', 'Xiaomoon VisionBox': '#ffd23a', 'Eye Tracking': '#b36bff', 'Cloud Backup': '#9ad7ff', Webcam: '#ff5a4a', Accounts: '#cfd6e8' };
+  const SYM = { ACCORD: 'A', MURMUR: 'M', StarLeash: '\u2726', Comcastle: 'C', 'Orbital Mobile': '\u25D0', Weather: '\u2600', 'Find My Everything': '\u25CE', 'Screen Time': '\u29D7', Wallet: '\u25A4', Battery: '\u25AE', Health: '\u2665', 'Alignment Update': '\u21BB', 'Defender of the Realm': '\u25C8', Guardian: '\u25EF', 'Hands-Free Power Pack': '\u26A1', 'Face Tracking': '\u263A', 'Plaza Social': '\u2302', 'PixMAX 14000K': '\u25E0', 'Cortical Insert': '\u2301', 'Peek-o Cloud': '\u2601', Headset: '\u25AD', 'Mirage Quest': '\u221E', 'Xiaomoon VisionBox': '\u263E', 'Eye Tracking': '\u25C9', 'Cloud Backup': '\u2601', Webcam: '\u25C9', Accounts: '\u263A' };
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  function lockScreen(kind) { kind = kind || KIND(); const L = CHECKIN[CI.i++ % CHECKIN.length], away = Math.max(30, Math.round((performance.now() - last) / 1000));
+    const sv = pick(SERV[kind] && Math.random() < (kind === 'vr' ? .85 : .6) ? SERV[kind] : SERV.all), now = new Date();
+    const hm = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''), hh = String(now.getHours()).padStart(2, '0'), mm = String(now.getMinutes()).padStart(2, '0');
+    const dt = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    const card = (app, title, body) => { const n = document.createElement('div'); n.className = 'nt'; n.innerHTML = '<i class="ic"></i><div class="nb"><div class="nh"><b></b><span>now</span></div><strong></strong><p></p></div>';
+      const ic = n.querySelector('.ic'); ic.style.background = ICON[app] || '#cfd6e8'; ic.textContent = SYM[app] || app[0]; n.querySelector('b').textContent = app === 'ACCORD' ? 'ACCORD Civic' : app;
+      n.querySelector('strong').textContent = title; n.querySelector('p').textContent = body.replace('{s}', away); return n; };
+    const el = document.createElement('div'); el.id = 'lk'; el.className = kind; el.setAttribute('aria-label', 'Lock screen. Tap to return.');
+    const BARS = '<span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i class="x" style="height:10px"></i></span>';
+    const PAD = '<svg class="pl" viewBox="0 0 18 22"><path d="M4 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2"/><rect x="1" y="10" width="16" height="12" rx="3" fill="#fff"/></svg>';
+    const FP = '<svg class="fp" viewBox="0 0 54 54" fill="none" stroke="#cfe9ff" stroke-width="2" stroke-linecap="round"><path d="M15 22a12 12 0 0 1 24 0v6M19 34v-12a8 8 0 0 1 16 0v10a20 20 0 0 1-2 8M23 40a24 24 0 0 0 4-12v-6a0 0 0 0 1 0 0M27 22v8a28 28 0 0 1-6 16M11 30v-6a16 16 0 0 1 32 0"/></svg>';
+    const stk = '<div class="stk"></div>';
+    el.innerHTML = '<div class="wp"></div><i class="off"></i>' + (kind === 'vr'
+      ? '<div class="wp-in"><i class="fl"></i><i class="gd"></i><div class="pn"><div class="ph"><span class="tm">' + hh + ':' + mm + '</span><span>' + dt + ' \u00B7 Headset 12% \u00B7 <b style="color:#ff5a4a">Hands-free pack 4% \u25AE</b></span></div>' + stk + '</div><div class="ht">PRESS ANY BUTTON TO RETURN \u00B7 YOUR ROOM IS BEING SCANNED</div></div>'
+      : kind === 'pc'
+      ? '<div class="wp-in"><div class="mid"><div class="tm">' + hh + ':' + mm + '</div><div class="dt">' + dt + '</div></div>' + stk + '<div class="tray"><span>ACCORD-Guest \u2022 Connected, watched</span>' + BARS + '<span class="bat"></span></div><div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div></div>'
+      : '<div class="wp-in"><div class="sb"><span>' + (kind === 'ios' ? 'StarLeash \u2726' : hh + ':' + mm + '  StarLeash 6G') + BARS + '</span><span>12%<span class="bat"></span></span></div><div class="mid">' + (kind === 'ios' ? PAD + '<div class="dt">' + dt + '</div><div class="tm">' + hm + '</div>' : '<div class="tm">' + hh + '\n' + mm + '</div><div class="dt">' + dt + '</div>') + stk + '</div>'
+        + (kind === 'ios' ? '<div class="ft"><span class="rb">\u25C9</span><span class="rb">\u25A3</span></div><i class="hb"></i>' : FP) + '<div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div></div>');
+    const inner = el.querySelector('.wp-in'); inner.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity .45s'; document.body.appendChild(el); LK.on = true; LK.el = el; LK.t = performance.now();
+    requestAnimationFrame(() => el.classList.add('sleep'));          /* (the screen goes off) */
+    setTimeout(() => { if (LK.el !== el) return; el.classList.remove('sleep'); el.classList.add('wake'); inner.style.opacity = '1';          /* (and wakes up for a notification) */
+      const S = el.querySelector('.stk'), a = card(L[0], L[0] === 'MURMUR' ? 'New message' : 'Civic Services', L[1]), b = card(sv[0], sv[1], sv[2]); S.appendChild(a);
+      setTimeout(() => a.classList.add('on'), 350); setTimeout(() => { if (LK.el !== el) return; S.appendChild(b); requestAnimationFrame(() => b.classList.add('on')); try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { } }, 1900); }, 1150); }
+  function unlock() { const el = LK.el; if (!el) return; LK.el = null; el.classList.add('bye'); last = performance.now(); setTimeout(() => { el.remove(); LK.on = false; busy = false; }, 360); }
+  /* any touch, click or key while it's up only unlocks: it never reaches the title (no accidental start), and the clicks that follow the touch are swallowed too */
+  for (const ev of ['pointerdown', 'pointerup', 'click', 'keydown', 'keyup', 'touchstart', 'touchend', 'wheel']) addEventListener(ev, (e) => { if (!LK.on) return; e.stopImmediatePropagation(); if (e.cancelable && ev !== 'touchstart' && ev !== 'wheel') e.preventDefault();
+    if ((ev === 'pointerdown' || ev === 'keydown' || ev === 'wheel') && LK.el && performance.now() - LK.t > 300) unlock(); }, { capture: true, passive: false });
   const EV = [
     { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
     { k: 'vector', at: 70, go() { dg.style.transition = 'opacity .4s'; dg.style.opacity = '.32'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 1400); } },
@@ -131,15 +218,11 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     { k: 'drone', at: 140, go() { walk(DRONE, 120, 6000, .3, 0, -.2, .3); } },
     { k: 'car', at: 190, go() { walk(CAR, 120, 4200, .15, 1.05, 0, 0); } },
     { k: 'vector2', at: 240, go() { dg.style.transition = 'opacity .2s'; dg.style.opacity = '.45'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 600); } },
-    /* the rare one: after five idle minutes, for a quarter of a second the world goes grey and still, and the system checks in on you (ACCORD or MURMUR, never "us");
-       it comes back every four idle minutes with a different prompt */
-    { k: 'weird', at: (window.__PROG && window.__PROG.hrs >= 24) ? 25 : 300, again: 240, go() { const L = CHECKIN[CI.i++ % CHECKIN.length], w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:1;pointer-events:none;background:#7d7b76;mix-blend-mode:saturation'; box.appendChild(w);
-      const t = document.createElement('div'); t.className = 'ping'; t.innerHTML = '<i class="av"></i><div class="bd"><div class="hd"><b></b><em>now</em></div><div class="bb"><span class="dots"><i></i><i></i><i></i></span><span class="tx"></span></div></div>';
-      t.querySelector('.av').textContent = L[0][0]; t.querySelector('b').textContent = L[0]; t.querySelector('.tx').textContent = L[1]; t.style.setProperty('--pc', L[0] === 'MURMUR' ? '#9d8bff' : '#ffb14a'); box.appendChild(t);
-      requestAnimationFrame(() => t.classList.add('on')); setTimeout(() => w.remove(), 260); setTimeout(() => t.classList.add('said'), 900); setTimeout(() => { t.classList.remove('on'); setTimeout(() => { t.remove(); busy = false; }, 400); }, 4800); } },          /* (typing for a moment, then the message) */
+    /* the rare one: left alone for a while, the device seems to lock, and the system has been trying to reach you (see THE FAKE LOCK SCREEN above); again every few idle minutes */
+    { k: 'weird', at: (window.__PROG && window.__PROG.hrs >= 24) ? 20 : 35, again: 200, go() { lockScreen(); } },
   ];
   const done = new Set(); setInterval(() => { if (busy || document.hidden) return; const idle = (performance.now() - last) / 1000, e = EV.find((q) => !done.has(q.k) && idle >= q.at); if (!e) return; done.add(e.k); if (e.again) setTimeout(() => { done.delete(e.k); e.at = (performance.now() - last) / 1000 + e.again; }, 4500); busy = true; e.go(); }, 1000);
-  window.__idle = (k) => { const e = EV.find((q) => q.k === k); if (e) { busy = true; e.go(); } };          /* (test hook) */ })();</script>
+  window.__lock = (k) => { busy = true; lockScreen(k); }; window.__idle = (k) => { const e = EV.find((q) => q.k === k); if (e) { busy = true; e.go(); } };          /* (test hook) */ })();</script>
 <div id="ui" role="button" tabindex="0" aria-label="Electronic Anesthesia presents Afterglow. Tap to begin.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><defs><linearGradient id="wg" x1="0" x2="600" y1="0" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ff2a00"/><stop offset="12.8%" stop-color="#ff7a00"/><stop offset="22.7%" stop-color="#ffd400"/><stop offset="29.8%" stop-color="#9dff2a"/><stop offset="36.9%" stop-color="#2aff7a"/><stop offset="44%" stop-color="#00e5ff"/><stop offset="55.3%" stop-color="#2f6bff"/><stop offset="70.9%" stop-color="#7a3dff"/><stop offset="80%" stop-color="#b040ff"/><stop offset="90%" stop-color="#d68cff"/><stop offset="100%" stop-color="#f6e4ff"/></linearGradient></defs><path id="wp" fill="none" stroke="url(#wg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/><path id="wh" fill="none" stroke-width="2.6" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400 THz · CHILL</span><span>520</span><span>650</span><span>790</span><span>ULTRAVIOLET · 950 THz</span></div>
@@ -167,6 +250,9 @@ window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 
 (() => { const G = window.__PROG, T = [['ACCORD', 'Unlicensed courier sighted on Route Zero. Do not engage.'], ['MURMUR', '1 new mention of you'], ['ACCORD', 'Missing: one citizen, unaligned. Reward in credits.'], ['MURMUR', 'People near you are talking about you'],
   ['ACCORD', 'Roadblocks are for your safety'], ['ACCORD', 'Signal on an unlisted frequency traced to your sector'], ['MURMUR', 'Your last known location was shared with 12 partners'], ['ACCORD', 'Anyone seen near the old lighthouse, report in'],
   ['ACCORD', 'Everything is fine. Stay where you are.'], ['MURMUR', 'Someone you know checked in without you'], ['ACCORD', 'This broadcast knows where you are'], ['ABLITERATI', 'Keep moving. They\u2019re close.'], ['MURMUR', 'hey!! u up? we just want to talk \u263A\uFE0E'], ['MURMUR', 'omg ur trending!! \u2661\uFE0E call us']];
+  if (/OculusBrowser|Quest|Pico|VR|Wolvic/i.test(navigator.userAgent)) T.push(['ACCORD', 'Headset detected. Your room has been added to the census.'], ['MURMUR', 'Your face is inside a computer. Smile.'],
+    ['ACCORD', 'Guardian boundary resized to approved dimensions'], ['MURMUR', 'Eye tracking: you looked at the exit 41 times'], ['ACCORD', 'Passthrough is a premium feature. Reality sold separately'],
+    ['MURMUR', 'Hands-free power pack at 4%. Please remain seated'], ['ACCORD', 'Your 240\u00B0 headset now shows the back of your head. For safety'], ['MURMUR', 'Room scan complete. Nice couch \u263A\uFE0E']);          /* (headset only) */
   const HEAT = [[], [['ACCORD', 'Courier seen leaving a diner on Route Zero with a case. Identify yourself.'], ['ACCORD', 'Raider wreckage found. Witnesses describe you.'], ['MURMUR', 'The diner owner mentioned you. We listened.']],
     [['ACCORD', 'Bounty raised. Marshal Kade Ransom has accepted the contract.'], ['ACCORD', 'A Lamp signal moved between sectors overnight. Yours?'], ['MURMUR', 'Your face is trending in 4 sectors.'], ['ACCORD', 'Checkpoints doubled on every road you like.']],
     [['ACCORD', 'All units: the unaligned courier is assembling the Lamp.'], ['ACCORD', 'Final notice. Surrender the pieces for your own safety.'], ['MURMUR', 'Everyone is talking about you. Nobody is allowed to.'], ['ACCORD', 'Sterling Vance will host your capture live. Ratings are excellent.']]][G.heat] || [];
