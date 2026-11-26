@@ -4,6 +4,13 @@ export const LOOKNAMES = ["normal", "vector", "ascii", "line drawing", "pastel",
 export const PSYLOOK_FS = `precision highp float; varying vec2 vUV; uniform sampler2D textureSampler; uniform vec2 uTexel, uRes; uniform float uCell, uVec, uAsc, uTime, uSty, uMix;
 float lum(vec3 c) { return dot(c, vec3(.299, .587, .114)); }
 float hsh(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float gH(vec2 p) { p = mod(p, 289.); vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }          /* (precision-safe hash: no sin of big numbers, no diagonal lines on phone GPUs) */
+float gN(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(gH(i), gH(i + vec2(1., 0.)), f.x), mix(gH(i + vec2(0., 1.)), gH(i + vec2(1., 1.)), f.x), f.y); }
+vec4 stip(vec2 px, float s, float seed) { vec2 id = floor(px / s), g = fract(px / s); float h1 = gH(id + seed), h2 = gH(id + seed + 31.), h3 = gH(id + seed + 67.);
+  vec3 cc = texture2D(textureSampler, clamp((id + .5) * s / uRes, 0., 1.)).rgb; float l = lum(cc); float r = clamp(sqrt(max(0., 1. - l * .9)) * (.3 + .32 * h3), .05, .47);
+  vec2 ctr = .5 + (vec2(h1, h2) - .5) * (1. - 2. * r); float a = (1. - smoothstep(r - .08, r + .04, length(g - ctr))) * step(h3 * .85, 1.08 - l);
+  float h = (h1 - .5) * 1.6 + uTime * .22 + l * 2.; vec3 kk = vec3(.57735); float ca = cos(h), sa = sin(h); vec3 ink = cc / max(max(cc.r, max(cc.g, cc.b)), .15); ink = ink * ca + cross(kk, ink) * sa + kk * dot(kk, ink) * (1. - ca);
+  return vec4(clamp(ink, 0., 1.) * (.5 + .5 * l), a); }
 void gst(vec2 ip, vec2 fp, vec2 g, inout float d1, inout float d2, inout vec2 best) { vec2 o = vec2(hsh(ip + g), hsh(ip + g + 17.)); o = .5 + .45 * sin(uTime * .5 + 6.28318 * o); vec2 rr = g + o - fp; float d = dot(rr, rr), lt = step(d, d1); d2 = mix(min(d2, d), d1, lt); best = mix(best, ip + g + o, lt); d1 = min(d1, d); }
 vec3 T(vec2 o) { return texture2D(textureSampler, vUV + o * uTexel).rgb; }
 float sobelK(float k) { float a = lum(T(vec2(-1., -1.) * k)), b = lum(T(vec2(0., -1.) * k)), d = lum(T(vec2(1., -1.) * k)), e = lum(T(vec2(-1., 0.) * k)), f = lum(T(vec2(1., 0.) * k)), g = lum(T(vec2(-1., 1.) * k)), h = lum(T(vec2(0., 1.) * k)), i = lum(T(vec2(1., 1.) * k)); float gx = (d + 2. * f + i) - (a + 2. * e + g), gy = (g + 2. * h + i) - (a + 2. * b + d); return length(vec2(gx, gy)); }
@@ -51,15 +58,18 @@ void main() {
       vec3 b = (T(vec2(0.)) * 2. + T(vec2(2., 0.)) + T(vec2(-2., 0.)) + T(vec2(0., 2.)) + T(vec2(0., -2.))) / 6.; float fz = hsh(floor(uv * uRes / 2.)), fz2 = hsh(floor(uv * uRes / 2.) + 13.);
       vec3 f = b * (.78 + .34 * fz) + vec3(.05) * fz2; float edge = smoothstep(.09, .24, sobelK(2.5)); float dash = step(.5, fract((uv.x * uRes.x + uv.y * uRes.y) / 8.));
       f = mix(f, f * .5 + vec3(.95, .9, .72) * .5, edge * dash); R = mix(vec3(lum(f)), f, 1.2) * 1.02;
-    } else if (uMix < 7.5) {          /* halftone comic: coloured dots on cream paper, bigger where it is darker */
-      float s = 6.; vec2 id = floor(uv * uRes / s), g = fract(uv * uRes / s) - .5; vec3 cc = texture2D(textureSampler, (id + .5) * s / uRes).rgb; float l = lum(cc), rr = sqrt(clamp(1. - l * .9, 0., 1.)) * .66; float dd = 1. - smoothstep(rr - .06, rr + .06, length(g));
-      vec3 ink = cc / max(max(cc.r, max(cc.g, cc.b)), .15); R = mix(vec3(.97, .95, .88), ink * (.45 + .5 * l), dd);
+    } else if (uMix < 7.5) {          /* halftone comic, granular (owner 2026-11-26): three sizes of dot, fine to coarse, each scattered off its grid; slow drifting patches decide which size shows, dark parts get bigger and more dots, bright parts thin out to bare paper; every dot inked in its own turning colour */
+      float k = max(1., uRes.y / 720.); vec2 px = uv * uRes; float m = gN(px / (uRes.y * .2) + vec2(uTime * .05, -uTime * .035));
+      float wA = smoothstep(.56, .74, m), wC = smoothstep(.44, .26, m), wB = clamp(1. - wA - wC, 0., 1.) + .35 * (wA + wC);
+      vec3 paper = mix(vec3(.97, .95, .88), c, .1); vec4 dC = stip(px, 15. * k, 0.), dB = stip(px, 8. * k, 101.), dA = stip(px, 4. * k, 211.);
+      R = paper; R = mix(R, dC.rgb, dC.a * wC); R = mix(R, dB.rgb, dB.a * wB); R = mix(R, dA.rgb, dA.a * wA);
     } else if (uMix < 8.5) {          /* kaleidoscope: the edges of the picture folded into six mirrored wedges, slowly turning, the middle left clear */
       float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.); float a = atan(p.y, p.x), rd = length(p), seg = 6.28318 / 6.; a = abs(mod(a + uTime * .06, seg) - seg * .5); vec2 q = vec2(cos(a), sin(a)) * rd; vec3 kc = texture2D(textureSampler, vec2(q.x / asp, q.y) + .5).rgb; R = mix(c, kc, smoothstep(.34, .78, rd) * .9);          /* only the edges fold: the middle of the screen stays the game */
     } else if (uMix < 9.5) {          /* thermal: brightness read as heat, black through violet, red, orange, yellow to white */
       float l = clamp(lum(c) * 1.25, 0., 1.); R = vec3(smoothstep(.25, .6, l), smoothstep(.5, .92, l), smoothstep(.78, 1., l)) + vec3(.35 * l * (1. - l), 0., .5 * (1. - l) * l * 1.5);
-    } else if (uMix < 10.5) {          /* mosaic: big square tiles in a few colour steps with dark grout */
-      float s = 9.; vec2 id = floor(uv * uRes / s), g = fract(uv * uRes / s); vec3 m = texture2D(textureSampler, (id + .5) * s / uRes).rgb; m = floor(m * 5. + .5) / 5.; R = m * (1. - .35 * step(.88, max(g.x, g.y)));
+    } else if (uMix < 10.5) {          /* mosaic: a flash of structure (owner 2026-11-26): square tiles in a few colour steps with dark grout, the picture sharpened inside each tile so every edge cuts, then back into the mess */
+      float s = 9. * max(1., uRes.y / 720.); vec2 id = floor(uv * uRes / s), g = fract(uv * uRes / s); vec3 m = texture2D(textureSampler, (id + .5) * s / uRes).rgb; m = floor(m * 5. + .5) / 5.;
+      vec3 bl = (T(vec2(1.5, 0.)) + T(vec2(-1.5, 0.)) + T(vec2(0., 1.5)) + T(vec2(0., -1.5))) * .25; vec3 sh = clamp(c + (c - bl) * 2.4, 0., 1.); R = mix(m, sh, .38) * (1. - .4 * step(.88, max(g.x, g.y)));
     } else if (uMix < 11.5) {          /* stained glass: drifting Voronoi panes, each one the colour of the picture at its centre, lit from within, black lead between */
       float cs = max(7., uRes.y / 60.); vec2 p = uv * uRes / cs; vec2 ip = floor(p), fp = fract(p); float d1 = 9., d2 = 9.; vec2 best = vec2(0.);
       gst(ip, fp, vec2(-1., -1.), d1, d2, best); gst(ip, fp, vec2(0., -1.), d1, d2, best); gst(ip, fp, vec2(1., -1.), d1, d2, best); gst(ip, fp, vec2(-1., 0.), d1, d2, best); gst(ip, fp, vec2(0., 0.), d1, d2, best); gst(ip, fp, vec2(1., 0.), d1, d2, best); gst(ip, fp, vec2(-1., 1.), d1, d2, best); gst(ip, fp, vec2(0., 1.), d1, d2, best); gst(ip, fp, vec2(1., 1.), d1, d2, best);          /* (unrolled, no loop or branch: some phone GPUs mis-run the looped search) */
