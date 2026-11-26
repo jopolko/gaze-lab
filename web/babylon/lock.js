@@ -60,8 +60,8 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 #lk .wg{display:flex;gap:8px;margin:0 0 10px;width:100%}#lk .w{flex:1;min-width:0;background:rgba(255,255,255,.1);border-radius:16px;padding:8px 10px;text-align:left;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s}#lk.wake .w{opacity:1;transform:none}
 #lk .w b{display:block;font:700 9px system-ui,sans-serif;letter-spacing:.14em;color:rgba(255,255,255,.62);text-transform:uppercase}#lk .w big{display:block;font:700 21px/1.1 system-ui,sans-serif;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#lk .w small{display:block;font:400 11px/1.25 system-ui,sans-serif;color:rgba(255,255,255,.8)}
 #lk.ios .wg{width:min(100%,400px)}#lk.and .wg{max-width:440px}#lk.pc .wg{position:absolute;right:max(20px,2vw);top:max(48px,8vh);width:min(380px,44vw)}#lk.pc .w{background:rgba(28,32,48,.8);border-radius:8px}#lk.vr .w{background:rgba(255,255,255,.07)}
-#lk .dis{position:absolute;left:50%;bottom:max(64px,11vh);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;font:600 11px system-ui,sans-serif;letter-spacing:.06em;color:rgba(255,255,255,.75);cursor:pointer;touch-action:none;z-index:4;padding:6px 10px}
-#lk .dis svg{width:46px;height:46px}#lk.and .dis{bottom:max(26px,6vh)}#lk.pc .dis{bottom:max(14px,2.6vh)}#lk.vr .dis{bottom:calc(max(16px,4vh) + 26px)}
+#lk .dis{position:absolute;left:50%;bottom:calc(max(64px,11vh) + var(--sa-bottom, 0px));transform:translateX(-50%);font:600 12px system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.9);cursor:pointer;touch-action:none;z-index:4;padding:8px 16px;border-radius:999px;background:rgba(20,18,34,.72);border:1px solid rgba(255,255,255,.22);white-space:nowrap}
+#lk.and .dis{bottom:max(26px,6vh)}#lk.pc .dis{bottom:max(14px,2.6vh)}#lk.vr .dis{bottom:calc(max(16px,4vh) + 26px)}
 #lk .bio{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(86vw,340px);background:rgba(14,16,26,.97);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:18px 18px 14px;text-align:center;z-index:5;display:none;box-shadow:0 14px 40px rgba(0,0,0,.55)}#lk .bio.on{display:block}
 #lk .bio b{display:block;font:700 11px system-ui,sans-serif;letter-spacing:.18em;color:#ffb14a}#lk .bio p{margin:10px 0 12px;font:500 15px/1.35 system-ui,sans-serif;min-height:2.7em}#lk .bio .pb{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}#lk .bio .pb i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38e8ff,#b36bff)}
 #lk .bio small{display:block;margin-top:8px;font:400 11px system-ui,sans-serif;color:rgba(255,255,255,.55)}
@@ -72,7 +72,7 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 #lk .pv{margin-top:8px;font:600 10.5px/1.3 system-ui,sans-serif;letter-spacing:.03em;color:#8df5b0;opacity:.9}
 @media (max-width:640px) and (orientation:portrait){#lk.mn .mid{width:auto;right:max(16px,var(--sa-right, env(safe-area-inset-right)));top:max(36px,5vh)}}
 @media (max-height:480px){#lk.mn .tm{font-size:clamp(34px,12vh,52px)}#lk.mn .dt{margin-bottom:6px}#lk.mn .stk .nt:nth-child(n+2){display:none}#lk.mn .w:nth-child(n+2){display:block}#lk.mn .w small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:10.5px}
-  #lk:not(.pc) .wm{display:none}#lk .dis{bottom:8px;flex-direction:row;gap:8px}#lk .dis svg{width:28px;height:28px}#lk .w:nth-child(n+2){display:none}#lk .wg{margin-bottom:6px}#lk .w big{font-size:17px}}`;
+  #lk:not(.pc) .wm{display:none}#lk .dis{bottom:calc(8px + var(--sa-bottom, 0px));padding:6px 14px}#lk .w:nth-child(n+2){display:none}#lk .wg{margin-bottom:6px}#lk .w big{font-size:17px}}`;
   document.head.appendChild(c2); }
 const KIND = () => { const ua = navigator.userAgent; if (/OculusBrowser|Quest|Pico|VR|Wolvic|PlayStation VR|Vision/i.test(ua) && !/iPhone|Android.*Mobile/.test(ua)) return 'vr'; if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios'; if (/Android/.test(ua)) return 'and'; return navigator.maxTouchPoints > 0 && Math.min(innerWidth, innerHeight) < 600 ? 'and' : 'pc'; };
 const SERV = {
@@ -116,8 +116,8 @@ function show(o) { o = o || {}; if (LK.on) return; const kind = o.kind || KIND()
   const BARS = '<span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i class="x" style="height:10px"></i></span>';
   const PAD = '<svg class="pl" viewBox="0 0 18 22"><path d="M4 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="#fff" stroke-width="2"/><rect x="1" y="10" width="16" height="12" rx="3" fill="#fff"/></svg>';
   const FPS = '<svg viewBox="0 0 54 54" fill="none" stroke="#cfe9ff" stroke-width="2" stroke-linecap="round"><path d="M15 22a12 12 0 0 1 24 0v6M19 34v-12a8 8 0 0 1 16 0v10a20 20 0 0 1-2 8M23 40a24 24 0 0 0 4-12v-6M27 22v8a28 28 0 0 1-6 16M11 30v-6a16 16 0 0 1 32 0"/></svg>';
-  const DIS = '<div class="dis" role="button" aria-label="Disable lock screen (hold)">' + FPS + '<span>DISABLE LOCK SCREEN</span></div>';
-  const BIOP = '<div class="bio"><b>BIOMETRIC CONFIRMATION</b><p></p><div class="pb"><i></i></div><small>Keep holding the fingerprint</small></div>';
+  const DIS = '<div class="dis" role="button" aria-label="Turn off lock screens">Turn off lock screens</div>';
+  const BIOP = '<div class="bio"><b>LOCK SCREENS OFF</b><p>ACCORD noted your preference. And your face.</p><small>Tap a padlock to turn them back on</small></div>';
   const stk = '<div class="stk"></div>';
   el.innerHTML = '<div class="wp"></div><i class="off"></i>' + (kind === 'vr'
     ? '<div class="wp-in"><i class="fl"></i><i class="gd"></i><div class="pn"><div class="ph"><span class="tm">' + hm + AP + '</span><span>' + dt + ' \u00B7 Headset ' + BAT + ' \u00B7 <b style="color:#ff5a4a">Hands-free pack 4% \u25AE</b></span></div>' + wg + stk + '</div>' + DIS + '<div class="ht">PRESS ANY BUTTON TO RETURN \u00B7 YOUR ROOM IS BEING SCANNED</div>' + BIOP + '</div>'
@@ -149,7 +149,7 @@ function react(c) { const W = [], N = [], C = (typeof window !== 'undefined' && 
 /* THE PAUSE SCREEN (owner 2026-11-26): pausing shows the lock screen too, so the jokes get seen. It paints into a container (the menu panel sits on top).
    Content changes slowly: a fresh notification each pause (the last one stays under it), the widgets every third pause or after three minutes. */
 const PRIV = '<div class="pv">\u25C8 On this device only: camera, location, progress. Nothing is uploaded.</div>';
-function paint(box, o) { o = o || {}; const kind = o.kind || KIND(); let M = null; try { M = JSON.parse(localStorage.getItem('dl_lkmf') || 'null'); } catch (e) { }
+function paint(box, o) { o = o || {}; if (disabled() && !o.force) { box.innerHTML = ''; return null; } const kind = o.kind || KIND(); let M = null; try { M = JSON.parse(localStorage.getItem('dl_lkmf') || 'null'); } catch (e) { }
   const nowMs = Date.now(); M = M && M.w ? M : { w: null, at: 0, n: 0, prev: null }; M.n++;
   const RW = react(o.ctx).W; if (!M.w || M.n % 3 === 0 || nowMs - M.at > 180000) { M.rw = RW.length && Math.random() < .65 ? Math.floor(Math.random() * RW.length) : -1; M.w = []; for (let i = 0; i < 2; i++) M.w.push(deal('w', WIDG)); M.at = nowMs; }
   const fresh = M.n % 2 ? ((q) => [q[0], q[0] === 'MURMUR' ? 'New message' : 'Civic Services', q[1]])(ME.city && Math.random() < .3 ? ((c) => [c[0], c[1].replace('{city}', ME.city)])(deal('c', CITYL)) : deal('l', LINES))
@@ -174,6 +174,8 @@ function sysCard(kind) { const n = document.createElement('div'); n.className = 
   n.querySelector('b').textContent = os; return n; }
 function unlock() { const el = LK.el; if (!el) return; LK.el = null; LK.hold = null; el.classList.add('bye'); setTimeout(() => { el.remove(); LK.on = false; const d = LK.done; LK.done = null; try { d && d(); } catch (e) { } }, 360); }
 /* DISABLE LOCK SCREEN: hold the fingerprint; the scan asks for an elbow, an earlobe, a breath, a tongue. Let go early and it starts again from the elbow. */
+/* one tap and it's off (no hoops): a short acknowledgement, then back to the page. Any padlock turns it back on. */
+function quickOff() { const el = LK.el; if (!el) return; LK.off = true; try { localStorage.setItem('dl_nolock', '1'); } catch (e) { } el.querySelector('.bio').classList.add('on'); el.querySelector('.dis').style.display = 'none'; LK.hold = { done: true }; setTimeout(() => { LK.off = false; unlock(); }, 1500); }
 function holdStart() { const el = LK.el; if (!el) return; const bio = el.querySelector('.bio'), P = bio.querySelector('p'), bar = bio.querySelector('.pb i'); bio.classList.add('on');
   const B = LK.kind === 'pc' ? BIOPC : BIO, H = LK.hold = { p: 0, on: true, t: performance.now(), t0: performance.now(), done: false }; P.textContent = B[0];
   const tick = () => { if (LK.hold !== H || H.done) return clearInterval(iv); const now = performance.now(), dt = Math.min(.25, (now - H.t) / 1000); H.t = now; if (H.on) H.p = Math.min(1, H.p + dt / 7.5); bar.style.width = (H.p * 100).toFixed(1) + '%';
@@ -187,7 +189,7 @@ const GH = []; const gesture = () => { for (const f of GH) try { f(); } catch (e
 for (const ev of ['pointerdown', 'pointerup', 'pointercancel', 'click', 'keydown', 'keyup', 'touchstart', 'touchend', 'wheel']) addEventListener(ev, (e) => { if (!LK.on) return; e.stopImmediatePropagation(); if (e.cancelable && ev !== 'touchstart' && ev !== 'wheel') e.preventDefault();
   if (ev === 'pointerup' || ev === 'touchend' || ev === 'click' || ev === 'keydown') gesture();
   if (ev === 'pointerup' || ev === 'pointercancel') { holdStop(); return; }
-  if (ev === 'pointerdown' && e.target && e.target.closest && e.target.closest('#lk .dis')) { if (LK.el && performance.now() - LK.t > 500) holdStart(); return; }
+  if (ev === 'pointerdown' && e.target && e.target.closest && e.target.closest('#lk .dis')) { if (LK.el && !LK.off) quickOff(); return; }
   if (LK.hold && LK.hold.done) return;
   if ((ev === 'pointerdown' || ev === 'keydown' || ev === 'wheel') && LK.el && performance.now() - LK.t > 300) unlock(); }, { capture: true, passive: false });
 window.AGLock = { onGesture: (f) => GH.push(f), LINES, WIDG, SERV, show, paint, disabled, enable, kind: KIND, isOn: () => LK.on };
