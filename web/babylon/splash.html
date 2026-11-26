@@ -328,9 +328,18 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
   const quad = (pr) => { gl.useProgram(pr); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
   function off(why) { dead = true; cvs.style.display = 'none'; window.__LOOKERR = why || window.__LOOKERR || 'off'; }
   /* a layer's life: idle (a gap that shortens as the dial climbs), then a look fades in, holds, fades out */
+  /* STAINED GLASS SNAPS (owner 2026-11-26): not a slow fade but the brain snapping to focus, or dropping into sleep for a split second: it pops in (a tenth of a
+     second), tunes for a moment (its strength wavering like a signal being found), pops out, and now and then snaps back once more straight after. */
+  const SNAP = (L, T) => { L.snap = { in: .07 + .08 * Math.random(), hold: (.3 + .9 * Math.random()) * (.7 + .6 * T), out: .14 + .16 * Math.random(), f1: 11 + 9 * Math.random(), f2: 23 + 14 * Math.random(), again: Math.random() < .3 + .3 * T }; };
   function step(L, i, t, dt, T) { const other = LAY[1 - i].q ? LAY[1 - i].q[0] : -1;
-    if (L.ph === 'idle') { if (t >= L.next && (i === 0 || T > .3)) { L.q = pickLook(other); L.ph = 'in'; L.t = 0; L.hold = (2 + Math.random() * 4) * (.6 + .8 * T); } return 0; }
-    L.t += dt; if (L.ph === 'in') { L.a = Math.min(1, L.t / (1.4 - .6 * T)); if (L.a >= 1) { L.ph = 'hold'; L.t = 0; } }
+    if (L.ph === 'idle') { if (t >= L.next && (i === 0 || T > .3)) { const back = !!L.re; L.q = L.re || pickLook(other); L.re = null; L.ph = 'in'; L.t = 0; L.hold = (2 + Math.random() * 4) * (.6 + .8 * T); L.snap = null; if (L.q[0] === 11) { SNAP(L, T); if (back) L.snap.again = false; } }          /* (one snap-back at most) */ return 0; }
+    L.t += dt; const S = L.snap;
+    if (S) {          /* the snap */
+      if (L.ph === 'in') { L.a = Math.min(1, L.t / S.in); if (L.a >= 1) { L.ph = 'hold'; L.t = 0; } }
+      else if (L.ph === 'hold') { const w = Math.sin(L.t * S.f1) * .6 + Math.sin(L.t * S.f2 + 1.3) * .4; L.a = .72 + .28 * w * (1 - .5 * L.t / S.hold); if (L.t >= S.hold) { L.ph = 'out'; L.t = 0; L.a0 = L.a; } }
+      else { L.a = Math.max(0, (L.a0 || 1) * (1 - L.t / S.out)); if (L.a <= 0) { L.ph = 'idle'; if (S.again) { L.re = L.q; L.next = t + .18 + .45 * Math.random(); } else L.next = t + (5 - 4.2 * T) * (.5 + .8 * Math.random()); L.q = null; L.snap = null; } }
+      return L.q ? Math.max(0, L.a) * L.q[2] * (.25 + .75 * Math.pow(T, 1.1)) : 0; }
+    if (L.ph === 'in') { L.a = Math.min(1, L.t / (1.4 - .6 * T)); if (L.a >= 1) { L.ph = 'hold'; L.t = 0; } }
     else if (L.ph === 'hold') { L.a = 1; if (L.t >= L.hold) { L.ph = 'out'; L.t = 0; } }
     else { L.a = Math.max(0, 1 - L.t / 1.6); if (L.a <= 0) { L.ph = 'idle'; L.q = null; L.next = t + (6.5 - 5.6 * T) * (.5 + .8 * Math.random()); } }
     const e = L.a * L.a * (3 - 2 * L.a); return L.q ? e * L.q[2] * (.18 + .82 * Math.pow(T, 1.1)) : 0; }
