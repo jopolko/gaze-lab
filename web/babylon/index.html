@@ -37,7 +37,7 @@ import { createGvMusic } from '../downhill-three/gvmusic.js';
 import { startLoop, preloadLoop } from '../downhill-three/looper.js';
 import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
-import { createIntro } from './intro.js?v=20261126c';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
+import { createIntro } from './intro.js?v=20261126d';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js';
 import { planRoad, planPlay, findTunnel, seedOf } from './director.js';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
@@ -56,6 +56,8 @@ const WORLD0 = (() => { const q = new URLSearchParams(location.search); const li
    Route Zero opens on it like a film: titles cut to its hits, then it steps back under the driving and hands over to the generated music at the first dose. */
 const OPEN = { on: new URLSearchParams(location.search).has('story') && !new URLSearchParams(location.search).has('noopen') && !new URLSearchParams(location.search).has('mseed') };
 if (OPEN.on) { OPEN.a = new Audio('music/legalize.mp3'); OPEN.a.preload = 'auto'; } window.__OPEN = OPEN;
+/* (the intro opens on black: nothing of the road shows between the loader and the first studio card; the intro lifts this cover once its own black is up) */
+if (OPEN.on) { const pb = document.createElement('div'); pb.id = 'preBlack'; pb.style.cssText = 'position:fixed;inset:0;z-index:64;background:#030304;pointer-events:none'; (document.body || document.documentElement).appendChild(pb); }
 const ME_OPTS = () => (Q.has('mseed') ? { seed: +Q.get('mseed'), style: Q.get('mstyle') || 'techno', level: Q.get('mlv') || undefined, tr: +(Q.get('mtr') || 55) / 100, en: +(Q.get('men') || 80) / 100, strong: false, lookAhead: .5 } : { level: Q.has('story') || Q.has('tutorial') || WORLD0 === 'desert' ? 'routezero' : WORLD0, style: LAB.sty || undefined, trAdd: (LAB.trn - 55) / 100, enMul: LAB.nrg / 80 * (LAB.chl ? .6 : 1), strong: !LAB.chl, lookAhead: .5 });
 const PSY = createPsyFx({ fx: { x_level: parseFloat(new URLSearchParams(location.search).get('level') || '0.6') }, seed: 7, sessionMin: +(new URLSearchParams(location.search).get('min') || 10), cfgTrip: 1, journey: !new URLSearchParams(location.search).has('plain'), onCheer: () => { }, onToast: () => { } });          /* the real trip director: the molecules, the come-up / peak / comedown arc, the moment of clarity */
 import { MOL_EL_COL, MOL_EL_R, MOL_STICK, MOL_SC } from '../downhill-three/molmesh.js';
