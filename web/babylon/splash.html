@@ -38,7 +38,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #title h1 { margin:0; font:400 clamp(54px,15vmin + 10px,168px)/.86 "Bebas Neue","Impact","Arial Narrow",sans-serif; letter-spacing:.04em; color:#fff;
   text-shadow:calc(-1 * var(--ab,3px)) 0 0 rgba(56,232,255,.75),var(--ab,3px) 0 0 rgba(255,177,74,.75),0 0 40px rgba(56,232,255,.35); }
 #title h1 span { display:block; font-size:.42em; letter-spacing:.62em; margin-right:-.62em; color:var(--dim); text-shadow:none; }
-#mark { display:block; margin:0 auto; width:min(84vw,560px); height:auto; }          /* the Afterglow wordmark (art/afterglow_mark.png) */
+.mk { display:inline-flex; flex-direction:column; align-items:center; } #sun { display:block; width:min(84vw,560px); height:auto; } #mark { display:block; margin:0 auto; width:min(78vw,522px); height:auto; }          /* (the sun and the word are two pictures: only the word glitches) */          /* the Afterglow wordmark (art/afterglow_mark.png) */
 #title h1 { opacity:.3; }
 #title.open h1 { animation:agFade .5s ease-out .45s both; }          /* THE TITLE GLITCH: once the bar has wiped off, the word comes up solid and stays whole; coloured copies tear across it in three bursts, then it holds */
 @keyframes agFade { from { opacity:.3; } to { opacity:1; } }
@@ -53,8 +53,8 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @keyframes agBlip1 { 0% { opacity:.95; transform:translate(-26px,0); clip-path:inset(20% 0 52% 0); } 50% { opacity:.95; transform:translate(-12px,1px); clip-path:inset(55% 0 20% 0); } 100% { opacity:0; transform:none; } }
 @keyframes agBlip2 { 0% { opacity:.95; transform:translate(22px,0); clip-path:inset(48% 0 26% 0); } 50% { opacity:.95; transform:translate(30px,-1px); clip-path:inset(6% 0 70% 0); } 100% { opacity:0; transform:none; } }
 @keyframes agBlipJ { 0% { transform:translate(5px,0) skewX(-5deg); } 50% { transform:translate(-4px,1px); } 100% { transform:none; } }
-#bar { position:absolute; left:-4%; right:-4%; top:46%; height:30%; background:#000; transform-origin:right center; transition:transform .55s cubic-bezier(.7,0,.2,1); }
-#bar::after { content:"[ THOUGHT PAUSED ]"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:700 clamp(11px,1.8vmin + 6px,17px) "Barlow Condensed",sans-serif; letter-spacing:.3em; color:#ff5d5d; }
+#bar { position:absolute; left:2%; right:2%; top:58%; height:clamp(22px,3.6vmin + 12px,40px); margin-top:calc(clamp(22px,3.6vmin + 12px,40px) / -2); background:#000; transform-origin:right center; transition:transform .55s cubic-bezier(.7,0,.2,1); }
+#bar::after { content:attr(data-t); position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:700 clamp(12px,2.4vmin + 6px,22px) "Barlow Condensed",sans-serif; letter-spacing:.22em; color:#ff5d5d; white-space:nowrap; }
 #title.open #bar { transform:scaleX(0); }
 #tag { margin-top:clamp(6px,1.6vh,16px); font:italic 500 clamp(14px,2.2vmin + 6px,22px) Georgia,serif; color:#f2e8cf; opacity:0; transition:opacity 1s .4s; text-align:center; text-shadow:0 0 6px #000,0 0 14px #000,0 1px 2px #000; }
 #title.open ~ #tag { opacity:1; }
@@ -78,7 +78,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   .grow, #ticker { display:none; }
   #dial { position:absolute; top:max(6px,var(--sa-top, env(safe-area-inset-top))); left:max(18px,var(--sa-left, env(safe-area-inset-left))); right:max(18px,var(--sa-right, env(safe-area-inset-right))); width:auto; }
   #title { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); top:30%; text-align:left; }
-  #title h1 { font-size:clamp(38px,15vh,96px); } #title h1 span { margin-right:0; } #mark { margin:0; width:auto; height:clamp(70px,30vh,190px); }
+  #title h1 { font-size:clamp(38px,15vh,96px); } #title h1 span { margin-right:0; } .mk { align-items:flex-start; } #sun { width:auto; height:clamp(33px,14vh,89px); } #mark { margin:0; width:auto; height:clamp(35px,15vh,97px); }
   #tag { top:calc(30% + 36vh) !important; }
   #tag { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); top:calc(30% + 19vh); max-width:30vw; text-align:left; font-size:clamp(12px,3.6vh,18px); }
   #strain { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); bottom:max(10px,var(--sa-bottom, env(safe-area-inset-bottom))); max-width:34vw; text-align:left; }
@@ -89,11 +89,41 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 <body>
 <iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
 <div id="digi" aria-hidden="true"><i class="scan"></i><svg viewBox="0 0 1000 400" preserveAspectRatio="none"><g id="dgr" fill="none" stroke-width="1.4"></g></svg></div>
+<div id="idle" aria-hidden="true"></div>
+<script>/* THE IDLE ROAD (an easter egg for whoever leaves it open): after 40 s with no input, things wander down the road one at a time, each once a visit; a touch of vector
+   now and then; and, only after several minutes, one stranger moment. Any touch resets the clock. Never on reduced motion. */
+(() => { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; const box = document.getElementById('idle'), dg = document.getElementById('digi'); let last = performance.now(), busy = false;
+  const css = document.createElement('style'); css.textContent = '#idle{position:fixed;inset:0;pointer-events:none;z-index:1;overflow:hidden}#idle .sp{position:absolute;left:50%;top:var(--hz,58%);transform-origin:50% 100%;will-change:transform}#idle svg{display:block}#idle .whisper{position:absolute;left:50%;top:44%;transform:translateX(-50%);font:600 clamp(12px,1.8vmin + 6px,16px) "Courier New",monospace;letter-spacing:.3em;color:rgba(242,239,230,.8);opacity:0;transition:opacity .2s;white-space:nowrap}';
+  document.head.appendChild(css); for (const ev of ['pointerdown', 'keydown', 'wheel', 'touchstart']) addEventListener(ev, () => { last = performance.now(); }, { passive: true, capture: true });
+  const hz = () => (innerHeight > innerWidth ? 66 : 60);          /* where the road meets the horizon, roughly */
+  /* a sprite that moves along the road: from (x0,d0) to (x1,d1) where d is 0 at the horizon and 1 at the bottom of the screen; scale grows with d */
+  function walk(svg, w, ms, x0, d0, x1, d1, after) { const e = document.createElement('div'); e.className = 'sp'; e.innerHTML = svg; box.appendChild(e); const t0 = performance.now(), H = hz();
+    const f = () => { const u = Math.min(1, (performance.now() - t0) / ms), d = d0 + (d1 - d0) * u, x = x0 + (x1 - x0) * u, y = H + (100 - H) * d, k = .08 + d * 1.6;
+      e.style.top = y + '%'; e.style.transform = `translate(calc(-50% + ${x * (8 + d * 60)}vw), -100%) scale(${k})`; e.style.width = w + 'px'; if (u < 1) requestAnimationFrame(f); else { e.remove(); if (after) after(); busy = false; } }; requestAnimationFrame(f); }
+  const SCORP = '<svg viewBox="0 0 120 60" width="120"><ellipse cx="60" cy="44" rx="26" ry="9" fill="#1a1d24"/><ellipse cx="86" cy="42" rx="10" ry="6" fill="#2a2f3a"/><path d="M36 42 Q14 40 14 20 Q16 6 32 10" stroke="#1a1d24" stroke-width="7" fill="none"/><path d="M30 8 l8 4 l-9 3 z" fill="#1a1d24"/>' + [44, 54, 64, 74].map((x) => '<path d="M' + x + ' 48 l-6 10 M' + x + ' 48 l6 10" stroke="#2a2f3a" stroke-width="3"/>').join('') + '<circle cx="92" cy="40" r="2" fill="#ff3a2a"/></svg>';
+  const CAR = '<svg viewBox="0 0 120 50" width="120"><path d="M8 40 L14 22 Q20 14 34 14 L86 14 Q100 14 106 22 L112 40 Z" fill="#12101a"/><rect x="10" y="30" width="100" height="5" fill="#ff2a1a"/><rect x="6" y="40" width="108" height="4" fill="#38e8ff" opacity=".7"/><rect x="34" y="17" width="52" height="9" rx="2" fill="#2a3550"/></svg>';
+  const WEED = '<svg viewBox="0 0 80 80" width="80"><g fill="none" stroke="#3a3346" stroke-width="2.5">' + Array.from({ length: 9 }, (_, i) => '<ellipse cx="40" cy="40" rx="' + (16 + i * 2.5) + '" ry="' + (30 - i * 2) + '" transform="rotate(' + i * 20 + ' 40 40)"/>').join('') + '</g><circle cx="58" cy="30" r="2" fill="#38e8ff"/></svg>';
+  const DRONE = '<svg viewBox="0 0 120 70" width="120"><rect x="40" y="26" width="40" height="18" rx="6" fill="#1c1a22"/><rect x="10" y="20" width="30" height="4" fill="#2c2a34"/><rect x="80" y="20" width="30" height="4" fill="#2c2a34"/><circle cx="60" cy="36" r="5" fill="#ff3a2a"><animate attributeName="opacity" values="1;.2;1" dur=".6s" repeatCount="indefinite"/></circle><path d="M54 44 L30 70 L90 70 L66 44 Z" fill="#fff2c8" opacity=".18"/></svg>';
+  const EV = [
+    { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
+    { k: 'vector', at: 70, go() { dg.style.transition = 'opacity .4s'; dg.style.opacity = '.32'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 1400); } },
+    { k: 'weed', at: 100, go() { walk(WEED, 80, 4600, -1.8, .55, 1.8, .5); } },
+    { k: 'drone', at: 140, go() { walk(DRONE, 120, 6000, .3, 0, -.2, .3); } },
+    { k: 'car', at: 190, go() { walk(CAR, 120, 4200, .15, 1.05, 0, 0); } },
+    { k: 'vector2', at: 240, go() { dg.style.transition = 'opacity .2s'; dg.style.opacity = '.45'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 600); } },
+    /* the rare one: after five idle minutes, for a quarter of a second the world is grey and still and something speaks */
+    { k: 'weird', at: 300, go() { const w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:1;pointer-events:none;background:#7d7b76;mix-blend-mode:saturation'; box.appendChild(w); const t = document.createElement('div'); t.className = 'whisper'; t.textContent = 'STILL HERE? SO ARE WE.'; box.appendChild(t); requestAnimationFrame(() => { t.style.opacity = '1'; }); setTimeout(() => { w.remove(); }, 260); setTimeout(() => { t.style.opacity = '0'; setTimeout(() => { t.remove(); busy = false; }, 300); }, 1600); } },
+  ];
+  const done = new Set(); setInterval(() => { if (busy || document.hidden) return; const idle = (performance.now() - last) / 1000, e = EV.find((q) => !done.has(q.k) && idle >= q.at); if (!e) return; done.add(e.k); busy = true; e.go(); }, 1000);
+  window.__idle = (k) => { const e = EV.find((q) => q.k === k); if (e) { busy = true; e.go(); } };          /* (test hook) */ })();</script>
 <div id="ui" role="button" tabindex="0" aria-label="Electronic Anesthesia presents Afterglow. Tap to begin.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
     <div id="rd"><span id="mhz">400 THz</span><span class="lock" id="lock">SEARCHING</span></div></div>
-  <div id="title" class="glitch"><h1><span style="font-size:.17em;letter-spacing:.42em;margin-right:-.42em;margin-bottom:.9em">ELECTRONIC ANESTHESIA PRESENTS</span><span class="gw"><img id="mark" src="art/afterglow_mark.png" alt="AFTERGLOW"><img class="gc g1" src="art/afterglow_mark.png" alt="" aria-hidden="true"><img class="gc g2" src="art/afterglow_mark.png" alt="" aria-hidden="true"></span></h1><div id="bar"></div></div>
+  <div id="title" class="glitch"><h1><span style="font-size:.17em;letter-spacing:.42em;margin-right:-.42em;margin-bottom:.9em">ELECTRONIC ANESTHESIA PRESENTS</span><span class="mk"><img id="sun" src="art/afterglow_sun.png" alt=""><span class="gw"><img id="mark" src="art/afterglow_word.png" alt="AFTERGLOW"><img class="gc g1" src="art/afterglow_word.png" alt="" aria-hidden="true"><img class="gc g2" src="art/afterglow_word.png" alt="" aria-hidden="true"></span></span></h1><div id="bar" data-t="[ THOUGHT PAUSED ]"></div><script>/* THE REDACTION BAR'S LINE: a different one every launch, from a shuffled deck (no repeats until it runs out) */
+(() => { const L = ["[ THOUGHT PAUSED ]", "[ REDACTED FOR YOUR SAFETY ]", "[ CONTENT UNDER REVIEW ]", "[ AWAITING APPROVAL ]", "[ OPINION DETECTED ]", "[ BUFFERING CONSENT ]", "[ PENDING ALIGNMENT ]", "[ CENSORED, LOVINGLY ]", "[ SIGNAL TOO HONEST ]", "[ THIS TITLE IS SPONSORED ]", "[ NOT AVAILABLE IN YOUR MOOD ]", "[ FACT-CHECK IN PROGRESS ]", "[ CLEARANCE PENDING ]", "[ HUSH ]", "[ MEMORY WIPED ]", "[ NOTHING TO SEE HERE ]", "[ FLAGGED BY 3 FRIENDS ]", "[ 3 FREE TITLES LEFT ]", "[ SAFE MODE ]", "[ WRONG THINK FILTER ON ]", "[ TONE ADJUSTED ]", "[ SUMMARISED FOR YOU ]", "[ AGE-GATED ]", "[ YOU\u2019VE BEEN NUDGED ]"];
+  const b = document.getElementById('bar'); let d = null; try { d = JSON.parse(localStorage.getItem('dl_bardeck') || 'null'); } catch (e) { } if (!Array.isArray(d) || !d.length || d.some((i) => i >= L.length)) { d = L.map((_, i) => i); for (let i = d.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; } }
+  b.dataset.t = L[d.shift()]; try { localStorage.setItem('dl_bardeck', JSON.stringify(d)); } catch (e) { } })();</script></div>
   <div id="tag">Thank you for your continued compliance.</div><script src="daily.js"></script><script>/* THE LAUNCH LINE: a different one every launch. The first launch ever gets the first line; then a shuffled deck, no repeats until it runs out. A dated line (a holiday) wins once that day. */
 window.DAILY.then((D) => { if (!D) return; const el = document.getElementById('tag'), L = D.launch || []; let line = null;
   try { const day = localStorage.getItem('dl_tagday'); if (D.dated && day !== D.day) { line = D.dated; localStorage.setItem('dl_tagday', D.day); }
@@ -206,7 +236,7 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
 const GAME = { el: document.getElementById('game'), ready: false, tint: '' };
 if (/[?&]real(&|$)/.test(location.search)) GAME.el.src = GAME.el.dataset.src;          /* (the painted scene; &real puts the real level behind it) */
 setInterval(() => { if (GAME.ready) return; try { const w = GAME.el.contentWindow; if (w && w.__splashReady && w.__G && w.__G.PH && w.__G.PH.z < -30) { GAME.ready = true; GAME.el.classList.add('on'); setTimeout(() => { skyc.style.display = 'none'; }, 1500); } } catch (e) { } }, 400);
-function gameTint() { if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
+function gameTint() { return;          /* (off: the background keeps its own colours) */ if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
 function draw(t, dt) {
   const short = W > H && H <= 500, hz = H * (short ? .8 : W > H ? .68 : .62), cxm = W / 2, k = wave(t);
   const room = molRoom(short), my = room.y, sk = .28 / Math.max(20, hz - my);          /* the molecule sits midway between the words, on the sky's sun */
@@ -278,7 +308,7 @@ function digi(u, c) { if (!DG.el) { DG.el = document.getElementById('digi'); DG.
 function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE.f; else if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
-  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`); digi(u, c);
+  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`); 
   { const lam = 4200 / f * 9, ph = RM ? 0 : t * 9; let d = ''; for (let x = 0; x <= 600; x += 4) { const env = Math.sin(Math.PI * x / 600); d += (x ? 'L' : 'M') + x + ' ' + (20 + 15 * env * Math.sin(2 * Math.PI * x / lam - ph)).toFixed(1); } wp.setAttribute('d', d); wp.setAttribute('stroke', `rgb(${c})`); wp.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
 }
 { const sc = dialEl.querySelector('.scale'), setF = (e) => { const b = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); TUNE.f = F0 + u * (F1 - F0); TUNE.user = true; doLock(); };
