@@ -5,6 +5,7 @@
    held all the way through, the idle lock stays off until the player taps a padlock again. Lines come from ACCORD, MURMUR or a service, never "us".
    API: AGLock.show({ kind, line, away, onDone }), AGLock.disabled(), AGLock.enable(), AGLock.LINES (the check-in pool). */
 (() => {
+if (typeof window !== 'undefined' && !window.CANON && typeof document !== 'undefined' && document.createElement('script').setAttribute) { try { const sc = document.createElement('script'); sc.src = (document.currentScript && document.currentScript.src ? document.currentScript.src.replace(/lock\.js.*$/, '') : '') + 'canon.js'; document.head.appendChild(sc); } catch (e) { } }          /* (the canon: names and reactions) */
 const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'], ['ACCORD', 'Is this still your current holo-ID?'], ['MURMUR', 'We set your off-world inbox as your emergency contact.'],
     ['ACCORD', 'Verify identity: mother\u2019s maiden DNA.'], ['MURMUR', 'You haven\u2019t moved in 5 minutes. We told your insurer.'], ['ACCORD', 'Inactivity logged. Wellness score adjusted.'],
     ['ACCORD', 'Retina on file expired. Look here to renew.'], ['MURMUR', '3 friends noticed you idling. Share how you feel?'], ['ACCORD', 'Consent renews automatically in 10 seconds.'],
@@ -133,19 +134,17 @@ function show(o) { o = o || {}; if (LK.on) return; const kind = o.kind || KIND()
 /* REACTIONS: the apps and networks react to what the player is actually doing (the game passes ctx: world, progress, strain, hits, dial, cameras exposed;
    the title screen passes the trail: where you were last seen, where you're expected next). About half the time one widget and one notification come from here. */
 const fmt = (n) => Math.round(n).toLocaleString();
-function react(c) { const W = [], N = []; if (!c) return { W, N };
-  const w = c.world, pc = Math.round((c.pct || 0) * 100);
-  if (w) { W.push(['Live odds', '1 : ' + Math.max(2, Math.round(40 * (1 - (c.pct || 0)))), 'On the Courier finishing ' + w + '. Sterling Vance has the over.'], ['Traffic', w, 'One vehicle. Unlicensed. Every camera agrees.'], ['Bounty', fmt(5000 + (c.score || 0) * 3) + ' cr', 'Marshal Ransom accepted the contract. He\u2019s bringing snacks.']);
-    N.push(['MURMUR', 'New message', 'saw u in ' + w + ' lol. everyone did \u263A\uFE0E'], ['ACCORD', 'Civic Services', 'Courier sighted in ' + w + '. Citizens: keep scrolling.'], ['ACCORD Live', 'Now streaming', (pc < 5 ? 'The Courier just entered ' + w : 'The Courier is ' + pc + '% through ' + w) + '. Chat thinks you\u2019ll crash.'], ['Ride Share', 'Rate your driver', 'You drove yourself through ' + w + '. 1 star. No tip.']); }
-  if (c.strain) c.strain = c.strain.charAt(0) + c.strain.slice(1).toLowerCase();
-  if (c.strain) { W.push(['Pharmacy', c.strain, 'Detected in your bloodstream. Not on your plan.']); N.push(['Pharmacy', 'Rx alert', c.strain + ' in your system. That one isn\u2019t covered.'], ['MURMUR', 'New message', 'ur pupils look different today \u263A\uFE0E who\u2019s your dealer']); }
-  if (c.f) { const f = Math.round(c.f); W.push(c.f > 790 ? ['Spectrum', f + ' THz', 'Ultraviolet. ACCORD can\u2019t see you up there. They hate it.'] : c.f > 560 ? ['Spectrum', f + ' THz', 'Out of approved range. Please retune to beige.'] : ['Spectrum', f + ' THz', 'Nearly compliant. Keep it warm and quiet.']); }
-  if (c.hits > 0) { W.push(['Car insurance', '\u25B2 ' + c.hits + '\u00D7', c.hits + ' collision' + (c.hits > 1 ? 's' : '') + ' logged in ' + (w || 'transit') + '. Your car told on you.']); if (c.hits > 2) N.push(['Insurance', 'Claim filed', 'On your behalf. Your premium now exceeds the car.']); }
-  else if (w && (c.pct || 0) > .2) W.push(['Car insurance', 'Flagged', 'Zero collisions in ' + w + '. Suspiciously competent.']);
-  if (c.sights > 0) W.push(['Camera network', '\u2212' + c.sights, 'ACCORD cameras you drove through. Replacements billed to you.']);
-  if (c.last) { W.push(['Last seen', c.last, 'Every camera on the road agrees.']); N.push(['ACCORD Live', 'Tonight', '\u201cWhere is the Courier?\u201d Last seen: ' + c.last + '. Ratings excellent.']); }
-  if (c.next) N.push(['Maps', 'Predicted route', 'You\u2019ll be in ' + c.next + ' next. The cones are already up.']);
-  if (c.fresh) N.push(['Census', 'New citizen', 'No record found. Please hold still while we make one.']);
+function react(c) { const W = [], N = [], C = (typeof window !== 'undefined' && window.CANON) || null; if (!c || !C) return { W, N };          /* (the lines live in canon.js) */
+  const pct = Math.round((c.pct || 0) * 100), T = { world: c.world || '', pct: String(pct), odds: String(Math.max(2, Math.round(40 * (1 - (c.pct || 0))))), bounty: fmt(5000 + (c.score || 0) * 3),
+    strain: c.strain ? c.strain.charAt(0) + c.strain.slice(1).toLowerCase() : '', hits: String(c.hits || 0), f: String(Math.round(c.f || 0)), sights: String(c.sights || 0), last: c.last || '', next: c.next || '' };
+  T.where = pct < 5 ? 'just entered ' + T.world : 'is ' + pct + '% through ' + T.world;
+  const fill = (q) => q.map((x) => String(x).replace(/\{(\w+)\}/g, (m, k) => (k in T ? T[k] : m)));
+  const add = (k) => { const e = C.react[k]; if (!e) return; (e.W || []).forEach((q) => W.push(fill(q))); (e.N || []).forEach((q) => N.push(fill(q))); };
+  if (c.world) add('world'); if (c.wkey) add('world:' + c.wkey); if (c.strain) add('strain'); if (c.skey) add('strain:' + c.skey);
+  if (c.f) add(c.f > 790 ? 'dial:uv' : c.f > 560 ? 'dial:high' : 'dial:low');
+  if (c.hits > 0) { add('hits'); if (c.hits > 2) add('hits:many'); } else if (c.world && (c.pct || 0) > .2) add('clean');
+  if (c.sights > 0) add('sights'); (c.quests || []).forEach((q) => add('quest:' + q)); if (c.craft) add('craft:' + c.craft);
+  if (c.last) add('trail:last'); if (c.next) add('trail:next'); if (c.fresh) add('trail:new');
   return { W, N }; }
 /* THE PAUSE SCREEN (owner 2026-11-26): pausing shows the lock screen too, so the jokes get seen. It paints into a container (the menu panel sits on top).
    Content changes slowly: a fresh notification each pause (the last one stays under it), the widgets every third pause or after three minutes. */
