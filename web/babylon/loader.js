@@ -1,5 +1,5 @@
 /* THE LOADING SCREEN (any page can use it: <script src="loader.js"></script> as the first thing in <body>).
-   A tuning meter: the light spectrum from 400 to 790 THz fills as the level loads, the wave above it tightens with the frequency, and a moire sheen
+   A tuning meter: the same dial as the title screen (400 to 950 THz, ultraviolet hatched above 790) fills as the level loads, up to the player's MAX INTENSITY, the wave above it tightens with the frequency, and a moire sheen
    drifts through the filled part. Under it, a status line rolls through the things that are "being done" (a shuffled bag, so it never repeats until
    all have shown). The page drives it: __LDR.to(0..1) moves the meter's target, __LDR.done() fills it and fades it out. Drawn on a 2D canvas, no CSS
    filters (phones tile them and the seams show). */
@@ -194,6 +194,10 @@
   const cv = el.querySelector('canvas'), cx = cv.getContext('2d'), stEl = el.querySelector('.st span'), pcEl = el.querySelector('.pc');
 
   const L = { v: 0, target: .04, done: false, t0: performance.now(), lastLine: 0 };
+  // the title screen's spectrum (red 400 to violet 790, then ultraviolet toward white at 950), and the player's own setting as the end of the fill
+  const SPEC = [[0, [255, 42, 0]], [.128, [255, 122, 0]], [.227, [255, 212, 0]], [.298, [157, 255, 42]], [.369, [42, 255, 122]], [.44, [0, 229, 255]], [.553, [47, 107, 255]], [.709, [122, 61, 255]], [.8, [176, 64, 255]], [.9, [214, 140, 255]], [1, [246, 228, 255]]];
+  const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
+  const FSET = (() => { let f = 500; try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 950) f = v; } catch (e) { } try { const q = +new URLSearchParams(location.search).get('freq'); if (q >= 400 && q <= 950) f = q; } catch (e) { } return f; })(), UV0 = (790 - 400) / 550;
   // the wavelength colour of a frequency (THz), roughly as the eye sees it
   const thzCol = (f) => { const nm = 299792 / f; let r = 0, g = 0, b = 0;
     if (nm < 440) { r = (440 - nm) / 60; b = 1; } else if (nm < 490) { g = (nm - 440) / 50; b = 1; } else if (nm < 510) { g = 1; b = (510 - nm) / 20; } else if (nm < 580) { r = (nm - 510) / 70; g = 1; } else if (nm < 645) { r = 1; g = (645 - nm) / 65; } else r = 1;
@@ -213,15 +217,16 @@
     const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
     cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, w, h);
-    const by = h * .62, bh = Math.max(8, h * .14), fx = w * L.v, f = 400 + 390 * L.v, ph = RM ? 0 : t * 5;
+    const by = h * .62, bh = Math.max(8, h * .14), f = 400 + (FSET - 400) * L.v, uf = (f - 400) / 550, fx = w * uf, ph = RM ? 0 : t * 5;          /* (the fill climbs to the player's setting and locks on there) */
     // the wave: tighter as the frequency climbs, coloured by it
-    const c = thzCol(f); cx.lineWidth = 2; cx.strokeStyle = `rgb(${c})`; cx.beginPath();
-    const lam = w * (.2 - .12 * L.v);
+    const c = specAt(uf); cx.lineWidth = 2; cx.strokeStyle = `rgb(${c})`; cx.beginPath();
+    const lam = w * (.2 - .14 * uf);
     for (let x = 0; x <= w; x += 3) { const env = Math.sin(Math.PI * x / w), on = x <= fx ? 1 : .25, y = by - bh * 1.6 - h * .2 * env * on * Math.sin(2 * Math.PI * x / lam - ph); x ? cx.lineTo(x, y) : cx.moveTo(x, y); }
     cx.stroke();
     // the track, then the spectrum filling it
     cx.fillStyle = 'rgba(255,255,255,.08)'; cx.fillRect(0, by, w, bh);
-    const g = cx.createLinearGradient(0, 0, w, 0); for (let i = 0; i <= 8; i++) g.addColorStop(i / 8, `rgb(${thzCol(400 + 390 * i / 8)})`);
+    { cx.save(); cx.beginPath(); cx.rect(w * UV0, by, w * (1 - UV0), bh); cx.clip(); cx.strokeStyle = 'rgba(176,64,255,.35)'; cx.lineWidth = 2; for (let x = w * UV0 - bh; x < w + bh; x += 7) { cx.beginPath(); cx.moveTo(x, by + bh); cx.lineTo(x + bh, by); cx.stroke(); } cx.restore(); }          /* (the ultraviolet zone, hatched like the title dial) */
+    const g = cx.createLinearGradient(0, 0, w, 0); for (const [u, col] of SPEC) g.addColorStop(u, `rgb(${col})`);
     cx.fillStyle = g; cx.fillRect(0, by, fx, bh);
     // the sheen: two dot rows drifting against each other through the filled part (the game's moire)
     if (fx > 2) { cx.save(); cx.beginPath(); cx.rect(0, by, fx, bh); cx.clip(); cx.fillStyle = 'rgba(255,255,255,.35)';
@@ -230,8 +235,8 @@
     // the marker at the edge of the fill, with its frequency
     cx.fillStyle = '#fff'; cx.fillRect(Math.max(0, fx - 1.5), by - 5, 3, bh + 10);
     cx.font = '700 12px "Barlow Condensed", system-ui, sans-serif'; cx.textBaseline = 'top'; cx.fillStyle = 'rgba(244,241,234,.75)';
-    cx.textAlign = 'left'; if (fx > 70) cx.fillText('400', 0, by + bh + 6); cx.textAlign = 'right'; if (fx < w - 110) cx.fillText('790 THz', w, by + bh + 6);
-    cx.textAlign = fx < 40 ? 'left' : fx > w - 40 ? 'right' : 'center'; cx.fillStyle = `rgb(${c})`; cx.fillText(Math.round(f) + ' THz', Math.max(0, Math.min(w, fx)), by + bh + 6);
+    cx.textAlign = 'left'; if (fx > 70) cx.fillText('400', 0, by + bh + 6); cx.textAlign = 'right'; if (fx < w - 110) cx.fillText('950 THz', w, by + bh + 6);
+    cx.textAlign = fx < 40 ? 'left' : fx > w - 40 ? 'right' : 'center'; cx.fillStyle = `rgb(${c})`; cx.fillText(Math.round(f) + ' THz' + (f > 790 ? ' \u00B7 UV' : ''), Math.max(0, Math.min(w, fx)), by + bh + 6);
     pcEl.textContent = L.done ? 'LOCKED' : Math.round(L.v * 100) + '%';
     if (L.done && L.v > .995 && !el.classList.contains('out')) { el.classList.add('out'); setTimeout(() => el.remove(), 650); }
     requestAnimationFrame(frame);
