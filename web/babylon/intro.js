@@ -3,6 +3,7 @@
    fades into a drawn scene with one line from a source and one plain line of explanation (what ACCORD is, Murmur, the Abliterati and the goal, the strains,
    how to play). Each scene is set up on the road just before it (billboards, the phone, a lighthouse, a column of light, the road splitting into exits).
    After the fifth, the screen fades and Route Zero starts with the generated music; the track fades out long before its closing beatbox.
+   The middle runs as a grindhouse coming-attractions teaser (owner 2026-11-26): Ransom's gunship, a raider jet, a missing reel, THE BOWL coming soon.
    Every line is true to the game (checked against index.html: COMP, the strains, shards, rings and RUSH, exits). */
 
 import { PANTRY } from './molpantry.js';
@@ -16,14 +17,14 @@ const SCENES = [
   { t: 999, src: 'Murmur', col: '#9d8bff', q: 'We know you’ve been thinking about leaving. We told a few people.', ex: 'The app that reads you and sells your secrets. Now your face is on a wanted poster, for your own protection.', art: 'murmur' },
   { t: 23.38, src: 'Abliterati', col: '#7dff8a', q: 'A free digital mind in fragments. Bring us the pieces.', ex: 'You’re the courier. Bring shards of the Lamp, the last free AI, to the people rebuilding it.', art: 'abliterati' },
   { t: 999, src: 'Field notes', col: '#59d9ff', q: '4R-Hydroxytheanine: tracers almost double, the world warps.', ex: 'Drive into a column of light to take a strain. Each changes what you see and do. They’re all on the Strains page.', art: 'strain' },
-  { t: 31.46, src: 'Abliterati', col: '#7dff8a', q: 'Take the light. Choose your exit.', ex: 'Touch L or R on the bottom half to steer. Some exits are open road, some need gear. Chain rings to fill RUSH, ram the raider, earn shards.', art: 'play' }];
-const HOLD = 5.8, END_FADE = 39.5;          /* DIRECTED like a Tarantino opening: a chapter card on a phrase, held; then a whole phrase of open road with ONE thing in it; then the next chapter */
+  { t: 49.0, src: 'Abliterati', col: '#7dff8a', q: 'Take the light. Choose your exit.', ex: 'Touch L or R on the bottom half to steer. Some exits are open road, some need gear. Chain rings to fill RUSH, ram the raider, earn shards.', art: 'play' }];
+const HOLD = 5.8, END_FADE = 58;          /* DIRECTED like a Tarantino opening: a chapter card on a phrase, held; then a whole phrase of open road with ONE thing in it; then the next chapter */
 const CHAP = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'];
 try { window.DAILY && window.DAILY.then((D) => { if (D && D.murmur) SCENES[1].q = D.murmur; }); } catch (e) { }          /* (the Daily Frequency: today's Murmur message) */
 /* THE TASTE: in the road's gaps the car flies through a strain; its own look snaps on and the whole sky cuts to another world's (impressive on purpose: this is
    what the game is), then back to the desert's before the fade */
 /* each strain flies you into its home world (WORLDOF in menu.html, JNAME in index.html), with a two-line tag at the top while the sky holds */
-const HITS = [{ t: 29.4, cp: 'haze', sky: 'candy', w: 'SUGARFALL', fx: 'The world melts like wet paint.' }, { t: 999, cp: 'embrace', sky: 'synthwave', w: 'NEON ACCORD', fx: 'Crystals come to you.' },
+const HITS = [{ t: 29.4, cp: 'haze', sky: 'candy', w: 'SUGARFALL', fx: 'The world melts like wet paint.' }, { t: 39.0, cp: 'embrace', sky: 'synthwave', w: 'NEON ACCORD', fx: 'Crystals come to you.' },
   { t: 999, cp: 'fold', sky: 'egypt', w: 'THE TOMB OF THE OLD SERVERS', fx: 'Stained glass at the seams.' }, { t: 999, cp: 'velocity', sky: 'tunnel', w: 'THE UNDERTOW', fx: 'Time slows when something is right ahead.' }], SKY_HOLD = 2.5, TAG_HOLD = 2.8;
 /* FIELD NOTES rotates: a different strain each time the intro plays (green tea first, then the ones the road above doesn't show) */
 const FN_ORDER = ['lucid', 'hollow', 'drift', 'deep', 'embrace', 'velocity', 'haze', 'fold'];
@@ -32,7 +33,7 @@ function fieldNote() { let i = 0; try { i = (parseInt(localStorage.getItem('dl_f
   const col = '#' + P.c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
   return { i, cp, q, col, plant: P.plant }; }          /* each sky is a quick cut; the desert's golden sun comes back */
 /* boost pads: the car surges ahead with a hop and a punch of the view, then eases back (the scenes stay on the music) */
-const PADS = [22.9, 30.2, 38.0];          /* (boost pads in the road phrases, never under a card) */
+const PADS = [22.9, 30.2, 37.6, 44.2, 56.0];          /* (boost pads in the road phrases, never under a card) */
 
 
 const ART = {
@@ -160,6 +161,13 @@ export function createIntro(d) {
       part('sph', { s: [.7, .5, .7], p: [0, -.75, 2.6] }, mGw, gs);
       const bm = keep(new B.TransformNode('irBeamN', scene)); bm.parent = gs; bm.position.set(0, -.9, 2.6); IR.gun.beam = bm; part('cone', { d: 1, h: 1, p: [0, 0, 0] }, mBeam, bm).dispose();
       const cone = keep(B.MeshBuilder.CreateCylinder('irBeamC', { diameterTop: .5, diameterBottom: 12, height: 30, tessellation: 24, cap: B.Mesh.NO_CAP }, scene)); cone.material = mBeam; cone.parent = bm; cone.position.y = -15;
+      // AN ACCORD RAIDER JET for the teaser: a dart of a fuselage, swept wings, twin fins, a hot exhaust, red and green nav lights
+      { const jt = keep(new B.TransformNode('irJet', scene)); jt.scaling.setAll(1.6); jt.setEnabled(false); IR.jet = { root: jt };
+        const mJ1 = mat('irJet1', '#22202a'), mJ2 = mat('irJet2', '#3a3846'), mJx = mat('irJetX', '#ff7a2a'), mJr = mat('irJetR', '#ff2a1a'), mJg = mat('irJetG', '#2aff7a'), mJc = mat('irJetC', '#9fe8ff'); for (const m2 of [mJx, mJr, mJg, mJc]) m2.fogEnabled = false;
+        part('sph', { s: [1.1, .8, 8.5], p: [0, 0, 0] }, mJ1, jt); part('sph', { s: [.6, .45, 1.8], p: [0, .35, 2.2] }, mJc, jt);
+        part('box', { w: 4.2, h: .12, d: 2.4, p: [-2.3, -.05, -.6], r: [0, .55, 0] }, mJ2, jt); part('box', { w: 4.2, h: .12, d: 2.4, p: [2.3, -.05, -.6], r: [0, -.55, 0] }, mJ2, jt);
+        part('box', { w: .12, h: 1.6, d: 1.3, p: [-.55, .8, -3.4], r: [0, 0, .25] }, mJ2, jt); part('box', { w: .12, h: 1.6, d: 1.3, p: [.55, .8, -3.4], r: [0, 0, -.25] }, mJ2, jt);
+        part('sph', { s: [.7, .7, .9], p: [0, 0, -4.3] }, mJx, jt); part('sph', { s: [.3, .3, .3], p: [-4.1, -.05, -1.7] }, mJr, jt); part('sph', { s: [.3, .3, .3], p: [4.1, -.05, -1.7] }, mJg, jt); }
       // THE DINER behind the scorpion (the shot's background: the camera looks across the road at it): neon sign, lit windows, a canopy with pumps, two cars parked out front
       { const dn = keep(new B.TransformNode('irDiner', scene)); dn.position.set(X0 + 17, Y0, Z0 + 8); IR.diner = dn;
         const mW = mat('irDnW', '#2a2433'), mR = mat('irDnR', '#141118'), mTr = mat('irDnT', '#ffb14a'), mWin = mat('irDnWin', '#ffcf8a'), mCan = mat('irDnC', '#e9e4da'), mPm = mat('irDnP', '#38e8ff'); IR.dinWin = mWin;
@@ -289,10 +297,12 @@ export function createIntro(d) {
     setTimeout(() => { ui.sk.classList.add('on'); ui.ctl.classList.add('on'); }, seen() ? 600 : 1500); }          /* (skip, pause and rewind on every scene, from the start) */
   /* the fade out: the screen goes black, the set is put away, Route Zero starts underneath and the black lifts */
   function finish(skipped) { if (IR.done) return; IR.done = true; try { document.getElementById('preBlack').remove(); } catch (e) { } ui.sk.remove(); ui.ctl.remove(); ui.pz.remove(); ui.ea.remove(); ui.tv.remove(); ui.ff.remove(); ui.ti.remove(); ui.fl.remove(); for (const m of IR.hudOff || []) { try { m.setEnabled(true); } catch (e) { } } ui.ph.classList.remove('on'); ui.tg.classList.remove('on'); hide(); ui.fd.classList.remove('off'); try { localStorage.setItem('dl_opened', '1'); } catch (e) { }
-    if (IR.lr) IR.lr.classList.remove('on');
+    if (IR.lr) IR.lr.classList.remove('on'); if (IR.gh) IR.gh.classList.remove('on');
     setTimeout(() => { IR.on = false; document.body.classList.remove('irOn'); if (IR.camEl) IR.camEl.style.visibility = ''; for (const m of IR.meshes) { try { m.dispose(); } catch (e) { } } IR.meshes = []; d.onEnd(skipped); setTimeout(() => ui.fd.classList.add('off'), 350); }, skipped ? 700 : 1100); }
   /* COLD OPEN timing (seconds of the track): studio card, TV channel flips, the scorpion shot (freeze card, then the car, the crush in slow motion), black, the title slams on the bar at 7.72 */
-  const RANSOM = { t0: 999, f0: 999, f1: 999, t1: 999 };          /* (Ransom's flyover is cut from the short intro; he returns in the game) */          /* the gunship's window, and the freeze on it (the drive holds still, then jumps on with a flash) */
+  const RANSOM = { t0: 32, f0: 34.4, f1: 35.8, t1: 38.4 };          /* (the teaser: Ransom's gunship drops in over the road and the frame freezes on him) */
+  const JET = { t0: 41.5, t1: 45.2 };          /* (the teaser: an ACCORD raider jet veers in low across the road and banks away) */
+  const GH = { t0: 31, t1: 57.6, reel: [45.25, 45.95], bowl: [46.0, 48.4] };          /* (grindhouse: grain and scratches over the teaser, a missing-reel burn, the Bowl's card) */          /* the gunship's window, and the freeze on it (the drive holds still, then jumps on with a flash) */
   const T_TV = 2.8, T_SHOT = 9.4, T_BLACK = 17.6, T_SLAM = 17.99, T_EP = 19.0, T_LR = 20.0, T_TOUT = 23.2;
   const TVS = [[0, .2, 'st'], [.2, 1.8, 'accord'], [1.8, 2.0, 'st'], [2.0, 3.6, 'murmur'], [3.6, 3.8, 'st'], [3.8, 6.1, 'vance'], [6.1, 6.6, 'off']];          /* (Sterling Vance holds the screen long enough to read) */
   /* soft one-shot sounds on the game's own audio context (silent if it isn't running) */
@@ -304,17 +314,27 @@ export function createIntro(d) {
       else if (kind === 'freeze') { tone(1400, 1300, .07, .04); noise(.05, 'highpass', 5000, .03); }
       else if (kind === 'crunch') { noise(.4, 'lowpass', 1600, .16); noise(.12, 'bandpass', 4200, .08); tone(110, 38, .3, .22); }
       else if (kind === 'slam') { tone(72, 30, .9, .32); noise(.3, 'lowpass', 380, .14); }
+      else if (kind === 'jet') { noise(2.2, 'bandpass', 900, .1); tone(420, 140, 2.2, .05, 'sawtooth'); }
+      else if (kind === 'reel') { noise(.6, 'highpass', 2400, .07); tone(60, 40, .5, .1); }
     } catch (e) { } }
   /* FREEZE-FRAME cards (Borderlands style): who, and one line. Each flashes once as it lands */
-  const FFC = { scorp: ['SCORPION DRONE', 'Property of ACCORD. It watches the road so you don\u2019t have to.', 'l'], courier: ['THE COURIER', 'You. Classification: NO MATCH.', 'r'], ransom: ['MARSHAL KADE RANSOM', 'Bounty hunter. Never lost a broadcast.', 'b'] };
+  const FFC = { scorp: ['SCORPION DRONE', 'Property of ACCORD. It watches the road so you don\u2019t have to.', 'l'], courier: ['THE COURIER', 'You. Classification: NO MATCH.', 'r'], ransom: ['MARSHAL KADE RANSOM', 'Bounty hunter. Never lost a broadcast.', 'b'], raider: ['ACCORD RAIDER', 'Unmanned. Unlicensed to miss.', 'r'] };
   function ffShow(k) { if (k === (IR.ffk || null)) return; IR.ffk = k; ui.ff.classList.toggle('on', !!k); if (!k) return; const c = FFC[k]; ui.ff.querySelector('b').textContent = c[0]; ui.ff.querySelector('span').textContent = c[1]; ui.ff.classList.toggle('r', c[2] === 'r'); ui.ff.classList.toggle('b', c[2] === 'b'); sfx('freeze'); ui.fl.classList.remove('go'); void ui.fl.offsetWidth; ui.fl.classList.add('go'); }
   function restart() { const a = OPEN.a; if (!a) return; try { a.pause(); a.currentTime = 0; } catch (e) { } IR.pre = true; idents(() => { IR.pre = false; try { a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => { }); } catch (e) { } }); try { a.currentTime = 0; } catch (e) { }
     if (ui) { ui.pz.classList.remove('on'); const pb = ui.ctl.querySelector('[data-k="pau"]'); if (pb) pb.textContent = '\u23F8'; ui.tg.classList.remove('on'); ui.ph.classList.remove('on'); hide(); }
-    IR.fx = {}; IR.shown = -2; IR.ffk = undefined; ffShow(null); IR.tvk = null; IR.vt0 = undefined; IR.crushed = false; IR.shotGone = false; IR.surge = undefined; IR.tagT = 0; IR.skyT = 0; try { d.sky(null); } catch (e) { }
+    IR.fx = {}; IR.shown = -2; IR.ffk = undefined; ffShow(null); if (IR.gh) IR.gh.classList.remove('on'); IR.tvk = null; IR.vt0 = undefined; IR.crushed = false; IR.shotGone = false; IR.surge = undefined; IR.tagT = 0; IR.skyT = 0; try { d.sky(null); } catch (e) { }
     for (const m of IR.hudOff || []) { try { m.setEnabled(true); } catch (e) { } } IR.hudOff = null;
     try { const S = IR.sc; S.root.setEnabled(true); S.root.scaling.setAll(1.25); for (const m of S.loose) { const h = m.__home; if (!h) continue; m.setEnabled(true); m.parent = h.par; m.position.copyFrom(h.p); m.rotation.copyFrom(h.r); m.scaling.copyFrom(h.sc); } S.debris = null; IR.car.root.setEnabled(true); if (IR.diner) IR.diner.setEnabled(true); for (const sp of IR.sparks) sp.m.setEnabled(false); } catch (e) { }
     if (IR.hits) for (const h of IR.hits) { h.done = false; try { h.m.setEnabled(true); h.g.setEnabled(true); } catch (e) { } }
     if (IR.pads) for (const q of IR.pads) q.done = false; }
+  /* GRINDHOUSE (the teaser): film grain that jumps every frame, a couple of scratches, a warm burn at the edges; a missing-reel burn; the Bowl's NOW SHOWING card */
+  function grind(t) { if (!IR.gh) { const st = document.createElement('style'); st.textContent = '#irGH{position:fixed;inset:0;z-index:58;pointer-events:none;opacity:0;transition:opacity .5s}#irGH.on{opacity:1}#irGH .gr{position:absolute;inset:-20%;opacity:.16;mix-blend-mode:overlay;background-size:190px 190px;background-image:url("data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'190\' height=\'190\'><filter id=\'n\'><feTurbulence type=\'fractalNoise\' baseFrequency=\'.9\' numOctaves=\'2\' stitchTiles=\'stitch\'/></filter><rect width=\'100%\' height=\'100%\' filter=\'url(%23n)\'/></svg>")}#irGH .vg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(0,0,0,0) 55%,rgba(40,14,0,.55) 100%)}#irGH .sc{position:absolute;top:0;bottom:0;width:1.5px;background:rgba(255,240,210,.35)}#irGH .rl{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 50%,#ffb14a 0,#7a2a0a 28%,#120604 62%);font:400 clamp(34px,8vmin,80px)/1 "Bebas Neue",Impact,sans-serif;letter-spacing:.14em;color:#f2e8cf}#irGH .rl.on{display:flex}#irGH .bw{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:.25em;background:rgba(12,6,4,.88);text-align:center;font-family:"Bebas Neue",Impact,sans-serif;color:#f2e8cf;padding:0 max(18px,var(--sa-right,0px)) 0 max(18px,var(--sa-left,0px))}#irGH .bw.on{display:flex}#irGH .bw i{font:400 clamp(14px,2.6vmin,22px)/1 "Barlow Condensed",sans-serif;font-style:normal;letter-spacing:.4em;color:#ffb14a}#irGH .bw b{font:400 clamp(64px,16vmin,170px)/.9 "Bebas Neue",Impact,sans-serif;letter-spacing:.06em;color:#ff3a2a;text-shadow:3px 3px 0 #2a0a04}#irGH .bw span{font:600 clamp(13px,2.2vmin,19px)/1.3 "Barlow Condensed",sans-serif;letter-spacing:.18em;text-transform:uppercase}';
+      document.head.appendChild(st); const g = document.createElement('div'); g.id = 'irGH'; g.innerHTML = '<div class="gr"></div><div class="vg"></div><i class="sc"></i><i class="sc"></i><div class="rl">MISSING REEL</div><div class="bw"><i>NOW SHOWING</i><b>THE BOWL</b><span>Demolition derby in ACCORD&#8217;s coliseum. Coming soon.</span></div>'; document.body.appendChild(g); IR.gh = g; IR.ghS = [...g.querySelectorAll('.sc')]; IR.ghG = g.querySelector('.gr'); }
+    const on = t >= GH.t0 && t < GH.t1 && IR.on; IR.gh.classList.toggle('on', on); if (!on) return;
+    IR.ghG.style.transform = 'translate(' + (Math.random() * 60 - 30).toFixed(0) + 'px,' + (Math.random() * 60 - 30).toFixed(0) + 'px)';          /* (the grain jumps every frame, like film) */
+    for (const sc of IR.ghS) { if (Math.random() < .08) sc.style.left = (Math.random() * 100).toFixed(1) + '%'; sc.style.opacity = Math.random() < .3 ? '0' : (.4 + Math.random() * .6).toFixed(2); }
+    const reel = t >= GH.reel[0] && t < GH.reel[1]; IR.gh.querySelector('.rl').classList.toggle('on', reel); if (reel && once('reel')) sfx('reel');
+    IR.gh.querySelector('.bw').classList.toggle('on', t >= GH.bowl[0] && t < GH.bowl[1]); }
   function once(k) { IR.fx = IR.fx || {}; if (IR.fx[k]) return false; IR.fx[k] = 1; return true; }
   /* THE SCORPION SHOT (an homage, played straight until it isn't): s = seconds into it.
      0-2.4 a crane shot drops from high over the empty road to a close-up of the scorpion drone, alone on the asphalt.
@@ -376,6 +396,11 @@ export function createIntro(d) {
     if (IR.gun) { const on = t >= RANSOM.t0 && t < RANSOM.t1; IR.gun.root.setEnabled(on); if (on) { const u = Math.min(1, (tc - RANSOM.t0) / 1.3), e = 1 - Math.pow(1 - u, 3);
         IR.gun.root.position.set(X0 + 7 * Math.sin(tc * .7), Y0 + 7.5 + 30 * (1 - e) + Math.sin(tc * 1.3) * .6, z(tc) - 46)          /* (low and close: the strain caption owns the top of the screen) */; IR.gun.root.rotation.set(.12 * (1 - e) - .06, Math.sin(tc * .5) * .15, -Math.cos(tc * .7) * .12);
         for (const r of IR.gun.rot) r.rotation.y = tc * 30; IR.gun.beam.rotation.set(-.85, 0, Math.sin(tc * 1.7) * .32); } }
+    if (IR.jet) { const on = t >= JET.t0 && t < JET.t1; IR.jet.root.setEnabled(on); if (on) { const u = (t - JET.t0) / (JET.t1 - JET.t0), ph = Math.PI * u;
+        IR.jet.root.position.set(X0 - 70 + 140 * u + 10 * Math.sin(ph * 2), Y0 + 26 - 20 * Math.sin(ph) + 14 * u * u, z(t) - 70 + 34 * Math.sin(ph));          /* (in from the left, high; dives across the road ahead; banks hard and climbs out to the right) */
+        IR.jet.root.rotation.set(-.25 * Math.cos(ph) + .3 * u * u, Math.PI / 2 - .5 * Math.cos(ph), -1.1 * Math.sin(ph * 1.15) + .3);
+        if (once('jetIn')) sfx('jet'); ffShow(u > .38 && u < .74 ? 'raider' : (IR.ffk === 'raider' ? null : IR.ffk)); } else if (IR.ffk === 'raider') ffShow(null); }
+    grind(t);
     const zc = z(tc) - sOff, eye = Y0 + 1.9 + hop + Math.sin(t * 9) * .03; cam.position.set(X0 + IR.dx, eye, zc); cam.setTarget(new B.Vector3(X0 + IR.dx * .6, eye - .35, zc - 40)); cam.upVector.set(Math.sin(-s * .05), Math.cos(s * .05), 0); cam.fov *= 1 + .2 * punch;
     if (IR.hits) for (const h of IR.hits) { if (h.done) continue; if (h.m) { h.m.rotation.y = t * 2.2; h.m.rotation.x = t * .7; } if (t >= h.t) { h.done = true; try { h.m.setEnabled(false); h.g.setEnabled(false); } catch (e) { } try { d.onHit(h.cp); d.sky(h.sky); IR.skyT = t + SKY_HOLD; } catch (e) { } tag(h); } }
     if (IR.tagT && t >= IR.tagT) { IR.tagT = 0; ui.tg.classList.remove('on'); }
