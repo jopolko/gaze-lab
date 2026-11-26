@@ -279,7 +279,7 @@ void main() {
   col = mix(col, vec3(.62, .27, .26), smoothstep(70., 420., tt));          /* haze toward the horizon, the sky's own low colour */
   gl_FragColor = vec4(paint(col * 1.15), 1.);
 }`;
-const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antialias: false }); if (!gl) return null;
+const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antialias: false }); if (!gl) return null; gl.disable(gl.DITHER);          /* (the GPU's ordered dither drew a fine regular 45-degree pattern, made visible by the saturation at high intensity) */
   const vs = 'attribute vec2 p; uniform vec2 uWH; uniform vec4 uMap; varying vec3 vP; varying vec3 vS; void main(){ float px = (p.x * .5 + .5) * uWH.x, py = (.5 - .5 * p.y) * uWH.y; vP = vec3(.12 + (px - uMap.x) * uMap.z, (uMap.y - py) * uMap.z, -1.); vS = vec3(.12 + (px - uMap.x) * uMap.w, (uMap.y - py) * uMap.w, -1.); gl_Position = vec4(p, 0., 1.); }';
   const fs = skyFragment('desert').replace('varying vec3 vP;', 'varying vec3 vP; varying vec3 vS; vec3 SD;').replace('normalize(vP)', 'normalize(SD)').replace('void main(){', 'void skyMain(){') + GROUND;          /* (the sky reads its own, wider view: vS) */
   const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
@@ -339,7 +339,7 @@ void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q 
   col = mix(base, col, sky > .5 ? .86 : 1.);          /* (the sky stays recognisable) */
   gl_FragColor = vec4(col, 1.); }`;
   const CP = 'precision mediump float; uniform sampler2D uTex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(uTex, vec2(vUv.x, 1. - vUv.y)); }';
-  function init() { gl = cvs.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: false }); if (!gl) return false;
+  function init() { gl = cvs.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: false }); if (!gl) return false; gl.disable(gl.DITHER);
     const sh = (t, sr) => { const o = gl.createShader(t); gl.shaderSource(o, sr); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
     const prog = (f) => { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); return pr; };
     P = prog(FS); C = prog(CP); const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
@@ -455,7 +455,7 @@ const SPEC = [[0, [255, 42, 0]], [.128, [255, 122, 0]], [.227, [255, 212, 0]], [
 const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
 const wp = document.getElementById('wp'), wh = document.getElementById('wh'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
-const LOCK_AT = 0, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
+const LOCK_AT = 2.6, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
 /* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
 const TUNE = { f: TARGET, user: false, k: 0, down: false };
 try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }
@@ -511,7 +511,7 @@ function idleBlip() { const t = document.getElementById('title'); if (!t || !t.c
     window.__glz = { tick() { const n = performance.now(); if (n - lastT < gap) return; lastT = n; gap = R(70, 230); one(); }, settle() { let d = R(120, 260); for (let i = 0, k = Math.round(R(2, 3.4)); i < k; i++) { setTimeout(one, d); d += R(160, 480); } } }; }          /* (while the dial moves / after it is let go) */
   setTimeout(cluster, R(500, 1300) + (window.__PRIVMS || 0)); window.__hit = (k) => { const r = Math.random; if (k !== undefined) Math.random = () => k; hit(); Math.random = r; }; window.__reset = reset; })();          /* (test hooks) */
 function doLock() { if (locked) return; locked = true;  lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); tap.classList.add('on'); }
-doLock();          /* (all at once, on the first frame: no staged reveal on the title screen) */
+title.classList.remove('glitch'); title.classList.add('open'); setTimeout(doLock, LOCK_AT * 1000);          /* (everything shows on the first frame; the dial sweeps for 2.6 s and TAP TO TUNE IN arrives as it locks on) */
 
 let t0 = performance.now(), last = t0;
 /* the molecule's turn: by itself, or by the viewer's finger or mouse (it keeps the flick, then eases back into its own slow turn) */
