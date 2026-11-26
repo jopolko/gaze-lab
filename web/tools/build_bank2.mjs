@@ -28,17 +28,23 @@ const prof = (G, z) => { const o = []; for (let k = 0; k <= 60; k++) { const x =
 const OLDE = fs.existsSync(D + 'trip_edges.json') ? rd('trip_edges.json') : {}, EDGES = CHECK ? {} : Object.assign({}, OLDE);
 const OLDC = fs.existsSync(D + 'row_catalog.json') ? rd('row_catalog.json') : [];
 const shared = fs.existsSync(D + 'bank/shared.json') && !CHECK ? rd('bank/shared.json') : null, materials = shared ? shared.materials : {}, meshes = shared ? shared.meshes : {}; let sharedMeta = shared ? shared.meta : null;
-const catalog = OLDC.filter((c) => !dumps.includes('long_' + c.d)); let renamed = 0, total = 0;
+const catalog = OLDC.filter((c) => !dumps.includes('long_' + c.d)); let renamed = 0, renamedM = 0, total = 0;
 fs.mkdirSync(D + 'bank', { recursive: true });
 for (const d of dumps) {
   const m = rd(d + '/meta.json'), ph = rd(d + '/physics.json'), tag = d.replace(/^long_/, '');
   // merge materials and meshes; an id clash with different data gets this dump's suffix (and every reference in this dump follows)
+  /* materials: each Godot bake numbers its own, so the same id can mean another material in another course: a clash gets this course's suffix, and every mesh surface and node override in this course follows */
+  const renM = {}; for (const [id, def] of Object.entries(m.materials)) { const js = JSON.stringify(def); if (materials[id] && JSON.stringify(materials[id]) !== js) { renM[id] = id + '~' + tag; renamedM++; } }
+  const fixMat = (v) => typeof v === 'string' ? (renM[v] || v) : Array.isArray(v) ? v.map(fixMat) : v;
+  const fixMesh = (def) => { if (def && def.surfaces) for (const s of def.surfaces) if (s.mat !== undefined) s.mat = fixMat(s.mat); return def; };
+  const fixNode = (n) => { if (n.mat_override !== undefined) n.mat_override = fixMat(n.mat_override); if (n.mat !== undefined) n.mat = fixMat(n.mat); return n; };
+  if (Object.keys(renM).length) { for (const def of Object.values(m.meshes)) fixMesh(def); for (const n of ph.nodes || []) fixNode(n); for (const [id, def] of Object.entries(m.materials)) if (renM[id]) { m.materials[renM[id]] = def; delete m.materials[id]; } }
   const ren = {}; for (const [id, def] of Object.entries(m.meshes)) { const js = JSON.stringify(def); if (meshes[id] && JSON.stringify(meshes[id]) !== js) { ren[id] = id + '~' + tag; meshes[ren[id]] = def; renamed++; } else meshes[id] = def; }
   Object.assign(materials, m.materials);
   if (!sharedMeta) { sharedMeta = Object.assign({}, m); for (const k of ['materials', 'meshes', 'pitch', 'trailx', 'nrows', 'segs']) delete sharedMeta[k]; }
   EDGES[d] = {};
   for (let j = 0; j < m.nrows; j++) {
-    const row = rd(d + '/row_' + String(j).padStart(2, '0') + '.json'); if (Object.keys(ren).length) for (const n of row.nodes) if (n.mesh && ren[n.mesh] && !(row.meshes || {})[n.mesh]) n.mesh = ren[n.mesh];
+    const row = rd(d + '/row_' + String(j).padStart(2, '0') + '.json'); if (Object.keys(ren).length) for (const n of row.nodes) if (n.mesh && ren[n.mesh] && !(row.meshes || {})[n.mesh]) n.mesh = ren[n.mesh]; if (Object.keys(renM).length) { for (const n of row.nodes) fixNode(n); for (const def of Object.values(row.meshes || {})) fixMesh(def); }
     if (!CHECK) { const rec = bankRecord(m, ph, row, j), nm = D + 'bank/' + d + '_' + String(j).padStart(2, '0'), t = JSON.stringify(rec.heavy); total += t.length; fs.writeFileSync(nm + '.json', t); fs.writeFileSync(nm + '.p.json', JSON.stringify(rec.light)); }
     const G = groundOf(row, m); EDGES[d][j] = { t0: m.trailx[SAMP * j], t1: m.trailx[SAMP * (j + 1)], a: prof(G, -ROW * j), b: prof(G, -ROW * (j + 1)) };
     const pr = ph.rows[String(j)] || {}, inRow = (z) => z <= -ROW * j && z > -ROW * (j + 1);
