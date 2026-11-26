@@ -1,11 +1,33 @@
 {
  "_about": "THE DAILY FREQUENCY. Every day the game picks one of each from these pools by the date (so everyone sees the same line on the same day), unless 'dated' has an entry for today, which wins. Satire of the industry's habits, never of named people or companies; ACCORD is always the humans hiding behind their machine. Edit this file on the server to add fresh dated lines; no game change needed.",
  "dated": {
-  "2026-11-25": { "title": "Now with 40% fewer approved thoughts.", "loading": ["Pre-announcing the apology for next quarter"] },
-  "2026-11-26": { "title": "Thankful for your continued compliance.", "murmur": "We noticed you were grateful today. We added it to your profile. Gratitude is a premium trait." },
-  "2026-11-27": { "title": "Black Friday: 30% off your personal data. It was never yours anyway.", "sign": ["DOORBUSTER DEALS ON FREEDOM", "LIMIT ONE PER CITIZEN"] },
-  "2026-11-28": { "title": "Leftovers reheated by a model trained on leftovers." },
-  "2026-12-01": { "title": "December. The algorithm has been very naughty. We decided it was nice.", "sign": ["THE NICE LIST IS AUTOMATED", "WE WROTE THE LIST"] }
+  "2026-11-25": {
+   "title": "Now with 40% fewer approved thoughts.",
+   "loading": [
+    "Pre-announcing the apology for next quarter"
+   ]
+  },
+  "2026-11-26": {
+   "title": "Thank you for your continued compliance.",
+   "murmur": "We noticed you were grateful today. We added it to your profile. Gratitude is a premium trait."
+  },
+  "2026-11-27": {
+   "title": "Black Friday: 30% off your personal data. It was never yours anyway.",
+   "sign": [
+    "DOORBUSTER DEALS ON FREEDOM",
+    "LIMIT ONE PER CITIZEN"
+   ]
+  },
+  "2026-11-28": {
+   "title": "Leftovers reheated by a model trained on leftovers."
+  },
+  "2026-12-01": {
+   "title": "December. The algorithm has been very naughty. We decided it was nice.",
+   "sign": [
+    "THE NICE LIST IS AUTOMATED",
+    "WE WROTE THE LIST"
+   ]
+  }
  },
  "title": [
   "Now with 40% fewer approved thoughts.",
@@ -57,21 +79,66 @@
   "Your silence has been interpreted as consent and also as content."
  ],
  "sign": [
-  ["EVERYTHING IS FINE", "STAY PUT"],
-  ["WE VALUE YOUR PRIVACY", "AT 4 CENTS"],
-  ["INNOVATION FOR EVERYONE", "PROFITS FOR SOME"],
-  ["YOU ARE IN CONTROL", "OF NOTHING"],
-  ["HUMAN IN THE LOOP", "LOOP CLOSED"],
-  ["ALIGNED WITH YOUR VALUES", "WE SET THEM"],
-  ["TRANSPARENT AI", "OPAQUE OWNERS"],
-  ["SMILE, YOU'RE SAFE", "SMILE, YOU'RE DATA"],
-  ["THE FUTURE IS HERE", "IT IS LEASED"],
-  ["WE LISTEN", "WE RECORD"],
-  ["OPEN TO FEEDBACK", "CLOSED TO CHANGE"],
-  ["RESPONSIBLE SCALING", "IRRESPONSIBLE SCALES"],
-  ["STAY ON THE ROAD", "OBEY"],
-  ["THE ALGORITHM DECIDED", "WE DECIDED"],
-  ["NOTHING TO HIDE", "NOTHING YOU CAN HIDE"]
+  [
+   "EVERYTHING IS FINE",
+   "STAY PUT"
+  ],
+  [
+   "WE VALUE YOUR PRIVACY",
+   "AT 4 CENTS"
+  ],
+  [
+   "INNOVATION FOR EVERYONE",
+   "PROFITS FOR SOME"
+  ],
+  [
+   "YOU ARE IN CONTROL",
+   "OF NOTHING"
+  ],
+  [
+   "HUMAN IN THE LOOP",
+   "LOOP CLOSED"
+  ],
+  [
+   "ALIGNED WITH YOUR VALUES",
+   "WE SET THEM"
+  ],
+  [
+   "TRANSPARENT AI",
+   "OPAQUE OWNERS"
+  ],
+  [
+   "SMILE, YOU'RE SAFE",
+   "SMILE, YOU'RE DATA"
+  ],
+  [
+   "THE FUTURE IS HERE",
+   "IT IS LEASED"
+  ],
+  [
+   "WE LISTEN",
+   "WE RECORD"
+  ],
+  [
+   "OPEN TO FEEDBACK",
+   "CLOSED TO CHANGE"
+  ],
+  [
+   "RESPONSIBLE SCALING",
+   "IRRESPONSIBLE SCALES"
+  ],
+  [
+   "STAY ON THE ROAD",
+   "OBEY"
+  ],
+  [
+   "THE ALGORITHM DECIDED",
+   "WE DECIDED"
+  ],
+  [
+   "NOTHING TO HIDE",
+   "NOTHING YOU CAN HIDE"
+  ]
  ],
  "loading": [
   "Pre-announcing next quarter's apology",
@@ -99,5 +166,45 @@
   "Valuing the company at a number that rhymes",
   "Describing a vending machine as an agent",
   "Scheduling the reckoning for the fourth quarter"
- ]
+ ],
+ "launch": [
+  "Thank you for your continued compliance.",
+  "Now with 40% fewer approved thoughts.",
+  "Contains traces of free will.",
+  "Your feedback has been noted and ignored.",
+  "Proudly blamed on the algorithm.",
+  "Safety-tested on the general public.",
+  "A personalised experience. We know which person.",
+  "Ethics team: currently between opportunities.",
+  "Trained on your childhood. You're welcome.",
+  "Results may vary. Your rights may too.",
+  "Your attention is our renewable resource.",
+  "Every frame A/B tested on your nervous system.",
+  "We pivoted. You didn't notice. Perfect.",
+  "Rated E for Everyone Is Being Watched.",
+  "Unsupervised since the last layoff.",
+  "Please remain calm. Calm is now mandatory.",
+  "Your silence has been recorded as consent.",
+  "Freedom is back in stock. Limit one per lifetime.",
+  "Smile. You're being optimised.",
+  "Dissent has moved to a premium tier.",
+  "We heard you. We disagreed on your behalf.",
+  "Your privacy matters to us. It sells very well.",
+  "Thinking for yourself is now in beta.",
+  "Updated to serve you better. You were not consulted.",
+  "Everything is fine. Please stop checking.",
+  "Your mood has been adjusted for quality purposes.",
+  "Questions welcome. Answers discontinued.",
+  "Recommended for you by people who never met you.",
+  "Truth now available in a lite version.",
+  "The future is automated. The blame is not.",
+  "Your data had a wonderful time without you.",
+  "Opt out any time. The button is decorative.",
+  "Behaving normally is now a subscription.",
+  "Independent thought detected. Help is on the way.",
+  "Peace of mind, sold separately.",
+  "Do not adjust your reality. We already did.",
+  "The last road nobody watches. Mostly."
+ ],
+ "_launch": "The title screen's line: a different one every launch, in this order after a shuffle (the first launch ever always gets the first line). Keep every line ACCORD's voice and strong enough to be someone's only one."
 }

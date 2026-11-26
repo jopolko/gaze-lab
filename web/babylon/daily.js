@@ -7,5 +7,5 @@
     dn = Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5), at = (a, k) => (a && a.length ? a[(dn * k) % a.length] : null);
   window.DAILY = fetch('daily.json?d=' + ymd, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).then((J) => { if (!J) return null; const x = (J.dated && J.dated[ymd]) || {};
     const pool = J.loading || [], lo = [at(pool, 7), at(pool, 11)].filter(Boolean);
-    return { day: ymd, title: x.title || at(J.title, 1), murmur: x.murmur || at(J.murmur, 3), sign: x.sign || at(J.sign, 5), loading: (x.loading || []).concat(lo) }; }).catch(() => null);
+    return { day: ymd, launch: J.launch || [], dated: x.title || null, title: x.title || at(J.title, 1), murmur: x.murmur || at(J.murmur, 3), sign: x.sign || at(J.sign, 5), loading: (x.loading || []).concat(lo) }; }).catch(() => null);
 })();
