@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js"></script>
-<title>The Frequency</title>
+<title>Afterglow</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0b0418; overflow: hidden; color: #fff; font: 600 16px system-ui, sans-serif; }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
@@ -1331,7 +1331,7 @@ void main() {
     const nm = Q.has('story') ? 'ROUTE ZERO' : Q.has('tutorial') ? 'TRAINING' : String((typeof BNAME !== 'undefined' && BNAME[WORLD0]) || WORLD0).toUpperCase();
     const d = document.createElement('div'); try { if (window.ME && !Q.has('oldmusic') && !Q.has('nomusic')) ME.preload(ME_OPTS()); } catch (e) { console.warn('music preload', e); } d.id = 'goCard'; d.style.cssText = 'position:fixed;inset:0;z-index:85;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center;background:radial-gradient(ellipse at 50% 55%,rgba(8,11,20,.45),rgba(3,4,8,.9));cursor:pointer;color:#f4f1ea';
     const bs = 'font:700 clamp(16px,2.2vmin + 8px,22px)/1 Barlow Condensed,sans-serif;letter-spacing:.14em;text-transform:uppercase;padding:.8em 1.4em;border-radius:12px;cursor:pointer;';
-    d.innerHTML = '<div style="font:700 14px/1 Barlow Condensed,sans-serif;letter-spacing:.34em;color:#9fe8ff">THE FREQUENCY</div><div style="font:400 clamp(52px,12vmin,120px)/.88 Bebas Neue,Impact,sans-serif;letter-spacing:.1em;color:#fff;text-shadow:0 0 34px rgba(56,232,255,.45)">' + nm + '</div>'
+    d.innerHTML = '<div style="font:700 14px/1 Barlow Condensed,sans-serif;letter-spacing:.34em;color:#9fe8ff">AFTERGLOW</div><div style="font:400 clamp(52px,12vmin,120px)/.88 Bebas Neue,Impact,sans-serif;letter-spacing:.1em;color:#fff;text-shadow:0 0 34px rgba(56,232,255,.45)">' + nm + '</div>'
       + '<div style="display:flex;gap:12px;flex-wrap:nowrap;justify-content:center;align-items:center;max-width:96vw"><button data-c="0" style="order:2;min-height:3.2em;' + bs + (lastCam ? 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)' : 'background:#38e8ff;color:#06101f;border:0;box-shadow:0 0 24px rgba(56,232,255,.4)') + '">\u25B6 Tap to drive</button>'
       + '<div style="display:flex;flex-direction:column;gap:12px;align-items:stretch">' + (hasCam ? '<button data-c="1" style="' + bs + (lastCam ? 'background:#38e8ff;color:#06101f;border:0;box-shadow:0 0 24px rgba(56,232,255,.4)' : 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)') + '">\u25C9 Steer with your head</button>' : '')
       + '<button id="goVR" data-c="vr" style="display:none;' + bs + 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)">\u25C8 Enter VR</button>' + '<div style="display:flex;gap:10px"><button data-c="menu" style="flex:1;' + bs + 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)">\u2630 Menu</button><button data-c="gloss" style="flex:1;' + bs + 'background:rgba(12,16,27,.92);color:#f4f1ea;border:1px solid rgba(56,232,255,.4)">Glossary</button></div></div></div>'

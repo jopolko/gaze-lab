@@ -1,6 +1,6 @@
 {
-  "name": "The Frequency",
-  "short_name": "Frequency",
+  "name": "Afterglow",
+  "short_name": "Afterglow",
   "description": "A head-steered drive through a trip.",
   "start_url": "app.html",
   "scope": "./",

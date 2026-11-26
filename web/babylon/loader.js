@@ -18,8 +18,8 @@
     'Peeling the sticker off in one go', 'Untwisting the phone cord', 'Rewinding with a pencil', 'Looking under the couch for signal',
     'Jiggling the cable', 'Turning it off and on again', 'Hitting the side of the TV', 'Unsticking the gas pedal',
     'Adjusting the mirrors', 'Checking the tyre pressure', 'Topping up the neon', 'Scraping the windscreen', 'Finding a parking spot',
-    // the Frequency
-    'Scanning for the Frequency', 'Locking on 540 THz', 'Dodging the filters', 'Sweeping for bugs', 'Hiding the antenna', 'Scrambling the plates',
+    // the run
+    'Warming up the afterglow', 'Tuning the tracers', 'Dodging the filters', 'Sweeping for bugs', 'Hiding the antenna', 'Scrambling the plates',
     'Taping over the camera', 'Changing lanes on the map', 'Muffling the engine', 'Swapping the licence plate', 'Bribing the toll booth',
     'Losing the tail', 'Cutting the lights', 'Leaving no trace', 'Wiping the dashcam', 'Finding the Lamp', 'Charging the shards',
     'Smuggling the pieces', 'Polishing a shard of the Lamp', 'Asking the Lamp nicely', 'Reassembling a free mind', 'Whispering to the radio',
@@ -188,7 +188,7 @@
   const el = document.createElement('div'); el.id = 'ldr'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
   const LVN = { desert: 'ROUTE ZERO', alpine: 'THE SAFE PEAKS', candy: 'SUGARFALL', tunnel: 'THE UNDERTOW', synthwave: 'NEON ACCORD', matrix: 'COLD RACK', egypt: 'TOMB OF THE OLD SERVERS', psychedelic: 'THE OPEN CHANNEL' };
   const lvName = Q.has('tutorial') ? 'TRAINING' : (LVN[lvl] || lvl.toUpperCase()), lvEp = Q.has('story') ? 'EPISODE 1' : '';
-  el.innerHTML = '<div class="k">THE FREQUENCY</div><div class="lv">' + lvName + '</div>' + (lvEp ? '<div class="ep">' + lvEp + '</div>' : '') + '<canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div>';
+  el.innerHTML = '<div class="k">AFTERGLOW</div><div class="lv">' + lvName + '</div>' + (lvEp ? '<div class="ep">' + lvEp + '</div>' : '') + '<canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div>';
   const mount = () => { (document.head || document.documentElement).appendChild(css); document.body.appendChild(el); };
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
   const cv = el.querySelector('canvas'), cx = cv.getContext('2d'), stEl = el.querySelector('.st span'), pcEl = el.querySelector('.pc');

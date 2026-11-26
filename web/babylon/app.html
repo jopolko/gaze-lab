@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Frequency</title>
+<title>Afterglow</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#05070c">
-<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="The Frequency">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="Afterglow">
 <link rel="apple-touch-icon" href="icons/icon-192.png"><link rel="icon" href="icons/icon-192.png">
 <style>
 /* THE SHELL: the game's one page. Every other page (menu, levels, the Dial, the character, the Music Lab) runs inside it, so going fullscreen once
@@ -11,14 +11,14 @@
 html, body { margin:0; height:100%; background:#05070c; overflow:hidden; }
 iframe { position:fixed; inset:0; width:100%; height:100%; border:0; display:block; background:#05070c; }
 </style></head><body>
-<iframe id="f" title="The Frequency" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
+<iframe id="f" title="Afterglow" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
 <script>
 window.__SHELL = true;          /* the pages look for this: inside the shell they fullscreen the shell itself */
 (() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'splash.html';          /* the title screen first; it taps through to the menu */
   if (!/^[A-Za-z0-9_-]+\.html([?#].*)?$/.test(p)) p = 'menu.html';          /* only this folder's own pages */
   f.src = p;
   /* the address bar follows the page inside, so a reload or a bookmark lands back on it */
-  f.addEventListener('load', () => { try { const L = f.contentWindow.location, page = L.pathname.split('/').pop() + L.search + L.hash; if (/^[A-Za-z0-9_-]+\.html/.test(page)) history.replaceState(null, '', 'app.html?p=' + encodeURIComponent(page)); document.title = f.contentDocument.title || 'The Frequency'; f.contentWindow.focus(); } catch (e) { } });
+  f.addEventListener('load', () => { try { const L = f.contentWindow.location, page = L.pathname.split('/').pop() + L.search + L.hash; if (/^[A-Za-z0-9_-]+\.html/.test(page)) history.replaceState(null, '', 'app.html?p=' + encodeURIComponent(page)); document.title = f.contentDocument.title || 'Afterglow'; f.contentWindow.focus(); } catch (e) { } });
   /* THE CAMERA HOLE: env(safe-area-inset-*) is only known to the top page, so the shell measures it and gives it to the page inside as --sa-top/right/bottom/left
      (the pages use var(--sa-left, env(safe-area-inset-left)), so they also work on their own). Measured again on every turn, resize and fullscreen change. */
   const probe = document.createElement('div'); probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)'; document.body.appendChild(probe);
