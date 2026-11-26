@@ -218,7 +218,7 @@ window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
-import { skyFragment } from './psylook.js';
+import { skyFragment, PSYLOOK_FS } from './psylook.js';
 /* reduced motion (many phones have it on) doesn't freeze the screen: the drive just runs slower */
 const CALM = matchMedia('(prefers-reduced-motion: reduce)').matches, RM = false;
 const bg = document.getElementById('bg'), bx = bg.getContext('2d'), cv = document.getElementById('c'), cx = cv.getContext('2d'), mcv = document.getElementById('mc'), mxc = mcv.getContext('2d');
@@ -287,80 +287,66 @@ const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antiali
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
     const U = {}; for (const n of ['uWH', 'uMap', 'uTime', 'uBeat', 'uGlass', 'uPsy', 'uTune', 'uDrive', 'uWH2', 'uFx', 'uInt']) U[n] = gl.getUniformLocation(pr, n); return { gl, U }; } catch (e) { console.error('splash sky', e); return null; } })();
 
-/* THE LOOKS (owner 2026-11-26: the max should look like the game's own deep trip, not cheap effects): a post pass over the painted world (sky, road, hills, trees)
-   with the game's art styles entangled: stained glass (living cells, lead lines), ink (outlines and boiling cross-hatch), colour bleed (channels smeared along a
-   slow flow field), recolouring, and afterimage trails that melt toward the horizon. Nothing periodic: every look's strength drifts to new random levels at
-   random moments, and each owns irregular regions of the screen grown from domain-warped noise, so they tangle and trade places. All of it scales with
-   MAX INTENSITY (present but faint at the default, the full wash at the top); the road keeps most of its clarity and the sky stays (barely) recognisable. */
-window.__LOOKON = { glass: 1, ink: 1, bleed: 1, recolour: 1, uv: 1, afterimages: 1 };
-const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, P = null, C = null, U = {}, src = null, sx = null, tex = null, fb = [], ft = [], cur = 0, w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);          /* (reduced motion keeps the looks, just steadier: they preview the game) */          /* (?nolook: the painted world without the looks, for comparing) */
-  const ENV = [0, 1, 2, 3].map(() => ({ v: .3, g: .6, n: 0 }));
-  const VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = vec2(p.x * .5 + .5, .5 - .5 * p.y); gl_Position = vec4(p, 0., 1.); }';
-  const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
- uniform sampler2D uTex, uPrev; uniform vec2 uRes; uniform float uTime, uT, uUV, uHz, uFeed; uniform vec4 uEnv; varying vec2 vUv;
-float h21(vec2 p){ p = mod(p, 289.); vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }          /* (precision-safe: the old fract(p*456.21) hash lost precision at large p and the flow turned that into straight diagonal lines on some GPUs) */
+/* THE LOOKS (owner 2026-11-26: preview the game's own trip, not an imitation): the game's real picture looks (psylook.js, the same shader the game runs)
+   over the painted world, in two layers that each fade a look in, hold it and let it go, overlapping and trading places as in play. Only looks without regular
+   dots, lines or bands: stained glass (most often), liquid melt, neon edges, kaleidoscope, prism, zoom blur, oil paint, cel cartoon, thermal, pastel. Under them a
+   gentle colour bleed along a slow flow. All of it follows MAX INTENSITY: rare and faint at the default, overlapping and full at the top; the road stays readable. */
+window.__LOOKON = { looks: 1, bleed: 1 };
+const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, PL = null, PB = null, UL = {}, UB = {}, src = null, sx = null, tex = null, fb = [], ft = [], w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);
+  const PREC = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
+  const VS = 'attribute vec2 p; varying vec2 vUV; void main(){ vUV = p * .5 + .5; gl_Position = vec4(p, 0., 1.); }';
+  /* the looks the title screen may use (uMix = the game's index - 2), with how often (weight) and how strong at most (cap) */
+  const POOL = [[11, 5, 1], [12, 2, .9], [13, 2, .75], [8, 2, .9], [17, 2, 1], [16, 1, .8], [3, 1, .9], [4, 1, .85], [9, 1, .6], [2, 1, .7]];
+  const pickLook = (not) => { let tot = 0; for (const q of POOL) if (q[0] !== not) tot += q[1]; let r = Math.random() * tot; for (const q of POOL) { if (q[0] === not) continue; r -= q[1]; if (r <= 0) return q; } return POOL[0]; };
+  const LAY = [{ q: null, ph: 'idle', t: 0, next: 1.2, a: 0, hold: 0 }, { q: null, ph: 'idle', t: 0, next: 4, a: 0, hold: 0 }];
+  const BLEED = { v: .5, g: .7, n: 0 };
+  const FB = PREC + `uniform sampler2D uTex, uOrig; uniform vec2 uRes; uniform float uTime, uT, uHz, uBleed; varying vec2 vUV;
+float h21(vec2 p){ p = mod(p, 289.); vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * f * (f * (f * 6. - 15.) + 10.); return mix(mix(h21(i), h21(i + vec2(1., 0.)), f.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), f.x), f.y); }
-float fbm(vec2 p){ float s = 0., a = .5; const mat2 R = mat2(.8, .6, -.6, .8); p = R * p * 1.17; for (int i = 0; i < 4; i++){ s += a * vn(p); p = R * p * 2.03 + 1.7; a *= .5; } return s; }          /* (octaves rotated: no grid lines) */
-vec2 curl(vec2 p, float t){ float e = .06, n = fbm(p + t);          /* (a wider step: smooth slopes, nothing tiny blown up) */ return vec2(fbm(p + vec2(0., e) + t) - n, -(fbm(p + vec2(e, 0.) + t) - n)) / e; }
-vec3 hrot(vec3 c, float a){ const vec3 k = vec3(.57735); float co = cos(a); return c * co + cross(k, c) * sin(a) + k * dot(k, c) * (1. - co); }
-float lum(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
-vec3 sat(vec3 c, float s){ return clamp(mix(vec3(lum(c)), c, s), 0., 1.); }
-float reg(vec2 q, float cov, vec2 o, float sc){ float n = fbm(q * sc + o); return smoothstep(1. - cov - .09, 1. - cov + .09, n); }
-void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q = vec2(uv.x * asp, uv.y); float T = uTime;
-  float dy = (uv.y - uHz) / max(.05, 1. - uHz), hw = .02 + .55 * max(0., dy), road = dy > 0. ? 1. - smoothstep(hw, hw + .1, abs(uv.x - .5)) : 0., keep = 1. - .72 * road;
-  float sky = 1. - smoothstep(uHz - .06, uHz + .01, uv.y), cov = .16 + .74 * uT;
-  vec2 fl = curl(q * 1.1 + 2., T * .03);
-  float rG = reg(q + fl * .05, cov, vec2(3.1, T * .021), 1.5), rI = reg(q - fl * .05, cov * .9, vec2(9.7, -T * .017), 1.25), rB = reg(q + fl * .1, cov, vec2(-5., T * .025), .9), rC = reg(q, cov, vec2(T * .013, 7.), 1.15);
-  /* colour bleed: the picture melts along the flow, channels apart */
-  vec2 f2 = curl(q * 2.2 + 3., T * .05); float bA = uEnv.z * rB * (.003 + .02 * uT) * keep;
-  vec2 m = uv + f2 * bA * .6; vec3 base = texture2D(uTex, uv).rgb, col = vec3(texture2D(uTex, m + f2 * bA).r, texture2D(uTex, m).g, texture2D(uTex, m - f2 * bA).b);
-  /* recolouring: hues turn by region, saturation climbs */
-  float sR = uEnv.w * rC * (.15 + .85 * uT) * keep; col = mix(col, sat(hrot(col, 3.2 * (fbm(q * .7 + T * .02) - .5) + 1.2 * uUV), 1.55), sR * .75);
-  /* stained glass: living cells take the colour under their heart, lead between them */
-  float sG = uEnv.x * rG * (.1 + .9 * pow(uT, 1.2)) * keep;
-  if (sG > .01){ float s = 8. + 7. * fbm(q * .45 + 1.7); vec2 g = q * s + fl * .35, id = floor(g), fr = fract(g); float d1 = 9., d2 = 9.; vec2 sp = vec2(0.), sid = id;
-    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec2 o = vec2(float(i), float(j)), c = id + o, sd = .5 + .9 * (vec2(vn(c * 1.7 + T * .07), vn(c * 2.3 - T * .06)) - .5); float d = length(o + sd - fr);
-      if (d < d1){ d2 = d1; d1 = d; sp = c + sd; sid = c; } else if (d < d2) d2 = d; }
-    vec2 suv = vec2(sp.x / s / asp, sp.y / s); vec3 cc = sat(hrot(texture2D(uTex, clamp(suv, 0., 1.)).rgb, (h21(sid) - .5) * .9), 1.7) * (.92 + .3 * (1. - d1));
-    float lead = 1. - smoothstep(.025, .07 + .02 * (1. - uT), d2 - d1); vec3 glass = mix(cc, vec3(.05, .03, .08), lead * .92); col = mix(col, glass, sG * .92); }
-  /* ink: outlines and a cross-hatch that boils (redrawn eight times a second, never sliding) */
-  float sI = uEnv.y * rI * (.1 + .9 * uT) * keep;
-  if (sI > .01){ vec2 e = 1.6 / uRes; float l0 = lum(texture2D(uTex, uv + vec2(-e.x, 0.)).rgb), l1 = lum(texture2D(uTex, uv + vec2(e.x, 0.)).rgb), l2 = lum(texture2D(uTex, uv + vec2(0., -e.y)).rgb), l3 = lum(texture2D(uTex, uv + vec2(0., e.y)).rgb);
-    float ed = smoothstep(.06, .2, length(vec2(l1 - l0, l3 - l2))), L = lum(col), bo = floor(T * 6.);
-    float wash = smoothstep(.45, .75, fbm(q * 7. + vec2(bo * 1.37, bo * .71))) * smoothstep(.6, .2, L);          /* (shadows inked in irregular blotches that redraw a few times a second; no ruled lines) */
-    col = mix(col, col * .12, ed * sI * .95); col *= 1. - sI * .45 * wash; }
-  /* (no blacklight edge glow: its diagonal sampling drew pale diagonal streaks on some GPUs) */
-  /* afterimages: the last picture lingers, drifting toward the horizon and along the flow */
-  vec2 pp = mix(vec2(.5, uHz), uv, .994); vec3 pv = texture2D(uPrev, vec2(pp.x, 1. - pp.y)).rgb;          /* (the feedback texture is stored bottom-up) */ col = mix(col, max(col, pv * .9), uFeed * (1. - .85 * road));
-  col = mix(base, col, sky > .5 ? .86 : 1.);          /* (the sky stays recognisable) */
+float fbm(vec2 p){ float s = 0., a = .5; const mat2 R = mat2(.8, .6, -.6, .8); p = R * p * 1.17; for (int i = 0; i < 4; i++){ s += a * vn(p); p = R * p * 2.03 + 1.7; a *= .5; } return s; }
+vec2 curl(vec2 p, float t){ float e = .06, n = fbm(p + t); return vec2(fbm(p + vec2(0., e) + t) - n, -(fbm(p + vec2(e, 0.) + t) - n)) / e; }
+void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q = vec2(uv.x * asp, yd);
+  float dy = (yd - uHz) / max(.05, 1. - uHz), hw = .02 + .55 * max(0., dy), road = dy > 0. ? 1. - smoothstep(hw, hw + .1, abs(uv.x - .5)) : 0.;
+  float reg = smoothstep(.62 - .5 * uT, .78 - .5 * uT, fbm(q * .9 + vec2(-5., uTime * .025)));          /* (the bleed owns drifting patches that grow with the dial) */
+  vec2 f2 = curl(q * 2.2 + 3., uTime * .05); f2.y = -f2.y; float bA = uBleed * reg * (.003 + .02 * uT) * (1. - .72 * road);
+  vec2 m = uv + f2 * bA * .6; vec3 col = vec3(texture2D(uTex, m + f2 * bA).r, texture2D(uTex, m).g, texture2D(uTex, m - f2 * bA).b);
+  vec3 o = texture2D(uOrig, uv).rgb; col = mix(col, o, road * .55);          /* (the road stays readable) */
+  if (dy < -.03) col = mix(o, col, .9);          /* (the sky stays (barely) recognisable) */
   gl_FragColor = vec4(col, 1.); }`;
-  const CP = 'precision mediump float; uniform sampler2D uTex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(uTex, vec2(vUv.x, 1. - vUv.y)); }';
   function init() { gl = cvs.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: false }); if (!gl) return false; gl.disable(gl.DITHER);
     const sh = (t, sr) => { const o = gl.createShader(t); gl.shaderSource(o, sr); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
     const prog = (f) => { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); return pr; };
-    P = prog(FS); C = prog(CP); const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    for (const n of ['uTex', 'uPrev', 'uRes', 'uTime', 'uT', 'uUV', 'uHz', 'uFeed', 'uEnv']) U[n] = gl.getUniformLocation(P, n);
+    PL = prog(PSYLOOK_FS.replace('precision highp float;', PREC)); PB = prog(FB);
+    for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix']) UL[n] = gl.getUniformLocation(PL, n);
+    for (const n of ['uTex', 'uOrig', 'uRes', 'uTime', 'uT', 'uHz', 'uBleed']) UB[n] = gl.getUniformLocation(PB, n);
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
     src = document.createElement('canvas'); sx = src.getContext('2d'); tex = mk(); return true; }
   function mk() { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); return t; }
   function sizeTo(nw, nh) { w = nw; h = nh; cvs.width = w; cvs.height = h; src.width = w; src.height = h; for (const t of ft) gl.deleteTexture(t); for (const f of fb) gl.deleteFramebuffer(f); ft = []; fb = [];
     for (let i = 0; i < 2; i++) { const t = mk(); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); ft.push(t); fb.push(f); }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); }
-  const draw = (pr) => { gl.useProgram(pr); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
+  const quad = (pr) => { gl.useProgram(pr); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
   function off(why) { dead = true; cvs.style.display = 'none'; window.__LOOKERR = why || window.__LOOKERR || 'off'; }
+  /* a layer's life: idle (a gap that shortens as the dial climbs), then a look fades in, holds, fades out */
+  function step(L, i, t, dt, T) { const other = LAY[1 - i].q ? LAY[1 - i].q[0] : -1;
+    if (L.ph === 'idle') { if (t >= L.next && (i === 0 || T > .3)) { L.q = pickLook(other); L.ph = 'in'; L.t = 0; L.hold = (2 + Math.random() * 4) * (.6 + .8 * T); } return 0; }
+    L.t += dt; if (L.ph === 'in') { L.a = Math.min(1, L.t / (1.4 - .6 * T)); if (L.a >= 1) { L.ph = 'hold'; L.t = 0; } }
+    else if (L.ph === 'hold') { L.a = 1; if (L.t >= L.hold) { L.ph = 'out'; L.t = 0; } }
+    else { L.a = Math.max(0, 1 - L.t / 1.6); if (L.a <= 0) { L.ph = 'idle'; L.q = null; L.next = t + (6.5 - 5.6 * T) * (.5 + .8 * Math.random()); } }
+    const e = L.a * L.a * (3 - 2 * L.a); return L.q ? e * L.q[2] * (.18 + .82 * Math.pow(T, 1.1)) : 0; }
   function render(t, dt, hzf) { if (dead || GAME.ready) return; if (!gl) { try { if (!init()) return off('no webgl'); } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); } }
-    const I = INT(), nw = Math.max(2, skyc.width || Math.round(W)), nh = Math.max(2, skyc.height || Math.round(H));          /* (exactly the sky's own resolution: resampling its fine dot texture drew criss-cross moire lines on big screens) */ if (nw !== w || nh !== h) sizeTo(nw, nh);
-    /* each look drifts to a new random strength at a random moment (resting now and then when the dial is low) */
-    for (const e of ENV) { if (t > e.n) { e.g = Math.random() < .2 * (1 - I.t) ? 0 : .3 + .7 * Math.random(); e.n = t + 2 + Math.random() * 6; } e.v += (e.g - e.v) * Math.min(1, dt * .55); }
+    const I = INT(), T = I.t, nw = Math.max(2, skyc.width || Math.round(W)), nh = Math.max(2, skyc.height || Math.round(H)); if (nw !== w || nh !== h) sizeTo(nw, nh);
+    const O = window.__LOOKON, s0 = step(LAY[0], 0, t, dt, T) * O.looks, s1 = step(LAY[1], 1, t, dt, T) * O.looks;
+    if (t > BLEED.n) { BLEED.g = Math.random() < .2 * (1 - T) ? 0 : .35 + .65 * Math.random(); BLEED.n = t + 2 + Math.random() * 6; } BLEED.v += (BLEED.g - BLEED.v) * Math.min(1, dt * .55);
     sx.drawImage(skyc, 0, 0, w, h); sx.drawImage(bg, 0, 0, w, h); sx.drawImage(cv, 0, 0, w, h);
-    gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-    const nx = 1 - cur; gl.bindFramebuffer(gl.FRAMEBUFFER, fb[nx]); gl.viewport(0, 0, w, h); gl.useProgram(P);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.uTex, 0); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ft[cur]); gl.uniform1i(U.uPrev, 1);
-    gl.uniform2f(U.uRes, w, h); gl.uniform1f(U.uTime, t); gl.uniform1f(U.uT, I.t); const O = window.__LOOKON; gl.uniform1f(U.uUV, I.uv * O.uv); gl.uniform1f(U.uHz, hzf); gl.uniform1f(U.uFeed, (.04 + .5 * Math.pow(I.t, 1.4)) * O.afterimages * (CALM ? 0 : 1)); window.__LOOKOK = (window.__LOOKOK || 0) + 1; gl.uniform4f(U.uEnv, ENV[0].v * O.glass, ENV[1].v * O.ink, ENV[2].v * O.bleed, ENV[3].v * O.recolour);
-    draw(P); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h); gl.useProgram(C); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ft[nx]); gl.uniform1i(gl.getUniformLocation(C, 'uTex'), 0); draw(C); cur = nx;
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.viewport(0, 0, w, h);
+    const look = (inTex, outFb, L, s) => { gl.bindFramebuffer(gl.FRAMEBUFFER, outFb); gl.useProgram(PL); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, inTex); gl.uniform1i(UL.textureSampler, 0);
+      gl.uniform2f(UL.uTexel, 1 / w, 1 / h); gl.uniform2f(UL.uRes, w, h); gl.uniform1f(UL.uCell, 8); gl.uniform1f(UL.uVec, 0); gl.uniform1f(UL.uAsc, 0); gl.uniform1f(UL.uTime, t); gl.uniform1f(UL.uSty, s); gl.uniform1f(UL.uMix, L.q ? L.q[0] : 0); quad(PL); };
+    look(tex, fb[0], LAY[0], s0); look(ft[0], fb[1], LAY[1], s1);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.useProgram(PB); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ft[1]); gl.uniform1i(UB.uTex, 0); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(UB.uOrig, 1);
+    gl.uniform2f(UB.uRes, w, h); gl.uniform1f(UB.uTime, t); gl.uniform1f(UB.uT, T); gl.uniform1f(UB.uHz, hzf); gl.uniform1f(UB.uBleed, BLEED.v * O.bleed); quad(PB);
+    window.__LOOKOK = (window.__LOOKOK || 0) + 1; window.__LOOKNOW = [LAY[0].q ? LAY[0].q[0] : '-', s0.toFixed(2), LAY[1].q ? LAY[1].q[0] : '-', s1.toFixed(2)].join(' ');
     if (cvs.style.display === 'none') cvs.style.display = 'block'; }
   return { render, off }; })();
 const DRIVE = { z: 0 };
@@ -565,7 +551,7 @@ if (/[?&]layers\b/.test(location.search)) addEventListener('load', () => { const
     const c = (id) => { const e = document.getElementById(id); return e ? e.width + 'x' + e.height : '-'; };
     return ['AFTERGLOW layers report', 'screen ' + innerWidth + 'x' + innerHeight + ' css px, devicePixelRatio ' + devicePixelRatio, 'canvases: sky ' + c('sky') + ', shading ' + c('bg') + ', trees ' + c('c') + ', looks ' + c('fx') + ', molecule ' + c('mc'), 'gpu ' + gpu, 'browser ' + navigator.userAgent, 'dial ' + (typeof TUNE !== 'undefined' ? Math.round(TUNE.f) : '?') + ' THz', 'precision: ' + (() => { try { const g = document.createElement('canvas').getContext('webgl'), f = g.getShaderPrecisionFormat(g.FRAGMENT_SHADER, g.HIGH_FLOAT); return f && f.precision ? 'highp ' + f.precision + ' bits' : 'no highp'; } catch (e) { return '?'; } })(), 'looks: ' + (window.__LOOKERR ? 'OFF (' + window.__LOOKERR + ')' : window.__LOOKOK ? 'running, ' + window.__LOOKOK + ' frames' : 'not started') + ', reduced motion ' + matchMedia('(prefers-reduced-motion: reduce)').matches, 'hidden: ' + [...box.querySelectorAll('button')].filter((b) => b.style.textDecoration === 'line-through').map((b) => b.textContent).join(', ')].join('\n'); };
   { const hd = document.createElement('div'); hd.textContent = 'EFFECTS (inside Looks)'; hd.style.cssText = 'margin-top:6px;font:800 10px system-ui;letter-spacing:.12em;color:#9fd8ff'; box.appendChild(hd);
-    for (const [nm, k] of [['Stained glass', 'glass'], ['Ink', 'ink'], ['Colour bleed', 'bleed'], ['Recolour', 'recolour'], ['Afterimages', 'afterimages']]) { const b = document.createElement('button'); b.textContent = nm; b.dataset.fx = k; b.style.cssText = 'border:1px solid #fff3;border-radius:6px;color:#fff;padding:6px;font:700 12px system-ui;cursor:pointer;text-align:left'; st(b, true);
+    for (const [nm, k] of [['Game looks', 'looks'], ['Colour bleed', 'bleed']]) { const b = document.createElement('button'); b.textContent = nm; b.dataset.fx = k; b.style.cssText = 'border:1px solid #fff3;border-radius:6px;color:#fff;padding:6px;font:700 12px system-ui;cursor:pointer;text-align:left'; st(b, true);
       b.addEventListener('pointerdown', (e) => e.stopPropagation()); b.addEventListener('click', (e) => { e.stopPropagation(); const O = window.__LOOKON; O[k] = O[k] ? 0 : 1; st(b, !!O[k]); }); box.appendChild(b); } }
   const cp = document.createElement('button'); cp.textContent = 'COPY REPORT'; cp.style.cssText = 'margin-top:4px;border:0;border-radius:6px;background:#38e8ff;color:#06101f;padding:7px;font:800 12px system-ui;cursor:pointer';
   const ta = document.createElement('textarea'); ta.style.cssText = 'display:none;width:100%;height:110px;font:11px ui-monospace,Consolas,monospace;background:#050810;color:#cfe;border:1px solid #fff3;border-radius:6px';
