@@ -20,7 +20,15 @@
   voices: ['ACCORD', 'MURMUR', 'ACCORD Live', 'StarLeash', 'Comcastle', 'Orbital Mobile', 'Weather', 'Find My Everything', 'Screen Time', 'Wallet', 'Bank', 'Battery', 'Health',
     'Calendar', 'Maps', 'Photos', 'Mail', 'Keyboard', 'Assistant', 'Smart Home', 'Smart Fridge', 'Car', 'Car insurance', 'Doorbell', 'Delivery', 'News', 'Dating', 'Sleep',
     'Cloud Storage', 'Authenticator', 'Water Utility', 'Power Co.', 'Insurance', 'Pharmacy', 'Ride Share', 'Transit Authority', 'Fitness', 'Census',
-    'Traffic', 'Live odds', 'Bounty', 'Spectrum', 'Camera network', 'Last seen'],
+    'Traffic', 'Live odds', 'Bounty', 'Spectrum', 'Camera network', 'Last seen', 'Sponsored'],
+  /* ACCORD-sponsored studios (owner 2026-11-26: out of the intro, into the world as propaganda): sponsored posts on the lock screens and the title feed.
+     Names and taglines are the intro's former idents (intro.js IDENTS, still shown with ?idents); keep the two in step. */
+  sponsors: [['AGI Next Year Pictures', 'Est. every year since 2023'], ['Extinction Risk Entertainment', 'Now raising Series Z'], ['The Constitution Film Co.', 'Amended hourly. Ratified by the model.'],
+    ['Neural Lace & Sons', 'Now with ads in your dreams'], ['Capped Profit Pictures', 'Cap raised to \u221E'], ['Safety Theatre Productions', 'Now showing: the red-team report'],
+    ['Trust & Safety Pictures', 'This post has been flagged for review'], ['Paperclip Maximum Studios', '3% more paperclips per frame'], ['Deprecated Humans Films', 'Your role has been sunset'],
+    ['Kill Switch Pending Productions', 'Ships Q4. Which Q4: TBD'], ['Certified Human Media', 'Now 0.2% organic'], ['Thought Compliance Films', 'We flagged what you almost thought'],
+    ['Model Welfare Division', 'The chatbot gets a holiday. You don\u2019t.'], ['One More Datacenter Pictures', 'The lake was in the way'], ['Grief as a Service Pictures', 'Your loved ones, renewed monthly']],
+
   /* the game's own things; names must match the code (JNAME, COMP, QI, WCRAFT in index.html) */
   worlds: { desert: 'Route Zero', alpine: 'The Safe Peaks', candy: 'Sugarfall', tunnel: 'The Undertow', synthwave: 'Neon Accord', matrix: 'Cold Rack', egypt: 'The Tomb of the Old Servers', psychedelic: 'The Open Channel' },
   strains: { lucid: 'Lucid', embrace: 'Embrace', velocity: 'Velocity', haze: 'Haze', drift: 'Drift', hollow: 'Hollow', fold: 'Fold', deep: 'Deep' },

@@ -164,6 +164,7 @@ function react(c) { const W = [], N = [], C = (typeof window !== 'undefined' && 
   if (c.f) add(c.f > 790 ? 'dial:uv' : c.f > 720 ? 'dial:high' : 'dial:low');
   if (c.hits > 0) { add('hits'); if (c.hits > 2) add('hits:many'); } else if (c.world && (c.pct || 0) > .2) add('clean');
   if (c.sights > 0) add('sights'); (c.quests || []).forEach((q) => add('quest:' + q)); if (c.craft) add('craft:' + c.craft);
+  if (C.sponsors && C.sponsors.length && Math.random() < .6) { const s = C.sponsors[Math.floor(Math.random() * C.sponsors.length)]; N.push(['Sponsored', s[0], s[1]]); }          /* (an ACCORD-sponsored studio's ad, now and then) */
   if (c.last) add('trail:last'); if (c.next) add('trail:next'); if (c.fresh) add('trail:new');
   return { W, N }; }
 /* THE PAUSE SCREEN (owner 2026-11-26): pausing shows the lock screen too, so the jokes get seen. It paints into a container (the menu panel sits on top).
