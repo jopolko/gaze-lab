@@ -3731,9 +3731,9 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   engine.onContextRestoredObservable.add(() => {  setTimeout(() => location.reload(), 150); });
   document.addEventListener('visibilitychange', () => {  if (!document.hidden && wasXR && !inXR) setTimeout(() => location.reload(), 300); });          // out of VR by the headset's own button: back to the start page
   addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
-  /* camera tracking is on by default wherever there is a camera (not in the headset): the head steers, and the keyboard, mouse and touch keep working next to it. Turn it off with the button (remembered), or &nocam. */
+  /* the camera never starts by itself on load (2026-11-26): head steering is chosen on the start card (Steer with your head), or forced with &cam */
   { const cb0 = camBtn.onclick; camBtn.onclick = function () { const r = cb0.apply(this, arguments); setTimeout(() => { OPT.cam = camOn ? 1 : 0; try { optSave(); } catch (e) { } }, 500); return r; };
-    if (camUI.isConnected && !Q.has('nocam') && OPT.cam !== 0 && !/OculusBrowser|Quest/.test(navigator.userAgent)) setTimeout(() => { if (!camOn) { try { camBtn.onclick(); } catch (e) { } } }, 700); }
+    if (camUI.isConnected && Q.has('cam') && !/OculusBrowser|Quest/.test(navigator.userAgent)) setTimeout(() => { if (!camOn) { try { camBtn.onclick(); } catch (e) { } } }, 700); }
   if (Q.has('splash')) { (() => {
     const keep = (m) => { const n = m.name; if (n === 'sky' || n === 'ring' || n === 'ringskin') return true; return n === 'src' && (m.__cat === 'ground' || m.__cat === 'veg' || m.__cat === 'back'); };
     const sweep = () => { for (const m of scene.meshes) if (!keep(m)) { if (m.isEnabled()) m.setEnabled(false); m.isVisible = false; } for (const p of scene.particleSystems || []) { try { p.stop(); } catch (e) { } } };
