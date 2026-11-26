@@ -189,5 +189,5 @@ if (new URLSearchParams(location.search).has('strains')) document.getElementById
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();          /* inside the shell (app.html): fullscreen the shell, which stays put while pages change inside it */
   if (/[?&]nofs\b/.test(location.search) || (window.top !== window.self && !SH) || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const D = SH ? SH.document : document, de = D.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(D.fullscreenElement || D.webkitFullscreenElement);
   if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
-  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); try { window.AGLock && AGLock.onGesture(go); } catch (e) { }          /* (the fake lock's unlock tap counts as the first tap) */ })();</script>
 </body></html>

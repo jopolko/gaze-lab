@@ -118,7 +118,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
      the device you're on (a phone in the iPhone or Android manner, or a desktop), with real notifications from made-up services: ACCORD or MURMUR checking in, and a
      satellite or network provider joking along. No real brands or logos. The first touch or key "unlocks" it straight back to the game, as if the system tricked
      you into coming back. Lines come from ACCORD, MURMUR or a service, never "us". */
-  function lockScreen(kind, first) { if (!window.AGLock) { busy = false; return; } AGLock.show({ kind, first: !!first, line: CHECKIN[CI.i++ % CHECKIN.length], away: Math.max(30, Math.round((performance.now() - last) / 1000)), onDone() { last = performance.now(); busy = false; } }); }          /* (THE FAKE LOCK SCREEN lives in lock.js, shared with the game and the menu) */
+  function lockScreen(kind, first) { if (!window.AGLock) { busy = false; return; } AGLock.show({ kind, first: !!first, ctx: (() => { const G = window.__PROG || {}, c = { last: G.last, next: G.next, fresh: !G.last && !G.n }; try { c.f = TUNE.f; } catch (e) { } return c; })(), line: CHECKIN[CI.i++ % CHECKIN.length], away: Math.max(30, Math.round((performance.now() - last) / 1000)), onDone() { last = performance.now(); busy = false; } }); }          /* (THE FAKE LOCK SCREEN lives in lock.js, shared with the game and the menu) */
   const EV = [
     { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
     { k: 'vector', at: 70, go() { dg.style.transition = 'opacity .4s'; dg.style.opacity = '.32'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 1400); } },
@@ -448,5 +448,5 @@ ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') 
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();
   if (/[?&]nofs\b/.test(location.search) || (window.top !== window.self && !SH) || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const D = SH ? SH.document : document, de = D.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(D.fullscreenElement || D.webkitFullscreenElement);
   if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
-  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+  for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); try { window.AGLock && AGLock.onGesture(go); } catch (e) { }          /* (the fake lock's unlock tap counts as the first tap) */ })();</script>
 </body></html>

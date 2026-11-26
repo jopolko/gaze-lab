@@ -1581,13 +1581,16 @@ void main() {
     if (window.ME) btn('Next track', () => { try { ME.next(); } catch (e) { } });          /* not feeling this one? a fresh track for the same level */
     { const sb = btn('', () => { STORYON = !STORYON; try { localStorage.setItem('dl_story', STORYON ? '1' : '0'); } catch (e) { } sb.textContent = 'Story: ' + (STORYON ? 'on' : 'off'); }); sb.textContent = 'Story: ' + (STORYON ? 'on' : 'off'); }
     btn('Look', () => { location.href = 'dressup.html?next=' + encodeURIComponent('index.html' + location.search); });
-    btn('\uD83D\uDD12\uFE0E Lock', () => { const go = () => { try { AGLock.enable(); AGLock.show({}); } catch (e) { } }; if (window.AGLock) go(); else { const sc = document.createElement('script'); sc.src = 'lock.js'; sc.onload = go; document.head.appendChild(sc); } });          /* (the lock screen gag on demand; also switches the idle lock back on) */
+    btn('\uD83D\uDD12\uFE0E Lock', () => { const go = () => { try { AGLock.enable(); AGLock.show({ ctx: window.__lkCtx && window.__lkCtx() }); } catch (e) { } }; if (window.AGLock) go(); else { const sc = document.createElement('script'); sc.src = 'lock.js'; sc.onload = go; document.head.appendChild(sc); } });          /* (the lock screen gag on demand; also switches the idle lock back on) */
     btn('Restart', () => { location.reload(); });
     if (!Q.has('story') && !Q.has('tutorial')) { const w = PZ('pzW'); if (w) { w.title = 'World'; G.appendChild(w); } }
     btn('Quit to menu', () => { location.href = 'menu.html'; });
     const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Settings \u00B7 diagnostics'; dv.style.gridColumn = '1/-1'; dv.onclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
     const VRL = el.querySelector('#pmVR');
-    const LKB = el.querySelector('#pmLk'), lkPaint = () => { try { if (window.AGLock) AGLock.paint(LKB); else { const sc = document.createElement('script'); sc.src = 'lock.js'; sc.onload = () => { try { AGLock.paint(LKB); } catch (e) { } }; document.head.appendChild(sc); } } catch (e) { } };          /* (the lock screen behind the pause panel: the jokes get seen) */
+    /* what the player is doing right now, for the apps to react to */
+    window.__lkCtx = () => { const c = {}; try { const nm = JNAME[WORLD0] ? JNAME[WORLD0][0] : WORLD0; c.world = nm.toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()); } catch (e) { } try { c.pct = Math.max(0, Math.min(1, PH.z / END)); } catch (e) { } try { c.score = Math.floor(PH.score); } catch (e) { }
+      try { if (DOSE.comp && DOSE.ph !== 'sober') c.strain = (COMP[DOSE.comp] || {}).name || ''; } catch (e) { } try { c.hits = (window.__crashes || []).length; } catch (e) { } try { c.f = window.__SIG.f; } catch (e) { } try { c.sights = SIGHT.found; } catch (e) { } return c; };
+    const LKB = el.querySelector('#pmLk'), lkPaint = () => { try { if (window.AGLock) AGLock.paint(LKB, { ctx: window.__lkCtx() }); else { const sc = document.createElement('script'); sc.src = 'lock.js'; sc.onload = () => { try { AGLock.paint(LKB, { ctx: window.__lkCtx() }); } catch (e) { } }; document.head.appendChild(sc); } } catch (e) { } };          /* (the lock screen behind the pause panel: the jokes get seen) */
     return { set(v) { el.classList.toggle('on', v); if (!v) T.hidden = true; if (v) lkPaint(); if (v && VRJ.on) { const [a, t] = VRJ.pause(); VRL.textContent = ''; const b = document.createElement('b'); b.style.cssText = 'letter-spacing:.12em;color:#38e8ff;text-transform:uppercase;font-size:10px'; b.textContent = a; VRL.append(b, document.createElement('br'), t); VRL.hidden = false; } } };          /* (headset only: a new status line each pause) */
   })();
   pzb.onclick = () => setPause(!PAUSED); PZ('pzR').onclick = () => setPause(false);
@@ -3904,7 +3907,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     scene.onBeforeRenderObservable.add(() => { try { window.__LVMOLS.n = Math.max(window.__LVMOLS.n || 0, 6); } catch (e) { } U.trip = Math.max(U.trip * (HOLD.t > .85 ? 1 : .2) + hold() * (HOLD.t > .85 ? 0 : .8), hold()); });
     /* the look waves (the colour/vector/ascii washes a deep trip brings): from a quarter of the dial up, more often, longer and stronger as it climbs */
     { const wave = () => { const t = HOLD.t; if (t > .22) try { lookPush(pickL(), 1, 0, 3 + 5 * t, .2 + .8 * t, true); } catch (e) { } setTimeout(wave, (7 - 5 * t) * 1000 * (.7 + .6 * Math.random())); }; setTimeout(wave, 2500); }
-    { const STR = ['lucid', 'ember', 'lucid']; let n = 0; const roll = () => { try { window.__G.doseTake(STR[n++ % STR.length]); } catch (e) { } }; setTimeout(roll, 1500); setInterval(roll, 21000); }
+    { const STR = ['lucid', 'embrace', 'velocity', 'haze', 'drift']; let n = 0; const roll = () => { try { window.__G.doseTake(STR[n++ % STR.length]); } catch (e) { } }; setTimeout(roll, 1500); setInterval(roll, 21000); }
     window.__splashTint = (r, g, b, a) => { try { const m = sky.material; if (m && m.setVector4) m.setVector4('uTint', new B.Vector4(r, g, b, a)); } catch (e) { } };
     window.__splashReady = true; })(); }
   /* THE EFFECTS LAB (?fxlab): every value feeding the picture, live. FREEZE holds the picture exactly as it is (every value pinned), COPY gives the numbers,
