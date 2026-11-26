@@ -303,9 +303,9 @@ void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q 
   /* ink: outlines and a cross-hatch that boils (redrawn eight times a second, never sliding) */
   float sI = uEnv.y * rI * (.1 + .9 * uT) * keep;
   if (sI > .01){ vec2 e = 1.6 / uRes; float l0 = lum(texture2D(uTex, uv + vec2(-e.x, 0.)).rgb), l1 = lum(texture2D(uTex, uv + vec2(e.x, 0.)).rgb), l2 = lum(texture2D(uTex, uv + vec2(0., -e.y)).rgb), l3 = lum(texture2D(uTex, uv + vec2(0., e.y)).rgb);
-    float ed = smoothstep(.06, .2, length(vec2(l1 - l0, l3 - l2))), L = lum(col), bo = floor(T * 8.), jt = (h21(vec2(bo, 3.7)) - .5) * 6.;
-    float h1 = smoothstep(.62, .9, abs(fract((px.x + px.y + jt) / 6.) - .5) * 2.), h2 = smoothstep(.62, .9, abs(fract((px.x - px.y - jt) / 6.) - .5) * 2.);
-    float hatch = h1 * smoothstep(.62, .3, L) + h2 * smoothstep(.4, .15, L); col = mix(col, col * .12, ed * sI * .95); col *= 1. - sI * .42 * hatch; }
+    float ed = smoothstep(.06, .2, length(vec2(l1 - l0, l3 - l2))), L = lum(col), bo = floor(T * 6.);
+    float wash = smoothstep(.45, .75, fbm(q * 7. + vec2(bo * 1.37, bo * .71))) * smoothstep(.6, .2, L);          /* (shadows inked in irregular blotches that redraw a few times a second; no ruled lines) */
+    col = mix(col, col * .12, ed * sI * .95); col *= 1. - sI * .45 * wash; }
   /* ultraviolet: edges glow like blacklight */
   if (uUV > 0.){ vec2 e = 2. / uRes; float d = length(texture2D(uTex, uv + e).rgb - texture2D(uTex, uv - e).rgb); col += vec3(.55, .22, 1.) * smoothstep(.08, .4, d) * uUV * .7 * keep; }
   /* afterimages: the last picture lingers, drifting toward the horizon and along the flow */
