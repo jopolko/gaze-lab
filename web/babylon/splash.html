@@ -172,7 +172,7 @@ void main() {
   if (vP.y >= 0.) { vec3 d = vS;
     if (uFx.z > .001) { float band = floor(d.y * 14. + floor(uTime * 9.) * 3.1);          /* distortion: a wobble, and now and then bands of sky slip sideways */
       d.xy += uFx.z * vec2(.035 * sin(d.y * 38. + uTime * 7.), .025 * sin(d.x * 31. - uTime * 6.));
-      d.x += uFx.z * .07 * (fract(sin(band * 12.9898) * 43758.5453) - .5) * step(.6, fract(sin(band * 78.233) * 9631.7)); }
+      }          /* (the band slips were cut: they read as jagged steps; only the smooth wobble stays) */
     vec3 c = skyAt(d);
     if (uFx.y > .001) { vec3 c1 = skyAt(d + vec3(uFx.w, 0., 0.)), c2 = skyAt(d + vec3(0., uFx.w, 0.));          /* the art looks, from the sky's own edges */
       float L = dot(c, vec3(.3, .5, .2)), e = length(vec2(dot(c1, vec3(.3, .5, .2)) - L, dot(c2, vec3(.3, .5, .2)) - L)), ed = smoothstep(.015, .07, e); vec3 rr;
@@ -209,10 +209,10 @@ const DRIVE = { z: 0 };
 const roadC = (z) => 7 * Math.sin(z * .006) + 3 * Math.sin(z * .017 + 1.3);
 const FX = { mode: 0, t0: 0, t1: 0, next: 4, warp: 0 };
 const FXF = +(new URLSearchParams(location.search).get('fx') || 0);          /* (?fx=1|2|3 holds one look on, for checking) */
-function fxNow(t) { if (FXF) return [FXF, 1, .6]; if (t > FX.next && t > FX.t1) { FX.mode = 1 + Math.floor(Math.random() * 3); FX.t0 = t; FX.t1 = t + 1.2 + Math.random() * 2.2; FX.warp = CALM ? 0 : Math.random() < .55 ? .5 + Math.random() * .5 : 0; FX.next = FX.t1 + 2.5 + Math.random() * 5.5; }
+function fxNow(t) { if (FXF) return [FXF, 1, .6]; if (t > FX.next && t > FX.t1) { FX.mode = Math.random() < .12 ? 1 : 0; FX.t0 = t; FX.t1 = t + 1.6 + Math.random() * 2.4; FX.warp = CALM ? 0 : .45 + Math.random() * .55; FX.next = FX.t1 + 2.5 + Math.random() * 5.5; }
   if (t > FX.t1 + .5) return [0, 0, 0];
   const env = Math.min(1, (t - FX.t0) / .15) * (t < FX.t1 ? 1 : Math.max(0, 1 - (t - FX.t1) / .5)), fit = CALM ? 1 : (Math.sin(t * 23) + Math.sin(t * 37.1) > -.4 ? 1 : .25);
-  return [FX.mode, Math.max(0, env * fit), FX.warp * env * (CALM ? 0 : .5 + .5 * Math.abs(Math.sin(t * 5.3)))]; }
+  return [FX.mode, FX.mode ? Math.max(0, env * .55) : 0, FX.warp * env * (CALM ? 0 : .6 + .4 * Math.sin(t * 1.7))]; }          /* (gentle: a soft wobble that breathes; the vector look at half strength and steady, no flicker) */
 function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = SKY, q = Math.min(1.25, DPR), w = Math.round(W * q), h = Math.round(H * q);
   if (skyc.width !== w || skyc.height !== h) { skyc.width = w; skyc.height = h; } gl.viewport(0, 0, w, h);
   DRIVE.z += dt * (CALM ? 18 : 42);          /* about 150 km/h */
@@ -220,7 +220,7 @@ function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = 
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
   gl.uniform2f(U.uWH, W, H); gl.uniform2f(U.uWH2, skyc.width, skyc.height); gl.uniform4f(U.uMap, cxm, hz, k, k);          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ gl.uniform1f(U.uTime, t); gl.uniform1f(U.uBeat, beat); gl.uniform1f(U.uGlass, 0);          /* (no stained glass on the title screen) */ gl.uniform1f(U.uPsy, 0);
-  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], TUNE.k); { const f = fxNow(t); gl.uniform4f(U.uFx, f[0], f[1], f[2], k * 1.6); } gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
+  gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], 0);          /* (the sky keeps its own colours) */ { const f = fxNow(t); gl.uniform4f(U.uFx, f[0], f[1], f[2], k * 1.6); } gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 
 /* the strains: a ball-and-stick model turning in the column of light, a new one every few seconds */
