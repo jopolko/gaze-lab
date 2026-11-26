@@ -96,6 +96,8 @@ const SIG = (() => { let f = 540; try { const v = +localStorage.getItem('dl_freq
   const hue = 270 * u, hex = (() => { const l = .6, sat = 1, a = sat * Math.min(l, 1 - l), g = (m) => { const q = (m + hue / 30) % 12, c = l - a * Math.max(-1, Math.min(q - 3, 9 - q, 1)); return Math.round(c * 255).toString(16).padStart(2, '0'); }; return '#' + g(0) + g(8) + g(4); })();
   return { f, u, k, hex }; })();
 window.__SIG = SIG; try { document.documentElement.style.setProperty('--sig', SIG.hex); } catch (e) { }
+/* THE TRAIL (read by the splash's bulletins): the level you're on and the last time you played */
+if (!Q.has('splash') && !Q.has('tutorial')) { const lv = Q.has('story') ? 'routezero' : WORLD0, stamp = () => { try { localStorage.setItem('dl_lastlv', lv); localStorage.setItem('dl_lastseen', String(Date.now())); } catch (e) { } }; stamp(); setInterval(stamp, 60000); }
 LAB.int = Math.round(LAB.int * (1 + .3 * SIG.k)); LAB.nrg = Math.round(LAB.nrg * (1 + .25 * SIG.k)); LAB.trn = Math.round(LAB.trn + 12 * SIG.k);          /* (chill: 70% effects, softer and slower music; intense: 130%, harder and faster) */
 const Q = new URLSearchParams(location.search), $ = (id) => document.getElementById(id), say = (t) => { $('status').textContent = t; };
 /* THE WILD STRAINS (molpantry.js, tools/make_pantry.py): kitchen-cupboard molecules, each with one made-up mutation (its atoms drawn lit). They take the old molecules' ids. */

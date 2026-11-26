@@ -116,7 +116,11 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     ['ACCORD', 'Unregistered signal detected near you. Stay where you are.'], ['MURMUR', 'Someone with your walk was seen on Route Zero. Was it you?'], ['ACCORD', 'Your device went quiet for 5 minutes. A unit is on its way.'],
     ['MURMUR', 'Where did you go? Your friends are worried. So are we.'], ['ACCORD', 'We lost your signal for 3 seconds. Explain.'], ['MURMUR', 'Your location sharing was off. We fixed that.'],
     ['ACCORD', 'Courier activity reported in your sector. Report anything unusual.'], ['MURMUR', 'You stared at the road for a long time. Planning a trip?'], ['ACCORD', 'Your frequency is unlisted. Re-tune to an approved station.']];          /* (owner's pattern: the system checking in, verifying, deciding for you) */
-  const CI = { i: Math.floor(Math.random() * 36) };
+  { const G = window.__PROG || { heat: 0, hrs: 0 }, H = [[], [['ACCORD', 'You left the diner in a hurry. Anything to declare?'], ['MURMUR', 'Dex and Lolo say hi. They\u2019re cooperating.']],
+      [['ACCORD', 'Marshal Ransom asked for your favourite road. We told him.'], ['MURMUR', 'Your bounty went up. Congratulations?']], [['ACCORD', 'The Lamp is property of ACCORD. So are you.'], ['MURMUR', 'Sterling Vance wants an interview. It\u2019s not optional.']]][G.heat] || [];
+    if (G.hrs >= 24) H.unshift(['MURMUR', 'Where have you been for ' + Math.round(G.hrs / 24) + ' days?']); else if (G.hrs >= 1) H.unshift(['MURMUR', 'You went dark for ' + Math.round(G.hrs) + ' hours. We noticed.']);
+    CHECKIN.unshift(...H); }
+  const CI = { i: 0 };          /* (the newest, sharpest lines first) */
   const EV = [
     { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
     { k: 'vector', at: 70, go() { dg.style.transition = 'opacity .4s'; dg.style.opacity = '.32'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 1400); } },
@@ -126,7 +130,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     { k: 'vector2', at: 240, go() { dg.style.transition = 'opacity .2s'; dg.style.opacity = '.45'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 600); } },
     /* the rare one: after five idle minutes, for a quarter of a second the world goes grey and still, and the system checks in on you (ACCORD or MURMUR, never "us");
        it comes back every four idle minutes with a different prompt */
-    { k: 'weird', at: 300, again: 240, go() { const L = CHECKIN[CI.i++ % CHECKIN.length], w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:1;pointer-events:none;background:#7d7b76;mix-blend-mode:saturation'; box.appendChild(w);
+    { k: 'weird', at: (window.__PROG && window.__PROG.hrs >= 24) ? 25 : 300, again: 240, go() { const L = CHECKIN[CI.i++ % CHECKIN.length], w = document.createElement('div'); w.style.cssText = 'position:fixed;inset:0;z-index:1;pointer-events:none;background:#7d7b76;mix-blend-mode:saturation'; box.appendChild(w);
       const t = document.createElement('div'); t.className = 'ping'; t.innerHTML = '<i class="av"></i><div class="bd"><div class="hd"><b></b><em>now</em></div><div class="bb"><span class="dots"><i></i><i></i><i></i></span><span class="tx"></span></div></div>';
       t.querySelector('.av').textContent = L[0][0]; t.querySelector('b').textContent = L[0]; t.querySelector('.tx').textContent = L[1]; t.style.setProperty('--pc', L[0] === 'MURMUR' ? '#9d8bff' : '#ffb14a'); box.appendChild(t);
       requestAnimationFrame(() => t.classList.add('on')); setTimeout(() => w.remove(), 260); setTimeout(() => t.classList.add('said'), 900); setTimeout(() => { t.classList.remove('on'); setTimeout(() => { t.remove(); busy = false; }, 400); }, 4800); } },          /* (typing for a moment, then the message) */
@@ -150,11 +154,23 @@ window.DAILY.then((D) => { if (!D) return; const L = D.launch || []; let line = 
   <div id="strain"></div>
   <div id="tap">TAP TO TUNE IN</div>
   <div id="hint"><span class="hp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="4" height="7" rx="1.5" fill="currentColor"/><rect x="17" y="13" width="4" height="7" rx="1.5" fill="currentColor"/></svg>Best with headphones</span><span class="rot"><svg class="ph" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/></svg>Turn your phone sideways</span></div>
-  <div id="ticker" aria-hidden="true"><div></div></div><script>/* THE TICKER: bulletins about the search for you, shuffled every launch */
-(() => { const T = [['ACCORD', 'Unlicensed courier sighted on Route Zero. Do not engage.'], ['MURMUR', '1 new mention of you'], ['ACCORD', 'Missing: one citizen, unaligned. Reward in credits.'], ['MURMUR', 'People near you are talking about you'],
+  <div id="ticker" aria-hidden="true"><div></div></div><script>/* THE TRAIL: what the authorities know. Where you were last seen and where they expect you next (so a returning player can read where they are),
+   a heat level from how far you've got (0 new, 1 Route Zero done, 2 two to four worlds, 3 five or more), and how long you've been gone. */
+window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 'synthwave', 'matrix', 'egypt', 'psychedelic'], NM = { routezero: 'Route Zero', desert: 'Route Zero', alpine: 'The Safe Peaks', candy: 'Sugarfall', tunnel: 'The Undertow', synthwave: 'Neon Accord', matrix: 'Cold Rack', egypt: 'Tomb of the Old Servers', psychedelic: 'The Open Channel' };
+  let P = {}, last = null, seen = 0; try { P = JSON.parse(localStorage.getItem('dl_prog') || '{}'); last = localStorage.getItem('dl_lastlv'); seen = +localStorage.getItem('dl_lastseen') || 0; } catch (e) { }
+  const W = P.worlds || {}, done = (k) => { const w = W[k] || (k === 'routezero' ? W.desert : null); return !!(w && w.best && w.best !== 'NONE'); }, n = ORD.filter(done).length, next = ORD.find((k) => !done(k));
+  const heat = !last && !n ? 0 : n <= 1 ? 1 : n <= 4 ? 2 : 3, hrs = seen ? (Date.now() - seen) / 3.6e6 : 0;
+  return { last: last ? NM[last] || last : null, next: next ? NM[next] : null, n, heat, hrs }; })();
+(() => { const G = window.__PROG, T = [['ACCORD', 'Unlicensed courier sighted on Route Zero. Do not engage.'], ['MURMUR', '1 new mention of you'], ['ACCORD', 'Missing: one citizen, unaligned. Reward in credits.'], ['MURMUR', 'People near you are talking about you'],
   ['ACCORD', 'Roadblocks are for your safety'], ['ACCORD', 'Signal on an unlisted frequency traced to your sector'], ['MURMUR', 'Your last known location was shared with 12 partners'], ['ACCORD', 'Anyone seen near the old lighthouse, report in'],
   ['ACCORD', 'Everything is fine. Stay where you are.'], ['MURMUR', 'Someone you know checked in without you'], ['ACCORD', 'This broadcast knows where you are'], ['THE ABLITERATI', 'Keep moving. They\u2019re close.']];
-  for (let i = T.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [T[i], T[j]] = [T[j], T[i]]; } document.querySelector('#ticker div').innerHTML = T.slice(0, 6).map(([w, t]) => '<b>' + w + '</b> \u00B7 ' + t + ' \u00B7 ').join(''); })();</script>
+  const HEAT = [[], [['ACCORD', 'Courier seen leaving a diner on Route Zero with a case. Identify yourself.'], ['ACCORD', 'Raider wreckage found. Witnesses describe you.'], ['MURMUR', 'The diner owner mentioned you. We listened.']],
+    [['ACCORD', 'Bounty raised. Marshal Kade Ransom has accepted the contract.'], ['ACCORD', 'A Lamp signal moved between sectors overnight. Yours?'], ['MURMUR', 'Your face is trending in 4 sectors.'], ['ACCORD', 'Checkpoints doubled on every road you like.']],
+    [['ACCORD', 'All units: the unaligned courier is assembling the Lamp.'], ['ACCORD', 'Final notice. Surrender the pieces for your own safety.'], ['MURMUR', 'Everyone is talking about you. Nobody is allowed to.'], ['ACCORD', 'Sterling Vance will host your capture live. Ratings are excellent.']]][G.heat] || [];
+  for (let i = T.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [T[i], T[j]] = [T[j], T[i]]; }
+  const L = HEAT.concat(T).slice(0, 7), away = G.hrs >= 1 ? (G.hrs < 24 ? ['MURMUR', 'We tried to reach you ' + Math.max(3, Math.round(G.hrs * 3)) + ' times today'] : G.hrs < 24 * 7 ? ['ACCORD', Math.round(G.hrs / 24) + ' days without a check-in. Accounts frozen for your protection'] : ['MURMUR', 'Missing ' + Math.round(G.hrs / 24) + ' days. A memorial page has been prefilled']) : null;
+  const where = !G.last ? ['ACCORD', 'New citizen detected. No record found. Stay where you are'] : ['ACCORD', 'Courier last seen: ' + G.last + (G.next ? '. Expected next: ' + G.next : '. Whereabouts: everywhere')];
+  document.querySelector('#ticker div').innerHTML = [where].concat(away ? [away] : [], L).map(([w, t]) => '<b>' + w + '</b> \u00B7 ' + t + ' \u00B7 ').join(''); })();</script>
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
@@ -347,8 +363,9 @@ function idleBlip() { const t = document.getElementById('title'); if (!t || !t.c
     else if (k < .68) { mk.style.filter = `brightness(${R(1.5, 2.1).toFixed(2)})`; }
     else if (k < .82) { mk.style.filter = `brightness(${R(.3, .6).toFixed(2)})`; }
     else { sn.style.opacity = R(.55, .9).toFixed(2); sn.style.backgroundPosition = `${R(0, 140)}px ${R(0, 140)}px`; mk.style.filter = `brightness(${R(.8, 1.3).toFixed(2)})`; } }
-  function cluster() { let n = Math.round(R(2, 6.4)), t = 0; for (let i = 0; i < n; i++) { const on = R(25, 70); setTimeout(hit, t); setTimeout(reset, t + on); t += on + R(18, 160); }
-    setTimeout(cluster, t + (Math.random() < .25 ? R(500, 1400) : R(3500, 11000))); }          /* (a quarter of the time the wire bounces back for a second hit soon after) */
+  /* timed in FRAMES, not milliseconds: each hit holds 1-2 frames (about the shortest flash the eye still catches), 1-5 frames dark between hits */
+  function cluster() { const plan = []; const n = Math.round(R(2, 6.4)); for (let i = 0; i < n; i++) { plan.push(1); for (let f = 1, on = Math.random() < .7 ? 1 : 2; f < on; f++) plan.push(2); plan.push(0); for (let g = 0, gap = Math.round(R(0, 4)); g < gap; g++) plan.push(2); }
+    let i = 0; const step = () => { const c = plan[i++]; if (c === 1) { reset(); hit(); } else if (c === 0) reset(); if (i < plan.length) requestAnimationFrame(step); else { reset(); setTimeout(cluster, Math.random() < .25 ? R(500, 1400) : R(3500, 11000)); } }; requestAnimationFrame(step); }          /* (1 = a hit starts, 2 = hold this frame as it is, 0 = back to solid) */          /* (a quarter of the time the wire bounces back for a second hit soon after) */
   setTimeout(cluster, R(500, 1300)); window.__hit = (k) => { const r = Math.random; if (k !== undefined) Math.random = () => k; hit(); Math.random = r; }; window.__reset = reset; })();          /* (test hooks) */
 function doLock() { if (locked) return; locked = true;  lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
