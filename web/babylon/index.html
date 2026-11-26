@@ -3899,29 +3899,44 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   /* the camera never starts by itself on load (2026-11-26): head steering is chosen on the start card (Steer with your head), or forced with &cam */
   { const cb0 = camBtn.onclick; camBtn.onclick = function () { const r = cb0.apply(this, arguments); setTimeout(() => { OPT.cam = camOn ? 1 : 0; try { optSave(); } catch (e) { } }, 500); return r; };
     if (camUI.isConnected && Q.has('cam') && !/OculusBrowser|Quest/.test(navigator.userAgent)) setTimeout(() => { if (!camOn) { try { camBtn.onclick(); } catch (e) { } } }, 700); }
-  /* FX DEMO (?fxdemo, owner 2026-11-26: decide what the trip may wash over): the same drive three ways, switched live from a small panel.
-     A  everything washed (as the game is now).  B  the things you play with stay clear (pickups, molecules, pads, boosts, rings, rails, gates, bombs, cameras,
-     raiders) while terrain, sky and sun take the full trip.  C  as B, but at the trip's peaks the wash wins for a couple of seconds and swallows them too.
-     How: a second camera, parented to the main one and free of the picture passes, draws the gameplay objects again, clean, on top. (A demo: an object behind a
-     hill shows through it; the real version would mask them inside the passes.) Doses roll every 18 s so the trip stays up while you judge. */
-  if (Q.has('fxdemo')) { (() => {
-    const GP = /^(pill|beam|mol_|molbeam|dosemol|dosebeam|dosename|pad|bb_|bh_|bp_|kring|kret|landring|pyl|drop|acc|bombs|bFunnel|sg[a-z]|raid|craft|jet|blimp|heli|barge|saucer|fighter|jelly|rail)/i, MASK = 0x20000000;
+  /* PLAY CLEAR (owner 2026-11-26): what you play with stays readable while the trip washes the world. Pickups, molecules, pads, boosts, rings, rails, gates,
+     bombs, cameras, raiders, and in-world signs and labels are drawn a second time, clean, by a camera that has none of the picture passes; terrain and sky take
+     the full trip. That clean camera first draws the terrain into depth only (its own materials, colour off), so a clean object behind a hill stays hidden.
+     Once the trip is full (deep into a dose, the level's trip built up) the trip wins now and then: for two or three seconds at a peak the wash swallows them too.
+     ?clear=0 turns it off; ?fxdemo adds a panel to compare: A all washed, B always clear, C the rule above. */
+  const CLEAR = { on: Q.get('clear') !== '0' && Q.get('fx') !== '0' && !Q.has('splash'), force: null, wins: 0, next: 6, n: 0, reach: 500, slow: 0 };
+  if (CLEAR.on) { try { (() => {
+    const GP = /^(pill|beam|mol_|molbeam|dosemol|dosebeam|dosename|pad|bb_|bh_|bp_|kring|kret|landring|pyl|drop|acc|bombs|bFunnel|sg[a-z]|sight|raid|craft|jet|blimp|heli|barge|saucer|fighter|jelly|rail|sign|label|lbl|txt|text|exit|gate|lens|crate|case|lamp)/i, MASK = 0x20000000;
     const cam2 = new B.FreeCamera('clearcam', B.Vector3.Zero(), scene); cam2.parent = cam; cam2.minZ = cam.minZ; cam2.maxZ = cam.maxZ; cam2.layerMask = MASK; cam2.inputs.clear();
-    scene.activeCameras = [cam, cam2]; scene.onBeforeRenderObservable.add(() => { cam2.fov = cam.fov; });
-    const DM = { mode: (Q.get('fxdemo') || 'b').toLowerCase(), wins: 0, next: 8 };
-    const tag = (m) => { if (!m || m === cam2 || !m.name || !GP.test(m.name)) return false; return true; };
-    const apply = () => { const clear = DM.mode !== 'a' && !(DM.mode === 'c' && DM.wins > 0); for (const m of scene.meshes) if (tag(m)) m.layerMask = clear ? (0x0FFFFFFF | MASK) : 0x0FFFFFFF; };
-    setInterval(apply, 500); apply();
-    { const STR = ['lucid', 'embrace', 'velocity', 'haze', 'drift', 'deep']; let n = 0; setTimeout(() => { try { doseTake(STR[n++ % STR.length]); } catch (e) { } }, 4000); setInterval(() => { try { doseTake(STR[n++ % STR.length]); } catch (e) { } }, 18000); }
-    let last = performance.now(); setInterval(() => { const now = performance.now(), dt = (now - last) / 1000; last = now; if (PAUSED) return;
-      if (DM.wins > 0) { DM.wins -= dt; if (DM.wins <= 0) apply(); }
-      else if (DM.mode === 'c' && (U.trip || 0) > .7 && (DM.next -= dt) <= 0) { DM.wins = 1.8 + Math.random() * 1.6; DM.next = 7 + Math.random() * 8; apply(); } }, 100);          /* (C: the wash wins now and then at the peaks) */
-    const el = document.createElement('div'); el.style.cssText = 'position:fixed;z-index:80;left:max(8px,var(--sa-left, env(safe-area-inset-left)));top:max(48px,calc(var(--sa-top, env(safe-area-inset-top)) + 48px));display:flex;flex-direction:column;gap:4px;background:rgba(8,10,20,.82);border:1px solid #38e8ff66;border-radius:10px;padding:6px;font:700 12px system-ui,sans-serif;color:#e8f4ff;pointer-events:auto';
-    const L = [['a', 'A  all washed'], ['b', 'B  play clear'], ['c', 'C  B + trip wins']], bs = [];
-    for (const [k, t] of L) { const b = document.createElement('button'); b.textContent = t; b.style.cssText = 'border:1px solid #fff3;border-radius:6px;color:#fff;padding:7px 10px;font:700 12px system-ui;text-align:left;cursor:pointer'; bs.push([k, b]);
-      for (const ev of ['pointerdown', 'touchstart']) b.addEventListener(ev, (e) => e.stopPropagation(), { passive: true }); b.addEventListener('click', (e) => { e.stopPropagation(); DM.mode = k; DM.wins = 0; paint(); apply(); }); el.appendChild(b); }
-    const paint = () => { for (const [k, b] of bs) b.style.background = k === DM.mode ? '#1a6f7a' : '#1a2340'; }; paint(); document.body.appendChild(el);
-  })(); }
+    scene.activeCameras = [cam, cam2]; try { xr && xr.baseExperience && xr.baseExperience.onStateChangedObservable.add((st) => { scene.activeCameras = st === B.WebXRState.IN_XR || st === B.WebXRState.ENTERING_XR ? [] : [cam, cam2]; }); } catch (e) { }          /* (in a headset the XR camera renders alone) */
+    scene.onBeforeRenderObservable.add(() => { cam2.fov = cam.fov; cam2.minZ = cam.minZ; cam2.maxZ = Math.min(cam.maxZ, CLEAR.reach); });          /* (the clean pass looks 500 m ahead: beyond that objects are specks and take the wash; halves its cost) */
+    const OCC = new Set();          /* (the terrain's materials: colour off while the clean camera draws, so they only lay down depth) */
+    const occ = (m) => !!(m.__cat || /^(src|prop_|stTunnel|tun|wall|cliff|rock|ground)/i.test(m.name || '')) && !/^(sky|tdome|tband|ring|hud|weather)/i.test(m.name || '');
+    let clearNow = true;
+    const scan = () => { OCC.clear(); for (const m of scene.meshes) { if (!m || m === cam2) continue; const nm = m.name || '';
+        if (GP.test(nm) && !occ(m)) { m.__gp = 1; m.layerMask = clearNow ? (0x0FFFFFFF | MASK) : 0x0FFFFFFF; }
+        else if (occ(m)) { m.__occ = 1; m.layerMask = 0x0FFFFFFF | MASK; if (m.material) OCC.add(m.material); } } };
+    setInterval(scan, 700); scan();
+    /* the clean camera: terrain first (depth only), then the clean objects */
+    for (const g of [0, 1, 2, 3]) scene.setRenderingOrder(g, (a2, b2) => { if (scene.activeCamera !== cam2) return 0; const ma = a2.getMesh(), mb = b2.getMesh(); return (mb && mb.__occ ? 1 : 0) - (ma && ma.__occ ? 1 : 0); });
+    scene.onBeforeCameraRenderObservable.add((c) => { if (c === cam2) for (const mt of OCC) mt.disableColorWrite = true; });
+    scene.onAfterCameraRenderObservable.add((c) => { if (c === cam2) for (const mt of OCC) mt.disableColorWrite = false; });
+    /* the rule: clear, except at full trip, where the trip wins for a moment now and then */
+    const full = () => { try { return (U.trip || 0) > .8 && (TRIPLV || (window.__LVMOLS && window.__LVMOLS.n >= 3)) && DOSE.ph !== 'sober'; } catch (e) { return false; } };
+    let last = performance.now(); setInterval(() => { const now = performance.now(), dt = (now - last) / 1000; last = now; if (PAUSED) return; let want;
+      if (CLEAR.force === 'a') want = false; else if (CLEAR.force === 'b') want = true;
+      else { if (CLEAR.wins > 0) CLEAR.wins -= dt; else if (full() && (CLEAR.next -= dt) <= 0) { CLEAR.wins = 1.8 + Math.random() * 1.6; CLEAR.next = 7 + Math.random() * 8; CLEAR.n++; } want = !(CLEAR.wins > 0); }
+      if (want !== clearNow) { clearNow = want; scan(); }
+      { const fps = engine.getFps(); CLEAR.slow = fps < 24 ? CLEAR.slow + dt : Math.max(0, CLEAR.slow - dt); CLEAR.reach = CLEAR.slow > 4 ? 250 : CLEAR.slow <= 0 ? 500 : CLEAR.reach; } }, 100);          /* (a slow device: the clean pass looks only 250 m ahead) */
+    window.__CLEAR = CLEAR;
+    if (Q.has('fxdemo')) {          /* the comparison panel; doses roll every 18 s so the trip stays up */
+      CLEAR.force = { a: 'a', b: 'b' }[(Q.get('fxdemo') || '').toLowerCase()] || null;
+      { const STR = ['lucid', 'embrace', 'velocity', 'haze', 'drift', 'deep']; let n = 0; setTimeout(() => { try { doseTake(STR[n++ % STR.length]); } catch (e) { } }, 4000); setInterval(() => { try { doseTake(STR[n++ % STR.length]); } catch (e) { } }, 18000); }
+      const el = document.createElement('div'); el.style.cssText = 'position:fixed;z-index:80;left:max(8px,var(--sa-left, env(safe-area-inset-left)));top:max(48px,calc(var(--sa-top, env(safe-area-inset-top)) + 48px));display:flex;flex-direction:column;gap:4px;background:rgba(8,10,20,.82);border:1px solid #38e8ff66;border-radius:10px;padding:6px;font:700 12px system-ui,sans-serif;color:#e8f4ff;pointer-events:auto';
+      const bs = []; for (const [k, t] of [['a', 'A  all washed'], ['b', 'B  play clear'], ['c', 'C  the rule']]) { const bt = document.createElement('button'); bt.textContent = t; bt.style.cssText = 'border:1px solid #fff3;border-radius:6px;color:#fff;padding:7px 10px;font:700 12px system-ui;text-align:left;cursor:pointer'; bs.push([k, bt]);
+        for (const ev of ['pointerdown', 'touchstart']) bt.addEventListener(ev, (e) => e.stopPropagation(), { passive: true }); bt.addEventListener('click', (e) => { e.stopPropagation(); CLEAR.force = k === 'c' ? null : k; CLEAR.wins = 0; paint(); }); el.appendChild(bt); }
+      const paint = () => { for (const [k, bt] of bs) bt.style.background = (CLEAR.force || 'c') === k ? '#1a6f7a' : '#1a2340'; }; paint(); document.body.appendChild(el); }
+  })(); } catch (e) { console.error('play clear', e); CLEAR.on = false; } }
   if (Q.has('splash')) { (() => {
     const keep = (m) => { const n = m.name; if (n === 'sky' || n === 'ring' || n === 'ringskin' || n === 'tdome' || n === 'tband' || n.startsWith('tmtn')) return true;          /* (the trip's own sky layers stay: the preview needs them) */ return n === 'src' && (m.__cat === 'ground' || m.__cat === 'veg' || m.__cat === 'back'); };
     const sweep = () => { for (const m of scene.meshes) if (!keep(m)) { if (m.isEnabled()) m.setEnabled(false); m.isVisible = false; } for (const p of scene.particleSystems || []) { try { p.stop(); } catch (e) { } } };
