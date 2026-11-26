@@ -159,6 +159,25 @@ export function createIntro(d) {
       part('sph', { s: [.7, .5, .7], p: [0, -.75, 2.6] }, mGw, gs);
       const bm = keep(new B.TransformNode('irBeamN', scene)); bm.parent = gs; bm.position.set(0, -.9, 2.6); IR.gun.beam = bm; part('cone', { d: 1, h: 1, p: [0, 0, 0] }, mBeam, bm).dispose();
       const cone = keep(B.MeshBuilder.CreateCylinder('irBeamC', { diameterTop: .5, diameterBottom: 12, height: 30, tessellation: 24, cap: B.Mesh.NO_CAP }, scene)); cone.material = mBeam; cone.parent = bm; cone.position.y = -15;
+      // THE DINER behind the scorpion (the shot's background: the camera looks across the road at it): neon sign, lit windows, a canopy with pumps, two cars parked out front
+      { const dn = keep(new B.TransformNode('irDiner', scene)); dn.position.set(X0 + 17, Y0, Z0 + 8); IR.diner = dn;
+        const mW = mat('irDnW', '#2a2433'), mR = mat('irDnR', '#141118'), mTr = mat('irDnT', '#ffb14a'), mWin = mat('irDnWin', '#ffcf8a'), mCan = mat('irDnC', '#e9e4da'), mPm = mat('irDnP', '#38e8ff'); IR.dinWin = mWin;
+        part('box', { w: 9, h: 4.4, d: 20, p: [4.5, 2.2, 0] }, mW, dn); part('box', { w: 9.6, h: .5, d: 20.6, p: [4.5, 4.65, 0] }, mR, dn); part('box', { w: .14, h: .22, d: 20.4, p: [-.05, 4.3, 0] }, mTr, dn); part('box', { w: .14, h: .22, d: 20.4, p: [-.05, .35, 0] }, mTr, dn);
+        for (let i = 0; i < 4; i++) part('box', { w: .1, h: 1.9, d: 3.4, p: [-.06, 2.2, -7 + i * 4.7] }, mWin, dn);
+        part('box', { w: .1, h: 2.6, d: 1.4, p: [-.06, 1.3, 9] }, mat('irDnDoor', '#ffdba0'), dn);
+        const st = new B.DynamicTexture('irDnSignT', { width: 600, height: 250 }, scene, true), sx = st.getContext(); sx.fillStyle = '#07060c'; sx.fillRect(0, 0, 600, 250); sx.textAlign = 'center'; sx.shadowBlur = 18;
+        sx.shadowColor = '#38e8ff'; sx.fillStyle = '#38e8ff'; sx.font = '700 150px Impact, "Barlow Condensed", sans-serif'; sx.fillText('DINER', 300, 150); sx.shadowColor = '#ffb14a'; sx.fillStyle = '#ffb14a'; sx.font = '700 46px Impact, "Barlow Condensed", sans-serif'; sx.fillText('OPEN 24 HRS \u00B7 GAS', 300, 222); st.update();
+        const sm = mat('irDnSignM', '#ffffff'); sm.emissiveTexture = st; sm.diffuseTexture = st; sm.backFaceCulling = false; const sg = keep(B.MeshBuilder.CreatePlane('irDnSign', { width: 6.2, height: 2.6 }, scene)); sg.material = sm; sg.parent = dn; sg.position.set(-8.5, 4.4, -3.5); sg.rotation.y = Math.PI / 2 - .5;          /* (a roadside pole sign, so the close-up sees it) */ part('box', { w: .25, h: 3.2, d: .25, p: [-8.5, 1.6, -3.5] }, mR, dn);
+        
+        // canopy and pumps on the forecourt (between the road and the diner)
+        part('box', { w: 6.5, h: .35, d: 11, p: [-5.2, 4.9, -2] }, mR, dn); part('box', { w: 6.55, h: .1, d: 11.05, p: [-5.2, 4.7, -2] }, mCan, dn);
+        for (const zz of [-6, 2]) { part('box', { w: .35, h: 4.6, d: .35, p: [-5.2, 2.4, zz] }, mR, dn); part('box', { w: .8, h: 1.6, d: .5, p: [-5.2, .8, zz + 1.1] }, mPm, dn); }
+        // two cars parked out front, nose to the diner
+        const parked = (x, z, col) => { const c = keep(new B.TransformNode('irParked', scene)); c.parent = dn; c.position.set(x, 0, z); c.rotation.y = -Math.PI / 2;
+          part('box', { w: 2, h: .7, d: 4.3, p: [0, .65, 0] }, mat('irPkB' + col, col), c); part('box', { w: 1.7, h: .55, d: 2.1, p: [0, 1.25, .3] }, mat('irPkT', '#16131c'), c);
+          for (const wx of [-1, 1]) for (const wz of [-1.4, 1.4]) part('cyl', { d: .7, h: .3, p: [wx * 1, .35, wz], r: [0, 0, Math.PI / 2] }, mat('irPkW', '#0b0b0e'), c);
+          for (const wx of [-.7, .7]) part('box', { w: .4, h: .12, d: .06, p: [wx, .8, -2.16] }, mat('irPkTl', '#ff3a2a'), c); };
+        parked(-9.5, 4.5, '#7a2a20'); parked(-9.5, 9.2, '#25506a'); }
       // sparks for the crush
       const mSp = mat('irSpark', '#ffd27a'); mSp.fogEnabled = false; IR.sparks = []; for (let i = 0; i < 18; i++) { const sp = keep(B.MeshBuilder.CreateBox('irSp', { size: .05 }, scene)); sp.material = mSp; IR.sparks.push({ m: sp, v: new B.Vector3(0, 0, 0) }); }
       for (const m of IR.sc.loose) m.__home = { par: m.parent, p: m.position.clone(), r: m.rotation.clone(), sc: m.scaling.clone() };
@@ -292,7 +311,7 @@ export function createIntro(d) {
     if (ui) { ui.pz.classList.remove('on'); const pb = ui.ctl.querySelector('[data-k="pau"]'); if (pb) pb.textContent = '\u23F8'; ui.tg.classList.remove('on'); ui.ph.classList.remove('on'); hide(); }
     IR.fx = {}; IR.shown = -2; IR.ffk = undefined; ffShow(null); IR.tvk = null; IR.vt0 = undefined; IR.crushed = false; IR.shotGone = false; IR.surge = undefined; IR.tagT = 0; IR.skyT = 0; try { d.sky(null); } catch (e) { }
     for (const m of IR.hudOff || []) { try { m.setEnabled(true); } catch (e) { } } IR.hudOff = null;
-    try { const S = IR.sc; S.root.setEnabled(true); S.root.scaling.setAll(1.25); for (const m of S.loose) { const h = m.__home; if (!h) continue; m.setEnabled(true); m.parent = h.par; m.position.copyFrom(h.p); m.rotation.copyFrom(h.r); m.scaling.copyFrom(h.sc); } S.debris = null; IR.car.root.setEnabled(true); for (const sp of IR.sparks) sp.m.setEnabled(false); } catch (e) { }
+    try { const S = IR.sc; S.root.setEnabled(true); S.root.scaling.setAll(1.25); for (const m of S.loose) { const h = m.__home; if (!h) continue; m.setEnabled(true); m.parent = h.par; m.position.copyFrom(h.p); m.rotation.copyFrom(h.r); m.scaling.copyFrom(h.sc); } S.debris = null; IR.car.root.setEnabled(true); if (IR.diner) IR.diner.setEnabled(true); for (const sp of IR.sparks) sp.m.setEnabled(false); } catch (e) { }
     if (IR.hits) for (const h of IR.hits) { h.done = false; try { h.m.setEnabled(true); h.g.setEnabled(true); } catch (e) { } }
     if (IR.pads) for (const q of IR.pads) q.done = false; }
   function once(k) { IR.fx = IR.fx || {}; if (IR.fx[k]) return false; IR.fx[k] = 1; return true; }
@@ -333,7 +352,8 @@ export function createIntro(d) {
       ui.tv.classList.toggle('off', k === 'off'); for (const c of ui.chs) c.classList.toggle('on', c.dataset.k === k);
       ui.tv.classList.toggle('st', k === 'st'); if (k === 'st') { const g = ui.tvc.getContext('2d'); for (let y = 0; y < 54; y += 6) for (let x = 0; x < 96; x += 8) { const v = Math.random(); g.fillStyle = v < .3 ? '#0a0d14' : v < .55 ? 'rgb(' + (40 + Math.random() * 60 | 0) + ',' + (20 + Math.random() * 40 | 0) + ',' + (60 + Math.random() * 90 | 0) + ')' : v < .8 ? 'rgb(' + (Math.random() * 255 | 0) + ',' + (Math.random() * 120 | 0) + ',' + (Math.random() * 60 | 0) + ')' : '#1d2a3a'; g.fillRect(x, y, 8, 6); } } }
     const inShot = t >= T_SHOT && t < T_BLACK; if (inShot) shot(t - T_SHOT, cam); else if (!(t >= RANSOM.f0 && t < RANSOM.f1)) ffShow(null);
-    if (t >= T_BLACK && !IR.shotGone) { IR.shotGone = true; try { IR.sc.root.setEnabled(false); IR.car.root.setEnabled(false); for (const d of IR.sc.debris || []) d.m.setEnabled(false); for (const sp of IR.sparks) sp.m.setEnabled(false); for (const m of IR.hudOff || []) m.setEnabled(true); } catch (e) { } }
+    if (IR.dinWin && inShot) IR.dinWin.emissiveColor.set(1, Math.random() < .04 ? .6 : .81, Math.random() < .04 ? .3 : .54);
+    if (t >= T_BLACK && !IR.shotGone) { IR.shotGone = true; try { IR.sc.root.setEnabled(false); IR.car.root.setEnabled(false); if (IR.diner) IR.diner.setEnabled(false); for (const d of IR.sc.debris || []) d.m.setEnabled(false); for (const sp of IR.sparks) sp.m.setEnabled(false); for (const m of IR.hudOff || []) m.setEnabled(true); } catch (e) { } }
     ui.ti.classList.toggle('on', t >= T_BLACK && t < T_TOUT); ui.ti.classList.toggle('slam', t >= T_SLAM); ui.ti.classList.toggle('ep2', t >= T_EP);
     if (t >= T_SLAM && t < T_SLAM + 1 && once('slam')) { sfx('slam'); ui.fl.classList.remove('go'); void ui.fl.offsetWidth; ui.fl.classList.add('go'); }
     return inShot; }
