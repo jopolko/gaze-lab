@@ -3559,7 +3559,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     document.head.appendChild(css);
     const card = document.createElement('div'); card.id = 'opCard'; document.body.appendChild(card); const cr = document.createElement('div'); cr.id = 'opCredit'; cr.innerHTML = '<i>\u266A</i> \u201CLegalize\u201D \u00B7 MalreDeszik ft. Synomo &amp; IAComplexe <span style="opacity:.7">\u00B7 CC BY 4.0</span>'; document.body.appendChild(cr);
     const at = (sec, fn) => { const w = () => { if (O.done) return; const t = O.a.currentTime; if (t >= sec) { try { fn(); } catch (e) { } } else setTimeout(w, Math.max(16, Math.min(200, (sec - t) * 1000 - 8))); }; setTimeout(w, 0); };
-    at(5.2, () => cr.classList.add('on')); at(9.6, () => cr.classList.remove('on'));
+    at(28.0, () => cr.classList.add('on')); at(31.2, () => cr.classList.remove('on'));          /* (the music credit sits in a gap between cards: the cold open owns the first ten seconds) */
   }
   let IRS = null; const IRD = { cp: null, t0: 0 };
   function irBegin() { if (IRS || !OPEN.on) return; try {
