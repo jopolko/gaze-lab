@@ -147,10 +147,11 @@ export function createIntro(d) {
       // the car: dark, low, headlights on; its front axle is at the node (it drives toward -z)
       const car = keep(new B.TransformNode('irCar', scene)); car.position.set(X0, Y0, Z0 + 165); const C = IR.car = { root: car, wheels: [] };
       const mK = mat('irCarK', '#17141d'), mK2 = mat('irCarK2', '#0d0b12'), mG = mat('irCarG', '#2a3550'), mT = mat('irCarT', '#0b0b0e'), mRim = mat('irCarR', '#8a93a6'), mH = mat('irCarH', '#fff6dc'), mHg = mat('irCarHg', '#ffe9b0', .3); mH.fogEnabled = false; mHg.fogEnabled = false; mHg.backFaceCulling = false;
-      part('box', { w: 2.1, h: .55, d: 4.4, p: [0, .8, 1.3] }, mK, car); part('box', { w: 1.7, h: .46, d: 2, p: [0, 1.3, 1.6] }, mK2, car); part('box', { w: 1.6, h: .42, d: .05, p: [0, 1.28, .62], r: [.55, 0, 0] }, mG, car); part('box', { w: 2, h: .14, d: .1, p: [0, .6, -.92] }, mT, car);
-      [-1, 1].forEach((s) => { part('sph', { s: [.3, .2, .1], p: [s * .72, .84, -.92] }, mH, car); });
-      { const mTl = mat('irCarTl', '#ff2a1a'); mTl.fogEnabled = false; [-1, 1].forEach((sd) => part('box', { w: .45, h: .14, d: .06, p: [sd * .75, .88, 3.53] }, mTl, car)); }
-      [0, 2.6].forEach((wz) => [-1, 1].forEach((s) => { const hub = keep(new B.TransformNode('irHub', scene)); hub.parent = car; hub.position.set(s * 1.0, .45, wz); part('cyl', { d: .9, h: .3, r: [0, 0, Math.PI / 2] }, mT, hub); part('cyl', { d: .5, h: .32, r: [0, 0, Math.PI / 2] }, mRim, hub); part('box', { w: .33, h: .08, d: .46 }, mT, hub); C.wheels.push(hub); }));
+      part('box', { w: 2.2, h: .42, d: 4.7, p: [0, .6, 1.35] }, mK, car); part('box', { w: 2.1, h: .2, d: 1.7, p: [0, .78, -.35], r: [.16, 0, 0] }, mK, car); part('box', { w: 1.55, h: .38, d: 1.6, p: [0, 1.0, 1.95] }, mK2, car);
+      part('box', { w: 1.5, h: .36, d: .05, p: [0, .98, 1.12], r: [.75, 0, 0] }, mG, car); part('box', { w: 1.45, h: .3, d: .05, p: [0, .99, 2.78], r: [-.6, 0, 0] }, mG, car); part('box', { w: 2.2, h: .07, d: .45, p: [0, 1.08, 3.55] }, mK2, car);
+      [-1, 1].forEach((s) => { part('box', { w: .55, h: .07, d: .06, p: [s * .68, .72, -1.18] }, mH, car); { const hm = mat('irCarHalo', '#fff2c8', .32); hm.fogEnabled = false; hm.backFaceCulling = false; const hd = keep(B.MeshBuilder.CreateDisc('irCarHd', { radius: .8, tessellation: 24 }, scene)); hd.material = hm; hd.parent = car; hd.position.set(s * .68, .72, -1.25); } part('box', { w: .1, h: .4, d: 3.6, p: [s * 1.11, .55, 1.4] }, mat('irCarStripe', '#ffb14a'), car); });
+      { const mTl = mat('irCarTl', '#ff2a1a'); mTl.fogEnabled = false; part('box', { w: 2.05, h: .09, d: .06, p: [0, .78, 3.71] }, mTl, car); const mU = mat('irCarUg', '#38e8ff', .55); mU.fogEnabled = false; mU.backFaceCulling = false; const ug = keep(B.MeshBuilder.CreateGround('irCarUg', { width: 2.3, height: 4.6 }, scene)); ug.material = mU; ug.parent = car; ug.position.set(0, .05, 1.35); }
+      [0, 2.6].forEach((wz) => [-1, 1].forEach((s) => { const hub = keep(new B.TransformNode('irHub', scene)); hub.parent = car; hub.position.set(s * 1.02, .4, wz); part('cyl', { d: .8, h: .32, r: [0, 0, Math.PI / 2] }, mT, hub); part('cyl', { d: .5, h: .32, r: [0, 0, Math.PI / 2] }, mRim, hub); part('box', { w: .33, h: .08, d: .46 }, mT, hub); C.wheels.push(hub); }));
       // MARSHAL KADE RANSOM's gunship: it drops in over the road ahead (38.7 s), its searchlight sweeping for you, and the frame freezes on it
       const gs = keep(new B.TransformNode('irRansom', scene)); gs.scaling.setAll(1.9); IR.gun = { root: gs };
       const mG1 = mat('irGun1', '#1c1a22'), mG2 = mat('irGun2', '#2c2a34'), mGr = mat('irGunR', '#ff3a2a'), mGw = mat('irGunW', '#fff6dc'), mBeam = mat('irBeamS', '#fff2c8', .24), mRot = mat('irRot', '#3a3846', .45); mGr.fogEnabled = mGw.fogEnabled = mBeam.fogEnabled = false; mBeam.backFaceCulling = false; mRot.backFaceCulling = false;
@@ -320,28 +321,28 @@ export function createIntro(d) {
      2.4-5.7 it barely lives: a leg twitches, it takes a step, the tail sways, its freeze card comes and goes, it raises its tail at nothing.
      5.75 out of nowhere a car obliterates it (no warning: the camera never saw it coming); the debris tumbles in slow motion while the car body fills the frame.
      6.6-7.0 the camera whips after the car; 7.0 on, the frame freezes on it: THE COURIER. */
-  const vtOf = (s) => s < 5.5 ? s : s < 6.2 ? 5.5 + (s - 5.5) * .3 : s < 6.5 ? 5.71 + (s - 6.2) : 6.01;
+  const vtOf = (s) => s < 6.0 ? s : s < 6.6 ? 6.0 + (s - 6.0) * .3 : s < 6.9 ? 6.18 + (s - 6.6) : 6.48;          /* 0-1.8 crane, 1.8-4.0 close-up, 4.0-5.6 the horizon shot (the car far off, coming), 5.6 back to the close-up, 6.0 the hit, 6.9 the Courier */
   const lerpK = (K, v) => { if (v <= K[0][0]) return K[0][1]; for (let i = 1; i < K.length; i++) if (v <= K[i][0]) { const u = (v - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * u; } return K[K.length - 1][1]; };
-  const CARZ = [[0, 260], [5.25, 40], [5.5, 9.6], [5.71, 6.5], [6.01, -12]];          /* (the scorpion stands at z 9, between two centre-line dashes) */
+  const CARZ = [[0, 420], [3.99, 420], [4.0, 170], [5.6, 45], [6.0, 9.6], [6.18, 6.5], [6.48, -12]];          /* (the scorpion stands at z 9, between two centre-line dashes) */
   const SCX = X0 - 1.0, SCZ = Z0 + 9, ss = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   function shot(s, cam) { const S = IR.sc, C = IR.car; if (!S || !C) return; const vt = vtOf(s), dv = Math.max(0, vt - (IR.vt0 === undefined ? vt : IR.vt0)); IR.vt0 = vt;
-    const carZ = lerpK(CARZ, vt); C.root.position.z = Z0 + carZ; C.root.setEnabled(carZ < 60); for (const w of C.wheels) w.rotation.x = -(260 - carZ) / .45;
-    ffShow(s >= 2.4 && s < 4.6 ? 'scorp' : s >= 6.5 ? 'courier' : null);
-    if (!IR.crushed) { const step = ss(3.2, 3.6, vt) * .22 + ss(4.1, 4.35, vt) * .1;          /* two small steps down the road */
+    const carZ = lerpK(CARZ, vt); C.root.position.z = Z0 + carZ; C.root.setEnabled(s >= 4.0); for (const w of C.wheels) w.rotation.x = -(420 - carZ) / .45;
+    ffShow(s >= 2.0 && s < 3.8 ? 'scorp' : s >= 6.9 ? 'courier' : null);
+    if (!IR.crushed) { const step = ss(2.6, 3.0, vt) * .22 + ss(3.4, 3.6, vt) * .1;          /* two small steps down the road */
       S.root.position.set(SCX, Y0, SCZ - step); S.root.rotation.y = Math.PI + Math.sin(vt * .7) * .06;          /* (facing down the road: the camera sees it side on) */
-      for (const lg of S.legs) { const tw = (vt > 2.6 && vt < 2.9 && lg.__k === 0 ? Math.sin(vt * 40) * .5 : 0) + ((vt > 3.2 && vt < 3.6) || (vt > 4.1 && vt < 4.35) ? Math.sin(vt * 30 + lg.__k * 1.7 + (lg.__s > 0 ? Math.PI : 0)) * .35 : 0); lg.rotation.y = tw; }
-      S.tail.rotation.x = Math.sin(vt * 1.6) * .05 - .05 - ss(4.7, 5.1, vt) * .35; }          /* (just before the end it raises its tail, at nothing) */
+      for (const lg of S.legs) { const tw = (vt > 2.2 && vt < 2.45 && lg.__k === 0 ? Math.sin(vt * 40) * .5 : 0) + ((vt > 2.6 && vt < 3.0) || (vt > 3.4 && vt < 3.6) ? Math.sin(vt * 30 + lg.__k * 1.7 + (lg.__s > 0 ? Math.PI : 0)) * .35 : 0); lg.rotation.y = tw; }
+      S.tail.rotation.x = Math.sin(vt * 1.6) * .05 - .05 - ss(5.6, 5.9, vt) * .35; }          /* (just before the end it raises its tail, at nothing) */
     if (!IR.crushed && carZ <= 9.35) { IR.crushed = true; sfx('crunch'); IR.shk = .12; const wp = S.root.getAbsolutePosition();
       S.debris = S.loose.map((m) => { m.computeWorldMatrix(true); m.setParent(null); const a = Math.random() * 6.283; return { m, v: new B.Vector3(Math.cos(a) * (1 + Math.random() * 2.5), 1.5 + Math.random() * 3.5, Math.sin(a) * 1.5 - .8), r: new B.Vector3(Math.random() * 14 - 7, Math.random() * 14 - 7, Math.random() * 14 - 7) }; });
       S.root.scaling.y = .3; S.root.position.y = Y0 - .02;
       for (const sp of IR.sparks) { sp.m.setEnabled(true); sp.m.position.set(wp.x + Math.random() * .3 - .15, Y0 + .15, wp.z + Math.random() * .3 - .15); const a = Math.random() * 6.283; sp.v.set(Math.cos(a) * (1.5 + Math.random() * 3), 2 + Math.random() * 4, Math.sin(a) * 2 - 1.5); } }
     if (IR.crushed && dv > 0) { for (const d of S.debris) { d.v.y -= 9.8 * dv; d.m.position.addInPlace(d.v.scale(dv)); if (d.m.position.y < Y0 + .03) { d.m.position.y = Y0 + .03; d.v.y *= -.3; d.v.x *= .6; d.v.z *= .6; } d.m.rotation.addInPlace(d.r.scale(dv)); }
       for (const sp of IR.sparks) { sp.v.y -= 9.8 * dv; sp.m.position.addInPlace(sp.v.scale(dv)); if (sp.m.position.y < Y0) sp.m.setEnabled(false); } }
-    C.root.position.y = Y0 + (IR.crushed && vt < 5.65 ? .06 : 0);
+    C.root.position.y = Y0 + (IR.crushed && vt < 6.15 ? .06 : 0);
     IR.shk = (IR.shk || 0) * Math.pow(.02, dv); const sh = IR.shk || 0, j = () => (Math.random() * 2 - 1) * sh;
     // the camera: crane down, hold the close-up beside the car's path, then whip after the car
-    const c = ss(0, 2.0, s), P0 = new B.Vector3(X0 - 9, Y0 + 30, Z0 + 15), P1 = new B.Vector3(SCX - 2.0, Y0 + .3, SCZ + .3), pos = B.Vector3.Lerp(P0, P1, c);
-    const sc = new B.Vector3(SCX, Y0 + .22, SCZ - .2), car = new B.Vector3(X0, Y0 + .8, Z0 + carZ + 1.5), tgt = B.Vector3.Lerp(sc, car, ss(6.2, 6.5, s));
+    const c = ss(0, 1.8, s), P0 = new B.Vector3(X0 - 9, Y0 + 30, Z0 + 15), P1 = new B.Vector3(SCX - 2.0, Y0 + .3, SCZ + .3), hz = s >= 4.0 && s < 5.6, pos = hz ? new B.Vector3(SCX + 1.3, Y0 + .22, SCZ - 2.6) : B.Vector3.Lerp(P0, P1, c);
+    const sc = new B.Vector3(SCX, Y0 + .22, SCZ - .2), car = new B.Vector3(X0, Y0 + .8, Z0 + carZ + 1.5), tgt = hz ? new B.Vector3(SCX + .2, Y0 + .6, SCZ + 80) : B.Vector3.Lerp(sc, car, ss(6.6, 6.9, s));
     cam.position.set(pos.x + j(), pos.y + j(), pos.z + j()); cam.upVector.set(0, 1, 0); cam.setTarget(new B.Vector3(tgt.x, tgt.y + j() * .5, tgt.z));
     if (!IR.hudOff) { IR.hudOff = []; try { const h = scene.getMeshByName('hud'), par = h && h.parent; for (const m of scene.meshes) if (m.isEnabled() && (m === h || (par && m.parent === par) || m.parent === cam)) { m.setEnabled(false); IR.hudOff.push(m); } } catch (e) { } } }          /* (the game's HUD rides on the camera: hidden for the shot) */
   function coldOpen(t, cam) { if (!ui) return false;
