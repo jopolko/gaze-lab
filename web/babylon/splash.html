@@ -539,7 +539,8 @@ function idleBlip() { const t = document.getElementById('title'); if (!t || !t.c
 /* THE SIGNAL GLITCH (owner 2026-11-26, from his reference pictures): the white word stays white while a red copy jumps one way and a cyan copy the other, so the
    edges fringe in red and cyan, and a few horizontal strips of the word tear sideways. Each hit holds a frame or two; hits come in clusters at random, and in
    bursts while the dial is dragged. The sun never glitches. */
-(() => { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; const mk = document.getElementById('mark'), gw = document.querySelector('.gw'); if (!mk || !gw) return;
+(() => { if (matchMedia('(prefers-reduced-motion: reduce)').matches) { setTimeout(() => { try { if (localStorage.getItem('dl_lockfirst')) return; localStorage.setItem('dl_lockfirst', '1'); localStorage.setItem('dl_firstlock', '1'); window.__fakeErr && window.__fakeErr(); } catch (e) { } }, 1400 + (window.__PRIVMS || 0)); return; }          /* (reduced motion: no title glitch, but the first-visit gag still comes; it is a still page) */
+  const mk = document.getElementById('mark'), gw = document.querySelector('.gw'); if (!mk || !gw) return;
   for (const e of gw.querySelectorAll('.ly, .snow')) e.style.display = 'none';          /* (the old back-row glitch layers, retired) */
   mk.style.position = 'relative'; mk.style.zIndex = '2';
   const im = (src, z) => { const e = document.createElement('img'); e.src = src; e.alt = ''; e.setAttribute('aria-hidden', 'true'); e.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;pointer-events:none;z-index:' + z; gw.appendChild(e); return e; };
