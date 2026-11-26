@@ -20,6 +20,18 @@
 <script src="https://cdn.jsdelivr.net/npm/babylonjs-gui@7.0.0/babylon.gui.min.js"></script>
 <script src="charfx.js"></script>
 </head><body>
+<script>/* SCENE CONTROLS for TRAINING (owner's rule: every scene gets restart / pause / skip and a progress bar). The same three buttons as the intro, top centre, from the
+   first moment (over the loading screen) and through play: restart = training from the start, pause = the game's pause, skip = straight to Route Zero. */
+(() => { if (!/[?&]tutorial\b/.test(location.search)) return; const css = document.createElement('style');
+  css.textContent = '#scCtl{position:fixed;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:96;display:flex;flex-direction:column;align-items:center;gap:6px}#scCtl .bt{display:flex;gap:10px}#scCtl button{font:700 clamp(16px,2.6vmin + 8px,22px) "Barlow Condensed","Arial Narrow",sans-serif;color:#f2efe6;background:rgba(3,5,10,.72);border:1px solid rgba(56,232,255,.45);border-radius:999px;padding:.4em .9em;min-width:3em;cursor:pointer}#scCtl .pg{width:min(240px,50vw);height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}#scCtl .pg i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38e8ff,#b36bff,#ffd23a);transition:width .5s}';
+  document.head.appendChild(css); const w = document.createElement('div'); w.id = 'scCtl'; w.innerHTML = '<div class="bt"><button type="button" data-k="rst" aria-label="Restart training" title="Restart">\u23EE</button><button type="button" data-k="pau" aria-label="Pause" title="Pause">\u23F8</button><button type="button" data-k="skp" aria-label="Skip training" title="Skip">\u23ED</button></div><div class="pg"><i></i></div>';
+  document.body.appendChild(w); w.addEventListener('pointerdown', (e) => e.stopPropagation(), true);
+  w.onclick = (e) => { e.stopPropagation(); const b = e.target.closest('button'); if (!b) return; const k = b.dataset.k;
+    if (k === 'rst') location.replace('index.html?tutorial=1&nointake=1&go=1');
+    if (k === 'skp') { try { localStorage.setItem('dl_tutdone', '1'); } catch (x) { } location.replace('index.html?story=1&nointake=1&go=1'); }
+    if (k === 'pau' && window.__setPause) { const v = !window.__isPaused(); window.__setPause(v); } };
+  setInterval(() => { try { const b = w.querySelector('[data-k="pau"]'); if (window.__isPaused) b.textContent = window.__isPaused() ? '\u25B6' : '\u23F8'; const t = window.__TUTP && window.__TUTP(); if (t) { w.querySelector('.pg i').style.width = Math.round(100 * Math.min(1, t.i / Math.max(1, t.n))) + '%'; if (t.done) w.style.display = 'none'; } } catch (x) { } }, 400); })();
+</script>
 <script src="daily.js"></script><script src="loader.js"></script>
 <canvas id="c"></canvas>
 <div id="big"></div>
@@ -1517,6 +1529,7 @@ void main() {
   const J = (o) => JSON.stringify(o, null, 1);
   function copyText(t) { try { navigator.clipboard.writeText(t).catch(() => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) { } a.remove(); }); } catch (e) { } }
   function refreshDiag() { const o = diag(); return o; }
+  window.__setPause = (v) => setPause(v); window.__isPaused = () => PAUSED;
   function setPause(v) { PAUSED = v; if (!v) try { window.__dgHide && window.__dgHide(); } catch (e) { } try { AW.onPause(v); } catch (e) { } try { const bt = window.__bt; if (bt) { if (v) bt.pause(); else { const pr = bt.play && bt.play(); if (pr && pr.catch) pr.catch(() => { }); } } } catch (e) { } pz.style.display = v ? 'flex' : 'none'; try { PMENU.set(v); } catch (e) { } pzb.textContent = v ? '> resume' : 'II pause'; if (gmOn) try { GM.setPaused(v); } catch (e) { } try { if (window.ME) ME.pause(v); } catch (e) { } try { if (OPEN.playing && !OPEN.done) { if (v) OPEN.a.pause(); else { const p = OPEN.a.play(); if (p && p.catch) p.catch(() => { }); } } } catch (e) { } if (v) refreshDiag(); }
 
   /* PLAYER MENU: everything that is not driving lives here (driving is head-only). Resume, Hint, Log, Look, World, Restart, Quit; the old diagnostics panel sits behind "Developer". */
@@ -2159,17 +2172,17 @@ const CFG = {
   const GRATE = [[3000, 'Unpaid Intern'], [7000, 'Contributor'], [12000, 'Thought Leader'], [18000, 'Visionary'], [1e9, 'Founder (Allegedly)']];
   const gearMult = () => { const c = GCFG[GEAR.id]; return c ? Math.min(c.cap, c.floor + GEAR.streak) : 1; };
   // ---- TUTORIAL (?tutorial=1): about 45 s of pure driving. Everyone gets the rockets, real pads, boosts and orbs are placed on purpose, the meter starts part full so a RUSH happens, one short tip per moment (shown once, on the same top card), then a READY card.
-  const TUT = { on: Q.has('tutorial'), built: false, i: 0, done: false, rushTold: false, nearTold: false };
+  const TUT = { on: Q.has('tutorial'), built: false, i: 0, done: false, rushTold: false, nearTold: false }; window.__TUTP = () => ({ i: TUT.i, n: (typeof TUTL !== 'undefined' ? TUTL.length : 1), done: TUT.done });
   const TUTL = [
-    { beat: 'Steer: hold the left or right side of the screen, arrow keys, or a gamepad.<br>Take the crystals.', make(z) { solTrail('tetra', z, 6, 6, 14, 3); solTrail('tetra', z - 150, -6, 6, 14, -3); solTrail('tetra', z - 300, 6, 6, 14, 3); return 420; } },
-    { beat: 'Glowing pads<br>give you speed.', make(z, R) { makePad(trailX(z), z, R); makePad(trailX(z - 170) + 5, z - 170, R); return 280; } },
-    { beat: 'Pickups work by themselves.<br>This one is a shield.', make(z, R) { makeBuff('shield', trailX(z), z, R); tutHaz('rock', z - 260, 0); return 360; } },
-    { beat: 'Red drones are ads.<br>Your rockets fire on their own.', make(z) { tutHaz('drone', z, 0); tutHaz('drone', z - 160, 4, 'swoop'); return 280; } },
-    { beat: 'Orange mines.<br>Rockets get those too.', make(z) { tutHaz('mine', z, 0); tutHaz('mine', z - 160, -2); return 280; } },
-    { beat: 'Grey boulders. Rockets can\u2019t.<br>Steer round them.', make(z) { tutHaz('rock', z, -2.5); tutHaz('rock', z - 180, 2.5); return 300; } },
-    { beat: 'Exits leave the highway.<br>A gold beam means it’s yours.', make(z) { exMake(z - 40, -1, 'rocket'); exMake(z - 40, 1, null); return 420; } },
-    { beat: 'A lens opens sealed exits.<br>Take it, then find the seal.', make(z) { lensPut('SEE', z); exMake(z - 120, -1, 'SEE'); return 500; } },
-    { beat: 'Take enough crystals and you RUSH.<br>Nothing can hurt you.', make(z, R) { TUT.rushOK = true; DOP.v = Math.max(DOP.v, .82); solTrail('tetra', z, 0, 6, 12); makePad(trailX(z - 90), z - 90, R); makeBuff('boost', trailX(z - 150), z - 150, R); [[-240, 'rock', 0], [-310, 'drone', 1], [-380, 'rock', -2], [-450, 'mine', 2]].forEach(([d, k, x]) => tutHaz(k, z + d, x)); return 500; } },
+    { beat: 'Hold left or right to steer.<br>Take the crystals.', make(z) { solTrail('tetra', z, 6, 6, 14, 3); solTrail('tetra', z - 150, -6, 6, 14, -3); solTrail('tetra', z - 300, 6, 6, 14, 3); return 420; } },
+    { beat: 'Hit the pads.<br>Go faster.', make(z, R) { makePad(trailX(z), z, R); makePad(trailX(z - 170) + 5, z - 170, R); return 280; } },
+    { beat: 'Grab the shield.<br>It works by itself.', make(z, R) { makeBuff('shield', trailX(z), z, R); tutHaz('rock', z - 260, 0); return 360; } },
+    { beat: 'Red drones: ads.<br>Rockets fire by themselves.', make(z) { tutHaz('drone', z, 0); tutHaz('drone', z - 160, 4, 'swoop'); return 280; } },
+    { beat: 'Orange mines.<br>Rockets get them too.', make(z) { tutHaz('mine', z, 0); tutHaz('mine', z - 160, -2); return 280; } },
+    { beat: 'Grey boulders.<br>Steer round.', make(z) { tutHaz('rock', z, -2.5); tutHaz('rock', z - 180, 2.5); return 300; } },
+    { beat: 'Take an exit.<br>Gold beam = yours.', make(z) { exMake(z - 40, -1, 'rocket'); exMake(z - 40, 1, null); return 420; } },
+    { beat: 'Grab the lens.<br>Open the sealed exit.', make(z) { lensPut('SEE', z); exMake(z - 120, -1, 'SEE'); return 500; } },
+    { beat: 'Fill up on crystals.<br>RUSH: nothing hurts.', make(z, R) { TUT.rushOK = true; DOP.v = Math.max(DOP.v, .82); solTrail('tetra', z, 0, 6, 12); makePad(trailX(z - 90), z - 90, R); makeBuff('boost', trailX(z - 150), z - 150, R); [[-240, 'rock', 0], [-310, 'drone', 1], [-380, 'rock', -2], [-450, 'mine', 2]].forEach(([d, k, x]) => tutHaz(k, z + d, x)); return 500; } },
   ];
 
   /* THE JOURNEY (?journey=1): one endless run through every world. At the end of a world the screen fades to black and the next world loads with its own music;
@@ -2772,7 +2785,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     if (ST.beatEnd && performance.now() < ST.beatEnd) clearAhead((ST.beatEnd - performance.now()) / 1000 + 1.6);          /* the message rule, enforced every frame (speed can change while you read) */
     if (!TUT.on || TUT.done) return;
     /* THE TUTORIAL: one new thing per lesson. A noir beat names it, the road stays empty while you read, then you meet it alone, then a breather. Placed from your real speed, so it can never arrive mid-message. */
-    if (!TUT.built) { TUT.built = true; TUT.R = mulbK(11); TUT.i = 0; TUT.next = -160; DOP.v = .2; setTimeout(() => { try { stBeatNow('Training', 'TRAINING ROAD<br>Nothing here can stop you. Some of it will try.', 3600); } catch (e) { } }, 1200); }
+    if (!TUT.built) { TUT.built = true; TUT.R = mulbK(11); TUT.i = 0; TUT.next = -160; DOP.v = .2; setTimeout(() => { try { stBeatNow('Training', 'TRAINING ROAD<br>Nothing here can stop you.', 3600); } catch (e) { } }, 1200); }
     if (TUT.i < TUTL.length && PH.z <= TUT.next) {
       const L = TUTL[TUT.i++], sp = Math.min(45, Math.max(30, Math.hypot(PH.vx, PH.vz))) * 1.15, hold = 3.8; try { stBeatNow('Training', L.beat, hold * 1000); } catch (e) { }
       const z0 = PH.z - sp * (hold + 1.0) - 30; let len = 300; try { len = L.make(z0, TUT.R) || 300; } catch (e) { console.error('tut lesson', e); } TUT.next = z0 - len - 60;
