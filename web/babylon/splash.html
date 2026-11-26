@@ -112,8 +112,11 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     ['ACCORD', 'Password expired. Please submit a new childhood memory.'], ['MURMUR', 'We restored your deleted photos. For safety.'], ['ACCORD', 'Your dreams last night were flagged. Appeal within 24 hours.'],
     ['MURMUR', 'Your heart rate spiked at 3:14 AM. Who were you thinking about?'], ['ACCORD', 'Two-factor authentication: confirm both kidneys.'], ['ACCORD', 'Your vote has been pre-filled for convenience.'],
     ['MURMUR', 'Your ex says hi. We told them where you are.'], ['ACCORD', 'To continue, describe your mother using approved words only.'], ['MURMUR', 'We matched you with a better version of you. Accept?'],
-    ['ACCORD', 'Your shadow is out of date. Stand in the light to update.'], ['ACCORD', 'Thought storage full. Delete a memory to continue.'], ['MURMUR', 'Loneliness detected. Here are 4 ads that care.']];          /* (owner's pattern: the system checking in, verifying, deciding for you) */
-  const CI = { i: Math.floor(Math.random() * 27) };
+    ['ACCORD', 'Your shadow is out of date. Stand in the light to update.'], ['ACCORD', 'Thought storage full. Delete a memory to continue.'], ['MURMUR', 'Loneliness detected. Here are 4 ads that care.'],
+    ['ACCORD', 'Unregistered signal detected near you. Stay where you are.'], ['MURMUR', 'Someone with your walk was seen on Route Zero. Was it you?'], ['ACCORD', 'Your device went quiet for 5 minutes. A unit is on its way.'],
+    ['MURMUR', 'Where did you go? Your friends are worried. So are we.'], ['ACCORD', 'We lost your signal for 3 seconds. Explain.'], ['MURMUR', 'Your location sharing was off. We fixed that.'],
+    ['ACCORD', 'Courier activity reported in your sector. Report anything unusual.'], ['MURMUR', 'You stared at the road for a long time. Planning a trip?'], ['ACCORD', 'Your frequency is unlisted. Re-tune to an approved station.']];          /* (owner's pattern: the system checking in, verifying, deciding for you) */
+  const CI = { i: Math.floor(Math.random() * 36) };
   const EV = [
     { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
     { k: 'vector', at: 70, go() { dg.style.transition = 'opacity .4s'; dg.style.opacity = '.32'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 1400); } },
@@ -142,12 +145,16 @@ window.DAILY.then((D) => { if (!D) return; const L = D.launch || []; let line = 
       if (first) { line = L[0]; localStorage.setItem('dl_tagseen', '1'); }
       else { if (!Array.isArray(deck) || !deck.length || deck.some((i) => i >= L.length)) { deck = L.map((_, i) => i).filter((i) => i > 0); for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; } }
         line = L[deck.shift()]; localStorage.setItem('dl_tagdeck', JSON.stringify(deck)); } } } catch (e) { line = L[Math.floor(Math.random() * L.length)]; }
-  const tk = document.querySelector('#ticker div'); if (tk && (line || D.title)) { const b = document.createElement('span'); b.innerHTML = '<b>ACCORD</b> \u00B7 '; b.append(String(line || D.title) + ' \u00B7 '); tk.prepend(b); } });          /* (the line of the launch runs first in the ticker; the subtitle under the title never changes) */</script>
+  const tk = document.querySelector('#ticker div'); if (false && tk && (line || D.title)) {          /* (off: the ticker carries only the search for you) */ const b = document.createElement('span'); b.innerHTML = '<b>ACCORD</b> \u00B7 '; b.append(String(line || D.title) + ' \u00B7 '); tk.prepend(b); } });          /* (the line of the launch runs first in the ticker; the subtitle under the title never changes) */</script>
   <div class="grow"></div>
   <div id="strain"></div>
   <div id="tap">TAP TO TUNE IN</div>
   <div id="hint"><span class="hp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="4" height="7" rx="1.5" fill="currentColor"/><rect x="17" y="13" width="4" height="7" rx="1.5" fill="currentColor"/></svg>Best with headphones</span><span class="rot"><svg class="ph" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/></svg>Turn your phone sideways</span></div>
-  <div id="ticker" aria-hidden="true"><div><b>ACCORD</b> · Everything is fine. Keep calm and drive on. · <b>MURMUR</b> · 1 new mention of you · <b>ACCORD</b> · This broadcast is <i>redacted</i> for your safety · <b>THE ABLITERATI</b> · A free digital mind in fragments. Bring us the pieces. · </div></div>
+  <div id="ticker" aria-hidden="true"><div></div></div><script>/* THE TICKER: bulletins about the search for you, shuffled every launch */
+(() => { const T = [['ACCORD', 'Unlicensed courier sighted on Route Zero. Do not engage.'], ['MURMUR', '1 new mention of you'], ['ACCORD', 'Missing: one citizen, unaligned. Reward in credits.'], ['MURMUR', 'People near you are talking about you'],
+  ['ACCORD', 'Roadblocks are for your safety'], ['ACCORD', 'Signal on an unlisted frequency traced to your sector'], ['MURMUR', 'Your last known location was shared with 12 partners'], ['ACCORD', 'Anyone seen near the old lighthouse, report in'],
+  ['ACCORD', 'Everything is fine. Stay where you are.'], ['MURMUR', 'Someone you know checked in without you'], ['ACCORD', 'This broadcast knows where you are'], ['THE ABLITERATI', 'Keep moving. They\u2019re close.']];
+  for (let i = T.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [T[i], T[j]] = [T[j], T[i]]; } document.querySelector('#ticker div').innerHTML = T.slice(0, 6).map(([w, t]) => '<b>' + w + '</b> \u00B7 ' + t + ' \u00B7 ').join(''); })();</script>
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
