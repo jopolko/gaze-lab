@@ -26,6 +26,12 @@ window.__SHELL = true;          /* the pages look for this: inside the shell the
   f.addEventListener('load', insets); for (const ev of ['resize', 'orientationchange', 'fullscreenchange', 'webkitfullscreenchange']) addEventListener(ev, () => { insets(); setTimeout(insets, 300); });
   try { screen.orientation && screen.orientation.addEventListener('change', () => setTimeout(insets, 300)); } catch (e) { } setInterval(insets, 2000);
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });          /* makes it installable (Add to Home Screen); it caches nothing */
+  /* UPDATES: every deploy writes version.txt. When the app comes back into view and the version has changed, a page that's just sitting there (title, menu,
+     glossary...) reloads itself, so nobody stays behind on an old build. The game itself is never reloaded mid-run: leaving it loads the new build anyway
+     (pages and scripts are served no-cache, so every load checks for a newer copy). */
+  let VER = null; const chk = async () => { try { const v = (await (await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' })).text()).trim(); if (!v) return; if (VER === null) { VER = v; return; }
+    if (v !== VER) { VER = v; const page = f.contentWindow.location.pathname.split('/').pop(); if (page !== 'index.html') f.contentWindow.location.reload(); } } catch (e) { } };
+  chk(); document.addEventListener('visibilitychange', () => { if (!document.hidden) chk(); }); addEventListener('focus', chk);
 })();
 </script>
 </body></html>
