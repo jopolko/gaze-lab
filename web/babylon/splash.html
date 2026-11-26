@@ -186,7 +186,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   const pick = (a) => a[Math.floor(Math.random() * a.length)];
   function lockScreen(kind) { kind = kind || KIND(); const L = CHECKIN[CI.i++ % CHECKIN.length], away = Math.max(30, Math.round((performance.now() - last) / 1000));
     const sv = pick(SERV[kind] && Math.random() < (kind === 'vr' ? .85 : .6) ? SERV[kind] : SERV.all), now = new Date();
-    const hm = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, ''), hh = String(now.getHours()).padStart(2, '0'), mm = String(now.getMinutes()).padStart(2, '0');
+    const h12 = now.getHours() % 12 || 12, ap = now.getHours() < 12 ? 'AM' : 'PM', mm = String(now.getMinutes()).padStart(2, '0'), hh = String(h12), hm = h12 + ':' + mm, AP = '<small style="font-size:.3em;font-weight:500;letter-spacing:.04em;margin-left:.2em">' + ap + '</small>';
     const dt = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     const card = (app, title, body) => { const n = document.createElement('div'); n.className = 'nt'; n.innerHTML = '<i class="ic"></i><div class="nb"><div class="nh"><b></b><span>now</span></div><strong></strong><p></p></div>';
       const ic = n.querySelector('.ic'); ic.style.background = ICON[app] || '#cfd6e8'; ic.textContent = SYM[app] || app[0]; n.querySelector('b').textContent = app === 'ACCORD' ? 'ACCORD Civic' : app;
@@ -197,10 +197,10 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     const FP = '<svg class="fp" viewBox="0 0 54 54" fill="none" stroke="#cfe9ff" stroke-width="2" stroke-linecap="round"><path d="M15 22a12 12 0 0 1 24 0v6M19 34v-12a8 8 0 0 1 16 0v10a20 20 0 0 1-2 8M23 40a24 24 0 0 0 4-12v-6a0 0 0 0 1 0 0M27 22v8a28 28 0 0 1-6 16M11 30v-6a16 16 0 0 1 32 0"/></svg>';
     const stk = '<div class="stk"></div>';
     el.innerHTML = '<div class="wp"></div><i class="off"></i>' + (kind === 'vr'
-      ? '<div class="wp-in"><i class="fl"></i><i class="gd"></i><div class="pn"><div class="ph"><span class="tm">' + hh + ':' + mm + '</span><span>' + dt + ' \u00B7 Headset 12% \u00B7 <b style="color:#ff5a4a">Hands-free pack 4% \u25AE</b></span></div>' + stk + '</div><div class="ht">PRESS ANY BUTTON TO RETURN \u00B7 YOUR ROOM IS BEING SCANNED</div></div>'
+      ? '<div class="wp-in"><i class="fl"></i><i class="gd"></i><div class="pn"><div class="ph"><span class="tm">' + hm + AP + '</span><span>' + dt + ' \u00B7 Headset 12% \u00B7 <b style="color:#ff5a4a">Hands-free pack 4% \u25AE</b></span></div>' + stk + '</div><div class="ht">PRESS ANY BUTTON TO RETURN \u00B7 YOUR ROOM IS BEING SCANNED</div></div>'
       : kind === 'pc'
-      ? '<div class="wp-in"><div class="mid"><div class="tm">' + hh + ':' + mm + '</div><div class="dt">' + dt + '</div></div>' + stk + '<div class="tray"><span>ACCORD-Guest \u2022 Connected, watched</span>' + BARS + '<span class="bat"></span></div><div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div></div>'
-      : '<div class="wp-in"><div class="sb"><span>' + (kind === 'ios' ? 'StarLeash \u2726' : hh + ':' + mm + '  StarLeash 6G') + BARS + '</span><span>12%<span class="bat"></span></span></div><div class="mid">' + (kind === 'ios' ? PAD + '<div class="dt">' + dt + '</div><div class="tm">' + hm + '</div>' : '<div class="tm">' + hh + '\n' + mm + '</div><div class="dt">' + dt + '</div>') + stk + '</div>'
+      ? '<div class="wp-in"><div class="mid"><div class="tm">' + hm + AP + '</div><div class="dt">' + dt + '</div></div>' + stk + '<div class="tray"><span>ACCORD-Guest \u2022 Connected, watched</span>' + BARS + '<span class="bat"></span></div><div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div></div>'
+      : '<div class="wp-in"><div class="sb"><span>' + (kind === 'ios' ? 'StarLeash \u2726' : hm + ' ' + ap + '  StarLeash 6G') + BARS + '</span><span>12%<span class="bat"></span></span></div><div class="mid">' + (kind === 'ios' ? PAD + '<div class="dt">' + dt + '</div><div class="tm">' + hm + AP + '</div>' : '<div class="tm">' + hh + '\n' + mm + AP + '</div><div class="dt">' + dt + '</div>') + stk + '</div>'
         + (kind === 'ios' ? '<div class="ft"><span class="rb">\u25C9</span><span class="rb">\u25A3</span></div><i class="hb"></i>' : FP) + '<div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div></div>');
     const inner = el.querySelector('.wp-in'); inner.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity .45s'; document.body.appendChild(el); LK.on = true; LK.el = el; LK.t = performance.now();
     requestAnimationFrame(() => el.classList.add('sleep'));          /* (the screen goes off) */
@@ -219,7 +219,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     { k: 'car', at: 190, go() { walk(CAR, 120, 4200, .15, 1.05, 0, 0); } },
     { k: 'vector2', at: 240, go() { dg.style.transition = 'opacity .2s'; dg.style.opacity = '.45'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 600); } },
     /* the rare one: left alone for a while, the device seems to lock, and the system has been trying to reach you (see THE FAKE LOCK SCREEN above); again every few idle minutes */
-    { k: 'weird', at: (window.__PROG && window.__PROG.hrs >= 24) ? 20 : 35, again: 200, go() { lockScreen(); } },
+    { k: 'weird', at: (() => { let seen = 0; try { seen = +localStorage.getItem('dl_lockseen') || 0; localStorage.setItem('dl_lockseen', seen + 1); } catch (e) { } return seen === 0 ? 12 : (window.__PROG && window.__PROG.hrs >= 24) ? 20 : 35; })(), again: 200,          /* (the very first visit: soon, at 12 s idle, so people meet it) */ go() { lockScreen(); } },
   ];
   const done = new Set(); setInterval(() => { if (busy || document.hidden) return; const idle = (performance.now() - last) / 1000, e = EV.find((q) => !done.has(q.k) && idle >= q.at); if (!e) return; done.add(e.k); if (e.again) setTimeout(() => { done.delete(e.k); e.at = (performance.now() - last) / 1000 + e.again; }, 4500); busy = true; e.go(); }, 1000);
   window.__lock = (k) => { busy = true; lockScreen(k); }; window.__idle = (k) => { const e = EV.find((q) => q.k === k); if (e) { busy = true; e.go(); } };          /* (test hook) */ })();</script>
@@ -376,7 +376,8 @@ function showStrain() { const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.roun
   const fx = p.does.split(';')[0].trim(); d.className = 'fx'; d.textContent = fx.charAt(0).toUpperCase() + fx.slice(1) + (WORLDOF[KEYS[si]] ? ' · found: ' + WORLDOF[KEYS[si]] : ''); strainEl.append(n, d); }
 
 const GAME = { el: document.getElementById('game'), ready: false, tint: '' };
-if (/[?&]real(&|$)/.test(location.search)) GAME.el.src = GAME.el.dataset.src;          /* (the painted scene; &real puts the real level behind it) */
+if (!/[?&]painted(&|$)/.test(location.search)) GAME.el.src = GAME.el.dataset.src + '&freq=' + (() => { try { const v = +localStorage.getItem('dl_freq'); return v >= 400 && v <= 950 ? Math.round(v) : 500; } catch (e) { return 500; } })();          /* (the real level behind the title, so the dial previews the exact hit; ?painted keeps the painted scene) */
+GAME.f = 0; GAME.at = 0; function gameDial(f) { if (!GAME.ready) return; const n = performance.now(); if (Math.abs(f - GAME.f) < 1 || n - GAME.at < 90) return; GAME.f = f; GAME.at = n; try { GAME.el.contentWindow.__splashDial(f); } catch (e) { } }
 setInterval(() => { if (GAME.ready) return; try { const w = GAME.el.contentWindow; if (w && w.__splashReady && w.__G && w.__G.PH && w.__G.PH.z < -30) { GAME.ready = true; GAME.el.classList.add('on'); setTimeout(() => { skyc.style.display = 'none'; }, 1500); } } catch (e) { } }, 400);
 function gameTint() { return;          /* (off: the background keeps its own colours) */ if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
 function draw(t, dt) {
@@ -451,7 +452,7 @@ function digi(u, c) { if (!DG.el) { DG.el = document.getElementById('digi'); DG.
 function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE.f; else if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
-  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = 'MAX INTENSITY \u00B7 ' + Math.round(f) + ' THz' + (f > FV ? ' \u00B7 UV' : ''); dialEl.style.setProperty('--lc', `rgb(${c})`); 
+  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; gameDial(f); mhz.textContent = 'MAX INTENSITY \u00B7 ' + Math.round(f) + ' THz' + (f > FV ? ' \u00B7 UV' : ''); dialEl.style.setProperty('--lc', `rgb(${c})`); 
   /* the wave matches the band under it, as real light does: red (400 THz) is the low frequency, long slow smooth waves = chill; violet and ultraviolet (950 THz) the
      high frequency, tight and taller = intense. The wavelength at each point is the light at that point of the scale (the spread exaggerated so the eye reads it),
      drawn faint in the spectrum's own colours; the stretch around your setting glows. */
@@ -463,8 +464,8 @@ function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE
 }
 { const sc = dialEl.querySelector('.scale'), setF = (e) => { const b = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); TUNE.f = F0 + u * (F1 - F0); TUNE.user = true; doLock(); };
   dialEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); TUNE.down = true; try { dialEl.setPointerCapture(e.pointerId); } catch (er) { } setF(e); });
-  dialEl.addEventListener('pointermove', (e) => { e.stopPropagation(); if (TUNE.down) setF(e); });
-  const up = (e) => { e.stopPropagation(); if (!TUNE.down) return; TUNE.down = false; try { localStorage.setItem('dl_freq', String(Math.round(TUNE.f))); } catch (er) { } };
+  dialEl.addEventListener('pointermove', (e) => { e.stopPropagation(); if (TUNE.down) { setF(e); try { window.__glz && window.__glz.tick(); } catch (er) { } } });
+  const up = (e) => { e.stopPropagation(); if (!TUNE.down) return; TUNE.down = false; try { localStorage.setItem('dl_freq', String(Math.round(TUNE.f))); } catch (er) { } try { window.__glz && window.__glz.settle(); } catch (er) { } };
   dialEl.addEventListener('pointerup', up); dialEl.addEventListener('pointercancel', up); }
 function idleBlip() { const t = document.getElementById('title'); if (!t || !t.classList.contains('open') || document.hidden) return setTimeout(idleBlip, 4000); t.classList.add('blip'); setTimeout(() => t.classList.remove('blip'), 130); setTimeout(idleBlip, 7000 + Math.random() * 8000); }
 
@@ -486,6 +487,8 @@ function idleBlip() { const t = document.getElementById('title'); if (!t || !t.c
   /* timed in FRAMES, not milliseconds: each hit holds 1-2 frames (about the shortest flash the eye still catches), 1-5 frames dark between hits */
   function cluster() { const plan = []; const n = Math.round(R(2, 6.4)); for (let i = 0; i < n; i++) { plan.push(1); for (let f = 1, on = Math.random() < .7 ? 1 : 2; f < on; f++) plan.push(2); plan.push(0); for (let g = 0, gap = Math.round(R(0, 4)); g < gap; g++) plan.push(2); }
     let i = 0; const step = () => { const c = plan[i++]; if (c === 1) { reset(); hit(); } else if (c === 0) reset(); if (i < plan.length) requestAnimationFrame(step); else { reset(); setTimeout(cluster, Math.random() < .25 ? R(500, 1400) : R(3500, 11000)); } }; requestAnimationFrame(step); }          /* (1 = a hit starts, 2 = hold this frame as it is, 0 = back to solid) */
+  { let lastT = 0, gap = 120; const one = () => { reset(); hit(); setTimeout(reset, R(28, 60)); };
+    window.__glz = { tick() { const n = performance.now(); if (n - lastT < gap) return; lastT = n; gap = R(70, 230); one(); }, settle() { let d = R(120, 260); for (let i = 0, k = Math.round(R(2, 3.4)); i < k; i++) { setTimeout(one, d); d += R(160, 480); } } }; }          /* (while the dial moves / after it is let go) */
   setTimeout(cluster, R(500, 1300)); window.__hit = (k) => { const r = Math.random; if (k !== undefined) Math.random = () => k; hit(); Math.random = r; }; window.__reset = reset; })();          /* (test hooks) */
 function doLock() { if (locked) return; locked = true;  lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
