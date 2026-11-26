@@ -13,7 +13,7 @@ iframe { position:fixed; left:0; top:0; width:100%; height:100%; height:100dvh; 
 </style></head><body>
 <iframe id="f" title="Afterglow" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
 <script>
-window.__SHELL = true;          /* the pages look for this: inside the shell they fullscreen the shell itself */
+window.__SHELL = true; window.__fsAt = -1e9; for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { if (document.fullscreenElement || document.webkitFullscreenElement) window.__fsAt = performance.now(); });          /* (when fullscreen began: phone browsers show an exit notice for a few seconds, and pages keep their buttons clear of it) */          /* the pages look for this: inside the shell they fullscreen the shell itself */
 (() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'splash.html';          /* the title screen first; it taps through to the menu */
   if (!/^[A-Za-z0-9_-]+\.html([?#].*)?$/.test(p)) p = 'menu.html';          /* only this folder's own pages */
   f.src = p;
