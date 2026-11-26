@@ -83,6 +83,7 @@ Names over time: Downhill → Downfall → The Frequency → **Afterglow**.
 - **Sterling Vance** — host of *ACCORD Live*; streams your run as a warning.
 - **Marshal Kade Ransom** — celebrity bounty hunter in a gunship; the raiders are his crews.
 - **The Tournament** — ACCORD's live arena show; every wreck is ratings.
+- **Your signal** — the title screen's light slider (400–790 THz, the real visible spectrum; the wave above it shortens as it climbs) is the player's signal. Warm red = chill (70% trip effects, softer, slower music), violet = intense (130%, harder, faster), 540 THz = as designed. Its colour is yours: the Courier car's underglow, `--sig` accents. Saved as `dl_freq`; read in index.html as `SIG`.
 - **SWARMCAST** — there is no TV: everything is streamed over a satellite peer-to-peer mesh that half works (peer counts, sat-link %, packet loss, reroutes). ACCORD Live, Murmur's feed and ACCORD ads are all streams on it. Use it everywhere a screen or broadcast appears.
 - **Studio idents** — made-up studios from today's AI trends carried forward (AGI Next Year Pictures, Extinction Risk Entertainment, The Constitution Film Co., Neural Lace & Sons, Capped Profit Pictures...), set as real logo lockups; three per intro, fresh each time.
 - **The only sober thing** — a recurring mechanic: under a heavy strain the world melts and the key object stays plain. First used for the Lamp in Route Zero's tunnel; reuse for later Lamp pieces and for spotting ACCORD's hidden cameras.
