@@ -292,27 +292,36 @@ const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antiali
    (neon edges, oil paint, cel cartoon, thermal, pastel), nothing that bends shapes; stained glass snaps on the sky alone (SKY GLASS below). Under them a
    gentle colour bleed along a slow flow. All of it follows MAX INTENSITY: rare and faint at the default, overlapping and full at the top; the road stays readable. */
 window.__LOOKON = { looks: 1, bleed: 1, glass: 1 };
-const LOOKFX = (() => { const cvs = document.getElementById('fx'); let PAR = null, READY = false, gl = null, PL = null, PB = null, UL = {}, UB = {}, src = null, sx = null, tex = null, fb = [], ft = [], w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);
+const LOOKFX = (() => { const cvs = document.getElementById('fx'); let REGOK = false, objT = null, objC = null, objX = null, PAR = null, READY = false, gl = null, PL = null, PB = null, UL = {}, UB = {}, src = null, sx = null, tex = null, fb = [], ft = [], w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);
   const PREC = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
   const VS = 'attribute vec2 p; varying vec2 vUV; void main(){ vUV = p * .5 + .5; gl_Position = vec4(p, 0., 1.); }';
-  /* the looks the title screen may use (uMix = the game's index - 2), with how often (weight) and how strong at most (cap) */
-  const POOL = [[13, 2, .75], [3, 2, .9], [4, 2, .85], [9, 1, .6], [2, 1, .7]];          /* (neon edges, oil paint, cel cartoon, thermal, pastel: colour and style, nothing that bends shapes; owner 2026-11-26) */
-  const pickLook = (not) => { let tot = 0; for (const q of POOL) if (q[0] !== not) tot += q[1]; let r = Math.random() * tot; for (const q of POOL) { if (q[0] === not) continue; r -= q[1]; if (r <= 0) return q; } return POOL[0]; };
-  const LAY = [{ q: null, ph: 'idle', t: 0, next: 1.2, a: 0, hold: 0 }, { q: null, ph: 'idle', t: 0, next: 4, a: 0, hold: 0 }];
+  /* THE LOOKS, REGION BY REGION (owner 2026-11-26): each look lands on one part of the picture (the sky, the sun, the land, the objects: trees and hills) or on
+     all of it, so the sky can be oil paint while the trees go neon and the sun runs thermal. [look (uMix, or -1 = vector glow), regions it may take, cap].
+     Shape-bending looks (melt, prism) only ever touch the sky and sun; nothing with regular dots, lines or bands. Recent looks are not repeated. */
+  const R_ALL = 0, R_SKY = 1, R_SUN = 2, R_LAND = 3, R_OBJ = 4;
+  const POOL = [[3, [R_ALL, R_SKY, R_LAND, R_OBJ], .9], [4, [R_ALL, R_OBJ, R_LAND], .85], [2, [R_ALL, R_SKY], .7], [9, [R_SKY, R_SUN, R_OBJ, R_ALL], .7], [13, [R_OBJ, R_LAND, R_ALL], .8],
+    [1, [R_OBJ, R_ALL], .75], [-1, [R_OBJ, R_LAND, R_ALL], .85], [15, [R_SUN, R_OBJ], .8], [12, [R_SKY, R_SUN], .8], [17, [R_SKY, R_SUN], .9]];
+  const RECENT = [];
+  const pickLook = () => { const taken = LAY.filter((L) => L.q).map((L) => L.reg), opts = POOL.filter((q) => !RECENT.includes(q[0])); const q = opts[Math.floor(Math.random() * opts.length)] || POOL[0];
+    const regs = q[1].filter((r) => !taken.includes(r) && !(r === R_ALL && taken.length)); const part = regs.filter((r) => r !== R_ALL), reg = regs.includes(R_ALL) && (!part.length || Math.random() < .15) ? R_ALL : part.length ? part[Math.floor(Math.random() * part.length)] : q[1][q[1].length - 1];          /* (whole-screen looks are rare: the hypnotic moments) */
+    RECENT.push(q[0]); if (RECENT.length > 4) RECENT.shift(); return { q, reg }; };
+  const LAY = [0, 1, 2].map((i) => ({ q: null, reg: 0, ph: 'idle', t: 0, next: 1.2 + i * 2.5, a: 0, hold: 0 }));
   const BLEED = { v: .5, g: .7, n: 0 };
   /* SKY GLASS (owner 2026-11-26): stained glass only on the sky and sun, ending at the horizon. It snaps in (a tenth of a second), holds for under a second while
      its strength wavers, and snaps out; mostly as a few large panes that break the sky into big simple chunks, now and then as small ones; once in a while it
      snaps straight back. Between snaps the wavy sky and the colour looks come through on their own. */
-  const GL = { ph: 'idle', t: 0, next: 2, a: 0, cell: 120, snap: null, back: false }; window.__GL = GL;          /* (test hook) */
+  const GL = { ph: 'idle', t: 0, next: 5, a: 0, cell: 120, snap: null, back: false }; window.__GL = GL;          /* (test hook) */
   function glassStep(t, dt, T) {
     if (GL.ph === 'idle') { if (t < GL.next) return 0; const big = Math.random() < .75; GL.cell = H * (big ? .14 + .22 * Math.random() : .025 + .025 * Math.random()) * Math.max(1, (skyc.width || W) / W);
       GL.snap = { in: .07 + .07 * Math.random(), hold: .35 + .45 * Math.random(), out: .12 + .12 * Math.random(), f1: 11 + 9 * Math.random(), f2: 23 + 14 * Math.random(), again: !GL.back && Math.random() < .3 + .2 * T }; GL.ph = 'in'; GL.t = 0; }
     GL.t += dt; const S = GL.snap;
     if (GL.ph === 'in') { GL.a = Math.min(1, GL.t / S.in); if (GL.a >= 1) { GL.ph = 'hold'; GL.t = 0; } }
     else if (GL.ph === 'hold') { const w = Math.sin(GL.t * S.f1) * .6 + Math.sin(GL.t * S.f2 + 1.3) * .4; GL.a = .74 + .26 * w; if (GL.t >= S.hold) { GL.ph = 'out'; GL.t = 0; GL.a0 = GL.a; } }
-    else { GL.a = Math.max(0, GL.a0 * (1 - GL.t / S.out)); if (GL.a <= 0) { GL.ph = 'idle'; if (S.again) { GL.back = true; GL.next = t + .18 + .4 * Math.random(); } else { GL.back = false; GL.next = t + (5.5 - 4 * T) * (.5 + .8 * Math.random()); } } }
+    else { GL.a = Math.max(0, GL.a0 * (1 - GL.t / S.out)); if (GL.a <= 0) { GL.ph = 'idle'; if (S.again) { GL.back = true; GL.next = t + .18 + .4 * Math.random(); } else { GL.back = false; GL.next = t + (11 - 7.5 * T) * (.5 + .8 * Math.random()); } } }          /* (about half as often as before: owner 2026-11-26) */
     return GL.a * (.3 + .7 * Math.pow(T, 1.1)); }
-  const FB = PREC + `uniform sampler2D uTex, uOrig; uniform vec2 uRes; uniform float uTime, uT, uHz, uBleed, uGlass, uCellPx; varying vec2 vUV;
+  const FB = PREC + `uniform sampler2D uTex, uOrig; uniform vec2 uRes, uCss; uniform float uTime, uT, uHz, uHzPx, uBleed, uGlass, uCellPx; varying vec2 vUV;
+float hillU(float ux){ float x = ux * uCss.x, y = uHzPx - uCss.y * .03 * (1. + .6 * sin(x * .013 + 1.) + .3 * sin(x * .041)); return 1. - y / uCss.y; }          /* (the hills' top, as uv height) */
+
 float h21(vec2 p){ p = mod(p, 289.); vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * f * (f * (f * 6. - 15.) + 10.); return mix(mix(h21(i), h21(i + vec2(1., 0.)), f.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), f.x), f.y); }
 float fbm(vec2 p){ float s = 0., a = .5; const mat2 R = mat2(.8, .6, -.6, .8); p = R * p * 1.17; for (int i = 0; i < 4; i++){ s += a * vn(p); p = R * p * 2.03 + 1.7; a *= .5; } return s; }
@@ -324,7 +333,7 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
   vec2 m = uv + f2 * bA * .6; vec3 col = vec3(texture2D(uTex, m + f2 * bA).r, texture2D(uTex, m).g, texture2D(uTex, m - f2 * bA).b);
   vec3 o = texture2D(uOrig, uv).rgb; col = mix(col, o, road * .55);          /* (the road stays readable) */
   if (dy < -.03) col = mix(o, col, .9);          /* (the sky stays (barely) recognisable) */
-  float skyM = 1. - smoothstep(-.015, .005, dy);          /* (glass: sky and sun only, ending at the horizon) */
+  float topU = max(1. - uHz, hillU(uv.x)), skyM = smoothstep(topU - .003, topU + .006, uv.y);          /* (glass: sky and sun only, ending at the hills) */
   if (uGlass > .01 && skyM > .001){ vec2 px = uv * uRes, g = px / uCellPx, id = floor(g), fr = fract(g); float d1 = 9., d2 = 9.; vec2 sp = vec2(0.), sid = id;
     for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++){ vec2 o2 = vec2(float(i), float(j)), c = id + o2, sd = .5 + .42 * vec2(sin(uTime * .4 + 6.2832 * h21(c)), cos(uTime * .35 + 6.2832 * h21(c + 7.3))); float d = length(o2 + sd - fr);
       if (d < d1){ d2 = d1; d1 = d; sp = c + sd; sid = c; } else if (d < d2) d2 = d; }
@@ -337,12 +346,15 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
     const sh = (t, sr) => { const o = gl.createShader(t); gl.shaderSource(o, sr); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
     PAR = gl.getExtension('KHR_parallel_shader_compile');          /* (compiles in the background where the GPU allows: no frozen first frames) */
     const prog = (f) => { const pr = gl.createProgram(); const mkS = (t, sr) => { const o = gl.createShader(t); gl.shaderSource(o, sr); gl.compileShader(o); return o; }; gl.attachShader(pr, mkS(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, mkS(gl.FRAGMENT_SHADER, f)); gl.linkProgram(pr); return pr; };
-    PL = prog(PSYLOOK_FS.replace('precision highp float;', PREC)); PB = prog(FB); return true; }
+    let fs = PSYLOOK_FS.replace('precision highp float;', PREC); const okR = fs.includes('void main() {') && fs.includes('col = mix(col, R, uSty);') && fs.includes(', uVec);');
+    if (okR) fs = fs.replace('void main() {', 'uniform float uReg, uHzU, uHzPx; uniform vec2 uCss; uniform vec3 uSun; uniform sampler2D uObj;\nfloat hillU(float ux){ float x = ux * uCss.x, y = uHzPx - uCss.y * .03 * (1. + .6 * sin(x * .013 + 1.) + .3 * sin(x * .041)); return 1. - y / uCss.y; }\nfloat regM(vec2 u){ if (uReg < .5) return 1.; float top = max(uHzU, hillU(u.x)), sky = smoothstep(top - .004, top + .006, u.y), ob = texture2D(uObj, u).a, sun = 1. - smoothstep(uSun.z * .8, uSun.z * 1.12, length((u - uSun.xy) * vec2(uRes.x / uRes.y, 1.)));\n  if (uReg < 1.5) return sky * (1. - sun) * (1. - ob); if (uReg < 2.5) return sun * (1. - ob); if (uReg < 3.5) return (1. - sky) * (1. - ob); return ob; }\nvoid main() { float RMk = regM(vUV);')
+      .replace('col = mix(col, R, uSty);', 'col = mix(col, R, uSty * RMk);').replace(', uVec);', ', uVec * RMk);');
+    REGOK = okR; PL = prog(fs); PB = prog(FB); return true; }
   function ready() { if (READY) return true; for (const pr of [PL, PB]) { if (PAR && !gl.getProgramParameter(pr, PAR.COMPLETION_STATUS_KHR)) return false; if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr) || 'link failed'); }
-    for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix']) UL[n] = gl.getUniformLocation(PL, n);
-    for (const n of ['uTex', 'uOrig', 'uRes', 'uTime', 'uT', 'uHz', 'uBleed', 'uGlass', 'uCellPx']) UB[n] = gl.getUniformLocation(PB, n);
+    for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix', 'uReg', 'uHzU', 'uSun', 'uObj', 'uCss', 'uHzPx']) UL[n] = gl.getUniformLocation(PL, n);
+    for (const n of ['uTex', 'uOrig', 'uRes', 'uTime', 'uT', 'uHz', 'uBleed', 'uGlass', 'uCellPx', 'uCss', 'uHzPx']) UB[n] = gl.getUniformLocation(PB, n);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    src = document.createElement('canvas'); sx = src.getContext('2d'); tex = mk(); READY = true; return true; }
+    src = document.createElement('canvas'); sx = src.getContext('2d'); tex = mk(); objT = mk(); objC = document.createElement('canvas'); objX = objC.getContext('2d'); READY = true; return true; }
   function mk() { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); return t; }
   function sizeTo(nw, nh) { w = nw; h = nh; cvs.width = w; cvs.height = h; src.width = w; src.height = h; for (const t of ft) gl.deleteTexture(t); for (const f of fb) gl.deleteFramebuffer(f); ft = []; fb = [];
     for (let i = 0; i < 2; i++) { const t = mk(); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); ft.push(t); fb.push(f); }
@@ -353,8 +365,8 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
   /* STAINED GLASS SNAPS (owner 2026-11-26): not a slow fade but the brain snapping to focus, or dropping into sleep for a split second: it pops in (a tenth of a
      second), tunes for a moment (its strength wavering like a signal being found), pops out, and now and then snaps back once more straight after. */
   const SNAP = (L, T) => { L.snap = { in: .07 + .08 * Math.random(), hold: (.3 + .9 * Math.random()) * (.7 + .6 * T), out: .14 + .16 * Math.random(), f1: 11 + 9 * Math.random(), f2: 23 + 14 * Math.random(), again: Math.random() < .3 + .3 * T }; };
-  function step(L, i, t, dt, T) { const other = LAY[1 - i].q ? LAY[1 - i].q[0] : -1;
-    if (L.ph === 'idle') { if (t >= L.next && (i === 0 || T > .3)) { const back = !!L.re; L.q = L.re || pickLook(other); L.re = null; L.ph = 'in'; L.t = 0; L.hold = (2 + Math.random() * 4) * (.6 + .8 * T); L.snap = null; if (L.q[0] === 11) { SNAP(L, T); if (back) L.snap.again = false; } }          /* (one snap-back at most) */ return 0; }
+  function step(L, i, t, dt, T) {
+    if (L.ph === 'idle') { if (t >= L.next && (i === 0 || (i === 1 && T > .3) || (i === 2 && T > .62))) { const back = !!L.re; const pk = L.re ? { q: L.re, reg: L.reg } : pickLook(); L.q = pk.q; L.reg = pk.reg; L.re = null; L.ph = 'in'; L.t = 0; L.hold = (2 + Math.random() * 4) * (.6 + .8 * T); L.snap = null; if (L.q[0] === 11) { SNAP(L, T); if (back) L.snap.again = false; } }          /* (one snap-back at most) */ return 0; }
     L.t += dt; const S = L.snap;
     if (S) {          /* the snap */
       if (L.ph === 'in') { L.a = Math.min(1, L.t / S.in); if (L.a >= 1) { L.ph = 'hold'; L.t = 0; } }
@@ -368,17 +380,21 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
   function render(t, dt, hzf) { if (dead || GAME.ready) return; if (!gl) { if (t < .6) return; try { if (!init()) return off('no webgl'); } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); } }          /* (not on the first frames: the page paints first) */
     try { if (!ready()) return; } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); }
     const I = INT(), T = I.t, nw = Math.max(2, skyc.width || Math.round(W)), nh = Math.max(2, skyc.height || Math.round(H)); if (nw !== w || nh !== h) sizeTo(nw, nh);
-    const O = window.__LOOKON, s0 = step(LAY[0], 0, t, dt, T) * O.looks, s1 = step(LAY[1], 1, t, dt, T) * O.looks;
+    const O = window.__LOOKON, s0 = step(LAY[0], 0, t, dt, T) * O.looks, s1 = step(LAY[1], 1, t, dt, T) * O.looks, s2 = step(LAY[2], 2, t, dt, T) * O.looks;
     if (t > BLEED.n) { BLEED.g = Math.random() < .2 * (1 - T) ? 0 : .35 + .65 * Math.random(); BLEED.n = t + 2 + Math.random() * 6; } BLEED.v += (BLEED.g - BLEED.v) * Math.min(1, dt * .55);
     sx.drawImage(skyc, 0, 0, w, h); sx.drawImage(bg, 0, 0, w, h); sx.drawImage(cv, 0, 0, w, h);
+    { const ow = Math.max(2, w >> 1), oh = Math.max(2, h >> 1); if (objC.width !== ow || objC.height !== oh) { objC.width = ow; objC.height = oh; } objX.clearRect(0, 0, ow, oh); objX.drawImage(cv, 0, 0, ow, oh);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.bindTexture(gl.TEXTURE_2D, objT); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, objC); }
     gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
     gl.viewport(0, 0, w, h);
     const look = (inTex, outFb, L, s) => { gl.bindFramebuffer(gl.FRAMEBUFFER, outFb); gl.useProgram(PL); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, inTex); gl.uniform1i(UL.textureSampler, 0);
-      gl.uniform2f(UL.uTexel, 1 / w, 1 / h); gl.uniform2f(UL.uRes, w, h); gl.uniform1f(UL.uCell, 8); gl.uniform1f(UL.uVec, 0); gl.uniform1f(UL.uAsc, 0); gl.uniform1f(UL.uTime, t); gl.uniform1f(UL.uSty, s); gl.uniform1f(UL.uMix, L.q ? L.q[0] : 0); quad(PL); };
-    look(tex, fb[0], LAY[0], s0); look(ft[0], fb[1], LAY[1], s1);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.useProgram(PB); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ft[1]); gl.uniform1i(UB.uTex, 0); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(UB.uOrig, 1);
-    gl.uniform2f(UB.uRes, w, h); gl.uniform1f(UB.uTime, t); gl.uniform1f(UB.uT, T); gl.uniform1f(UB.uHz, hzf); gl.uniform1f(UB.uBleed, BLEED.v * O.bleed); gl.uniform1f(UB.uGlass, glassStep(t, dt, T) * O.glass); gl.uniform1f(UB.uCellPx, GL.cell); quad(PB);
-    window.__LOOKOK = (window.__LOOKOK || 0) + 1; window.__LOOKNOW = [LAY[0].q ? LAY[0].q[0] : '-', s0.toFixed(2), LAY[1].q ? LAY[1].q[0] : '-', s1.toFixed(2)].join(' ');
+      gl.uniform2f(UL.uTexel, 1 / w, 1 / h); gl.uniform2f(UL.uRes, w, h); const vec = L.q && L.q[0] < 0; gl.uniform1f(UL.uCell, 8); gl.uniform1f(UL.uVec, vec ? s : 0); gl.uniform1f(UL.uAsc, 0); gl.uniform1f(UL.uTime, t); gl.uniform1f(UL.uSty, vec ? 0 : s); gl.uniform1f(UL.uMix, L.q && !vec ? L.q[0] : 0);
+      if (REGOK) { const S = window.__SUN || { x: .5, y: .4, r: .1 }; gl.uniform1f(UL.uReg, L.q ? L.reg : 0); gl.uniform1f(UL.uHzU, 1 - hzf); gl.uniform1f(UL.uHzPx, hzf * H); gl.uniform2f(UL.uCss, W, H); gl.uniform3f(UL.uSun, S.x, 1 - S.y, S.r); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, objT); gl.uniform1i(UL.uObj, 2); gl.activeTexture(gl.TEXTURE0); }
+      quad(PL); };
+    look(tex, fb[0], LAY[0], s0); look(ft[0], fb[1], LAY[1], s1); look(ft[1], fb[0], LAY[2], s2);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.useProgram(PB); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ft[0]); gl.uniform1i(UB.uTex, 0); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(UB.uOrig, 1);
+    gl.uniform2f(UB.uRes, w, h); gl.uniform1f(UB.uTime, t); gl.uniform1f(UB.uT, T); gl.uniform1f(UB.uHz, hzf); gl.uniform1f(UB.uBleed, BLEED.v * O.bleed); gl.uniform1f(UB.uGlass, glassStep(t, dt, T) * O.glass); gl.uniform1f(UB.uCellPx, GL.cell); gl.uniform2f(UB.uCss, W, H); gl.uniform1f(UB.uHzPx, hzf * H); quad(PB);
+    window.__LOOKOK = (window.__LOOKOK || 0) + 1; window.__LOOKNOW = LAY.map((L, i) => (L.q ? L.q[0] + '@' + ['all', 'sky', 'sun', 'land', 'obj'][L.reg] : '-') + ':' + [s0, s1, s2][i].toFixed(2)).join(' ');
     if (cvs.style.display === 'none') cvs.style.display = 'block'; }
   return { render, off }; })();
 const DRIVE = { z: 0 };
@@ -396,7 +412,7 @@ function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = 
   const camX = roadC(DRIVE.z + 14) + .7 * Math.sin(t * .63), camH = 1.7 + .035 * Math.sin(t * 7.3) + .02 * Math.sin(t * 11.1);          /* the car follows the road a little behind the curve, with a gentle sway and a road hum */
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
-  gl.uniform2f(U.uWH, W, H); gl.uniform2f(U.uWH2, skyc.width, skyc.height); gl.uniform4f(U.uMap, cxm, hz, k, k);          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ { const I = INT(); SPT.t += dt * (.8 + 1.4 * I.t + .6 * I.uv); gl.uniform1f(U.uTime, SPT.t); gl.uniform3f(U.uInt, I.a, I.uv, I.t); } gl.uniform1f(U.uBeat, beat);          /* (the sky's own clock runs faster as the dial climbs) */ gl.uniform1f(U.uGlass, 0);          /* (no stained glass on the title screen) */ gl.uniform1f(U.uPsy, 0);
+  gl.uniform2f(U.uWH, W, H); gl.uniform2f(U.uWH2, skyc.width, skyc.height); gl.uniform4f(U.uMap, cxm, hz, k, k); window.__SUN = { x: cxm / W, y: (hz - .28 / k) / H, r: .3 / k / H };          /* (version 6: the sky at the road's scale, its big sun behind the molecule) */ { const I = INT(); SPT.t += dt * (.8 + 1.4 * I.t + .6 * I.uv); gl.uniform1f(U.uTime, SPT.t); gl.uniform3f(U.uInt, I.a, I.uv, I.t); } gl.uniform1f(U.uBeat, beat);          /* (the sky's own clock runs faster as the dial climbs) */ gl.uniform1f(U.uGlass, 0);          /* (no stained glass on the title screen) */ gl.uniform1f(U.uPsy, 0);
   gl.uniform4f(U.uTune, tc[0], tc[1], tc[2], 0);          /* (the sky keeps its own colours) */ { const f = fxNow(t), I = INT(), base = CALM ? 0 : .08 + .6 * Math.pow(I.t, 1.1) + .2 * I.uv; gl.uniform4f(U.uFx, f[0], f[1], Math.max(base, f[2]), k * 1.6); }          /* (a steady smooth wobble set by the dial, the episodes on top) */ gl.uniform4f(U.uDrive, DRIVE.z, camX, camH, k); DRIVE.camX = camX; DRIVE.camH = camH; DRIVE.k = k;
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); return true; }
 
@@ -424,7 +440,7 @@ function draw(t, dt) {
   // shading: darker at the top (the title reads) and at the very bottom; the middle is the sky's sun, the molecule and the road
   g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(5,6,15,.7)'); g.addColorStop(.28, 'rgba(5,6,15,.2)'); g.addColorStop(Math.max(.3, hz / H - .04), 'rgba(5,6,15,0)'); g.addColorStop(1, 'rgba(4,4,8,.22)'); bx.fillStyle = g; bx.fillRect(0, 0, W, H);
   // the hills on the horizon (until the real level takes over)
-  if (!GAME.ready) cx.fillStyle = 'rgba(12,10,24,.9)'; cx.beginPath(); cx.moveTo(0, hz + 1); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .03) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz + 1); if (!GAME.ready) cx.fill();
+  if (!GAME.ready) { bx.fillStyle = 'rgba(12,10,24,.9)'; bx.beginPath(); bx.moveTo(0, hz + 1); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .03) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); bx.lineTo(x, y); } bx.lineTo(W, hz + 1); bx.fill(); }          /* (on the land's layer: the hills are terrain, the trees are the objects) */
   // trees by the road: every 18 m on both sides, 9 to 40 m out, drawn far to near; they come out of the haze and rush past. In waves they leave
   // tracers (fading copies a moment behind, the colour drifting along the trail) and their tops sway
   if (DRIVE.k && !GAME.ready) { const z0 = DRIVE.z, kk = DRIVE.k, near = [], I = INT(), trc0 = Math.pow(Math.max(0, Math.sin(t * .23 - .8)), 2) * (.7 + .3 * Math.sin(t * .07)), trc = CALM ? 0 : Math.min(1.8, .16 + 1.15 * Math.pow(I.t, 1.15) + trc0 * (.3 + .9 * I.t)), NK = 2 + Math.round(5 * I.t);          /* (mild tracers even at the default; up to 7 long trails at the top) */          /* (the tracers follow MAX INTENSITY: faint waves when chill, stronger toward violet, always on and longer in ultraviolet) */
