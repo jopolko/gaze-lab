@@ -506,7 +506,7 @@ const LOCK_AT = 2.6, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = fa
 /* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
 const TUNE = { f: TARGET, user: false, k: 0, down: false };
 try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }
-const INT = () => ({ a: Math.max(0, Math.min(1, (TUNE.f - F0) / (FV - F0))), uv: Math.max(0, Math.min(1, (TUNE.f - FV) / (F1 - FV))), t: Math.max(0, Math.min(1, (TUNE.f - F0) / (F1 - F0))) });          /* (t: 0-1 across the whole dial, the master fade) */          /* (a: 0-1 across visible light, uv: 0-1 across ultraviolet) */
+const INT = () => ({ a: Math.pow(Math.max(0, Math.min(1, (TUNE.f - F0) / (FV - F0))), 1.8), uv: Math.max(0, Math.min(1, (TUNE.f - FV) / (F1 - FV))), t: Math.pow(Math.max(0, Math.min(1, (TUNE.f - F0) / (F1 - F0))), 1.6) });          /* (eased, 2026-11-26: the low end is gentle, most of the rise is near the top, like the game) */          /* (t: 0-1 across the whole dial, the master fade) */          /* (a: 0-1 across visible light, uv: 0-1 across ultraviolet) */
 const specNow = () => specAt((TUNE.f - F0) / (F1 - F0));
 /* the digital layer, rebuilt only when the light moves: from 640 THz up the ground turns to a wire grid that tightens, and scanlines close in, by 790 it's all vector */
 const DG = { el: null, g: null, k: -1 };
