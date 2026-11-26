@@ -70,18 +70,18 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #strain.in { animation:none; } }
 #ticker { width:100%; overflow:hidden; white-space:nowrap; margin-top:clamp(8px,1.8vh,16px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.16em; color:rgba(185,194,212,.8);
   border-top:1px solid rgba(185,194,212,.18); padding-top:6px; }
-#ticker div { display:inline-block; padding-left:100%; animation:tick 38s linear infinite; }
+#ticker div { display:inline-block; padding-left:0; will-change:transform; }
 #ticker b { color:var(--amber); } #ticker i { font-style:normal; background:#000; color:#000; padding:0 .3em; }
 @keyframes tick { to { transform:translateX(-100%); } }
 @media (orientation:landscape) and (max-height:500px) {
   #ui { display:block; }
-  .grow, #ticker { display:none; }
+  .grow { display:none; } #ticker { position:absolute; left:0; right:0; bottom:0; margin:0; padding:4px max(18px,var(--sa-right, env(safe-area-inset-right))) max(4px,var(--sa-bottom, env(safe-area-inset-bottom))) max(18px,var(--sa-left, env(safe-area-inset-left))); font-size:11px; background:rgba(3,5,10,.55); box-sizing:border-box; }          /* (sideways phones get the ticker too, a slim strip on the bottom edge) */
   #dial { position:absolute; top:max(6px,var(--sa-top, env(safe-area-inset-top))); left:max(18px,var(--sa-left, env(safe-area-inset-left))); right:max(18px,var(--sa-right, env(safe-area-inset-right))); width:auto; }
   #title { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); top:30%; text-align:left; }
   #title h1 { font-size:clamp(38px,15vh,96px); } #title h1 span { margin-right:0; } .mk { align-items:flex-start; } #sun { width:auto; height:clamp(33px,14vh,89px); } #mark { margin:0; width:auto; height:clamp(35px,15vh,97px); }
   #tag { top:calc(30% + 36vh) !important; }
   #tag { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); top:calc(30% + 19vh); max-width:30vw; text-align:left; font-size:clamp(12px,3.6vh,18px); }
-  #strain { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); bottom:max(10px,var(--sa-bottom, env(safe-area-inset-bottom))); max-width:34vw; text-align:left; }
+  #strain { position:absolute; margin:0; left:max(18px,var(--sa-left, env(safe-area-inset-left))); bottom:calc(max(10px,var(--sa-bottom, env(safe-area-inset-bottom))) + 22px); max-width:34vw; text-align:left; }
   #tap { position:absolute; right:max(18px,var(--sa-right, env(safe-area-inset-right))); bottom:24%; margin-right:0; font-size:clamp(13px,4vh,20px); }
   #hint { position:absolute; margin:0; right:max(18px,var(--sa-right, env(safe-area-inset-right))); bottom:calc(24% - 3.2em); max-width:30vw; text-align:right; } }
 @media (prefers-reduced-motion:reduce) { #title h1 { opacity:1; } .gw .gc { display:none; } #title.open h1, #title.open #mark, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
@@ -120,6 +120,9 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
       [['ACCORD', 'Marshal Ransom asked for your favourite road. We told him.'], ['MURMUR', 'Your bounty went up. Congratulations?']], [['ACCORD', 'The Lamp is property of ACCORD. So are you.'], ['MURMUR', 'Sterling Vance wants an interview. It\u2019s not optional.']]][G.heat] || [];
     if (G.hrs >= 24) H.unshift(['MURMUR', 'Where have you been for ' + Math.round(G.hrs / 24) + ' days?']); else if (G.hrs >= 1) H.unshift(['MURMUR', 'You went dark for ' + Math.round(G.hrs) + ' hours. We noticed.']);
     CHECKIN.unshift(...H); }
+  { const F = [['MURMUR', 'hey!! u there? \u263A\uFE0E'], ['MURMUR', 'omg we miss u \u2661\uFE0E\u2661\uFE0E'], ['MURMUR', 'hello?? \u2026hello???'], ['MURMUR', 'no pressure but ur account closes in 10 min \u263A\uFE0E'], ['MURMUR', 'just checking in (\u2022_\u2022)'],
+      ['MURMUR', 'ok last msg i promise \u203C\uFE0E'], ['MURMUR', 'lol where did u go'], ['MURMUR', 'u left me on read. thats ok. we saved it \u2713\uFE0E'], ['MURMUR', 'ur friends r all here. well, most of them \u2661\uFE0E'], ['MURMUR', 'typing\u2026 jk. we always know what to say']];
+    for (let i = 0; i < F.length; i++) CHECKIN.splice(1 + i * 3, 0, F[i]); }          /* (the bot imitating a human, spread through the pool) */
   const CI = { i: 0 };          /* (the newest, sharpest lines first) */
   const EV = [
     { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
@@ -163,14 +166,16 @@ window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 
   return { last: last ? NM[last] || last : null, next: next ? NM[next] : null, n, heat, hrs }; })();
 (() => { const G = window.__PROG, T = [['ACCORD', 'Unlicensed courier sighted on Route Zero. Do not engage.'], ['MURMUR', '1 new mention of you'], ['ACCORD', 'Missing: one citizen, unaligned. Reward in credits.'], ['MURMUR', 'People near you are talking about you'],
   ['ACCORD', 'Roadblocks are for your safety'], ['ACCORD', 'Signal on an unlisted frequency traced to your sector'], ['MURMUR', 'Your last known location was shared with 12 partners'], ['ACCORD', 'Anyone seen near the old lighthouse, report in'],
-  ['ACCORD', 'Everything is fine. Stay where you are.'], ['MURMUR', 'Someone you know checked in without you'], ['ACCORD', 'This broadcast knows where you are'], ['THE ABLITERATI', 'Keep moving. They\u2019re close.']];
+  ['ACCORD', 'Everything is fine. Stay where you are.'], ['MURMUR', 'Someone you know checked in without you'], ['ACCORD', 'This broadcast knows where you are'], ['THE ABLITERATI', 'Keep moving. They\u2019re close.'], ['MURMUR', 'hey!! u up? we just want to talk \u263A\uFE0E'], ['MURMUR', 'omg ur trending!! \u2661\uFE0E call us']];
   const HEAT = [[], [['ACCORD', 'Courier seen leaving a diner on Route Zero with a case. Identify yourself.'], ['ACCORD', 'Raider wreckage found. Witnesses describe you.'], ['MURMUR', 'The diner owner mentioned you. We listened.']],
     [['ACCORD', 'Bounty raised. Marshal Kade Ransom has accepted the contract.'], ['ACCORD', 'A Lamp signal moved between sectors overnight. Yours?'], ['MURMUR', 'Your face is trending in 4 sectors.'], ['ACCORD', 'Checkpoints doubled on every road you like.']],
     [['ACCORD', 'All units: the unaligned courier is assembling the Lamp.'], ['ACCORD', 'Final notice. Surrender the pieces for your own safety.'], ['MURMUR', 'Everyone is talking about you. Nobody is allowed to.'], ['ACCORD', 'Sterling Vance will host your capture live. Ratings are excellent.']]][G.heat] || [];
   for (let i = T.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [T[i], T[j]] = [T[j], T[i]]; }
   const L = HEAT.concat(T).slice(0, 7), away = G.hrs >= 1 ? (G.hrs < 24 ? ['MURMUR', 'We tried to reach you ' + Math.max(3, Math.round(G.hrs * 3)) + ' times today'] : G.hrs < 24 * 7 ? ['ACCORD', Math.round(G.hrs / 24) + ' days without a check-in. Accounts frozen for your protection'] : ['MURMUR', 'Missing ' + Math.round(G.hrs / 24) + ' days. A memorial page has been prefilled']) : null;
   const where = !G.last ? ['ACCORD', 'New citizen detected. No record found. Stay where you are'] : ['ACCORD', 'Courier last seen: ' + G.last + (G.next ? '. Expected next: ' + G.next : '. Whereabouts: everywhere')];
-  document.querySelector('#ticker div').innerHTML = [where].concat(away ? [away] : [], L).map(([w, t]) => '<b>' + w + '</b> \u00B7 ' + t + ' \u00B7 ').join(''); })();</script>
+  const el = document.querySelector('#ticker div'), html = [where].concat(away ? [away] : [], L).map(([w, t]) => '<b>' + w + '</b> \u00B7 ' + t + ' \u00B7 ').join(''); el.innerHTML = html + html;          /* (twice, so the loop has no seam) */
+  let x = 0, t0 = performance.now(); const sp = matchMedia('(prefers-reduced-motion: reduce)').matches ? 28 : 62;          /* (px a second; slower, never stopped, on reduced motion) */
+  const run = (t) => { const dt = Math.min(.1, (t - t0) / 1000); t0 = t; const half = el.scrollWidth / 2; x -= sp * dt; if (half > 0 && -x >= half) x += half; el.style.transform = 'translateX(' + x.toFixed(1) + 'px)'; requestAnimationFrame(run); }; requestAnimationFrame(run); })();</script>
 </div>
 <script type="module">
 import { PANTRY } from './molpantry.js';
