@@ -157,7 +157,6 @@ function react(c) { const W = [], N = [], C = (typeof window !== 'undefined' && 
   return { W, N }; }
 /* THE PAUSE SCREEN (owner 2026-11-26): pausing shows the lock screen too, so the jokes get seen. It paints into a container (the menu panel sits on top).
    Content changes slowly: a fresh notification each pause (the last one stays under it), the widgets every third pause or after three minutes. */
-const PRIV = '<div class="pv">\u25C8 On this device only: camera, location, progress. Nothing is uploaded.</div>';
 function paint(box, o) { o = o || {}; if (disabled() && !o.force) { box.innerHTML = ''; return null; } const kind = o.kind || KIND(); let M = null; try { M = JSON.parse(localStorage.getItem('dl_lkmf') || 'null'); } catch (e) { }
   const nowMs = Date.now(); M = M && M.w ? M : { w: null, at: 0, n: 0, prev: null }; M.n++;
   const RW = react(o.ctx).W; if (!M.w || M.n % 3 === 0 || nowMs - M.at > 180000) { M.rw = RW.length && Math.random() < .65 ? Math.floor(Math.random() * RW.length) : -1; M.w = []; for (let i = 0; i < 2; i++) M.w.push(deal('w', WIDG)); M.at = nowMs; }
@@ -169,7 +168,7 @@ function paint(box, o) { o = o || {}; if (disabled() && !o.force) { box.innerHTM
   const dt = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   box.innerHTML = ''; const el = document.createElement('div'); el.id = 'lk'; el.className = kind + ' mn wake';
   el.innerHTML = '<div class="wp"></div><div class="wp-in"><div class="sb"><span>' + (kind === 'pc' ? 'ACCORD-Guest \u2022 Connected, watched' : kind === 'vr' ? 'Headset OS' : 'StarLeash \u2726') + '</span><span>' + BAT + '<span class="bat" style="--bl:' + BAT + '"></span></span></div>'
-    + '<div class="mid"><div class="tm">' + h12 + ':' + mm + '<small style="font-size:.32em;font-weight:500;margin-left:.2em">' + ap + '</small></div><div class="dt">' + dt + '</div><div class="wg">' + M.w.map(() => '<div class="w"><b></b><big></big><small></small></div>').join('') + '</div><div class="stk"></div>' + PRIV + '</div></div>';
+    + '<div class="mid"><div class="tm">' + h12 + ':' + mm + '<small style="font-size:.32em;font-weight:500;margin-left:.2em">' + ap + '</small></div><div class="dt">' + dt + '</div><div class="wg">' + M.w.map(() => '<div class="w"><b></b><big></big><small></small></div>').join('') + '</div><div class="stk"></div>' + '</div></div>';
   const MW = M.w.slice(); if (M.rw >= 0 && R.W.length) MW[0] = R.W[Math.min(M.rw, R.W.length - 1)];
   el.querySelectorAll('.w').forEach((w, i) => { w.querySelector('b').textContent = MW[i][0]; w.querySelector('big').textContent = MW[i][1]; w.querySelector('small').textContent = MW[i][2]; });
   const S = el.querySelector('.stk'); notes.forEach((q, i) => { const n = document.createElement('div'); n.className = 'nt on'; n.innerHTML = '<i class="ic"></i><div class="nb"><div class="nh"><b></b><span>' + (i ? Math.max(2, (M.n * 7) % 50) + 'm ago' : 'now') + '</span></div><strong></strong><p></p></div>';

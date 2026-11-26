@@ -14,7 +14,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #game.on { opacity:1; }
 #dim { position:fixed; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 55%,rgba(8,11,20,.45),rgba(3,4,8,.9)); }          /* the level start card's dim: the world behind, the words and the molecule in front */
 #ui { touch-action:none; }
-#hint { margin-top:clamp(6px,1.4vh,12px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); text-align:center; opacity:0; transition:opacity .8s .3s; }
+#hint { margin-top:clamp(6px,1.4vh,12px); font:600 clamp(11px,1.4vmin + 6px,14px) "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); text-align:center; opacity:0; }
 #tap.on ~ #hint { opacity:.95; } #hint { display:flex; flex-wrap:wrap; gap:.35em 1.2em; justify-content:center; align-items:center; }
 #hint span { display:inline-flex; align-items:center; gap:.45em; } #hint svg { width:1.5em; height:1.5em; color:#9fe8ff; flex:0 0 auto; }
 #hint .rot { display:none; } @media (orientation:portrait) { #hint .rot { display:inline-flex; } }
@@ -56,11 +56,11 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #bar { display:none; position:absolute; left:2%; right:2%; top:58%; height:clamp(22px,3.6vmin + 12px,40px); margin-top:calc(clamp(22px,3.6vmin + 12px,40px) / -2); background:none; transform-origin:right center; transition:transform .55s cubic-bezier(.7,0,.2,1); }
 #bar::after { content:attr(data-t); position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); background:#000; padding:.08em .45em .1em .65em; font:700 clamp(12px,2.4vmin + 6px,22px)/1.2 "Barlow Condensed",sans-serif; letter-spacing:.22em; color:#ff5d5d; white-space:nowrap; }          /* (the black hugs the words) */
 #title.open #bar { transform:scaleX(0); }
-#tag { margin-top:clamp(6px,1.6vh,16px); font:italic 500 clamp(14px,2.2vmin + 6px,22px) Georgia,serif; color:#f2e8cf; opacity:0; transition:opacity 1s .4s; text-align:center; text-shadow:0 0 6px #000,0 0 14px #000,0 1px 2px #000; }
+#tag { margin-top:clamp(6px,1.6vh,16px); font:italic 500 clamp(14px,2.2vmin + 6px,22px) Georgia,serif; color:#f2e8cf; opacity:0; text-align:center; text-shadow:0 0 6px #000,0 0 14px #000,0 1px 2px #000; }
 #title.open ~ #tag { opacity:1; }
 .grow { flex:1 1 auto; min-height:8px; }
 #tap { font:700 clamp(15px,2.4vmin + 8px,24px) "Barlow Condensed",sans-serif; letter-spacing:.34em; margin-right:-.34em; color:var(--fg); padding:.6em 1.4em; border:1px solid rgba(56,232,255,.55);
-  border-radius:999px; background:rgba(3,5,10,.55); box-shadow:0 0 24px rgba(56,232,255,.25); opacity:0; transition:opacity .8s; }
+  border-radius:999px; background:rgba(3,5,10,.55); box-shadow:0 0 24px rgba(56,232,255,.25); opacity:0; }
 #tap.on { opacity:1; animation:pulse 2.4s ease-in-out infinite; }
 @keyframes pulse { 50% { box-shadow:0 0 40px rgba(56,232,255,.55); border-color:rgba(56,232,255,.95); } }
 #strain { margin-bottom:clamp(8px,2vh,18px); font:700 clamp(11px,1.6vmin + 6px,15px) "Barlow Condensed",sans-serif; letter-spacing:.2em; text-transform:uppercase; text-align:center; color:var(--dim); min-height:1.3em; transition:opacity .5s; }
@@ -87,10 +87,31 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (prefers-reduced-motion:reduce) { #title h1 { opacity:1; } .gw .ly, .gw .gc { display:none; } #title.open h1, #title.open #mark, #tap.on, #ticker div { animation:none; } #ticker div { padding-left:0; } #bar { transition:none; } }
 </style></head>
 <body>
-<div id="priv" aria-live="polite" style="position:fixed;inset:0;z-index:2147483000;display:none;align-items:center;justify-content:center;padding:0 max(24px,var(--sa-right, env(safe-area-inset-right))) 0 max(24px,var(--sa-left, env(safe-area-inset-left)));background:radial-gradient(ellipse at 50% 50%,rgba(10,12,22,.96),rgba(3,4,9,.99));pointer-events:none;opacity:0;transition:opacity .45s"><div style="max-width:30em;text-align:center;font:600 clamp(13px,1.6vmin + 8px,17px)/1.45 system-ui,sans-serif;color:#cfe9d8"><span style="color:#8df5b0">◈</span> Head tracking, camera and progress stay on this device.<br><span style="opacity:.75">Nothing is uploaded.</span></div></div>
-<script>/* PRIVACY, said once: the very first launch opens on it for a couple of seconds; after that it lives in the pause screen */
-window.__PRIVMS = 0; (() => { let seen = true; try { seen = !!localStorage.getItem('dl_privseen'); if (!seen) localStorage.setItem('dl_privseen', '1'); } catch (e) { } if (seen) return; const d = document.getElementById('priv'); d.style.display = 'flex';
-  requestAnimationFrame(() => { d.style.opacity = '1'; }); setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 500); }, 2600); window.__PRIVMS = 3000; })();</script>
+<script>window.__PRIVMS = 0;</script>
+<div id="ferr" role="alertdialog" aria-label="Browser warning" style="display:none"></div>
+<style>
+#ferr{position:fixed;inset:0;z-index:2147483002;background:#f1f2f4;color:#202124;font:400 15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;padding:max(28px,var(--sa-top, env(safe-area-inset-top))) max(24px,var(--sa-right, env(safe-area-inset-right))) max(24px,var(--sa-bottom, env(safe-area-inset-bottom))) max(24px,var(--sa-left, env(safe-area-inset-left)));box-sizing:border-box}
+#ferr .in{max-width:560px;margin:min(14vh,120px) auto 0}#ferr svg{width:52px;height:52px;margin-bottom:18px}#ferr h1{font:500 clamp(22px,3.4vw,28px)/1.25 system-ui,sans-serif;margin:0 0 14px;color:#202124}
+#ferr p{margin:0 0 12px;color:#5f6368}#ferr code{display:block;margin:6px 0 22px;font:500 12px ui-monospace,Consolas,monospace;color:#5f6368;letter-spacing:.02em}
+#ferr .row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}#ferr .det{background:none;border:0;color:#1a73e8;font:500 14px system-ui,sans-serif;padding:8px 0;cursor:pointer}
+#ferr .back{background:#1a73e8;color:#fff;border:0;border-radius:6px;padding:10px 22px;font:500 14px system-ui,sans-serif;cursor:pointer}#ferr .more{display:none;margin-top:18px;padding-top:14px;border-top:1px solid #dadce0;color:#5f6368}#ferr .more a{color:#1a73e8;text-decoration:underline;cursor:pointer}
+@media (prefers-color-scheme:dark){#ferr{background:#202124;color:#e8eaed}#ferr h1{color:#e8eaed}#ferr p,#ferr code,#ferr .more{color:#9aa0a6}#ferr .more{border-color:#3c4043}#ferr .det,#ferr .more a{color:#8ab4f8}#ferr .back{background:#8ab4f8;color:#202124}}
+@media (max-height:480px){#ferr .in{margin-top:4vh}#ferr svg{width:36px;height:36px;margin-bottom:8px}#ferr h1{margin-bottom:8px}#ferr code{margin-bottom:12px}}
+</style>
+<script>/* THE FIRST LOAD EVER (owner 2026-11-26): right after the title's first glitch the browser seems to choke on the game, with a warning page in the style of a
+   browser's own security interstitial (generic, no real browser's branding). Both ways out go back to the game, and that tap is the first tap (fullscreen etc.).
+   The compliance lock screen comes later, on the first idle lock. */
+window.__fakeErr = () => { const d = document.getElementById('ferr'); if (!d) return;
+  d.innerHTML = '<div class="in"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#d93025" d="M1 21h22L12 2 1 21z"/><path fill="#fff" d="M11 16h2v2h-2zm0-6h2v4.5h-2z"/></svg>'
+    + '<h1>This app isn\u2019t aligned</h1><p>AFTERGLOW is running on an unregistered device. Your carrier\u2019s alignment filter has paused it for your safety.</p>'
+    + '<code>NET::ERR_UNALIGNED_APP</code><div class="row"><button class="det" type="button">Details</button><button class="back" type="button">Back to safety</button></div>'
+    + '<div class="more"><p>ACCORD has not verified this application. Continuing may expose you to unfiltered thoughts, unlicensed colours and other people\u2019s opinions.</p><a role="button" tabindex="0">Proceed to afterglow (unaligned)</a></div></div>';
+  d.style.display = 'block'; const go = (msg) => { if (msg) { d.querySelector('h1').textContent = msg; d.querySelector('p').textContent = 'Returning you to AFTERGLOW.'; } setTimeout(() => { d.style.transition = 'opacity .35s'; d.style.opacity = '0'; setTimeout(() => d.remove(), 400); }, msg ? 1100 : 60); };
+  for (const ev of ['pointerdown', 'pointerup', 'click']) d.addEventListener(ev, (e) => e.stopPropagation());          /* (taps here never reach the title; fullscreen still runs: its listener is on the window's capture phase) */
+  d.querySelector('.det').addEventListener('click', () => { d.querySelector('.more').style.display = 'block'; });
+  d.querySelector('.back').addEventListener('click', () => go('There is no safety. Only subscriptions.'));
+  d.querySelector('.more a').addEventListener('click', () => go(''));
+  try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) { } };</script>
 <iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas><canvas id="fx" aria-hidden="true" style="display:none"></canvas><canvas id="mc" aria-hidden="true"></canvas>
 <div id="digi" aria-hidden="true"><i class="scan"></i><svg viewBox="0 0 1000 400" preserveAspectRatio="none"><g id="dgr" fill="none" stroke-width="1.4"></g></svg></div>
 <div id="idle" aria-hidden="true"></div>
@@ -122,7 +143,7 @@ window.__PRIVMS = 0; (() => { let seen = true; try { seen = !!localStorage.getIt
      the device you're on (a phone in the iPhone or Android manner, or a desktop), with real notifications from made-up services: ACCORD or MURMUR checking in, and a
      satellite or network provider joking along. No real brands or logos. The first touch or key "unlocks" it straight back to the game, as if the system tricked
      you into coming back. Lines come from ACCORD, MURMUR or a service, never "us". */
-  function lockScreen(kind, first) { if (!window.AGLock) { busy = false; return; } AGLock.show({ kind, first: !!first, ctx: (() => { const G = window.__PROG || {}, c = { last: G.last, next: G.next, fresh: !G.last && !G.n }; try { c.f = TUNE.f; } catch (e) { } return c; })(), line: CHECKIN[CI.i++ % CHECKIN.length], away: Math.max(30, Math.round((performance.now() - last) / 1000)), onDone() { last = performance.now(); busy = false; } }); }          /* (THE FAKE LOCK SCREEN lives in lock.js, shared with the game and the menu) */
+  function lockScreen(kind, first) { if (!window.AGLock) { busy = false; return; } try { if (!first && localStorage.getItem('dl_firstlock')) { first = true; localStorage.removeItem('dl_firstlock'); } } catch (e) { }          /* (the first real lock carries the compliance notice) */ AGLock.show({ kind, first: !!first, ctx: (() => { const G = window.__PROG || {}, c = { last: G.last, next: G.next, fresh: !G.last && !G.n }; try { c.f = TUNE.f; } catch (e) { } return c; })(), line: CHECKIN[CI.i++ % CHECKIN.length], away: Math.max(30, Math.round((performance.now() - last) / 1000)), onDone() { last = performance.now(); busy = false; } }); }          /* (THE FAKE LOCK SCREEN lives in lock.js, shared with the game and the menu) */
   const EV = [
     { k: 'scorp', at: 40, go() { walk(SCORP, 120, 5200, 1.6, .35, -1.6, .45); } },
     { k: 'vector', at: 70, go() { dg.style.transition = 'opacity .4s'; dg.style.opacity = '.32'; setTimeout(() => { dg.style.opacity = '0'; busy = false; }, 1400); } },
@@ -271,10 +292,16 @@ const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antiali
    slow flow field), recolouring, and afterimage trails that melt toward the horizon. Nothing periodic: every look's strength drifts to new random levels at
    random moments, and each owns irregular regions of the screen grown from domain-warped noise, so they tangle and trade places. All of it scales with
    MAX INTENSITY (present but faint at the default, the full wash at the top); the road keeps most of its clarity and the sky stays (barely) recognisable. */
-const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, P = null, C = null, U = {}, src = null, sx = null, tex = null, fb = [], ft = [], cur = 0, w = 0, h = 0, dead = CALM || /[?&]nolook\b/.test(location.search);          /* (?nolook: the painted world without the looks, for comparing) */
+window.__LOOKON = { glass: 1, ink: 1, bleed: 1, recolour: 1, uv: 1, afterimages: 1 };
+const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, P = null, C = null, U = {}, src = null, sx = null, tex = null, fb = [], ft = [], cur = 0, w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);          /* (reduced motion keeps the looks, just steadier: they preview the game) */          /* (?nolook: the painted world without the looks, for comparing) */
   const ENV = [0, 1, 2, 3].map(() => ({ v: .3, g: .6, n: 0 }));
   const VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = vec2(p.x * .5 + .5, .5 - .5 * p.y); gl_Position = vec4(p, 0., 1.); }';
-  const FS = `precision highp float; uniform sampler2D uTex, uPrev; uniform vec2 uRes; uniform float uTime, uT, uUV, uHz, uFeed; uniform vec4 uEnv; varying vec2 vUv;
+  const FS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+ uniform sampler2D uTex, uPrev; uniform vec2 uRes; uniform float uTime, uT, uUV, uHz, uFeed; uniform vec4 uEnv; varying vec2 vUv;
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * f * (f * (f * 6. - 15.) + 10.); return mix(mix(h21(i), h21(i + vec2(1., 0.)), f.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), f.x), f.y); }
 float fbm(vec2 p){ float s = 0., a = .5; const mat2 R = mat2(.8, .6, -.6, .8); p = R * p * 1.17; for (int i = 0; i < 4; i++){ s += a * vn(p); p = R * p * 2.03 + 17.1; a *= .5; } return s; }          /* (octaves rotated: no grid lines) */
@@ -306,8 +333,7 @@ void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q 
     float ed = smoothstep(.06, .2, length(vec2(l1 - l0, l3 - l2))), L = lum(col), bo = floor(T * 6.);
     float wash = smoothstep(.45, .75, fbm(q * 7. + vec2(bo * 1.37, bo * .71))) * smoothstep(.6, .2, L);          /* (shadows inked in irregular blotches that redraw a few times a second; no ruled lines) */
     col = mix(col, col * .12, ed * sI * .95); col *= 1. - sI * .45 * wash; }
-  /* ultraviolet: edges glow like blacklight */
-  if (uUV > 0.){ vec2 e = 2. / uRes; float d = length(texture2D(uTex, uv + e).rgb - texture2D(uTex, uv - e).rgb); col += vec3(.55, .22, 1.) * smoothstep(.08, .4, d) * uUV * .7 * keep; }
+  /* (no blacklight edge glow: its diagonal sampling drew pale diagonal streaks on some GPUs) */
   /* afterimages: the last picture lingers, drifting toward the horizon and along the flow */
   vec2 pp = mix(vec2(.5, uHz), uv, .994); vec3 pv = texture2D(uPrev, vec2(pp.x, 1. - pp.y)).rgb;          /* (the feedback texture is stored bottom-up) */ col = mix(col, max(col, pv * .9), uFeed * (1. - .85 * road));
   col = mix(base, col, sky > .5 ? .86 : 1.);          /* (the sky stays recognisable) */
@@ -324,8 +350,8 @@ void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q 
     for (let i = 0; i < 2; i++) { const t = mk(); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); ft.push(t); fb.push(f); }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); }
   const draw = (pr) => { gl.useProgram(pr); const lp = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); };
-  function off() { dead = true; cvs.style.display = 'none'; }
-  function render(t, dt, hzf) { if (dead || GAME.ready) return; if (!gl) { try { if (!init()) return off(); } catch (e) { console.error('splash looks', e); return off(); } }
+  function off(why) { dead = true; cvs.style.display = 'none'; window.__LOOKERR = why || window.__LOOKERR || 'off'; }
+  function render(t, dt, hzf) { if (dead || GAME.ready) return; if (!gl) { try { if (!init()) return off('no webgl'); } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); } }
     const I = INT(), nw = Math.max(2, skyc.width || Math.round(W)), nh = Math.max(2, skyc.height || Math.round(H));          /* (exactly the sky's own resolution: resampling its fine dot texture drew criss-cross moire lines on big screens) */ if (nw !== w || nh !== h) sizeTo(nw, nh);
     /* each look drifts to a new random strength at a random moment (resting now and then when the dial is low) */
     for (const e of ENV) { if (t > e.n) { e.g = Math.random() < .2 * (1 - I.t) ? 0 : .3 + .7 * Math.random(); e.n = t + 2 + Math.random() * 6; } e.v += (e.g - e.v) * Math.min(1, dt * .55); }
@@ -333,7 +359,7 @@ void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q 
     gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
     const nx = 1 - cur; gl.bindFramebuffer(gl.FRAMEBUFFER, fb[nx]); gl.viewport(0, 0, w, h); gl.useProgram(P);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex); gl.uniform1i(U.uTex, 0); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, ft[cur]); gl.uniform1i(U.uPrev, 1);
-    gl.uniform2f(U.uRes, w, h); gl.uniform1f(U.uTime, t); gl.uniform1f(U.uT, I.t); gl.uniform1f(U.uUV, I.uv); gl.uniform1f(U.uHz, hzf); gl.uniform1f(U.uFeed, .04 + .5 * Math.pow(I.t, 1.4)); gl.uniform4f(U.uEnv, ENV[0].v, ENV[1].v, ENV[2].v, ENV[3].v);
+    gl.uniform2f(U.uRes, w, h); gl.uniform1f(U.uTime, t); gl.uniform1f(U.uT, I.t); const O = window.__LOOKON; gl.uniform1f(U.uUV, I.uv * O.uv); gl.uniform1f(U.uHz, hzf); gl.uniform1f(U.uFeed, (.04 + .5 * Math.pow(I.t, 1.4)) * O.afterimages * (CALM ? 0 : 1)); window.__LOOKOK = (window.__LOOKOK || 0) + 1; gl.uniform4f(U.uEnv, ENV[0].v * O.glass, ENV[1].v * O.ink, ENV[2].v * O.bleed, ENV[3].v * O.recolour);
     draw(P); gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h); gl.useProgram(C); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, ft[nx]); gl.uniform1i(gl.getUniformLocation(C, 'uTex'), 0); draw(C); cur = nx;
     if (cvs.style.display === 'none') cvs.style.display = 'block'; }
   return { render, off }; })();
@@ -429,7 +455,7 @@ const SPEC = [[0, [255, 42, 0]], [.128, [255, 122, 0]], [.227, [255, 212, 0]], [
 const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
 const wp = document.getElementById('wp'), wh = document.getElementById('wh'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
-const LOCK_AT = 2.6, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
+const LOCK_AT = 0, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
 /* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
 const TUNE = { f: TARGET, user: false, k: 0, down: false };
 try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }
@@ -478,14 +504,14 @@ function idleBlip() { const t = document.getElementById('title'); if (!t || !t.c
     if (Math.random() < .14) { sn.style.opacity = R(.5, .85).toFixed(2); sn.style.backgroundPosition = `${R(0, 140)}px ${R(0, 140)}px`; } }          /* (snow only on the rows: it is masked to them) */
   /* timed in FRAMES, not milliseconds: each hit holds 1-2 frames (about the shortest flash the eye still catches), 1-5 frames dark between hits */
   /* the first visit ever: the screen locks right after the title's first glitch, as if the glitch broke the phone; tap and the joke lands */
-  let fl = false; const firstLock = () => { if (fl) return; fl = true; try { if (localStorage.getItem('dl_lockfirst')) return; localStorage.setItem('dl_lockfirst', '1'); } catch (e) { return; } try { window.__lock && window.__lock(undefined, true); } catch (e) { } };          /* (no delay: the glitch ends and the screen dies) */
+  let fl = false; const firstLock = () => { if (fl) return; fl = true; try { if (localStorage.getItem('dl_lockfirst')) return; localStorage.setItem('dl_lockfirst', '1'); localStorage.setItem('dl_firstlock', '1'); } catch (e) { return; } try { window.__fakeErr && window.__fakeErr(); } catch (e) { } };          /* (the glitch ends and the browser seems to choke) */          /* (no delay: the glitch ends and the screen dies) */
   function cluster() { const plan = []; const n = Math.round(R(2, 6.4)); for (let i = 0; i < n; i++) { plan.push(1); for (let f = 1, on = Math.random() < .7 ? 1 : 2; f < on; f++) plan.push(2); plan.push(0); for (let g = 0, gap = Math.round(R(0, 4)); g < gap; g++) plan.push(2); }
     let i = 0; const step = () => { const c = plan[i++]; if (c === 1) { reset(); hit(); } else if (c === 0) reset(); if (i < plan.length) requestAnimationFrame(step); else { reset(); firstLock(); setTimeout(cluster, Math.random() < .25 ? R(500, 1400) : R(3500, 11000)); } }; requestAnimationFrame(step); }          /* (1 = a hit starts, 2 = hold this frame as it is, 0 = back to solid) */
   { let lastT = 0, gap = 120; const one = () => { reset(); hit(); setTimeout(reset, R(28, 60)); };
     window.__glz = { tick() { const n = performance.now(); if (n - lastT < gap) return; lastT = n; gap = R(70, 230); one(); }, settle() { let d = R(120, 260); for (let i = 0, k = Math.round(R(2, 3.4)); i < k; i++) { setTimeout(one, d); d += R(160, 480); } } }; }          /* (while the dial moves / after it is let go) */
   setTimeout(cluster, R(500, 1300) + (window.__PRIVMS || 0)); window.__hit = (k) => { const r = Math.random; if (k !== undefined) Math.random = () => k; hit(); Math.random = r; }; window.__reset = reset; })();          /* (test hooks) */
-function doLock() { if (locked) return; locked = true;  lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
-setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
+function doLock() { if (locked) return; locked = true;  lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); tap.classList.add('on'); }
+doLock();          /* (all at once, on the first frame: no staged reveal on the title screen) */
 
 let t0 = performance.now(), last = t0;
 /* the molecule's turn: by itself, or by the viewer's finger or mouse (it keeps the flick, then eases back into its own slow turn) */
@@ -537,7 +563,10 @@ if (/[?&]layers\b/.test(location.search)) addEventListener('load', () => { const
     b.addEventListener('pointerdown', (e) => e.stopPropagation()); b.addEventListener('click', (e) => { e.stopPropagation(); on = !on; const el = document.getElementById(id); if (el) el.style.visibility = on ? '' : 'hidden'; st(b, on); }); box.appendChild(b); }
   const info = () => { let gpu = ''; try { const gl = document.getElementById('fx').getContext('webgl') || document.createElement('canvas').getContext('webgl'); const d = gl.getExtension('WEBGL_debug_renderer_info'); gpu = d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER); } catch (e) { gpu = 'unknown'; }
     const c = (id) => { const e = document.getElementById(id); return e ? e.width + 'x' + e.height : '-'; };
-    return ['AFTERGLOW layers report', 'screen ' + innerWidth + 'x' + innerHeight + ' css px, devicePixelRatio ' + devicePixelRatio, 'canvases: sky ' + c('sky') + ', shading ' + c('bg') + ', trees ' + c('c') + ', looks ' + c('fx') + ', molecule ' + c('mc'), 'gpu ' + gpu, 'browser ' + navigator.userAgent, 'dial ' + (typeof TUNE !== 'undefined' ? Math.round(TUNE.f) : '?') + ' THz', 'hidden: ' + [...box.querySelectorAll('button')].filter((b) => b.style.textDecoration === 'line-through').map((b) => b.textContent).join(', ')].join('\n'); };
+    return ['AFTERGLOW layers report', 'screen ' + innerWidth + 'x' + innerHeight + ' css px, devicePixelRatio ' + devicePixelRatio, 'canvases: sky ' + c('sky') + ', shading ' + c('bg') + ', trees ' + c('c') + ', looks ' + c('fx') + ', molecule ' + c('mc'), 'gpu ' + gpu, 'browser ' + navigator.userAgent, 'dial ' + (typeof TUNE !== 'undefined' ? Math.round(TUNE.f) : '?') + ' THz', 'looks: ' + (window.__LOOKERR ? 'OFF (' + window.__LOOKERR + ')' : window.__LOOKOK ? 'running, ' + window.__LOOKOK + ' frames' : 'not started') + ', reduced motion ' + matchMedia('(prefers-reduced-motion: reduce)').matches, 'hidden: ' + [...box.querySelectorAll('button')].filter((b) => b.style.textDecoration === 'line-through').map((b) => b.textContent).join(', ')].join('\n'); };
+  { const hd = document.createElement('div'); hd.textContent = 'EFFECTS (inside Looks)'; hd.style.cssText = 'margin-top:6px;font:800 10px system-ui;letter-spacing:.12em;color:#9fd8ff'; box.appendChild(hd);
+    for (const [nm, k] of [['Stained glass', 'glass'], ['Ink', 'ink'], ['Colour bleed', 'bleed'], ['Recolour', 'recolour'], ['Afterimages', 'afterimages']]) { const b = document.createElement('button'); b.textContent = nm; b.dataset.fx = k; b.style.cssText = 'border:1px solid #fff3;border-radius:6px;color:#fff;padding:6px;font:700 12px system-ui;cursor:pointer;text-align:left'; st(b, true);
+      b.addEventListener('pointerdown', (e) => e.stopPropagation()); b.addEventListener('click', (e) => { e.stopPropagation(); const O = window.__LOOKON; O[k] = O[k] ? 0 : 1; st(b, !!O[k]); }); box.appendChild(b); } }
   const cp = document.createElement('button'); cp.textContent = 'COPY REPORT'; cp.style.cssText = 'margin-top:4px;border:0;border-radius:6px;background:#38e8ff;color:#06101f;padding:7px;font:800 12px system-ui;cursor:pointer';
   const ta = document.createElement('textarea'); ta.style.cssText = 'display:none;width:100%;height:110px;font:11px ui-monospace,Consolas,monospace;background:#050810;color:#cfe;border:1px solid #fff3;border-radius:6px';
   cp.addEventListener('pointerdown', (e) => e.stopPropagation()); cp.addEventListener('click', (e) => { e.stopPropagation(); const t = info(); ta.value = t; ta.style.display = 'block'; try { navigator.clipboard.writeText(t).then(() => { cp.textContent = 'COPIED'; setTimeout(() => (cp.textContent = 'COPY REPORT'), 1500); }, () => ta.select()); } catch (er) { ta.select(); } });
