@@ -38,6 +38,7 @@ import { startLoop, preloadLoop } from '../downhill-three/looper.js';
 import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
 import { createIntro } from './intro.js';
+import { createSets } from './chains.js';
 import { createPsyFx } from '../downhill-three/psyfx.js';
 import { createPostFx, toGLSLPost } from '../downhill-three/postfx.js';
 import * as THREE from 'three';
@@ -932,10 +933,11 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
       if (PH.y <= gh + .05) { const wasCrest = PH.crest; PH.crest = false; const impact = wasCrest ? 0 : Math.max(gvy - PH.vy, 0); if (wasCrest) PH.vy = gvy; PH.landT = PH.air_t; PH.grounded = true; PH.y = gh; PH.vy = Math.min(gvy, 3 * SPK); PH.air_t = 0; PH.stickT = .35; PH.mom = 2.6; shake = Math.min(.8, impact / (60 * SPK)); if (PH.landT > .2 && performance.now() - (window.__goAt || 0) > 900) AW.onLand(impact / SPK, PH.landT);          /* (only a real landing thumps: the car is spawned a hair above the road, and its first touch-down at the start was a thud with nothing there) */
         if (impact > 18 * SPK && !(window.__TUNW && PH.z < window.__TUNW.z0 + 10 && PH.z > window.__TUNW.z1)) crash('WIPEOUT!'); else if (impact > 12 * SPK) { PH.vx *= .97; PH.vz *= .97; } else if (PH.landT > .5) { const kick = (4 + 3 * Math.min(PH.landT, 3)) * SPK; PH.vx += Math.sin(PH.heading) * kick; PH.vz -= Math.cos(PH.heading) * kick; PH.boost_t = Math.max(PH.boost_t, 1.1); PH.vxa = Math.max(PH.vxa, .8); chainHit(); big(impact < 5 * SPK ? 'SMOOTH LANDING!' : 'LANDED'); try { FXB.E.landSmooth([PH.x, PH.y, PH.z]); } catch (e) { } U.beat = 1; } } }          // a landing after a real flight is a boost and a link in the chain
     railStep(dt, sIn); toysStep(dt, sIn); KITL.step(dt); deckStep(dt); finStep(dt);
-    try { if (inTunZ(PH.z, 6)) { if (PH.rail) { PH.rail.done = true; PH.rail = null; } if (toys.state.lk) { toys.state.lk = null; toys.state.tube.active = false; } PH.ram = null; PH.latch = null;          /* (the ground lock: wheels on the road, every frame, inside a tunnel) */
+    try { SETS.step(dt, sIn); } catch (e) { }
+    try { if (inTunZ(PH.z, 6)) { if (PH.rail) { PH.rail.done = true; PH.rail = null; } if (toys.state.lk) { toys.state.lk = null; toys.state.tube.active = false; } PH.ram = null; PH.latch = null; if (PH.set) try { SETS.abort(); } catch (e) { }          /* (the ground lock: wheels on the road, every frame, inside a tunnel) */
       const g = th(PH.x, PH.z); if (Number.isFinite(g)) { PH.y = g; PH.vy = 0; PH.grounded = true; PH.crest = false; PH.air_t = 0; PH.gh_prev = g; } } } catch (e) { }
     // obstacles, pads, pickups
-    if (!toys.active() && !PH.rail) obstacleStepB(PH.xPrev, PH.zPrev);
+    if (!toys.active() && !PH.rail && !PH.set) obstacleStepB(PH.xPrev, PH.zPrev);
     for (const p of PADS) if (!p.used && !p.lk && Math.abs(PH.z - p.z) < 5 && Math.abs(PH.x - p.x) < 4) { p.used = true; if (p.hideSelf) p.hideSelf(); AW.onPadHit(); try { dopAdd('pad'); } catch (e) { } try { PSY.events.onPad(false); } catch (e) { } try { FXB.E.pad([PH.x, PH.y, PH.z]); } catch (e) { } PH.vx += Math.sin(PH.heading) * 14 * SPK * PSY.perks().padK; PH.vz -= Math.cos(PH.heading) * 14 * SPK * PSY.perks().padK; PH.boost_t = 2.4; PH.vxa = Math.max(PH.vxa, 1.4); chainHit(); big('BOOST'); }
     for (const b of BUFFS) if (!b.taken && Math.abs(PH.z - b.z) < (PH.mult > 0 ? 12 : 5) && Math.abs(PH.x - b.x) < (PH.mult > 0 ? 12 : 5)) { b.taken = true; try { hideBuffGroup(b); } catch (e) { } PH.boost_t = Math.max(PH.boost_t, 4); PH.score += 250; U.trip = Math.min(1, U.trip + .12); U.beat = 1; big('MOLECULE'); chainHit(); { const mi = b.mi % MOL_ORDER.length; try { PSY.events.onMolecule(MOL_ORDER[mi], MOLS[MOL_ORDER[mi]].name); } catch (e) { try { PSY.pillEat(MOL_ORDER[mi]); } catch (e2) { } } lookPulse(['vec', 'asc', 'psy'][mi % 3]); AW.onMoleculeFound(mi, false); try { FXB.E.pillEat([b.x, th(b.x, b.z) + 2.2, b.z], MOLS[MOL_ORDER[mi]].c); } catch (e) { } if (gmOn) try { GM.onMolecule(MOL_ORDER[mi]); } catch (e) { } } }
     for (const o of ORBS) if (!o.taken && Math.abs(PH.z - o.z) < 3 && Math.abs(PH.x - o.x) < 3) { o.taken = true; try { hideRecs(BYNAME[nameOfN(o.n)]); } catch (e) { } try { FXB.E.orb([o.x, th(o.x, o.z) + 1.2, o.z]); } catch (e) { } PH.score += 25; U.beat = Math.max(U.beat, .5); }
@@ -1877,7 +1879,7 @@ const CFG = {
   //   toys.js moves nodes with three.js matrices; each touched node gets a stand-in whose matrix is copied into Babylon's instance buffer after every tick (and the piece stops being driven by animStep).
   const TFLUSH = [], TREGN = new Proxy({}, { get(o, k) { if (typeof k !== 'string') return undefined; const key = nameOfN(k); if (!(key in o)) o[key] = (BYNAME[key] || []).map((rc) => { const m = new THREE.Matrix4(); m.elements.set(rc.M.m); const px = { matrix: m, rc, last: Float32Array.from(m.elements) }; TFLUSH.push(px); return px; }); return o[key]; } });
   const toys = createToys({ lvl: { rows: phys.rows, nodes: meta.nodes }, PH, th, SPK, hideNode: (n) => { try { hideBuffGroup({ n }); } catch (e) { } }, toast: () => { }, SFX, REGN: TREGN,
-    hooks: { noLift: (z) => inTunZ(z, 160), lkSpeedK: 1.6, pillK: () => (PH.mult > 0 ? 2.6 : 1.7), pillPull: () => (PH.mult > 0 ? 30 : 9), quant: (f) => f(), onTrip: (k) => { U.trip = Math.min(1, U.trip + k); try { dopAdd('mol'); } catch (e) { } },
+    hooks: { noLift: (z) => inTunZ(z, 160) || !!PH.set, lkSpeedK: 1.6, pillK: () => (PH.mult > 0 ? 2.6 : 1.7), pillPull: () => (PH.mult > 0 ? 30 : 9), quant: (f) => f(), onTrip: (k) => { U.trip = Math.min(1, U.trip + k); try { dopAdd('mol'); } catch (e) { } },
       onBump: (x, y, z) => { try { FXB.E.orb([x, y + 1.5, z]); FXB.E.cheer([x, y + 2, z], 0xffcc44, 1); } catch (e) { } },
       onRing: () => { try { FXB.E.orb([PH.x, PH.y, PH.z]); } catch (e) { } },
       onPill: (t, first, mi) => { try { PSY.events.onMolecule(String(t.id), t.name); } catch (e) { } lookPulse(['vec', 'asc', 'psy'][Math.max(0, mi) % 3]); try { SFX.mol(Math.max(0, mi)); } catch (e) { } try { FXB.E.pillEat([t.x, t.y, t.z], t.col ? t.col.slice(0, 3) : [.7, .5, 1]); } catch (e) { } U.beat = 1; } } });
@@ -2160,15 +2162,27 @@ const CFG = {
   try { LV.R = Math.max(0, Math.min(1, +localStorage.getItem('dl_ready') || .2)); } catch (e) { } LV.tier = LV.R < .34 ? 1 : LV.R < .67 ? 2 : 3;
   const lvHits = () => (window.__crashes || []).length;
 const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.max(0, ['desert', 'alpine', 'candy', 'egypt', 'synthwave', 'tunnel', 'matrix', 'psychedelic'].indexOf(WORLD0))) % 4];
+  const LVIDX = Math.max(0, JORDER.indexOf(WORLD0));
+  const SETS = createSets({ B, scene, PH, th, trailX, SPK: () => SPK, inTunZ: (z, p) => inTunZ(z, p), solPut: (k, x, z, l) => solPut(k, x, z, l), lensPut: (k, z) => lensPut(k, z), lensKind: () => WLENS[WORLD0] || 'SEE',
+    makeBuff: (t, x, z) => makeBuff(t, x, z, Math.random), BANK: () => BANK, bankSpend: (k) => bankSpend(k), GEAR: () => GEAR, LENS: () => LENS, DOP: () => DOP, dopAdd: (k, w) => dopAdd(k, w), chainHit: () => chainHit(),
+    busy: () => toys.active() || !!PH.ram, world: () => WORLD0, speedNeed: () => 34 * SPK, sfx: (k) => { try { SFX[k] && SFX[k](); } catch (e) { } },
+    fx: (k, p) => { try { if (k === 'cheer') FXB.E.cheer(p); else if (k === 'blast') FXB.E.blast(p); else FXB.E.orb(p); } catch (e) { } }, shake: (v) => { shake = Math.max(shake, v); },
+    raidRam: () => { const R = RAID.cur; if (!R || !['arm', 'attack'].includes(R.phase) || PH.ram) return false; const c = R.root.position; if (PH.z - c.z < 10 || PH.z - c.z > 160) return false; rampLaunch(R, 'clean'); return true; } });
+  window.__SETS = SETS; const SETSEC = { name: 'set', make(z, T) { return SETS.section(z, T, LVIDX); } };
   const LVS = [
     { name: 'warm', make(z, T) { solTrail('tetra', z, 5, 6, 14, 3); solTrail('tetra', z - 150, -5, 6, 14, -3); if (T >= 2) solTrail('tetra', z - 300, 8, 6, 14, 4); return T >= 2 ? 420 : 280; } },
+    SETSEC,
     { name: 'speed', make(z, T, R) { makePad(trailX(z), z, R); solPut('octa', trailX(z - 60), z - 60); solTrail('tetra', z - 100, 0, 4, 16); if (T >= 2) { makePad(trailX(z - 230) - 5, z - 230, R); solPut('octa', trailX(z - 290) - 5, z - 290); } return 360; } },
     { name: 'threat', make(z, T) { const k = ['drone', 'mine', 'rock'][LV.focus]; for (let n = 0; n < T + 1; n++) { const side = n % 2 ? 2.5 : -2.5; tutHaz(k, z - n * 190, side); solPut('cube', trailX(z - n * 190 - 45) - side * 2.2, z - n * 190 - 45); } return 190 * (T + 1) + 60; } },
+    SETSEC,
     { name: 'breath', make(z) { exMake(z - 40, 1, null, true); return 420; } },
     { name: 'mix', make(z, T, R) { exMake(z - 60, -1, gw(0)); solTrail('tetra', z, -6, 5, 14, -2); tutHaz(['drone', 'mine', 'rock'][(LV.focus + 1) % 3], z - 180, 2); makePad(trailX(z - 320), z - 320, R); solPut('octa', trailX(z - 380), z - 380); if (T >= 2) tutHaz(['drone', 'mine', 'rock'][LV.focus], z - 460, -2.5); return T >= 2 ? 560 : 420; } },
+    SETSEC,
     { name: 'pressure', make(z, T) { exMake(z - 40, 1, gw(1)); lensPut(WLENS[WORLD0] || 'SEE', z + 40); const n = 2 + T; for (let k = 0; k < n; k++) { tutHaz(['drone', 'mine', 'rock'][(LV.focus + k) % 3], z - k * 170, k % 2 ? 2.5 : -2.5, T >= 2 || k === n - 1 ? 'swoop' : null); if (k % 2) solTrail('tetra', z - k * 170 - 70, 0, 3, 14); else solPut('cube', trailX(z - k * 170 - 50) + (k % 2 ? -5 : 5), z - k * 170 - 50); } return n * 170 + 80; } },
     { name: 'breath', make(z) { exMake(z - 40, -1, WLENS[WORLD0] || 'SEE'); solTrail('tetra', z - 120, 0, 4, 18); return 420; } },
+    SETSEC,
     { name: 'gearpair', make(z, T, R) { if (['TRUTH', 'MERGE'].includes(WLENS[WORLD0])) { solFake(trailX(z - 260) + 2, z - 260); solFake(trailX(z - 300) - 2, z - 300); } exMake(z - 30, -1, gw(2)); exMake(z - 30, 1, gw(3)); makePad(trailX(z - 120), z - 120, R); solPut('octa', trailX(z - 180), z - 180); solTrail('tetra', z - 230, 0, 5, 16); return 440; } },
+    SETSEC,
     { name: 'finale', make(z, T, R) { DOP.v = Math.max(DOP.v, .78); solTrail('tetra', z, 0, 6, 12); makePad(trailX(z - 90), z - 90, R); solPut('octa', trailX(z - 150), z - 150); [[-300, 'rock', 0], [-380, 'drone', 2], [-460, 'mine', -2], [-540, 'rock', 2], [-620, 'drone', -2]].forEach(([d, k, x]) => tutHaz(k, z + d, x)); LV.finZ = z - 700; const prize = solPut('icosa', trailX(z - 690), z - 690, 2.4); prize.prize = () => lvPayoff(true); return 760; } },
   ];
   function lvlStep() {
@@ -2193,6 +2207,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     { const Qd = ((JSON.parse(localStorage.getItem('dl_prog') || '{}').worlds || {})[WORLD0] || {}).quests || {}, QI = [['main', '◈', 'the lens exit'], ['rocket', GICON.rocket, 'Rockets exit'], ['pole', GICON.pole, 'Magnet exit'], ['shield', GICON.shield, 'Shield exit'], ['bull', GICON.bull, 'Bull Bar exit'], ['hidden', '✷', 'the hidden exit'], ['gold', '★', 'a gold grade'], ['clean', '✧', 'a run with no hits'], ['mols', '⬢', 'every molecule'], ['rail', '═', 'a rail ridden to its end'], ['relay', '⚡', 'a relay brought down'], ['rings', '◎', 'a perfect ring set']];
       const row = document.createElement('div'); row.style.cssText = 'margin-top:10px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap'; QI.forEach(([k, ic, what]) => { const sp = document.createElement('span'); sp.textContent = ic; sp.title = (Qd[k] ? 'Done: ' : 'Still to do: ') + what; sp.style.cssText = 'font-size:18px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid ' + (Qd[k] ? '#ffd23a' : '#2a3447') + ';opacity:' + (Qd[k] ? 1 : .35); row.appendChild(sp); }); d.appendChild(row); }
     { const i = JORDER.indexOf(WORLD0), nx = i >= 0 && i < JORDER.length - 1 ? JORDER[i + 1] : null; if (nx && !Q.has('journey')) { const b = document.createElement('button'); b.textContent = 'NEXT: ' + JNAME[nx][0] + ' \u25B6'; b.style.cssText = 'margin-top:12px;font:700 15px \'Barlow Condensed\',Impact,sans-serif;letter-spacing:.14em;padding:10px 18px;border-radius:10px;border:1px solid #38e8ff;background:rgba(56,232,255,.14);color:#e8fbff;cursor:pointer;pointer-events:auto'; b.onclick = (e) => { e.stopPropagation(); campNext(); }; d.appendChild(b); } }
+    try { const L = SETS.summary().loose; if (L.length) { const le = document.createElement('div'); le.style.cssText = 'margin-top:10px;font:600 13px system-ui;color:#ffd23a;letter-spacing:.06em'; le.textContent = 'LOOSE ENDS: ' + [...new Set(L)].join(' \u00B7 ') + ' (they come back)'; d.appendChild(le); } } catch (e) { }
     d.firstChild.textContent = nm; document.body.appendChild(d); requestAnimationFrame(() => { d.style.opacity = '1'; d.style.transform = 'translate(-50%,0)'; });
     setTimeout(() => { d.style.opacity = '0'; setTimeout(() => d.remove(), 900); }, Q.has('journey') ? 5200 : 14000);
   }
@@ -3057,10 +3072,10 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function kickerGone(M) { for (const m of M.parts) try { m.dispose(); } catch (e) { } }
   function rampStep(dt) { const M = RAMP.cur;
     if (M && M.course) { const k = M.course, lipz = k.z - k.len, half = k.w * .5;
-      if (PH.zPrev > lipz && PH.z <= lipz && Math.abs(PH.x - k.x) < half && !PH.ram && RAID.cur === M.R) { const q = 1 - Math.abs(PH.x - k.x) / half, spd = Math.hypot(PH.vx, PH.vz) / SPK; rampLaunch(M.R, q > .72 && spd > 32 ? 'perfect' : q > .3 ? 'clean' : 'clipped'); kickerGone(M); RAMP.cur = null; }
+      if (PH.zPrev > lipz && PH.z <= lipz && Math.abs(PH.x - k.x) < half && !PH.ram && !PH.set && RAID.cur === M.R) { const q = 1 - Math.abs(PH.x - k.x) / half, spd = Math.hypot(PH.vx, PH.vz) / SPK; rampLaunch(M.R, q > .72 && spd > 32 ? 'perfect' : q > .3 ? 'clean' : 'clipped'); kickerGone(M); RAMP.cur = null; }
       else if (PH.z < lipz - 15 || RAID.cur !== M.R) { kickerGone(M); RAMP.cur = null; if (JUNK.arrow) JUNK.arrow.style.opacity = '0'; JUNK.lockT = 0; } }
     else if (M) { const F = M.F, dx = PH.x - M.x0, dz = PH.z - M.z0, d = dx * F.f[0] + dz * F.f[1], s = dx * F.r[0] + dz * F.r[1], g = rGround(PH.x, PH.z);
-      if (d >= 0 && d <= KL && Math.abs(s) <= KW / 2 && !PH.ram && RAID.cur === M.R && (M.on || PH.y <= g + 2.5)) {          /* (on the deck: you ride its curve) */
+      if (d >= 0 && d <= KL && Math.abs(s) <= KW / 2 && !PH.ram && !PH.set && RAID.cur === M.R && (M.on || PH.y <= g + 2.5)) {          /* (on the deck: you ride its curve) */
         M.on = true; M.best = Math.min(M.best, Math.abs(s) / (KW / 2)); const y = g + kProf(d / KL); PH.y = y; PH.gh_prev = g; PH.vy = Math.max(0, (kProf((d + 1) / KL) - kProf(d / KL)) * Math.hypot(PH.vx, PH.vz)); PH.grounded = true;
         if (d > KL - 1.2) { const q = 1 - Math.abs(s) / (KW / 2), spd = Math.hypot(PH.vx, PH.vz) / SPK; rampLaunch(M.R, q > .72 && spd > 32 ? 'perfect' : q > .3 ? 'clean' : 'clipped'); kickerGone(M); RAMP.cur = null; } }
       else if (M.on && (Math.abs(s) > KW / 2 || d > KL)) { M.on = false; PH.grounded = false; PH.crest = true; }          /* (rolled off the side: you drop) */
@@ -3120,7 +3135,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
       PH.vx = slope * -PH.vz; PH.heading = Math.atan(slope) + Math.max(-1, Math.min(1, sIn)) * .1; PH.steer = Math.max(-1, Math.min(1, PH.heading / C.THETA_MAX)); PH.sv = 0; PH.grounded = true; PH.gh_prev = th(PH.x, PH.z);
       PH.railSparkT = (PH.railSparkT || 0) - dt; if (PH.railSparkT <= 0) { PH.railSparkT = .14; try { FXB.E.railSpark([PH.x, PH.y, PH.z]); } catch (e) { } } return;
     }
-    for (const f of RAILS) {
+    for (const f of (PH.set ? [] : RAILS)) {
       if (f.done) continue; if (PH.z < f.zb + 5) { f.done = true; continue; }
       if (PH.z > f.za + .5) continue; if (tunSpan(f.za, f.zb, 15)) { f.done = true; continue; } const nt = PH.z > f.za - 10;
       if (Math.abs(PH.x - featX(f, PH.z)) < (nt ? 6 : 5) && PH.y - railY(f, PH.z) < 8 && PH.y - railY(f, PH.z) > -2.5) { PH.hurt = 0; PH.rail = f; PH.rail_z0 = PH.z; PH.rail_dx = PH.x - featX(f, PH.z); PH.slide = PH.vx; PH.rail_ok = false; PH.rail_out = 0; AW.onRailStart(); break; }
