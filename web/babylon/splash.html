@@ -292,7 +292,7 @@ const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antiali
    (neon edges, oil paint, cel cartoon, thermal, pastel), nothing that bends shapes; stained glass snaps on the sky alone (SKY GLASS below). Under them a
    gentle colour bleed along a slow flow. All of it follows MAX INTENSITY: rare and faint at the default, overlapping and full at the top; the road stays readable. */
 window.__LOOKON = { looks: 1, bleed: 1, glass: 1 };
-const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, PL = null, PB = null, UL = {}, UB = {}, src = null, sx = null, tex = null, fb = [], ft = [], w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);
+const LOOKFX = (() => { const cvs = document.getElementById('fx'); let PAR = null, READY = false, gl = null, PL = null, PB = null, UL = {}, UB = {}, src = null, sx = null, tex = null, fb = [], ft = [], w = 0, h = 0, dead = /[?&]nolook\b/.test(location.search);
   const PREC = '#ifdef GL_FRAGMENT_PRECISION_HIGH\nprecision highp float;\n#else\nprecision mediump float;\n#endif\n';
   const VS = 'attribute vec2 p; varying vec2 vUV; void main(){ vUV = p * .5 + .5; gl_Position = vec4(p, 0., 1.); }';
   /* the looks the title screen may use (uMix = the game's index - 2), with how often (weight) and how strong at most (cap) */
@@ -335,12 +335,14 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
   gl_FragColor = vec4(col, 1.); }`;
   function init() { gl = cvs.getContext('webgl', { alpha: false, antialias: false, premultipliedAlpha: false }); if (!gl) return false; gl.disable(gl.DITHER);
     const sh = (t, sr) => { const o = gl.createShader(t); gl.shaderSource(o, sr); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
-    const prog = (f) => { const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr)); return pr; };
-    PL = prog(PSYLOOK_FS.replace('precision highp float;', PREC)); PB = prog(FB);
+    PAR = gl.getExtension('KHR_parallel_shader_compile');          /* (compiles in the background where the GPU allows: no frozen first frames) */
+    const prog = (f) => { const pr = gl.createProgram(); const mkS = (t, sr) => { const o = gl.createShader(t); gl.shaderSource(o, sr); gl.compileShader(o); return o; }; gl.attachShader(pr, mkS(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, mkS(gl.FRAGMENT_SHADER, f)); gl.linkProgram(pr); return pr; };
+    PL = prog(PSYLOOK_FS.replace('precision highp float;', PREC)); PB = prog(FB); return true; }
+  function ready() { if (READY) return true; for (const pr of [PL, PB]) { if (PAR && !gl.getProgramParameter(pr, PAR.COMPLETION_STATUS_KHR)) return false; if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr) || 'link failed'); }
     for (const n of ['textureSampler', 'uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix']) UL[n] = gl.getUniformLocation(PL, n);
     for (const n of ['uTex', 'uOrig', 'uRes', 'uTime', 'uT', 'uHz', 'uBleed', 'uGlass', 'uCellPx']) UB[n] = gl.getUniformLocation(PB, n);
     const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-    src = document.createElement('canvas'); sx = src.getContext('2d'); tex = mk(); return true; }
+    src = document.createElement('canvas'); sx = src.getContext('2d'); tex = mk(); READY = true; return true; }
   function mk() { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v); return t; }
   function sizeTo(nw, nh) { w = nw; h = nh; cvs.width = w; cvs.height = h; src.width = w; src.height = h; for (const t of ft) gl.deleteTexture(t); for (const f of fb) gl.deleteFramebuffer(f); ft = []; fb = [];
     for (let i = 0; i < 2; i++) { const t = mk(); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null); const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); ft.push(t); fb.push(f); }
@@ -363,7 +365,8 @@ void main(){ vec2 uv = vUV; float yd = 1. - uv.y, asp = uRes.x / uRes.y; vec2 q 
     else if (L.ph === 'hold') { L.a = 1; if (L.t >= L.hold) { L.ph = 'out'; L.t = 0; } }
     else { L.a = Math.max(0, 1 - L.t / 1.6); if (L.a <= 0) { L.ph = 'idle'; L.q = null; L.next = t + (6.5 - 5.6 * T) * (.5 + .8 * Math.random()); } }
     const e = L.a * L.a * (3 - 2 * L.a); return L.q ? e * L.q[2] * (.18 + .82 * Math.pow(T, 1.1)) : 0; }
-  function render(t, dt, hzf) { if (dead || GAME.ready) return; if (!gl) { try { if (!init()) return off('no webgl'); } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); } }
+  function render(t, dt, hzf) { if (dead || GAME.ready) return; if (!gl) { if (t < .6) return; try { if (!init()) return off('no webgl'); } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); } }          /* (not on the first frames: the page paints first) */
+    try { if (!ready()) return; } catch (e) { console.error('splash looks', e); return off(String(e && e.message || e).slice(0, 200)); }
     const I = INT(), T = I.t, nw = Math.max(2, skyc.width || Math.round(W)), nh = Math.max(2, skyc.height || Math.round(H)); if (nw !== w || nh !== h) sizeTo(nw, nh);
     const O = window.__LOOKON, s0 = step(LAY[0], 0, t, dt, T) * O.looks, s1 = step(LAY[1], 1, t, dt, T) * O.looks;
     if (t > BLEED.n) { BLEED.g = Math.random() < .2 * (1 - T) ? 0 : .35 + .65 * Math.random(); BLEED.n = t + 2 + Math.random() * 6; } BLEED.v += (BLEED.g - BLEED.v) * Math.min(1, dt * .55);
@@ -502,21 +505,21 @@ function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE
   dialEl.addEventListener('pointerup', up); dialEl.addEventListener('pointercancel', up); }
 function idleBlip() { const t = document.getElementById('title'); if (!t || !t.classList.contains('open') || document.hidden) return setTimeout(idleBlip, 4000); t.classList.add('blip'); setTimeout(() => t.classList.remove('blip'), 130); setTimeout(idleBlip, 7000 + Math.random() * 8000); }
 
-/* THE SPARKING WIRE: the white AFTERGLOW stays solid; only the three tracer rows behind it short out, each on its own (art/aw_*.png, split from the wordmark).
-   A cluster is 2-6 micro-hits of 1-2 frames at uneven gaps; in each hit every row independently holds, slips sideways, tears (a slice jumps), blinks out,
-   flares or browns out. Clusters land at random, never on a beat: a wire swinging, sometimes touching. */
-(() => { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; const mk = document.getElementById('mark'), F = document.getElementById('awF'), rows = [...document.querySelectorAll('.gw .ly[data-r]')], sn = document.querySelector('.gw .snow'); if (!mk || !F || rows.length < 3) return;
-  const R = (a, b) => a + Math.random() * (b - a), clip = () => { const t = R(0, 70), h = R(6, 30); return `inset(${t.toFixed(0)}% 0 ${Math.max(0, 100 - t - h).toFixed(0)}% 0)`; };
-  const reset = () => { mk.style.opacity = ''; F.style.opacity = '0'; for (const g of rows) { g.style.opacity = '0'; g.style.transform = ''; g.style.clipPath = ''; g.style.filter = ''; } sn.style.opacity = '0'; };
-  function row(g) { const k = Math.random(); g.style.opacity = '1';
-    if (k < .22) return;          /* (this row holds) */
-    if (k < .44) g.style.transform = `translate(${R(-26, 26).toFixed(0)}px,${R(-3, 3).toFixed(0)}px)`;
-    else if (k < .62) { g.style.clipPath = clip(); g.style.transform = `translate(${R(-34, 34).toFixed(0)}px,0)`; }
-    else if (k < .76) g.style.opacity = '0';
-    else if (k < .88) g.style.filter = `brightness(${R(1.5, 2.2).toFixed(2)})`;
-    else g.style.filter = `brightness(${R(.25, .55).toFixed(2)})`; }
-  function hit() { mk.style.opacity = '0'; F.style.opacity = '1'; let moved = 0; for (const g of rows) { row(g); if (g.style.transform || g.style.filter || g.style.opacity === '0') moved = 1; } if (!moved) row(rows[(Math.random() * 3) | 0]);
-    if (Math.random() < .14) { sn.style.opacity = R(.5, .85).toFixed(2); sn.style.backgroundPosition = `${R(0, 140)}px ${R(0, 140)}px`; } }          /* (snow only on the rows: it is masked to them) */
+/* THE SIGNAL GLITCH (owner 2026-11-26, from his reference pictures): the white word stays white while a red copy jumps one way and a cyan copy the other, so the
+   edges fringe in red and cyan, and a few horizontal strips of the word tear sideways. Each hit holds a frame or two; hits come in clusters at random, and in
+   bursts while the dial is dragged. The sun never glitches. */
+(() => { if (matchMedia('(prefers-reduced-motion: reduce)').matches) return; const mk = document.getElementById('mark'), gw = document.querySelector('.gw'); if (!mk || !gw) return;
+  for (const e of gw.querySelectorAll('.ly, .snow')) e.style.display = 'none';          /* (the old back-row glitch layers, retired) */
+  mk.style.position = 'relative'; mk.style.zIndex = '2';
+  const im = (src, z) => { const e = document.createElement('img'); e.src = src; e.alt = ''; e.setAttribute('aria-hidden', 'true'); e.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;opacity:0;pointer-events:none;z-index:' + z; gw.appendChild(e); return e; };
+  const RED = im('art/aw_r.png', 1), CY = im('art/aw_c.png', 1), SL = [0, 1, 2, 3, 4].map(() => im('art/afterglow_word.png', 3));
+  const R = (a, b) => a + Math.random() * (b - a);
+  const reset = () => { for (const e of [RED, CY, ...SL]) { e.style.opacity = '0'; e.style.transform = ''; e.style.clipPath = ''; } mk.style.transform = ''; };
+  function hit() { const k = Math.random(), big = k < .35, sp = big ? R(7, 16) : R(3, 8), dy = R(-1.5, 1.5);
+    RED.style.opacity = '.95'; RED.style.transform = `translate(${-sp.toFixed(1)}px,${dy.toFixed(1)}px)`; CY.style.opacity = '.95'; CY.style.transform = `translate(${sp.toFixed(1)}px,${(-dy).toFixed(1)}px)`;          /* (the colour split) */
+    const n = big ? Math.round(R(2, 5)) : Math.round(R(0, 2)); for (let i = 0; i < n; i++) { const e = SL[i], t = R(0, 88), h = R(2.5, big ? 12 : 7);          /* (the tears: thin strips slid sideways) */
+      e.style.clipPath = `inset(${t.toFixed(1)}% 0 ${Math.max(0, 100 - t - h).toFixed(1)}% 0)`; e.style.transform = `translateX(${(R(8, 34) * (Math.random() < .5 ? -1 : 1)).toFixed(0)}px)`; e.style.opacity = '1'; }
+    if (big && Math.random() < .4) mk.style.transform = `translateX(${R(-4, 4).toFixed(1)}px)`; }
   /* timed in FRAMES, not milliseconds: each hit holds 1-2 frames (about the shortest flash the eye still catches), 1-5 frames dark between hits */
   /* the first visit ever: the screen locks right after the title's first glitch, as if the glitch broke the phone; tap and the joke lands */
   let fl = false; const firstLock = () => { if (fl) return; fl = true; try { if (localStorage.getItem('dl_lockfirst')) return; localStorage.setItem('dl_lockfirst', '1'); localStorage.setItem('dl_firstlock', '1'); } catch (e) { return; } try { window.__fakeErr && window.__fakeErr(); } catch (e) { } };          /* (the glitch ends and the browser seems to choke) */          /* (no delay: the glitch ends and the screen dies) */
