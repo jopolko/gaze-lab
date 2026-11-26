@@ -13,7 +13,7 @@ export function createSets(d) {
   const { B, scene, PH } = d, TAU = Math.PI * 2;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, t) => a + (b - a) * t;
   const gnd = (x, z) => { const g = d.th(x, z); return Number.isFinite(g) ? g : PH.y; };
-  const SETS = [], ST = { A: null, loose: [], done: 0, full: 0, paid: 0, n: 0, err: 0, echoes: 0, boosts: [] };
+  const SETS = [], ST = { A: null, loose: [], done: 0, full: 0, paid: 0, n: 0, err: 0, echoes: 0, boosts: [], charges: [] };
   try { ST.loose = (JSON.parse(localStorage.getItem('dl_loose') || '[]') || []).slice(0, 6); } catch (e) { ST.loose = []; }
   const saveLoose = () => { try { localStorage.setItem('dl_loose', JSON.stringify(ST.loose.slice(0, 6))); } catch (e) { } };
 
@@ -145,8 +145,9 @@ export function createSets(d) {
     SETS.push(S); ST.n++; return S;
   }
   /* SECTION: called by the level script. Chooses a set (a loose end first, if there is one), builds it, and returns how much road it uses. */
-  function section(z, T, lvIdx, R) {
+  function section(z, T, lvIdx, R, forceId) {
     R = R || Math.random;
+    if (forceId) { if (d.inTunZ(z, 200) || d.inTunZ(z - 500, 200)) return 120; const S = build(forceId === 'remix' || CAT[forceId] ? forceId : 'hop', z - 40, R, null); return S.len + 120; }
     if (d.inTunZ(z, 200) || d.inTunZ(z - 500, 200)) return 120;
     let echo = null; if (ST.loose.length && ST.echoes < 2 && R() < .85) { echo = ST.loose[0]; ST.echoes++; }
     let id;
@@ -160,12 +161,12 @@ export function createSets(d) {
     if (need && (echo || R() < .45)) pre = provide(need, z0 + 160, R);
     const S = build(id, z0, R, echo); return S.len + 120 + pre * 0;
   }
-  function provide(need, z, R) { const x = d.trailX(z) + (R() < .5 ? -7 : 7);
+  function provide(need, z, R, side) { side = side || ((R || Math.random)() < .5 ? -1 : 1); const x = d.trailX(z) + side * 9;
     try {
       if (need === 'WINGS') d.makeBuff('donut', x, z); else if (need === 'MAGNET') d.makeBuff('mult', x, z); else if (need === 'SHIELD') d.makeBuff('shield', x, z);
-      else if (need === 'LENS') d.lensPut(d.lensKind(), z);
-      else if (need === 'SPEED') { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 40 }; SETS.push(S); for (let i = 0; i < 3; i++) { const zz = z + 70 - i * 35, q = [d.trailX(zz), gnd(d.trailX(zz), zz) + .12, zz], m = B.MeshBuilder.CreateBox('setPad', { width: 6, height: .2, depth: 12 }, scene); m.position.set(q[0], q[1], q[2]); m.material = M.pad(); own(S, m); ST.boosts.push(zz); } }
-      else if (need === 'BULL' || need === 'ROCKETS' || need === 'RUSH') { const n = 12; for (let i = 0; i < n; i++) d.solPut('octa', d.trailX(z + 40 - i * 9) + Math.sin(i * .7) * 3, z + 40 - i * 9, 1.7); ST.charge = z - 80; }
+      else if (need === 'LENS') { const o = d.lensPut(d.lensKind(), z); if (o && o.m) { o.x += side * 9; o.m.position.x += side * 9; } }
+      else if (need === 'SPEED') { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 40 }; SETS.push(S); for (let i = 0; i < 3; i++) { const zz = z + 70 - i * 35, xx = d.trailX(zz) + side * 9, q = [xx, gnd(xx, zz) + .12, zz], m = B.MeshBuilder.CreateBox('setPad', { width: 6, height: .2, depth: 12 }, scene); m.position.set(q[0], q[1], q[2]); m.material = M.pad(); own(S, m); ST.boosts.push({ z: zz, x: side * 9 }); } }
+      else if (need === 'BULL' || need === 'ROCKETS' || need === 'RUSH') { const n = 12; for (let i = 0; i < n; i++) d.solPut('octa', d.trailX(z + 40 - i * 9) + side * 9 + Math.sin(i * .7) * 2, z + 40 - i * 9, 1.7); ST.charges.push({ z: z - 70, x: side * 9 }); }
     } catch (e) { console.error('sets provide', need, e); } return 0; }
 
   // ---------------------------------------------------------------- running a set
@@ -240,8 +241,13 @@ export function createSets(d) {
       if (S.ghosts.length) for (const m of S.ghosts) m.material.alpha = lensOn ? .85 : .16;
       if (tT % 20 === 0 && S.state === 'ready' && PH.z - S.z0 < 450) for (const sg of S.segs) if (sg.t === 'gate' && sg.sign && sg.need !== 'FORK') { const h = !!NEED[sg.need].has(sg.need === 'SPEED' ? { v0: Math.hypot(PH.vx, PH.vz) } : null); if (h !== sg.sign.have) { sg.sign.have = h; sg.sign.draw(h); } }
       if (S.state !== 'live' && PH.z < S.z0 - (S.len || 0) - 120) { for (const m of S.meshes) try { m.dispose(); } catch (e) { } for (const x of S.extra) try { x.dispose(); } catch (e) { } S.meshes.length = 0; S.state = 'gone'; } }
-    for (let i = ST.boosts.length - 1; i >= 0; i--) if (PH.z < ST.boosts[i]) { const zz = ST.boosts.splice(i, 1)[0]; if (Math.abs(PH.x - d.trailX(zz)) < 4.5 && !ST.A) { PH.vx *= 1.18; PH.vz *= 1.18; PH.boost_t = Math.max(PH.boost_t || 0, 2.4); d.sfx('powerup'); d.fx('orb', [PH.x, PH.y + 1, PH.z]); } }
-    if (ST.charge && PH.z < ST.charge) { ST.charge = 0; const D = d.DOP(); if (!D.on) { D.v = Math.max(D.v, .97); d.dopAdd('mol'); } } }
+    for (let i = ST.boosts.length - 1; i >= 0; i--) if (PH.z < ST.boosts[i].z) { const bo = ST.boosts.splice(i, 1)[0]; if (Math.abs(PH.x - d.trailX(bo.z) - bo.x) < 4.5 && !ST.A) { PH.vx *= 1.18; PH.vz *= 1.18; PH.boost_t = Math.max(PH.boost_t || 0, 2.4); d.sfx('powerup'); d.fx('orb', [PH.x, PH.y + 1, PH.z]); } }
+    for (let i = ST.charges.length - 1; i >= 0; i--) if (PH.z < ST.charges[i].z) { const ch = ST.charges.splice(i, 1)[0]; if (Math.abs(PH.x - d.trailX(ch.z) - ch.x) < 8) { const D = d.DOP(); if (!D.on) { D.v = Math.max(D.v, .97); d.dopAdd('mol'); } } } }          /* (a RUSH charge counts only if you took its line of crystals) */
+  /* THE FORK (the director's lock-and-key): two keys, one each side of the road, each under a sign naming it. You can only take one. */
+  function fork(z, a, b) { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 60 }; SETS.push(S);
+    for (const [need, side] of [[a, -1], [b, 1]]) { provide(need, z, null, side); const x = d.trailX(z) + side * 9; sign(S, (side < 0 ? '◀ ' : '') + NEED[need].txt + (side > 0 ? ' ▶' : ''), NEED[need].col, [x, gnd(x, z) + 7.5, z + 8], 10); }
+    return 140; }
+  function key(z, need, side) { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 60 }; SETS.push(S); provide(need, z, null, side); const x = d.trailX(z) + side * 9; sign(S, NEED[need].txt, NEED[need].col, [x, gnd(x, z) + 7.5, z + 8], 9); return 120; }
   const summary = () => ({ done: ST.done, full: ST.full, paid: ST.paid, loose: ST.loose.map((q) => NEED[q.need] ? NEED[q.need].txt : q.need) });
-  return { section, step, abort, summary, build, CAT, ST, SETS, NEED, active: () => !!ST.A };
+  return { section, fork, key, step, abort, summary, build, CAT, ST, SETS, NEED, active: () => !!ST.A };
 }

@@ -30,3 +30,5 @@ web/downhill-three/shots_parity/
 web/spike/logs/
 __pycache__/
 web/eye-tracking-kit/vendor/
+
+tools/godot/

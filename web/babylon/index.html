@@ -39,6 +39,8 @@ import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
 import { createIntro } from './intro.js';
 import { createSets } from './chains.js';
+import { planRoad, planPlay, findTunnel, seedOf } from './director.js';
+import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
 import { createPsyFx } from '../downhill-three/psyfx.js';
 import { createPostFx, toGLSLPost } from '../downhill-three/postfx.js';
 import * as THREE from 'three';
@@ -81,7 +83,7 @@ if (STRAINS) for (const cp in PANTRY) { const P = PANTRY[cp]; MOLS[STRAIN_ID[cp]
 const strainFound = (cp) => { try { const s = new Set(JSON.parse(localStorage.getItem('dl_strains') || '[]')); if (!s.has(cp)) { s.add(cp); localStorage.setItem('dl_strains', JSON.stringify([...s])); } } catch (e) { } };
 const FXM = (() => { const N = { vmax: 1, boost: 1, grip: 1, steer: 1, jump: 1, airg: 1, hurt: 1, free1: false, regen: false }; try { return N;          /* gear never changes handling: full steering control always */ const ch = JSON.parse(localStorage.getItem('dl_char') || 'null'); return ch ? Object.assign({}, N, window.DLFX.mech(ch)) : N; } catch (e) { return N; } })();          /* the driver's gear (docs: charfx.js) */
 const sayFps = (head, rest) => { const e = $('status'); e.textContent = ''; const b = document.createElement('b'); b.textContent = head; b.style.cssText = 'color:#ffe14d;text-shadow:0 0 4px #000'; e.appendChild(b); e.appendChild(document.createTextNode(rest)); };
-const NROWS = Math.max(4, Math.min(43, +(Q.get('rows') || 38))), COURSE = Q.get('course') || 'long_s7', DIR = '../downhill-three/data/' + COURSE + '/';
+const COMPOSE0 = !Q.has('classic') && !Q.has('course') && !Q.has('story') && !Q.has('tutorial') && !Q.has('splash') && !Q.has('basin') && !Q.has('shot'), NROWS = Math.max(4, Math.min(COMPOSE0 ? 60 : 43, +(Q.get('rows') || (COMPOSE0 ? 46 : 38)))), COURSE = Q.get('course') || 'long_s7', DIR = '../downhill-three/data/' + COURSE + '/';
 
 const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 (async () => {
@@ -91,8 +93,21 @@ const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a)
   const scene = new B.Scene(engine); scene.useRightHandedSystem = true; scene.clearColor = new B.Color4(.1, .03, .2, 1); scene.skipPointerMovePicking = true; scene.autoClear = true;
   const cam = new B.FreeCamera('cam', new B.Vector3(0, 3, 0), scene); cam.minZ = .2; cam.maxZ = 1800; cam.fov = 1.2; cam.inputs.clear(); scene.activeCamera = cam;
   say('loading the course (' + NROWS + ' rows)...'); try { __LDR.to(.12); } catch (e) { }
-  const [meta, phys] = await Promise.all([fetch(DIR + 'meta.json').then((r) => r.json()), fetch(DIR + 'physics.json').then((r) => r.json())]), rows = [];
-  for (let j = 0; j < NROWS; j += 4) { const part = await Promise.all([0, 1, 2, 3].filter((k) => j + k < NROWS).map((k) => fetch(DIR + 'row_' + String(j + k).padStart(2, '0') + '.json').then((r) => r.json()))); rows.push(...part); say('loading the course... ' + rows.length + ' / ' + NROWS); try { __LDR.to(.12 + .5 * rows.length / NROWS); } catch (e) { } }
+  const COMPOSE = COMPOSE0;
+  const LSEED = seedOf(WORLD0 + ':' + (Q.get('seed') || 'v1'));
+  let meta = null, phys = null, rows = [];
+  if (COMPOSE) try {
+    const BK = '../downhill-three/data/', getJ = (p) => fetch(BK + p).then((r) => { if (!r.ok) throw new Error(p + ' ' + r.status); return r.json(); });
+    const [shared, catalog, EDG] = await Promise.all([getJ('bank/shared.json'), getJ('row_catalog.json'), getJ('trip_edges.json')]); try { __LDR.to(.18); } catch (e) { }
+    const plan = planRoad({ catalog, edge: (d, j) => EDG[d][j], joinCost, seed: LSEED, n: NROWS, world: WORLD0 }); if (plan.length < NROWS) throw new Error('road plan short: ' + plan.length);
+    if (shared.split) { const ds = [...new Set(plan.map((p) => p.d))]; for (const part of await Promise.all(ds.map((d) => getJ('bank/shared_' + d + '.json').catch(() => ({ meshes: {} }))))) Object.assign(shared.meshes, part.meshes); }          /* (only the meshes of the courses this road is made from) */
+    const off = rowOffsets(plan, (d, j) => EDG[d][j]), pad2 = (j) => String(j).padStart(2, '0'), lights = new Array(NROWS), heavies = new Array(NROWS); let nx = 0, done = 0;
+    await Promise.all(Array.from({ length: 6 }, async () => { for (;;) { const v = nx++; if (v >= NROWS) return; const p = plan[v], b = 'bank/' + p.d + '_' + pad2(p.j); [lights[v], heavies[v]] = await Promise.all([getJ(b + '.p.json'), getJ(b + '.json')]); done++; say('building the road... ' + done + ' / ' + NROWS); try { __LDR.to(.18 + .45 * done / NROWS); } catch (e) { } } }));
+    const A = assemble(plan, lights, off, shared); meta = A.meta; meta.theme = WORLD0; phys = A.phys; rows = heavies.map((h, v) => { const o = moveHeavy(h, off[v], v); o.row = phys.rows[v]; return o; });
+    window.__ROAD = { seed: LSEED, plan, worst: Math.max(0, ...plan.slice(1).map((p, v) => joinCost(EDG[plan[v].d][plan[v].j], EDG[p.d][p.j]))) };
+  } catch (e) { console.error('road director: using the classic course instead', e); meta = null; rows = []; }
+  if (!meta) { [meta, phys] = await Promise.all([fetch(DIR + 'meta.json').then((r) => r.json()), fetch(DIR + 'physics.json').then((r) => r.json())]); }
+  if (!rows.length) for (let j = 0; j < NROWS; j += 4) { const part = await Promise.all([0, 1, 2, 3].filter((k) => j + k < NROWS).map((k) => fetch(DIR + 'row_' + String(j + k).padStart(2, '0') + '.json').then((r) => r.json()))); rows.push(...part); say('loading the course... ' + rows.length + ' / ' + NROWS); try { __LDR.to(.12 + .5 * rows.length / NROWS); } catch (e) { } }
   /* ?basin=1 (a prototype, docs/BASINS_PLAN.md): rows 8-11 (z -1440 to -2160) become one open bowl 300 m wide. Their content is cleared and their ground
      is replaced by the basin's own (their ground meshes are kept only so the heightfield can blend the basin into the road at both ends). */
   /* ?splash (the title screen's backdrop): just the highway, its scenery and the sky. Every gameplay item is cleared before the world is built */
@@ -2192,12 +2207,19 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     SETSEC,
     { name: 'finale', make(z, T, R) { DOP.v = Math.max(DOP.v, .78); solTrail('tetra', z, 0, 6, 12); makePad(trailX(z - 90), z - 90, R); solPut('octa', trailX(z - 150), z - 150); [[-300, 'rock', 0], [-380, 'drone', 2], [-460, 'mine', -2], [-540, 'rock', 2], [-620, 'drone', -2]].forEach(([d, k, x]) => tutHaz(k, z + d, x)); LV.finZ = z - 700; const prize = solPut('icosa', trailX(z - 690), z - 690, 2.4); prize.prize = () => lvPayoff(true); return 760; } },
   ];
+  const LVN = {}; LVS.forEach((sx) => { if (sx.name === 'breath') LVN[LVN.breath ? 'lensbreath' : 'breath'] = sx; else if (sx.name !== 'set') LVN[sx.name] = sx; });
+  const PLAY = (() => { try { const C = SETS.CAT, tiers = {}; for (const k of Object.keys(C)) tiers[k] = C[k].tier; tiers.remix = 2; const plain = Object.keys(C).filter((k) => !C[k].need && C[k].tier <= 1), hard = ['ladder', 'catcher', 'corkscrew', 'pinball', 'railhop', 'skygrind', 'rings'];
+      return planPlay({ seed: LSEED, lvIdx: Math.max(1, LVIDX), setTiers: tiers, plainSets: plain, hardSets: hard }); } catch (e) { console.error('play director', e); return null; } })();
+  window.__PLAY = PLAY;
+  const LVSEQ = !PLAY || Q.has('classicplay') ? LVS : PLAY.beats.map((b) => b.k === 'set' ? { name: (b.gate ? 'gate:' : 'set:') + b.id, make(z, T, R) { return SETS.section(z, T, LVIDX, R, b.gate || !SETS.ST.loose.length ? b.id : null); } }
+    : b.k === 'fork' ? { name: 'fork', make(z) { return SETS.fork(z - 40, b.a, b.b); } } : b.k === 'key' ? { name: 'key', make(z) { return SETS.key(z - 40, b.need, b.side); } } : LVN[b.k] || LVN.breath);
   function lvlStep() {
     if (!LV.on || LV.done || !GEAR.T || !GEAR.T.length) return;
     if (LV.focus === undefined) LV.focus = Math.max(0, ['desert', 'alpine', 'candy', 'egypt', 'synthwave', 'tunnel', 'matrix', 'psychedelic'].indexOf(WORLD0)) % 3;
-    if (LV.i < LVS.length && PH.z <= LV.next) {
+    if (LV.i < LVSEQ.length && PH.z <= LV.next) { const left = PH.z - END - 300; while (LV.i < LVSEQ.length - 1 && left < (LVSEQ.length - LV.i) * 440 && /^(breath|lensbreath|speed|threat|mix|warm|gearpair|set:.*)$/.test(LVSEQ[LV.i].name) ) LV.i++; if (left < 1300 && LV.i < LVSEQ.length - 1) LV.i = LVSEQ.length - 1; }          /* (short of road: breathers and plain sections give way; the fork, its gates and the finale never do) */
+    if (LV.i < LVSEQ.length && PH.z <= LV.next) {
       if (LV.i > 0) { const h = lvHits() - LV.hits0; LV.R = Math.max(0, Math.min(1, LV.R + (h === 0 ? .05 : -.07 * h))); try { localStorage.setItem('dl_ready', LV.R.toFixed(3)); } catch (e) { } }
-      LV.hits0 = lvHits(); const S = LVS[LV.i++], sp = Math.max(30, Math.hypot(PH.vx, PH.vz)), z0 = PH.z - sp * 2.2 - 40; let len = 300; try { len = S.make(z0, LV.tier, LV.R0) || 300; } catch (e) { console.error('lvl', S.name, e); } LV.next = z0 - len - 90;
+      LV.hits0 = lvHits(); const S = LVSEQ[LV.i++], sp = Math.max(30, Math.hypot(PH.vx, PH.vz)); let z0 = PH.z - sp * 2.2 - 40; { const W = window.__TUNW; if (W && z0 > W.z1 - 100 && z0 - 460 < W.z0 + 60) z0 = W.z1 - 120; }          /* (nothing is built in or just before a tunnel: the section waits for its far end) */ let len = 300; try { len = S.make(z0, LV.tier, LV.R0) || 300; } catch (e) { console.error('lvl', S.name, e); } LV.next = z0 - len - 90;
     }
     if (LV.finZ && PH.z < LV.finZ - 30 && !LV.paid) lvPayoff(false);
   }
@@ -2320,12 +2342,14 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     for (const sd of [-1, 1]) { const p = B.MeshBuilder.CreateBox('dropPost', { width: .5, height: 9, depth: .5 }, scene); p.material = gm; p.position.set(x + sd * 13, y + 4.5, z); p.isPickable = false; }
     const bar = B.MeshBuilder.CreateBox('dropBar', { width: 26.5, height: .7, depth: .5 }, scene); bar.material = gm; bar.position.set(x, y + 9, z); bar.isPickable = false;
     for (let i = -2; i <= 2; i++) { const c = B.MeshBuilder.CreateBox('dropChev', { width: 2.2, height: .35, depth: .3 }, scene); c.material = gm; c.position.set(x + i * 4.2, y + 7.6, z); c.rotation.z = .7; const c2 = c.clone('dropChev'); c2.position.x += 1.5; c2.rotation.z = -.7; c.isPickable = c2.isPickable = false; } } } catch (e) { console.error('drops', e); }
-  if (BASIN && !Q.has('story')) try { const a = BASIN.z0 + 280, b = BASIN.z0 + 6, T = stTunnel(a, b); T.m.setEnabled(true); T.wake = .6; T.lamp = .5; window.__TUNW = { z0: a, z1: b, fun: 90 };
+  function buildTunnelAt(a, b) { try { const T = stTunnel(a, b); T.m.setEnabled(true); T.wake = .6; T.lamp = .5; window.__TUNW = { z0: a, z1: b, fun: 90 };
     for (const sd of [-1, 1]) { const pts = []; for (let d = 90; d >= -2; d -= 4) { const z = a + d, u = Math.min(1, Math.max(0, (90 - d) / 90)), half = 15 + 25 * (1 - u * u * (3 - 2 * u)), x = trailX(z) + sd * (half + .6), g = th(x, z); pts.push(new B.Vector3(x, (Number.isFinite(g) ? g : 0) + 1.1, z)); }
       const rail = B.MeshBuilder.CreateTube('bFunnel', { path: pts, radius: .45, tessellation: 8 }, scene); rail.material = solidMat([2.2, 1.6, .4], 'bFunnel'); rail.isPickable = false; }
     setTimeout(() => { try { tlDose((a + b) / 2, (WHOMES[WORLD0] || ['lucid'])[0]); } catch (e) { console.error('tunnel molecule', e); } }, 1500);
     scene.onBeforeRenderObservable.add(() => { const on = PH.z < a + 500 && PH.z > b - 80; if (T.m.isEnabled() !== on) T.m.setEnabled(on); if (!on) return; const cp = scene.activeCamera.globalPosition || scene.activeCamera.position;
-      T.mt.setFloat('uTime', U.time); T.mt.setFloat('uBeat', Math.max(BEATFX.pulse || 0, U.beat * .6)); T.mt.setFloat('uWake', T.wake); T.mt.setFloat('uLamp', T.lamp); T.mt.setFloat('uRun', -PH.z); T.mt.setVector3('uCam', cp); }); } catch (e) { console.error('basin tunnel', e); }
+      T.mt.setFloat('uTime', U.time); T.mt.setFloat('uBeat', Math.max(BEATFX.pulse || 0, U.beat * .6)); T.mt.setFloat('uWake', T.wake); T.mt.setFloat('uLamp', T.lamp); T.mt.setFloat('uRun', -PH.z); T.mt.setVector3('uCam', cp); }); } catch (e) { console.error('tunnel', e); } }
+  if (BASIN && !Q.has('story')) buildTunnelAt(BASIN.z0 + 280, BASIN.z0 + 6);
+  else if (LV.on && !Q.has('notunnel')) try { const tz = findTunnel({ trailX, slopeAt: (z) => { const x = trailX(z), a2 = th(x, z + 5), b2 = th(x, z - 5); return Number.isFinite(a2) && Number.isFinite(b2) ? (a2 - b2) / 10 : 0; }, end: END }); if (tz) { buildTunnelAt(tz[0], tz[1]); window.__TUNZ = tz; } } catch (e) { console.error('director tunnel', e); }
   /* the Daily Frequency: the first ACCORD sign of the run shows today's slogan (and today's truth when it glitches); today's line in the pause menu */
   try { window.DAILY && window.DAILY.then((D) => { if (!D) return; if (D.sign && ACC.list[0]) { ACC.pairs[5] = D.sign; const o = ACC.list[0]; o.i = 5; o.m.emissiveTexture = o.m.diffuseTexture = accTex(5, false); }
     if (D.title) { const el = document.getElementById('pmDaily'); if (el) el.textContent = D.title; } }); } catch (e) { }          /* built with the level, so the first frame of the run doesn't hitch */
