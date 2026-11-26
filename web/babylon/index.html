@@ -1581,6 +1581,7 @@ void main() {
     if (window.ME) btn('Next track', () => { try { ME.next(); } catch (e) { } });          /* not feeling this one? a fresh track for the same level */
     { const sb = btn('', () => { STORYON = !STORYON; try { localStorage.setItem('dl_story', STORYON ? '1' : '0'); } catch (e) { } sb.textContent = 'Story: ' + (STORYON ? 'on' : 'off'); }); sb.textContent = 'Story: ' + (STORYON ? 'on' : 'off'); }
     btn('Look', () => { location.href = 'dressup.html?next=' + encodeURIComponent('index.html' + location.search); });
+    btn('\uD83D\uDD12\uFE0E Lock', () => { const go = () => { try { AGLock.enable(); AGLock.show({}); } catch (e) { } }; if (window.AGLock) go(); else { const sc = document.createElement('script'); sc.src = 'lock.js'; sc.onload = go; document.head.appendChild(sc); } });          /* (the lock screen gag on demand; also switches the idle lock back on) */
     btn('Restart', () => { location.reload(); });
     if (!Q.has('story') && !Q.has('tutorial')) { const w = PZ('pzW'); if (w) { w.title = 'World'; G.appendChild(w); } }
     btn('Quit to menu', () => { location.href = 'menu.html'; });
