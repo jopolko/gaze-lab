@@ -33,6 +33,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #rd { display:flex; justify-content:space-between; margin-top:2px; color:var(--lc,#fff); }
 #rd .lock { color:var(--dim); } #rd .lock.on { color:var(--lc,#38e8ff); text-shadow:0 0 10px var(--lc,#38e8ff); }
 /* the title */
+#ui { z-index:2; } #digi { position:fixed; inset:0; pointer-events:none; opacity:0; z-index:1; mix-blend-mode:screen; } #digi svg { position:absolute; left:0; right:0; bottom:0; width:100%; height:52%; } #digi .scan { position:absolute; inset:0; background:repeating-linear-gradient(0deg, color-mix(in srgb, var(--lc,#38e8ff) 40%, transparent) 0 1px, transparent 1px var(--sp,6px)); }
 #title { margin-top:clamp(10px,6vh,70px); text-align:center; position:relative; }
 #title h1 { margin:0; font:400 clamp(54px,15vmin + 10px,168px)/.86 "Bebas Neue","Impact","Arial Narrow",sans-serif; letter-spacing:.04em; color:#fff;
   text-shadow:calc(-1 * var(--ab,3px)) 0 0 rgba(56,232,255,.75),var(--ab,3px) 0 0 rgba(255,177,74,.75),0 0 40px rgba(56,232,255,.35); }
@@ -43,10 +44,15 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @keyframes agFade { from { opacity:.3; } to { opacity:1; } }
 .gw { position:relative; display:inline-block; } .gw .gc { position:absolute; left:0; top:0; width:100%; height:100%; opacity:0; pointer-events:none; mix-blend-mode:screen; }
 .gw .g1 { filter:drop-shadow(0 0 0 #38e8ff) hue-rotate(160deg) saturate(3); } .gw .g2 { filter:hue-rotate(-30deg) saturate(3); }
-#title.open .gw .g1 { animation:agTear1 2.4s linear .6s both; } #title.open .gw .g2 { animation:agTear2 2.4s linear .6s both; } #title.open #mark { animation:agJolt 2.4s linear .6s both; }
-@keyframes agTear1 { 0%, 9%, 16%, 44%, 52%, 80%, 88%, 100% { opacity:0; transform:none; clip-path:inset(0 0 0 0); } 10% { opacity:.9; transform:translate(-18px,0); clip-path:inset(12% 0 55% 0); } 12% { opacity:.9; transform:translate(-26px,2px); clip-path:inset(58% 0 18% 0); } 14% { opacity:.8; transform:translate(-8px,0); clip-path:inset(30% 0 40% 0); } 45% { opacity:.9; transform:translate(-30px,-2px); clip-path:inset(5% 0 70% 0); } 48% { opacity:.9; transform:translate(-12px,0); clip-path:inset(44% 0 30% 0); } 50% { opacity:.85; transform:translate(-22px,3px); clip-path:inset(72% 0 4% 0); } 81% { opacity:.9; transform:translate(-36px,0); clip-path:inset(20% 0 48% 0); } 84% { opacity:.9; transform:translate(-14px,-3px); clip-path:inset(50% 0 22% 0); } 86% { opacity:.7; transform:translate(-6px,0); clip-path:inset(0 0 80% 0); } }
-@keyframes agTear2 { 0%, 9%, 16%, 44%, 52%, 80%, 88%, 100% { opacity:0; transform:none; clip-path:inset(0 0 0 0); } 11% { opacity:.9; transform:translate(20px,0); clip-path:inset(40% 0 30% 0); } 13% { opacity:.9; transform:translate(12px,-2px); clip-path:inset(8% 0 62% 0); } 15% { opacity:.7; transform:translate(24px,0); clip-path:inset(66% 0 10% 0); } 46% { opacity:.9; transform:translate(28px,2px); clip-path:inset(26% 0 50% 0); } 49% { opacity:.9; transform:translate(10px,0); clip-path:inset(60% 0 14% 0); } 51% { opacity:.8; transform:translate(18px,-2px); clip-path:inset(2% 0 76% 0); } 82% { opacity:.9; transform:translate(34px,0); clip-path:inset(34% 0 36% 0); } 85% { opacity:.9; transform:translate(16px,3px); clip-path:inset(70% 0 6% 0); } 87% { opacity:.7; transform:translate(8px,0); clip-path:inset(12% 0 64% 0); } }
-@keyframes agJolt { 0%, 9%, 16%, 44%, 52%, 80%, 88%, 100% { transform:none; } 10%, 45%, 81% { transform:translate(4px,0) skewX(-4deg); } 12%, 48%, 84% { transform:translate(-5px,1px); } 14%, 50%, 86% { transform:translate(2px,-1px) skewX(3deg); } }
+#title.open .gw .g1 { animation:agTear1 1.6s linear .55s both; } #title.open .gw .g2 { animation:agTear2 1.6s linear .55s both; } #title.open #mark { animation:agJolt 1.6s linear .55s both; }          /* (three bursts of a tenth of a second: a system that glitches in milliseconds and recovers) */
+@keyframes agTear1 { 0%, 6.5%, 40%, 46.5%, 80%, 86.5%, 100% { opacity:0; transform:none; clip-path:inset(0 0 0 0); } .5% { opacity:.95; transform:translate(-22px,0); clip-path:inset(12% 0 55% 0); } 2.4% { opacity:.95; transform:translate(-30px,2px); clip-path:inset(58% 0 18% 0); } 4.3% { opacity:.8; transform:translate(-10px,0); clip-path:inset(30% 0 40% 0); } 40.5% { opacity:.95; transform:translate(-34px,-2px); clip-path:inset(5% 0 70% 0); } 42.4% { opacity:.95; transform:translate(-14px,0); clip-path:inset(44% 0 30% 0); } 44.3% { opacity:.85; transform:translate(-24px,3px); clip-path:inset(72% 0 4% 0); } 80.5% { opacity:.95; transform:translate(-40px,0); clip-path:inset(20% 0 48% 0); } 82.4% { opacity:.95; transform:translate(-16px,-3px); clip-path:inset(50% 0 22% 0); } 84.3% { opacity:.7; transform:translate(-8px,0); clip-path:inset(0 0 80% 0); } }
+@keyframes agTear2 { 0%, 6.5%, 40%, 46.5%, 80%, 86.5%, 100% { opacity:0; transform:none; clip-path:inset(0 0 0 0); } 1.4% { opacity:.95; transform:translate(24px,0); clip-path:inset(40% 0 30% 0); } 3.3% { opacity:.95; transform:translate(14px,-2px); clip-path:inset(8% 0 62% 0); } 5.2% { opacity:.7; transform:translate(28px,0); clip-path:inset(66% 0 10% 0); } 41.4% { opacity:.95; transform:translate(32px,2px); clip-path:inset(26% 0 50% 0); } 43.3% { opacity:.95; transform:translate(12px,0); clip-path:inset(60% 0 14% 0); } 45.2% { opacity:.8; transform:translate(20px,-2px); clip-path:inset(2% 0 76% 0); } 81.4% { opacity:.95; transform:translate(38px,0); clip-path:inset(34% 0 36% 0); } 83.3% { opacity:.95; transform:translate(18px,3px); clip-path:inset(70% 0 6% 0); } 85.2% { opacity:.7; transform:translate(10px,0); clip-path:inset(12% 0 64% 0); } }
+@keyframes agJolt { 0%, 6.5%, 40%, 46.5%, 80%, 86.5%, 100% { transform:none; } .5%, 40.5%, 80.5% { transform:translate(5px,0) skewX(-5deg); } 2.4%, 42.4%, 82.4% { transform:translate(-6px,1px); } 4.3%, 44.3%, 84.3% { transform:translate(2px,-1px) skewX(3deg); } }
+/* 2. IDLE BLIPS: left alone, the title glitches once now and then (the title only; the sky keeps its own effects) */
+#title.blip .gw .g1 { animation:agBlip1 .11s steps(3) both !important; } #title.blip .gw .g2 { animation:agBlip2 .11s steps(3) both !important; } #title.blip #mark { animation:agBlipJ .11s steps(3) both !important; }
+@keyframes agBlip1 { 0% { opacity:.95; transform:translate(-26px,0); clip-path:inset(20% 0 52% 0); } 50% { opacity:.95; transform:translate(-12px,1px); clip-path:inset(55% 0 20% 0); } 100% { opacity:0; transform:none; } }
+@keyframes agBlip2 { 0% { opacity:.95; transform:translate(22px,0); clip-path:inset(48% 0 26% 0); } 50% { opacity:.95; transform:translate(30px,-1px); clip-path:inset(6% 0 70% 0); } 100% { opacity:0; transform:none; } }
+@keyframes agBlipJ { 0% { transform:translate(5px,0) skewX(-5deg); } 50% { transform:translate(-4px,1px); } 100% { transform:none; } }
 #bar { position:absolute; left:-4%; right:-4%; top:46%; height:30%; background:#000; transform-origin:right center; transition:transform .55s cubic-bezier(.7,0,.2,1); }
 #bar::after { content:"[ THOUGHT PAUSED ]"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:700 clamp(11px,1.8vmin + 6px,17px) "Barlow Condensed",sans-serif; letter-spacing:.3em; color:#ff5d5d; }
 #title.open #bar { transform:scaleX(0); }
@@ -82,6 +88,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 </style></head>
 <body>
 <iframe id="game" title="" aria-hidden="true" tabindex="-1" allow="autoplay" data-src="index.html?splash=1&biome=desert&nointake=1&nocards&noshell&nomusic&notap"></iframe><canvas id="sky" aria-hidden="true"></canvas><canvas id="bg" aria-hidden="true"></canvas><canvas id="c" aria-hidden="true"></canvas>
+<div id="digi" aria-hidden="true"><i class="scan"></i><svg viewBox="0 0 1000 400" preserveAspectRatio="none"><g id="dgr" fill="none" stroke-width="1.4"></g></svg></div>
 <div id="ui" role="button" tabindex="0" aria-label="Electronic Anesthesia presents Afterglow. Tap to begin.">
   <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400</span><span>480</span><span>560</span><span>640</span><span>720</span><span>790 THz</span></div>
@@ -262,10 +269,16 @@ const LOCK_AT = 2.6, TARGET = 540, F0 = 400, F1 = 790; let locked = false;
 const TUNE = { f: TARGET, user: false, k: 0, down: false };
 try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }
 const specNow = () => specAt((TUNE.f - F0) / (F1 - F0));
+/* the digital layer, rebuilt only when the light moves: from 640 THz up the ground turns to a wire grid that tightens, and scanlines close in, by 790 it's all vector */
+const DG = { el: null, g: null, k: -1 };
+function digi(u, c) { if (!DG.el) { DG.el = document.getElementById('digi'); DG.g = document.getElementById('dgr'); } const k = Math.max(0, Math.min(1, (u - .55) / .45)), kq = Math.round(k * 40) / 40; if (kq === DG.k) return; DG.k = kq;
+  DG.el.style.opacity = (kq * kq * .85).toFixed(3); DG.el.style.setProperty('--lc', `rgb(${c})`); DG.el.style.setProperty('--sp', (9 - kq * 6).toFixed(1) + 'px'); DG.g.setAttribute('stroke', `rgb(${c})`);
+  const n = Math.round(10 + kq * 22), rows = Math.round(6 + kq * 12); let d = ''; for (let i = -n; i <= n; i++) d += `M500 0 L${500 + i * (1000 / n) * 1.6} 400 `; for (let j = 1; j <= rows; j++) { const y = 400 * Math.pow(j / rows, 2.2); d += `M0 ${y.toFixed(1)} L1000 ${y.toFixed(1)} `; }
+  DG.g.innerHTML = '<path d="' + d + '"/>'; }
 function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE.f; else if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
-  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`);
+  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = Math.round(f) + ' THz'; dialEl.style.setProperty('--lc', `rgb(${c})`); digi(u, c);
   { const lam = 4200 / f * 9, ph = RM ? 0 : t * 9; let d = ''; for (let x = 0; x <= 600; x += 4) { const env = Math.sin(Math.PI * x / 600); d += (x ? 'L' : 'M') + x + ' ' + (20 + 15 * env * Math.sin(2 * Math.PI * x / lam - ph)).toFixed(1); } wp.setAttribute('d', d); wp.setAttribute('stroke', `rgb(${c})`); wp.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
 }
 { const sc = dialEl.querySelector('.scale'), setF = (e) => { const b = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); TUNE.f = F0 + u * (F1 - F0); TUNE.user = true; doLock(); };
@@ -273,7 +286,8 @@ function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE
   dialEl.addEventListener('pointermove', (e) => { e.stopPropagation(); if (TUNE.down) setF(e); });
   const up = (e) => { e.stopPropagation(); if (!TUNE.down) return; TUNE.down = false; try { localStorage.setItem('dl_freq', String(Math.round(TUNE.f))); } catch (er) { } };
   dialEl.addEventListener('pointerup', up); dialEl.addEventListener('pointercancel', up); }
-function doLock() { if (locked) return; locked = true; lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
+function idleBlip() { const t = document.getElementById('title'); if (!t || !t.classList.contains('open') || document.hidden) return setTimeout(idleBlip, 4000); t.classList.add('blip'); setTimeout(() => t.classList.remove('blip'), 130); setTimeout(idleBlip, 7000 + Math.random() * 8000); }
+function doLock() { if (locked) return; locked = true; if (!RM) setTimeout(idleBlip, 9000); lock.textContent = 'LOCKED · UNFILTERED'; lock.classList.add('on'); title.classList.remove('glitch'); title.classList.add('open'); setTimeout(() => tap.classList.add('on'), RM ? 0 : 900); }
 setTimeout(doLock, LOCK_AT * 1000);          /* (on a timer, so it locks on time even when frames are slow) */
 
 let t0 = performance.now(), last = t0;
