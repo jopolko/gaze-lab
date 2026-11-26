@@ -2025,6 +2025,9 @@ const CFG = {
     const gold = new B.StandardMaterial('kgold', scene); gold.disableLighting = true; gold.emissiveColor = new B.Color3(1.6, 1.2, .35); gold.fogEnabled = false; gold.backFaceCulling = false;
     const tor = B.MeshBuilder.CreateTorus('kring', { diameter: 5.4, thickness: .6, tessellation: 28 }, scene); tor.bakeTransformIntoVertices(B.Matrix.RotationX(Math.PI / 2)); tor.material = metalMat(null, 1, 'ring'); tor.isPickable = false; tor.alwaysSelectAsActiveMesh = true; tor.doNotSyncBoundingInfo = true;
     const rbuf = new Float32Array(CAP * 16); tor.thinInstanceSetBuffer('matrix', rbuf, 16, false); tor.thinInstanceCount = CAP; let rdirty = false;
+    /* ART PASS phase 1 (2026-11-26): every hoop gets a thin lit inner ring and a lamp at the top (gold = yours), drawn from the same instance buffer */
+    const tin = B.MeshBuilder.CreateTorus('kring2', { diameter: 4.3, thickness: .14, tessellation: 32 }, scene); tin.bakeTransformIntoVertices(B.Matrix.RotationX(Math.PI / 2)); const tlp = B.MeshBuilder.CreateSphere('kringlamp', { diameter: .75, segments: 8 }, scene); tlp.bakeTransformIntoVertices(B.Matrix.Translation(0, 2.7, 0));
+    for (const q of [tin, tlp]) { q.material = gold; q.isPickable = false; q.alwaysSelectAsActiveMesh = true; q.doNotSyncBoundingInfo = true; q.thinInstanceSetBuffer('matrix', rbuf, 16, false); q.thinInstanceCount = CAP; }
     const mm = new B.Matrix(), zero = new Float32Array(16);
     const setRing = (g, on) => { if (g.on === on) return; g.on = on; if (on) { B.Matrix.ComposeToRef(new B.Vector3(1.7, 1.7, 1.7), B.Quaternion.Identity(), new B.Vector3(g.x, g.y, g.z), mm); mm.copyToArray(rbuf, g.i * 16); } else rbuf.set(zero, g.i * 16); rdirty = true; };
     const gy = (x, z) => th(x, z);
@@ -2067,7 +2070,7 @@ const CFG = {
       { const up = !PH.grounded; for (const g of rings) if (g.air && !g.taken) setRing(g, up && g.z < PH.z + 6 && g.z > PH.z - 90); }
       for (const g of rings) { if (g.taken || Math.abs(g.z - PH.z) > 3 || (g.air && PH.grounded)) continue; if (Math.hypot(PH.x - g.x, (PH.y + 1) - g.y) < g.r) { g.taken = true; setRing(g, false); PH.score += 120; PH.boost_t = Math.max(PH.boost_t, 1.1); try { ringGot(g); } catch (e) { } try { FXB.confetti([g.x, g.y, g.z], 40, 1); FXB.E.orb([g.x, g.y, g.z]); } catch (e) { } AW.onAirRing(); } }
       try { ringSetsStep(); } catch (e) { }
-      if (rdirty) { tor.thinInstanceBufferUpdated('matrix'); rdirty = false; }
+      if (rdirty) { tor.thinInstanceBufferUpdated('matrix'); tin.thinInstanceBufferUpdated('matrix'); tlp.thinInstanceBufferUpdated('matrix'); rdirty = false; }
     }
     return { launch, step, stream: buildStream, reset() { for (const g of rings) g.taken = false; for (const q of targets) q.done = true; } };
   })();
@@ -3297,13 +3300,14 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     const N = 20, pos = [], idx = [], uv = []; for (let i = 0; i <= N; i++) { const d = KL * i / N, h = kProf(i / N); for (const s of [-KW / 2, KW / 2]) { const p = P(d, s); pos.push(p[0], p[1] + h + .05, p[2]); uv.push(s > 0 ? 1 : 0, i / N); } }
     for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
     const deck = new B.Mesh('kickerdeck', scene), vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.uvs = uv; const nr = []; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr; vd.applyToMesh(deck);
-    deck.material = RAID.mats.deck || (RAID.mats.deck = (() => { const m = new B.StandardMaterial('kickerDeckM', scene); m.diffuseColor = new B.Color3(.95, .78, .3); m.emissiveColor = new B.Color3(.45, .3, .08); m.specularColor = new B.Color3(.3, .3, .3); m.backFaceCulling = false; return m; })()); deck.isPickable = false;
+    deck.material = RAID.mats.deck || (RAID.mats.deck = (() => { const m = new B.StandardMaterial('kickerDeckM', scene); m.diffuseColor = new B.Color3(.95, .78, .3); m.emissiveColor = new B.Color3(1, 1, 1); m.specularColor = new B.Color3(.3, .3, .3); m.backFaceCulling = false;
+      /* ART PASS phase 1: chevrons pointing up the ramp, bright on a deep gold deck, so it reads at speed */ const t = new B.DynamicTexture('kickerChev', { width: 128, height: 128 }, scene, true), c = t.getContext(); c.fillStyle = '#5a3c0c'; c.fillRect(0, 0, 128, 128); c.fillStyle = '#ffd85a'; c.beginPath(); c.moveTo(10, 96); c.lineTo(64, 40); c.lineTo(118, 96); c.lineTo(118, 70); c.lineTo(64, 14); c.lineTo(10, 70); c.closePath(); c.fill(); c.fillStyle = '#8a5d14'; c.fillRect(0, 0, 6, 128); c.fillRect(122, 0, 6, 128); t.update(); t.wrapU = t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.vScale = -5; m.emissiveTexture = t; return m; })()); deck.isPickable = false;
     const root = new B.TransformNode('kicker', scene), parts = [deck];
     // rails, lip bar and posts
     for (const s of [-KW / 2, KW / 2]) for (let i = 0; i < N; i += 2) { const a = P(KL * i / N, s), b = P(KL * (i + 2) / N, s), ha = kProf(i / N), hb = kProf((i + 2) / N), m = B.MeshBuilder.CreateBox('kickrail', { width: .3, height: .3, depth: 1 }, scene);
       m.material = rMat([1, .4, .2]); m.position.set((a[0] + b[0]) / 2, (a[1] + ha + b[1] + hb) / 2 + .5, (a[2] + b[2]) / 2); const L = Math.hypot(b[0] - a[0], b[1] + hb - a[1] - ha, b[2] - a[2]); m.scaling.z = L; m.lookAt(new B.Vector3(b[0], b[1] + hb + .5, b[2])); m.isPickable = false; parts.push(m); }
-    { const l = P(KL, 0), bar = B.MeshBuilder.CreateBox('kicklip', { width: KW + 1, height: .5, depth: .6 }, scene); bar.material = rMat([1, .25, .2]); bar.position.set(l[0], l[1] + KH + .3, l[2]); bar.rotation.y = yaw; bar.isPickable = false; parts.push(bar);
-      for (const s of [-KW / 2 - .5, KW / 2 + .5]) { const q = P(KL, s), po = B.MeshBuilder.CreateCylinder('kickpost', { height: KH + 1, diameter: .5 }, scene); po.material = rMat([.2, .2, .25]); po.position.set(q[0], q[1] + (KH + 1) / 2, q[2]); po.isPickable = false; parts.push(po); } }
+    { const l = P(KL, 0), bar = B.MeshBuilder.CreateBox('kicklip', { width: KW + 1, height: .5, depth: .6 }, scene); bar.material = rMat([2.4, .55, .3]); bar.position.set(l[0], l[1] + KH + .3, l[2]); bar.rotation.y = yaw; bar.isPickable = false; parts.push(bar);
+      for (const s of [-KW / 2 - .5, KW / 2 + .5]) { const q = P(KL, s), po = B.MeshBuilder.CreateCylinder('kickpost', { height: KH + 1, diameter: .5 }, scene); po.material = rMat([.95, .7, .2]); po.position.set(q[0], q[1] + (KH + 1) / 2, q[2]); po.isPickable = false; parts.push(po); const lp = B.MeshBuilder.CreateSphere('kicklamp', { diameter: 1.1, segments: 8 }, scene); lp.material = rMat([2.6, 2, .7]); lp.position.set(q[0], q[1] + KH + 1.6, q[2]); lp.isPickable = false; parts.push(lp); } }
     // the five shrinking chrome rings in front of it, funnelling you onto the deck (the course's own ring mesh)
     const tor = scene.meshes.find((m) => m.name === 'src' && m.material && m.material.name === 'pkmettorus');
     for (let i = 0; i < 5; i++) { const d = -34 + i * 11.3, p = P(Math.max(0, d), 0), h = d > 0 ? kProf(d / KL) : 0, sc = 5.2 - i * .68; let m;

@@ -25,6 +25,8 @@ export function createSets(d) {
     post: () => mat('post', [.62, .66, .74], [.16, .18, .22]), cyan: () => mat('cyan', [.3, .9, 1], [.2, .75, .9]), pad: () => mat('pad', [1, .55, .1], [1, .45, .05]),
     spring: () => mat('spring', [.35, 1, .55], [.15, .7, .3]), ghost: () => mat('ghost', [.4, 1, .6], [.25, .9, .5], .16), wall: () => mat('wall', [1, .45, .2], [.7, .22, .05], .55),
     box: () => mat('box', [.85, .7, .25], [.35, .25, .05]), barrier: () => mat('barrier', [.3, .8, 1], [.3, .8, 1], .35),
+    /* ART PASS phase 1 (2026-11-26): one look for all track furniture: a lit edge along every rail, lamps on lips and posts */
+    lit: () => { const m = mat('lit', [0, 0, 0], [1.9, 1.95, 2.1]); m.disableLighting = true; return m; }, litGold: () => { const m = mat('litGold', [0, 0, 0], [2.4, 1.7, .5]); m.disableLighting = true; return m; }, litGreen: () => { const m = mat('litGreen', [0, 0, 0], [.5, 2.2, .9]); m.disableLighting = true; return m; },
   };
 
   // ---------------------------------------------------------------- what a gate needs (the words match the game's own names)
@@ -53,8 +55,8 @@ export function createSets(d) {
     S.extra.push(m, dt); return { pl, draw, have: null };
   }
   function tube(S, pts, r, mt) { if (pts.length < 2) return null; const m = B.MeshBuilder.CreateTube('setTube', { path: pts.map(V), radius: r, tessellation: 10, cap: B.Mesh.CAP_ALL }, scene); m.material = mt; return own(S, m); }
-  function posts(S, pts, every) { const list = []; for (let i = 0; i < pts.length; i += every) { const p = pts[i], g = gnd(p[0], p[2]), hh = p[1] - g; if (hh < 1.4) continue; const c = B.MeshBuilder.CreateCylinder('setPost', { height: hh, diameter: .26, tessellation: 6 }, scene); c.position.set(p[0], g + hh / 2, p[2]); list.push(c); }
-    if (!list.length) return; const mm = list.length > 1 ? B.Mesh.MergeMeshes(list, true) : list[0]; mm.material = M.post(); own(S, mm); }
+  function posts(S, pts, every) { const list = [], lamps = []; for (let i = 0; i < pts.length; i += every) { const p = pts[i], g = gnd(p[0], p[2]), hh = p[1] - g; if (hh < 1.4) continue; const c = B.MeshBuilder.CreateCylinder('setPost', { height: hh, diameter: .26, tessellation: 6 }, scene); c.position.set(p[0], g + hh / 2, p[2]); list.push(c); const lp = B.MeshBuilder.CreateSphere('setPostLamp', { diameter: .4, segments: 6 }, scene); lp.position.set(p[0], g + hh + .05, p[2]); lamps.push(lp); }
+    if (!list.length) return; const mm = list.length > 1 ? B.Mesh.MergeMeshes(list, true) : list[0]; mm.material = M.post(); own(S, mm); const ml = lamps.length > 1 ? B.Mesh.MergeMeshes(lamps, true) : lamps[0]; ml.material = M.lit(); own(S, ml); }
   function ribbon(S, d0, d1, u, w, hf, mt) { const N = 18, pos = [], idx = [], uv = []; for (let i = 0; i <= N; i++) { const t = i / N, dd = lerp(d0, d1, t), h = hf(t); for (const s of [-w / 2, w / 2]) { const p = P(S, dd, u + s, h + .06); pos.push(p[0], p[1], p[2]); uv.push(s > 0 ? 1 : 0, t); } }
     for (let i = 0; i < N; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); } const m = new B.Mesh('setDeck', scene), vd = new B.VertexData(), nr = []; vd.positions = pos; vd.indices = idx; vd.uvs = uv; B.VertexData.ComputeNormals(pos, idx, nr); vd.normals = nr; vd.applyToMesh(m); m.material = mt; return own(S, m); }
   function torus(S, p, dia, th, mt, facing) { const m = B.MeshBuilder.CreateTorus('setRing', { diameter: dia, thickness: th, tessellation: 28 }, scene); m.material = mt; m.position.set(p[0], p[1], p[2]); if (facing) m.rotation.x = Math.PI / 2; return own(S, m); }
@@ -70,14 +72,14 @@ export function createSets(d) {
       kick(u, H = 5, len = 24) { c.u = u; const hf = (t) => H * t * t, s = { t: 'ride', k: 'kick', d0: c.d, d1: c.d + len, u0: u, u1: u, hf, w: 7 }; L.push(s);
         ribbon(S, c.d, c.d + len, u, 7, hf, M.gold());
         for (const sd of [-3.6, 3.6]) { const pts = []; for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(P(S, c.d + len * t, u + sd, hf(t) + .55)); } tube(S, pts, .16, M.orange()); }
-        { const l = P(S, c.d + len, u, H + .3), bar = B.MeshBuilder.CreateBox('setLip', { width: 8, height: .4, depth: .5 }, scene); bar.position.set(l[0], l[1], l[2]); bar.material = M.orange(); own(S, bar); }
+        { const l = P(S, c.d + len, u, H + .3), bar = B.MeshBuilder.CreateBox('setLip', { width: 8, height: .4, depth: .5 }, scene); bar.position.set(l[0], l[1], l[2]); bar.material = M.orange(); own(S, bar); for (const sd of [-4.2, 4.2]) { const q = P(S, c.d + len, u + sd, H + .55), lp = B.MeshBuilder.CreateSphere('setLipLamp', { diameter: .7, segments: 8 }, scene); lp.position.set(q[0], q[1], q[2]); lp.material = M.litGold(); own(S, lp); } }
         c.d += len; c.h = H; return b; },
       spring(u) { c.u = u; const s = { t: 'ride', k: 'spring', d0: c.d, d1: c.d + 5, u0: u, u1: u, h0: 0, h1: 0, w: 6 }; L.push(s);
         const p = P(S, c.d + 2.5, u, 0), base = B.MeshBuilder.CreateCylinder('setSpring', { height: .5, diameter: 5.4, tessellation: 24 }, scene); base.position.set(p[0], p[1] + .25, p[2]); base.material = M.spring(); own(S, base);
-        for (let i = 0; i < 3; i++) torus(S, [p[0], p[1] + .7 + i * .45, p[2]], 4.2 - i * .5, .22, M.chrome());
+        for (let i = 0; i < 3; i++) torus(S, [p[0], p[1] + .7 + i * .45, p[2]], 4.2 - i * .5, .22, M.chrome()); { const cap = B.MeshBuilder.CreateCylinder('setSpringCap', { height: .12, diameter: 2.6, tessellation: 24 }, scene); cap.position.set(p[0], p[1] + 1.75, p[2]); cap.material = M.litGreen(); own(S, cap); }
         c.d += 5; c.h = 0; c.nextH = 22; return b; },
       rail(len, u1, h0, h1, o = {}) { const s = { t: 'ride', k: 'rail', d0: c.d, d1: c.d + len, u0: c.u, u1: u1 ?? c.u, h0: h0 ?? c.h, h1: h1 ?? (h0 ?? c.h), boost: o.boost, pull: o.pull, ghost: o.ghost }; L.push(s);
-        if (o.mesh !== false) { const pts = []; for (let i = 0; i <= Math.ceil(len / 3); i++) { const t = i / Math.ceil(len / 3); pts.push(P(S, c.d + len * t, lerp(s.u0, s.u1, t), lerp(s.h0, s.h1, t) - .55)); } const m = tube(S, pts, .32, o.ghost ? M.ghost() : (o.boost ? M.gold() : M.chrome())); if (o.ghost) S.ghosts.push(m); if (!o.ghost) posts(S, pts, 7); s.mesh = m; }
+        if (o.mesh !== false) { const pts = []; for (let i = 0; i <= Math.ceil(len / 3); i++) { const t = i / Math.ceil(len / 3); pts.push(P(S, c.d + len * t, lerp(s.u0, s.u1, t), lerp(s.h0, s.h1, t) - .55)); } const m = tube(S, pts, .32, o.ghost ? M.ghost() : (o.boost ? M.gold() : M.chrome())); if (o.ghost) S.ghosts.push(m); if (!o.ghost) { posts(S, pts, 7); tube(S, pts.map((q) => [q[0], q[1] + .3, q[2]]), .07, o.boost ? M.litGold() : M.lit()); } s.mesh = m; }
         c.d += len; c.u = s.u1; c.h = s.h1; return b; },
       helix(len, turns = 1.5, R = 5) { const s = { t: 'ride', k: 'helix', d0: c.d, d1: c.d + len, u0: c.u, u1: c.u, R, turns, hc: c.h + R }; L.push(s);
         const pts = [], N = Math.ceil(len / 1.4); for (let i = 0; i <= N; i++) { const t = i / N, a = turns * TAU * t; pts.push(P(S, c.d + len * t, c.u + R * Math.sin(a), s.hc - R * Math.cos(a) - .55)); } tube(S, pts, .3, M.cyan()); posts(S, pts.filter((q, i) => Math.cos(turns * TAU * i / N) > .9), 1);
