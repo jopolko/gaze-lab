@@ -102,7 +102,8 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 <script>/* THE FIRST LOAD EVER (owner 2026-11-26): right after the title's first glitch the browser seems to choke on the game, with a warning page in the style of a
    browser's own security interstitial (generic, no real browser's branding). Both ways out go back to the game, and that tap is the first tap (fullscreen etc.).
    The compliance lock screen comes later, on the first idle lock. */
-window.__fakeErr = () => { const d = document.getElementById('ferr'); if (!d) return;
+window.__fakeErr = () => { };          /* (owner 2026-11-26: the first-visit fake browser error is OFF; nobody gets messed with on the way into the game. The page stays below as __fakeErrPage, unused) */
+window.__fakeErrPage = () => { const d = document.getElementById('ferr'); if (!d) return;
   d.innerHTML = '<div class="in"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#d93025" d="M1 21h22L12 2 1 21z"/><path fill="#fff" d="M11 16h2v2h-2zm0-6h2v4.5h-2z"/></svg>'
     + '<h1>This app isn\u2019t aligned</h1><p>AFTERGLOW is running on an unregistered device. Your carrier\u2019s alignment filter has paused it for your safety.</p>'
     + '<code>NET::ERR_UNALIGNED_APP</code><div class="row"><button class="det" type="button">Details</button><button class="back" type="button">Back to safety</button></div>'
