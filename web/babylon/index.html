@@ -1318,14 +1318,17 @@ void main() {
   function probeDevice() {
     let gpu = ''; try { const g = engine.getGlInfo(); gpu = (g.renderer || '') + ' | ' + (g.vendor || ''); } catch (e) { } POST.gpu = gpu; const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight, touch = (navigator.maxTouchPoints || 0) > 0 && matchMedia('(pointer:coarse)').matches;
     const strong = /NVIDIA|GeForce|RTX|GTX|Radeon RX|Radeon Pro|Apple M|Apple GPU|Adreno \(TM\) 7|Adreno 7|Mali-G7|Immortalis/i.test(gpu), weak = /Intel|UHD|Iris|SwiftShader|llvmpipe|Adreno \(TM\) [2-5]|Mali-[T4]/i.test(gpu);
-    const budget = touch ? (strong ? 4.5e6 : 2.6e6) : (strong ? 9.5e6 : (weak ? 2.8e6 : 5e6)); POST.cap = touch ? (strong ? 3 : 2) : (strong ? 4 : (weak ? 2 : 3)); POST.rsMin = touch ? (P3 ? .4 : .5) : (P3 ? .5 : .6); if (Q.get('postcap')) POST.cap = Math.max(0, Math.min(4, +Q.get('postcap'))); POST.level = POST.cap;
+    const budget = touch ? (strong ? 4.5e6 : 2.6e6) : (strong ? 9.5e6 : (weak ? 2.8e6 : 5e6)); POST.cap = touch ? (strong ? 3 : 2) : (strong ? 4 : (weak ? 2 : 3)); POST.rsMin = touch ? (P3 ? .62 : .66) : (P3 ? .55 : .6);          /* (owner 2026-11-26: a phone ended at .4, 164 px wide, and everything read plain and blurry) */ if (Q.get('postcap')) POST.cap = Math.max(0, Math.min(4, +Q.get('postcap'))); POST.level = POST.cap;
     const rs0 = clamp(Math.sqrt(budget / (W * H * dpr * dpr)), POST.rsMin, 1); applyRes(rs0); applyPost(POST.level);
     let n = 0, t0 = performance.now(), prev = t0; const ds = []; const tick = (t) => { ds.push(t - prev); prev = t; if (++n < 45) requestAnimationFrame(tick); else { ds.sort((a, b) => a - b); const med = ds[ds.length >> 1] || 16.7, hz = 1000 / med, snap = [30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240].reduce((a, b) => Math.abs(b - hz) < Math.abs(a - hz) ? b : a); POST.refresh = Math.min(snap, 144);  } }; requestAnimationFrame(tick);
   }
   function tune2d(f) {
     if (inXR || !started || panelOpen || Q.get('postcap') || POST.settle-- > 0) return; POST.settle = Math.max(0, POST.settle); const target = Math.min(POST.refresh, 60);
-    if (f < target * .84) { POST.good = 0; if (POST.rs > POST.rsMin + .001) applyRes(POST.rs - (f < target * .75 ? .1 : .05)); else if (POST.level > (P3 ? 1 : 0)) applyPost(POST.level - 1); else if (TUNE.level < SHEDN.length) applyShed(TUNE.level + 1); POST.settle = 2; }
-    else if (f > target * .985) { if (++POST.good >= 6) { POST.good = 0; if (TUNE.level > 0) applyShed(TUNE.level - 1); else if (POST.level < POST.cap) applyPost(POST.level + 1); else if (POST.rs < POST.rsMax - .001) applyRes(POST.rs + .05); POST.settle = 2; } }
+    /* (owner 2026-11-26: the old rule cut below 50 fps but only gave back above 59, so a phone holding 56 lost resolution and never got it back. Now: give back from 55;
+       when cutting, resolution only down to .8, then draw distance, then the rest of the resolution, then post) */
+    const RS_SOFT = Math.max(POST.rsMin, .8);
+    if (f < target * .84) { POST.good = 0; if (POST.rs > RS_SOFT + .001) applyRes(Math.max(RS_SOFT, POST.rs - (f < target * .75 ? .1 : .05))); else if (TUNE.level < SHEDN.length) applyShed(TUNE.level + 1); else if (POST.rs > POST.rsMin + .001) applyRes(Math.max(POST.rsMin, POST.rs - .05)); else if (POST.level > (P3 ? 1 : 0)) applyPost(POST.level - 1); POST.settle = 2; }
+    else if (f > target * .92) { if (++POST.good >= 6) { POST.good = 0; if (POST.level < POST.cap) applyPost(POST.level + 1); else if (POST.rs < RS_SOFT - .001) applyRes(POST.rs + .05); else if (TUNE.level > 0) applyShed(TUNE.level - 1); else if (POST.rs < POST.rsMax - .001) applyRes(POST.rs + .05); POST.settle = 2; } }
     else POST.good = 0;
   }
   function tune(f, hz) {
