@@ -83,14 +83,14 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 <main id="ups" hidden><div class="row"><span class="uphint" id="uphint"></span></div><div class="up" id="upgrades"></div></main>
 <script>
 const LEVELS = [
-  { id: 'routezero', name: 'Route Zero', world: 'Desert', art: 'desert', comp: 'lucid', url: 'index.html?story=1&nointake=1' },
-  { id: 'candy', name: 'Sugarfall', world: 'Candy Land', art: 'candy', comp: 'haze', url: 'index.html?biome=candy&nointake=1' },
-  { id: 'alpine', name: 'The Safe Peaks', world: 'Alps', art: 'alpine', comp: 'hollow', url: 'index.html?biome=alpine&nointake=1' },
-  { id: 'egypt', name: 'Tomb of the Old Servers', world: 'Egypt', art: 'egypt', comp: 'fold', url: 'index.html?biome=egypt&nointake=1' },
-  { id: 'synthwave', name: 'Neon Accord', world: 'Synthwave', art: 'synthwave', comp: 'embrace', url: 'index.html?biome=synthwave&nointake=1' },
-  { id: 'tunnel', name: 'The Undertow', world: 'Tunnel', art: 'tunnel', comp: 'velocity', url: 'index.html?biome=tunnel&nointake=1' },
-  { id: 'matrix', name: 'Cold Rack', world: 'Matrix', art: 'matrix', comp: 'deep', url: 'index.html?biome=matrix&nointake=1' },
-  { id: 'psychedelic', name: 'The Open Channel', world: 'Trip', art: 'psychedelic', comp: 'all', url: 'index.html?biome=psychedelic&nointake=1' },
+  { id: 'routezero', name: 'Route Zero', world: 'Desert', art: 'desert', comp: 'lucid', url: 'index.html?story=1&nointake=1&go=1' },
+  { id: 'candy', name: 'Sugarfall', world: 'Candy Land', art: 'candy', comp: 'haze', url: 'index.html?biome=candy&nointake=1&go=1' },
+  { id: 'alpine', name: 'The Safe Peaks', world: 'Alps', art: 'alpine', comp: 'hollow', url: 'index.html?biome=alpine&nointake=1&go=1' },
+  { id: 'egypt', name: 'Tomb of the Old Servers', world: 'Egypt', art: 'egypt', comp: 'fold', url: 'index.html?biome=egypt&nointake=1&go=1' },
+  { id: 'synthwave', name: 'Neon Accord', world: 'Synthwave', art: 'synthwave', comp: 'embrace', url: 'index.html?biome=synthwave&nointake=1&go=1' },
+  { id: 'tunnel', name: 'The Undertow', world: 'Tunnel', art: 'tunnel', comp: 'velocity', url: 'index.html?biome=tunnel&nointake=1&go=1' },
+  { id: 'matrix', name: 'Cold Rack', world: 'Matrix', art: 'matrix', comp: 'deep', url: 'index.html?biome=matrix&nointake=1&go=1' },
+  { id: 'psychedelic', name: 'The Open Channel', world: 'Trip', art: 'psychedelic', comp: 'all', url: 'index.html?biome=psychedelic&nointake=1&go=1' },
 ];
 /* each world's home compound, in its own colour (bright enough to read on the dark veil) */
 const COMPC = { lucid: ['LUCID', '#6fe0ff'], haze: ['HAZE', '#7dff8a'], hollow: ['HOLLOW', '#dfe6f2'], fold: ['FOLD', '#d6ff5c'], embrace: ['EMBRACE', '#ffc04d'], velocity: ['VELOCITY', '#e8f6ff'], deep: ['DEEP', '#b4a3ff'], all: ['EVERYTHING', '#ffffff'] };

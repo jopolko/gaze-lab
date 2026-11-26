@@ -176,6 +176,8 @@
     transition:opacity .6s; pointer-events:none; font-family:'Barlow Condensed', system-ui, sans-serif; }
   #ldr.out { opacity:0; }
   #ldr .k { font:700 13px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.34em; color:#9fe8ff; }
+  #ldr .lv { font:400 clamp(40px, 10vmin, 92px)/.9 'Bebas Neue', Impact, sans-serif; letter-spacing:.08em; color:#fff; text-align:center; text-shadow:0 0 30px rgba(56,232,255,.4); margin-top:-4px; }
+  #ldr .ep { font:700 12px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.3em; color:#ffd23a; margin-top:-6px; }
   #ldr canvas { position:static; width:min(560px, 86vw); height:clamp(70px, 16vmin, 110px); display:block; }
   #ldr .st { font:600 clamp(16px, 2.4vmin + 8px, 22px)/1.25 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.06em; min-height:2.6em; max-width:min(560px, 86vw); text-align:center;
     display:flex; align-items:center; justify-content:center; }
@@ -184,7 +186,9 @@
   #ldr .st span.clue { font:italic 400 clamp(15px, 2vmin + 8px, 20px)/1.3 Georgia, 'Times New Roman', serif; letter-spacing:0; color:#9fe8ff; }
   #ldr .pc { font:700 12px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.2em; color:#c9d2e3; opacity:.8; }`;
   const el = document.createElement('div'); el.id = 'ldr'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
-  el.innerHTML = '<div class="k">THE FREQUENCY</div><canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div>';
+  const LVN = { desert: 'ROUTE ZERO', alpine: 'THE SAFE PEAKS', candy: 'SUGARFALL', tunnel: 'THE UNDERTOW', synthwave: 'NEON ACCORD', matrix: 'COLD RACK', egypt: 'TOMB OF THE OLD SERVERS', psychedelic: 'THE OPEN CHANNEL' };
+  const lvName = Q.has('tutorial') ? 'TRAINING' : (LVN[lvl] || lvl.toUpperCase()), lvEp = Q.has('story') ? 'EPISODE 1' : '';
+  el.innerHTML = '<div class="k">THE FREQUENCY</div><div class="lv">' + lvName + '</div>' + (lvEp ? '<div class="ep">' + lvEp + '</div>' : '') + '<canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div>';
   const mount = () => { (document.head || document.documentElement).appendChild(css); document.body.appendChild(el); };
   if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
   const cv = el.querySelector('canvas'), cx = cv.getContext('2d'), stEl = el.querySelector('.st span'), pcEl = el.querySelector('.pc');
