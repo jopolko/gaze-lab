@@ -851,7 +851,10 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     if (txt === 'WIPEOUT!') { PH.vx *= .5; PH.vz *= .6; PH.hurt = .8; try { FXB.E.treeHit(PH.x, th(PH.x, PH.z), PH.z - 2, Math.hypot(PH.vx, PH.vz) / SPK); } catch (e) { } }
   }
   /* the lip: the swirl lets go (RunRig._update_ramps, crossed). It must run AFTER the board has moved this frame (PH.zPrev is where it was at the start of the step): before the move both are equal and the blast never fired, so no ramp threw anyone through its ring arc */
-  function lipStep() { const TW = window.__TUNW; for (const k of VXS) { if (!k.trail) continue; if (TW && k.z - k.len < TW.z0 + 20 && k.z - k.len > TW.z1 - 20) continue; const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5; if (PH.zPrev > lipz && PH.z <= lipz && Math.abs(PH.x - kx) < half) { PH.vy += C.JUMP_BLAST; PH.boost_t = Math.max(PH.boost_t, 1.2); try { KITL.launch(); } catch (e) { } if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } try { FXB.E.blast([PH.x, PH.y, PH.z]); } catch (e) { } AW.onRampBlast(); PH.jumps++; PH.score += 150; chainHit(); big('BLAST!'); U.beat = 1; shake = .5; } } }
+  /* TUNNELS ARE GROUND ONLY: nothing lifts the car inside one (no ramps, spring arcs, spirals, rails, raid ramps, crests); pad = metres of margin either side */
+  function inTunZ(z, pad) { const W = window.__TUNW; pad = pad || 0; return !!W && z < W.z0 + pad && z > W.z1 - pad; }
+  function tunSpan(za, zb, pad) { const W = window.__TUNW; pad = pad || 0; return !!W && Math.max(za, zb) > W.z1 - pad && Math.min(za, zb) < W.z0 + pad; }
+  function lipStep() { const TW = window.__TUNW; for (const k of VXS) { if (!k.trail) continue; if (TW && k.z - k.len < TW.z0 + 140 && k.z - k.len > TW.z1 - 20) continue; const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5; if (PH.zPrev > lipz && PH.z <= lipz && Math.abs(PH.x - kx) < half) { PH.vy += C.JUMP_BLAST; PH.boost_t = Math.max(PH.boost_t, 1.2); try { KITL.launch(); } catch (e) { } if (k.super) { PH.vy += 5; PH.boost_t = 2.4; } try { PSY.events.onBlast({ crossedMid: true, superRamp: !!k.super, charge: 0 }); } catch (e) { } try { FXB.E.blast([PH.x, PH.y, PH.z]); } catch (e) { } AW.onRampBlast(); PH.jumps++; PH.score += 150; chainHit(); big('BLAST!'); U.beat = 1; shake = .5; } } }
   function vortexStep(dt, sIn) {          // the swirl ramps: they pull a nearby board to their mouth, speed it up, and let go with a hard blast at the lip
     PH.vlock = null;
     for (const k of VXS) { const kz = k.z, kx = k.x, lipz = kz - k.len, half = k.w * .5, dxk = kx - PH.x, onIt = PH.z < kz + 4 && Math.abs(dxk) < half + 1.5, want = Math.sign(sIn) === Math.sign(dxk) && Math.abs(sIn) > .15;
@@ -918,7 +921,6 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     if (!inBasin(PH.z) && !PH.rail && !(PH.ram)) { let room = openW - 1.5; try { for (const e of (LV.exits || [])) if (!e.gone && PH.z < e.z0 && PH.z > e.z0 - EXL) room = Math.max(room, Math.abs(exX(e, PH.z) - trailX(PH.z)) + 6); } catch (er) { }
       const off = PH.x - trailX(PH.z); if (Math.abs(off) > room) { const sg = Math.sign(off); PH.x = trailX(PH.z) + sg * room; if (PH.vx * sg > 0) PH.vx = -PH.vx * .45 - sg * 3 * SPK; PH.heading *= .7; shake = Math.max(shake, .12); } }          /* (the treeline bounce) */
     { const WHz = WHAt(PH.z); if (Math.abs(PH.x) >= WHz - 2.5) { PH.x = clamp(PH.x, -(WHz - 2.5), WHz - 2.5); PH.vx *= -.2; } }
-    try { const W = window.__TUNW; if (W && PH.z < W.z0 + 4 && PH.z > W.z1 - 4) { const gy = th(PH.x, PH.z); if (Number.isFinite(gy) && PH.y > gy + 7) { PH.y = gy + 7; PH.vy = Math.min(PH.vy, 0); } } } catch (e) { }          /* (the roof: nothing throws you through it) */
     try { const W = window.__TUNW; if (W && PH.z < W.z0 + W.fun && PH.z > W.z1) { const u = clamp((W.z0 + W.fun - PH.z) / W.fun, 0, 1), half = PH.z > W.z0 ? 15 + 25 * (1 - u * u * (3 - 2 * u)) : 13.5, off = PH.x - trailX(PH.z);
       if (Math.abs(off) > half) { PH.x = trailX(PH.z) + Math.sign(off) * half; const fx2 = Math.cos(PH.heading || 0); PH.vx -= Math.sign(off) * Math.max(0, Math.sign(off) * PH.vx) * 1.2; PH.heading *= .85; shake = Math.max(shake, .08); } } } catch (e) { }          /* (the tunnel's walls and the funnel into it) */
     if (inBasin(PH.z) && bT(PH.z) > .8) { const sp = Math.hypot(PH.vx, PH.vz), cap = 56; if (sp > cap) { const k = 1 - (1 - cap / sp) * (1 - Math.exp(-1.5 * dt)); PH.vx *= k; PH.vz *= k; } }          /* the funnel eases you back to road speed, so the road's first crest doesn't throw you */
@@ -929,6 +931,8 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
       if (PH.y <= gh + .05) { const wasCrest = PH.crest; PH.crest = false; const impact = wasCrest ? 0 : Math.max(gvy - PH.vy, 0); if (wasCrest) PH.vy = gvy; PH.landT = PH.air_t; PH.grounded = true; PH.y = gh; PH.vy = Math.min(gvy, 3 * SPK); PH.air_t = 0; PH.stickT = .35; PH.mom = 2.6; shake = Math.min(.8, impact / (60 * SPK)); if (PH.landT > .2 && performance.now() - (window.__goAt || 0) > 900) AW.onLand(impact / SPK, PH.landT);          /* (only a real landing thumps: the car is spawned a hair above the road, and its first touch-down at the start was a thud with nothing there) */
         if (impact > 18 * SPK && !(window.__TUNW && PH.z < window.__TUNW.z0 + 10 && PH.z > window.__TUNW.z1)) crash('WIPEOUT!'); else if (impact > 12 * SPK) { PH.vx *= .97; PH.vz *= .97; } else if (PH.landT > .5) { const kick = (4 + 3 * Math.min(PH.landT, 3)) * SPK; PH.vx += Math.sin(PH.heading) * kick; PH.vz -= Math.cos(PH.heading) * kick; PH.boost_t = Math.max(PH.boost_t, 1.1); PH.vxa = Math.max(PH.vxa, .8); chainHit(); big(impact < 5 * SPK ? 'SMOOTH LANDING!' : 'LANDED'); try { FXB.E.landSmooth([PH.x, PH.y, PH.z]); } catch (e) { } U.beat = 1; } } }          // a landing after a real flight is a boost and a link in the chain
     railStep(dt, sIn); toysStep(dt, sIn); KITL.step(dt); deckStep(dt); finStep(dt);
+    try { if (inTunZ(PH.z, 6)) { if (PH.rail) { PH.rail.done = true; PH.rail = null; } if (toys.state.lk) { toys.state.lk = null; toys.state.tube.active = false; } PH.ram = null; PH.latch = null;          /* (the ground lock: wheels on the road, every frame, inside a tunnel) */
+      const g = th(PH.x, PH.z); if (Number.isFinite(g)) { PH.y = g; PH.vy = 0; PH.grounded = true; PH.crest = false; PH.air_t = 0; PH.gh_prev = g; } } } catch (e) { }
     // obstacles, pads, pickups
     if (!toys.active() && !PH.rail) obstacleStepB(PH.xPrev, PH.zPrev);
     for (const p of PADS) if (!p.used && !p.lk && Math.abs(PH.z - p.z) < 5 && Math.abs(PH.x - p.x) < 4) { p.used = true; if (p.hideSelf) p.hideSelf(); AW.onPadHit(); try { dopAdd('pad'); } catch (e) { } try { PSY.events.onPad(false); } catch (e) { } try { FXB.E.pad([PH.x, PH.y, PH.z]); } catch (e) { } PH.vx += Math.sin(PH.heading) * 14 * SPK * PSY.perks().padK; PH.vz -= Math.cos(PH.heading) * 14 * SPK * PSY.perks().padK; PH.boost_t = 2.4; PH.vxa = Math.max(PH.vxa, 1.4); chainHit(); big('BOOST'); }
@@ -1872,7 +1876,7 @@ const CFG = {
   //   toys.js moves nodes with three.js matrices; each touched node gets a stand-in whose matrix is copied into Babylon's instance buffer after every tick (and the piece stops being driven by animStep).
   const TFLUSH = [], TREGN = new Proxy({}, { get(o, k) { if (typeof k !== 'string') return undefined; const key = nameOfN(k); if (!(key in o)) o[key] = (BYNAME[key] || []).map((rc) => { const m = new THREE.Matrix4(); m.elements.set(rc.M.m); const px = { matrix: m, rc, last: Float32Array.from(m.elements) }; TFLUSH.push(px); return px; }); return o[key]; } });
   const toys = createToys({ lvl: { rows: phys.rows, nodes: meta.nodes }, PH, th, SPK, hideNode: (n) => { try { hideBuffGroup({ n }); } catch (e) { } }, toast: () => { }, SFX, REGN: TREGN,
-    hooks: { lkSpeedK: 1.6, pillK: () => (PH.mult > 0 ? 2.6 : 1.7), pillPull: () => (PH.mult > 0 ? 30 : 9), quant: (f) => f(), onTrip: (k) => { U.trip = Math.min(1, U.trip + k); try { dopAdd('mol'); } catch (e) { } },
+    hooks: { noLift: (z) => inTunZ(z, 160), lkSpeedK: 1.6, pillK: () => (PH.mult > 0 ? 2.6 : 1.7), pillPull: () => (PH.mult > 0 ? 30 : 9), quant: (f) => f(), onTrip: (k) => { U.trip = Math.min(1, U.trip + k); try { dopAdd('mol'); } catch (e) { } },
       onBump: (x, y, z) => { try { FXB.E.orb([x, y + 1.5, z]); FXB.E.cheer([x, y + 2, z], 0xffcc44, 1); } catch (e) { } },
       onRing: () => { try { FXB.E.orb([PH.x, PH.y, PH.z]); } catch (e) { } },
       onPill: (t, first, mi) => { try { PSY.events.onMolecule(String(t.id), t.name); } catch (e) { } lookPulse(['vec', 'asc', 'psy'][Math.max(0, mi) % 3]); try { SFX.mol(Math.max(0, mi)); } catch (e) { } try { FXB.E.pillEat([t.x, t.y, t.z], t.col ? t.col.slice(0, 3) : [.7, .5, 1]); } catch (e) { } U.beat = 1; } } });
@@ -3006,7 +3010,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   /* THE STRIKE RAMP: a clean dodge puts a glowing ramp on the road ahead, in the craft's lane. Hit it squarely and it throws you up in an arc straight into the craft:
      chunks fly off it and you drop back to the road. Three rams and it is wrecked. Miss the ramp and the chance is gone (dodge the next volley for another). */
   const RAMP = { cur: null };
-  function junkReward(R) { if (RAMP.cur || PH.ram) return; const ret = junkRet(); JUNK.lockT = 3.6; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE · LOCKED ON</div><div>HIT THE RAMP!</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
+  function junkReward(R) { if (RAMP.cur || PH.ram || inTunZ(PH.z, 420)) return; const ret = junkRet(); JUNK.lockT = 3.6; JUNK.lockR = R; ret.style.color = '#ff4a3a'; JUNK.arrow.innerHTML = '<div style="font-size:.62em;letter-spacing:.3em;color:#fff">CLEAN DODGE · LOCKED ON</div><div>HIT THE RAMP!</div>'; JUNK.arrow.style.opacity = '1'; try { SFX.blip && SFX.blip(); } catch (e) { }
     const F = rFrame(); let best = null; for (const k of (G_VXS() || [])) { if (!k.trail) continue; const lipz = k.z - k.len, ahead = (PH.z - lipz); if (ahead > 90 && ahead < 260 && (!best || ahead < best.ahead)) best = { k, ahead }; }
     if (best) { const k = best.k, bm = B.MeshBuilder.CreateCylinder('rampbeam', { height: 46, diameter: .6, tessellation: 8 }, scene); bm.material = rMat([2.6, 1.9, .3]); bm.position.set(k.x, rGround(k.x, k.z - k.len) + 23, k.z - k.len); bm.isPickable = false;
       RAMP.cur = { R, course: k, parts: [bm], F, on: false }; return; }          /* (the level's own ramp, lit up) */
@@ -3106,7 +3110,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     }
     for (const f of RAILS) {
       if (f.done) continue; if (PH.z < f.zb + 5) { f.done = true; continue; }
-      if (PH.z > f.za + .5) continue; const nt = PH.z > f.za - 10;
+      if (PH.z > f.za + .5) continue; if (tunSpan(f.za, f.zb, 15)) { f.done = true; continue; } const nt = PH.z > f.za - 10;
       if (Math.abs(PH.x - featX(f, PH.z)) < (nt ? 6 : 5) && PH.y - railY(f, PH.z) < 8 && PH.y - railY(f, PH.z) > -2.5) { PH.hurt = 0; PH.rail = f; PH.rail_z0 = PH.z; PH.rail_dx = PH.x - featX(f, PH.z); PH.slide = PH.vx; PH.rail_ok = false; PH.rail_out = 0; AW.onRailStart(); break; }
     }
   }
@@ -3407,7 +3411,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   }
   let IRS = null; const IRD = { cp: null, t0: 0 };
   function irBegin() { if (IRS || !OPEN.on) return; try {
-    IRS = createIntro({ B, scene, OPEN, BEATFX, COMP, HOOK: STRAIN_HOOK, hex, signTex, molGeo, steer: () => clamp(K.r - K.l + (typeof headSteer === 'number' ? headSteer : 0) + (typeof padSteer === 'number' ? padSteer : 0), -1, 1),
+    IRS = createIntro({ B, scene, OPEN, BEATFX, COMP, MOLS, HOOK: STRAIN_HOOK, hex, signTex, molGeo, steer: () => clamp(K.r - K.l + (typeof headSteer === 'number' ? headSteer : 0) + (typeof padSteer === 'number' ? padSteer : 0), -1, 1),
       onPad: () => { try { SFX.mol(1); } catch (e) { } U.beat = 1; },
       onHit: (cp) => { const C = COMP[cp]; IRD.cp = cp; IRD.t0 = performance.now(); tlook(C.looks[0], 1, 0, 3.2, .78, 'snap'); tlook(rndOf(LOOKHEAVY), 2, 0, .6, .5, 'snap'); BEATFX.glass = 1; U.beat = 1; try { SFX.mol(2); } catch (e) { } },
       sky: (id) => { try { if (id) sky.material = skyFor(id); else applyBiome(); } catch (e) { } BEATFX.glass = 1; },

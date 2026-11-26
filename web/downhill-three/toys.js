@@ -121,6 +121,7 @@ export function createToys({ lvl, PH, th, SPK, hideNode, toast, SFX, REGN, hooks
     return [nz(lp(ts[i - 1], ts[i])), nz(lp(us[i - 1], us[i]))];
   };
   function lkStart(d, pad) {
+    if (hooks.noLift && hooks.noLift(PH.z)) return;          // (a page may forbid lifts somewhere: the Babylon game's tunnels)
     const sp = (Math.max(-PH.vz, 24 * SPK) + 8 * SPK) * (hooks.lkSpeedK || 1);          // (a page may speed the arcs up: the Babylon game does)
     S.lk = { d, t: 0, dur: d.len / sp, sp, ri: 0 }; S.lkDepth = S.lkRecent > 0 ? S.lkDepth + 1 : 1;
     PH.slide = 0; PH.grounded = false; PH.air_t = 0; PH.vxa = Math.max(PH.vxa, 2.6); PH.latch = null; PH.rail = null;
