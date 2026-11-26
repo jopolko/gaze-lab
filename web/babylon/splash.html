@@ -224,7 +224,7 @@ vec3 skyAt(vec3 d) { SD = d; skyMain(); return gl_FragColor.rgb; }
 float cgrain(vec2 p) { return fract(sin(dot(floor(p), vec2(12.9898, 78.233))) * 43758.5453); }
 vec3 hrot(vec3 c, float a) { const vec3 k = vec3(.57735); float ca = cos(a); return c * ca + cross(k, c) * sin(a) + k * dot(k, c) * (1. - ca); }
 vec3 paint(vec3 c) { c = pow(max(c, 0.), vec3(.8)); float l = dot(c, vec3(.3, .5, .2)); c = mix(vec3(l), c, .62 + .5 * uInt.x + .35 * uInt.y); c = mix(c, vec3(.55, .36, .27) * (.35 + l), .22 * (1. - .7 * uInt.x)); c = clamp(hrot(c, (max(0., uInt.z - .25) * 1.1 + uInt.y * .8) * sin(uTime * .21)), 0., 1.6);          /* (max intensity: richer colour; ultraviolet: the hues drift) */
-  vec2 sp = gl_FragCoord.xy; float gr = cgrain(sp + fract(uTime * 7.31) * 113.) - .5; c *= 1. + gr * .045;          /* (per-pixel grain that shifts each frame: the old 2 and 4 pixel blocks beat into criss-cross lines once the screen scaled them) */
+            /* (no canvas grain: its sine hash drew a faint regular grid / criss-cross lines on many GPUs; the game has none either) */          /* (per-pixel grain that shifts each frame: the old 2 and 4 pixel blocks beat into criss-cross lines once the screen scaled them) */
   vec2 v = gl_FragCoord.xy / uWH2 - .5; float vg = 1. - smoothstep(.3, .9, length(v * vec2(1., v.y < 0. ? .45 : .8))) * .45; return c * .58 * vg; }
 void main() {
   if (vP.y >= 0.) { vec3 d = vS;
@@ -271,7 +271,7 @@ const SKY = (() => { const gl = skyc.getContext('webgl', { alpha: false, antiali
    slow flow field), recolouring, and afterimage trails that melt toward the horizon. Nothing periodic: every look's strength drifts to new random levels at
    random moments, and each owns irregular regions of the screen grown from domain-warped noise, so they tangle and trade places. All of it scales with
    MAX INTENSITY (present but faint at the default, the full wash at the top); the road keeps most of its clarity and the sky stays (barely) recognisable. */
-const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, P = null, C = null, U = {}, src = null, sx = null, tex = null, fb = [], ft = [], cur = 0, w = 0, h = 0, dead = CALM;
+const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null, P = null, C = null, U = {}, src = null, sx = null, tex = null, fb = [], ft = [], cur = 0, w = 0, h = 0, dead = CALM || /[?&]nolook\b/.test(location.search);          /* (?nolook: the painted world without the looks, for comparing) */
   const ENV = [0, 1, 2, 3].map(() => ({ v: .3, g: .6, n: 0 }));
   const VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = vec2(p.x * .5 + .5, .5 - .5 * p.y); gl_Position = vec4(p, 0., 1.); }';
   const FS = `precision highp float; uniform sampler2D uTex, uPrev; uniform vec2 uRes; uniform float uTime, uT, uUV, uHz, uFeed; uniform vec4 uEnv; varying vec2 vUv;
