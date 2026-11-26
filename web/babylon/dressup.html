@@ -479,7 +479,7 @@ button.go{background:var(--acc)!important;color:#06101f!important;border:0!impor
   engine.runRenderLoop(() => scene0.render()); addEventListener('resize', () => engine.resize());
 
   // ---- thumbnails: every option drawn alone, close up, and spun on a turntable (12 pictures each)
-  const THUMBS = {}, TF = 12; let T2 = null; window.__THUMBS = THUMBS; window.__thumbDbg = (k, id) => { const o = CATS[k][2].find((q) => q.id === id); const T = thumbEnv(), sv = { scene, CH, rig, parts, S, popT, ANIM, MODEL }; rig = null; MODEL = 'car'; scene = T.s2; CH = Object.assign({}, DEF, { [k]: id }); build(); const out = parts.filter((m) => m.metadata && m.metadata.slot === k).map((m) => ({ n: m.name, a: m.material && m.material.alpha, vis: m.isVisible, en: m.isEnabled(), sc: m.scaling.asArray(), side: m.metadata.side, bb: (() => { m.computeWorldMatrix(true); const b = m.getBoundingInfo().boundingBox; return [b.minimumWorld.asArray().map((v) => +v.toFixed(2)), b.maximumWorld.asArray().map((v) => +v.toFixed(2))]; })() })); rig.dispose(false, true); MODEL = sv.MODEL; scene = sv.scene; CH = sv.CH; rig = sv.rig; parts = sv.parts; S = sv.S; popT = sv.popT; ANIM = sv.ANIM; return out; };
+  const THUMBS = {}, TF = 8; let T2 = null; window.__THUMBS = THUMBS; window.__thumbDbg = (k, id) => { const o = CATS[k][2].find((q) => q.id === id); const T = thumbEnv(), sv = { scene, CH, rig, parts, S, popT, ANIM, MODEL }; rig = null; MODEL = 'car'; scene = T.s2; CH = Object.assign({}, DEF, { [k]: id }); build(); const out = parts.filter((m) => m.metadata && m.metadata.slot === k).map((m) => ({ n: m.name, a: m.material && m.material.alpha, vis: m.isVisible, en: m.isEnabled(), sc: m.scaling.asArray(), side: m.metadata.side, bb: (() => { m.computeWorldMatrix(true); const b = m.getBoundingInfo().boundingBox; return [b.minimumWorld.asArray().map((v) => +v.toFixed(2)), b.maximumWorld.asArray().map((v) => +v.toFixed(2))]; })() })); rig.dispose(false, true); MODEL = sv.MODEL; scene = sv.scene; CH = sv.CH; rig = sv.rig; parts = sv.parts; S = sv.S; popT = sv.popT; ANIM = sv.ANIM; return out; };
   const FR = { hat: [0, 2.85, 0, 2.1], mask: [0, 2.5, 0, 1.9], face: [0, 2.42, 0, 1.55], outfit: [0, 1.6, 0, 4.2], gloves: [0, 1.0, 0, 1.6], feet: [0, .2, 0, 2.0], charm: [-1.7, 1.0, 0, 2.8] };
   function thumbEnv() {
     if (T2) return T2; const c2 = document.createElement('canvas'); c2.width = 224; c2.height = 168; const e2 = new B.Engine(c2, true, { preserveDrawingBuffer: true, alpha: true, premultipliedAlpha: false }), s2 = new B.Scene(e2); s2.clearColor = new B.Color4(0, 0, 0, 0);
@@ -500,10 +500,18 @@ button.go{background:var(--acc)!important;color:#06101f!important;border:0!impor
   }
   function makeThumbs() {
     const list = []; for (const k of ['gear', 'hat', 'mask', 'face', 'outfit', 'gloves', 'feet', 'wheels', 'engine', 'springs', 'bumper', 'roof', 'back', 'sticker', 'charm']) for (const o of CATS[k][2]) { if (o.id === 'none' || o.id === 'c0') continue; list.push([k, o]); }
-    list.sort((a, b) => (a[0] === open ? 0 : 1) - (b[0] === open ? 0 : 1));
-    for (const [k, o] of list) { const f = thumbItem(k, o, 1); if (f.length) THUMBS[k + '.' + o.id] = f; }
+    /* (owner 2026-11-26: the character's frame rate was terrible, because every option's 12-picture spin was made straight away on the main thread. Now: at the
+       start only the open slot gets its pictures; after that one option at a time, in quiet moments, never while the character is being turned; spins only for
+       the slot on screen, 8 pictures each) */
+    for (const [k, o] of list) if (k === open) { const f = thumbItem(k, o, 1); if (f.length) THUMBS[k + '.' + o.id] = f; }
     renderGrid();
-    let i = 0; const next = () => { if (i >= list.length) return; const [k, o] = list[i++]; const f = thumbItem(k, o, TF); if (f.length) THUMBS[k + '.' + o.id] = f; setTimeout(next, 30); }; setTimeout(next, 150);
+    let busyT = 0; const cvEl = document.getElementById('cv'); if (cvEl) for (const ev of ['pointerdown', 'pointermove', 'wheel']) cvEl.addEventListener(ev, (e) => { if (ev !== 'pointermove' || e.buttons) busyT = performance.now(); }, { passive: true });
+    const pick = () => { const has = (k, o) => THUMBS[k + '.' + o.id]; let c = list.find(([k, o]) => k === open && !has(k, o)); if (c) return [c, 1, true];
+      c = list.find(([k, o]) => k === open && has(k, o).length < 2); if (c) return [c, TF, false]; c = list.find(([k, o]) => !has(k, o)); return c ? [c, 1, false] : null; };
+    const pump = () => { const later = (ms) => (window.requestIdleCallback ? setTimeout(() => requestIdleCallback(pump, { timeout: 800 }), ms) : setTimeout(pump, ms));
+      if (performance.now() - busyT < 1200) return later(400);          /* (hands off while the character is being turned) */
+      const n = pick(); if (!n) return later(1500); const [[k, o], frames, show] = n; const f = thumbItem(k, o, frames); if (f.length) THUMBS[k + '.' + o.id] = f; if (show) renderGrid(); later(frames > 1 ? 350 : show ? 120 : 450); };
+    setTimeout(pump, 600);
   }
   setInterval(() => { document.querySelectorAll('.th img[data-k]').forEach((im) => { const fr = THUMBS[im.dataset.k]; if (!fr || fr.length < 2) return; const i = Math.round((Math.sin(performance.now() / 750 + (+im.dataset.i || 0)) + 1) / 2 * (fr.length - 1)); if (im.dataset.f !== String(i)) { im.dataset.f = i; im.src = fr[i]; } }); }, 100);
   setInterval(() => { const tiles = [...document.querySelectorAll('#grid .opt:not(.on):not(.sw)')]; if (!tiles.length) return; document.querySelectorAll('.opt.tease').forEach((x) => x.classList.remove('tease')); let tot = 0; const w = tiles.map((x) => { const m = /rar(\d)/.exec(x.className); const v = 1 + (m ? +m[1] : 0) * 1.5; tot += v; return v; }); let q = Math.random() * tot, k = 0; while (k < tiles.length - 1 && (q -= w[k]) > 0) k++; const tile = tiles[k]; tile.classList.add('tease'); setTimeout(() => tile.classList.remove('tease'), 1100); }, 1600);
