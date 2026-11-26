@@ -408,7 +408,7 @@ function fxNow(t) { if (FXF) return [FXF, 1, .6]; if (t > FX.next && t > FX.t1) 
 const SPT = { t: 0 };
 function drawSky(t, dt, cxm, hz, k) { if (!SKY) return false; const { gl, U } = SKY, q = Math.min(1.25, DPR), w = Math.round(W * q), h = Math.round(H * q);
   if (skyc.width !== w || skyc.height !== h) { skyc.width = w; skyc.height = h; } gl.viewport(0, 0, w, h);
-  DRIVE.z += dt * (CALM ? 18 : 42);          /* about 150 km/h */
+  DRIVE.z += dt * (CALM ? 18 : 42) * SURGE.v;          /* about 150 km/h */
   const camX = roadC(DRIVE.z + 14) + .7 * Math.sin(t * .63), camH = 1.7 + .035 * Math.sin(t * 7.3) + .02 * Math.sin(t * 11.1);          /* the car follows the road a little behind the curve, with a gentle sway and a road hum */
   const beat = Math.pow(Math.max(0, Math.cos(t * Math.PI * 2 * 2.05)), 10) * .5, gt = (t - 3) % 8.73, glass = t < 3 ? 0 : gt < .25 ? gt / .25 : Math.max(0, 1 - (gt - .25) / 2.6);
   const tc = TUNE.k > .005 ? specNow().map((v) => v / 255) : [0, 0, 0];
@@ -431,9 +431,17 @@ if (/[?&]real(&|$)/.test(location.search)) GAME.el.src = GAME.el.dataset.src + '
 GAME.f = 0; GAME.at = 0; function gameDial(f) { if (!GAME.ready) return; const n = performance.now(); if (Math.abs(f - GAME.f) < 1 || n - GAME.at < 90) return; GAME.f = f; GAME.at = n; try { GAME.el.contentWindow.__splashDial(f); } catch (e) { } }
 setInterval(() => { if (GAME.ready) return; try { const w = GAME.el.contentWindow; if (w && w.__splashReady && w.__G && w.__G.PH && w.__G.PH.z < -30) { GAME.ready = true; GAME.el.classList.add('on'); setTimeout(() => { skyc.style.display = 'none'; }, 1500); } } catch (e) { } }, 400);
 function gameTint() { return;          /* (off: the background keeps its own colours) */ if (!GAME.ready) return; const c = TUNE.k > .005 ? specNow() : [0, 0, 0], key = c.join(',') + ':' + TUNE.k.toFixed(2); if (key === GAME.tint) return; GAME.tint = key; try { const w = GAME.el.contentWindow; w.__splashTint && w.__splashTint(c[0] / 255, c[1] / 255, c[2] / 255, TUNE.k * .7); } catch (e) { } }
+/* THE SURGE (owner 2026-11-26): now and then the car punches forward: the view tightens (a zoom of up to a fifth) and the road rushes at twice the speed, then
+   eases back over a second and a half, as if the driver floored it and lifted off. More often and harder as MAX INTENSITY climbs; never under reduced motion. */
+const SURGE = { k: 1, v: 1, t: -1, next: 9 }; window.__SURGE = SURGE;
+function surgeStep(t, dt) { if (CALM) return; const I = INT();
+  if (SURGE.t < 0 && t > SURGE.next) { SURGE.t = 0; SURGE.amp = (.1 + .1 * I.t) * (.7 + .3 * Math.random()); }
+  if (SURGE.t >= 0) { SURGE.t += dt; const u = SURGE.t, e = u < .35 ? u / .35 : u < .95 ? 1 : Math.max(0, 1 - (u - .95) / 1.4), s = e * e * (3 - 2 * e);
+    SURGE.k = 1 - SURGE.amp * s; SURGE.v = 1 + 1.4 * s; if (u > 2.4) { SURGE.t = -1; SURGE.k = 1; SURGE.v = 1; SURGE.next = t + (24 - 14 * I.t) * (.6 + .8 * Math.random()); } } }
 function draw(t, dt) {
+  surgeStep(t, dt || 0);
   const short = W > H && H <= 500, hz = H * (short ? .8 : W > H ? .68 : .62), cxm = W / 2, k = wave(t);
-  const room = molRoom(short), my = room.y, sk = .28 / Math.max(20, hz - my);          /* the molecule sits midway between the words, on the sky's sun */
+  const room = molRoom(short), my = room.y, sk = .28 / Math.max(20, hz - my) * SURGE.k;          /* (the surge tightens the view) */          /* the molecule sits midway between the words, on the sky's sun */
   cx.clearRect(0, 0, W, H); bx.clearRect(0, 0, W, H); mxc.clearRect(0, 0, W, H); let g;
   gameTint();
   if (GAME.ready && skyc.style.display === 'none') { } else if (!drawSky(t, dt || 0, cxm, hz, sk)) { g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#05060f'); g.addColorStop(.6, '#4a2a2a'); g.addColorStop(1, '#07060a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H); }
