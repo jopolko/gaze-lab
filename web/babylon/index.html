@@ -3942,9 +3942,12 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   const CLEAR = { on: Q.get('clear') !== '0' && Q.get('fx') !== '0' && !Q.has('splash'), force: null, wins: 0, next: 6, n: 0, reach: 500, slow: 0 };
   if (CLEAR.on) { try { (() => {
     const GP = /^(pill|beam|mol_|molbeam|dosemol|dosebeam|dosename|pad|bb_|bh_|bp_|kring|kret|landring|pyl|drop|acc|bombs|bFunnel|sg[a-z]|sight|raid|craft|jet|blimp|heli|barge|saucer|fighter|jelly|rail|sign|label|lbl|txt|text|exit|gate|lens|crate|case|lamp)/i, MASK = 0x20000000;
-    const cam2 = new B.FreeCamera('clearcam', B.Vector3.Zero(), scene); cam2.parent = cam; cam2.minZ = cam.minZ; cam2.maxZ = cam.maxZ; cam2.layerMask = MASK; cam2.inputs.clear();
+    const cam2 = new B.FreeCamera('clearcam', B.Vector3.Zero(), scene); cam2.minZ = cam.minZ; cam2.maxZ = cam.maxZ; cam2.layerMask = MASK; cam2.inputs.clear();
     scene.activeCameras = [cam, cam2]; try { xr && xr.baseExperience && xr.baseExperience.onStateChangedObservable.add((st) => { scene.activeCameras = st === B.WebXRState.IN_XR || st === B.WebXRState.ENTERING_XR ? [] : [cam, cam2]; }); } catch (e) { }          /* (in a headset the XR camera renders alone) */
-    scene.onBeforeRenderObservable.add(() => { cam2.fov = cam.fov; cam2.minZ = cam.minZ; cam2.maxZ = Math.min(cam.maxZ, CLEAR.reach); });          /* (the clean pass looks 500 m ahead: beyond that objects are specks and take the wash; halves its cost) */
+    scene.onBeforeRenderObservable.add(() => { cam2.fov = cam.fov; cam2.minZ = cam.minZ; cam2.maxZ = Math.min(cam.maxZ, CLEAR.reach); });
+    /* (owner 2026-11-26, rings/gates/boosts 'flying forward up in the sky': parented to the game camera, the clean camera faced BACKWARDS on every device, so the clean
+       objects were drawn from a rear view over the picture. Now it is a free camera that copies the game camera's position, facing and roll right before it draws.) */
+    const UPV = new B.Vector3(), FWV = new B.Vector3(), TGT = new B.Vector3(); scene.onBeforeCameraRenderObservable.add((c) => { if (c !== cam2) return; try { const wm = cam.getWorldMatrix(); cam2.position.copyFrom(cam.globalPosition); B.Vector3.TransformNormalToRef(B.Axis.Y, wm, UPV); cam2.upVector.copyFrom(UPV.normalize()); FWV.copyFrom(cam.getForwardRay(1).direction); cam2.position.addToRef(FWV, TGT); cam2.setTarget(TGT); cam2.getViewMatrix(true); } catch (e) { } });          /* (the clean pass looks 500 m ahead: beyond that objects are specks and take the wash; halves its cost) */
     const OCC = new Set();          /* (the terrain's materials: colour off while the clean camera draws, so they only lay down depth) */
     const occ = (m) => !!(m.__cat || /^(src|prop_|stTunnel|tun|wall|cliff|rock|ground)/i.test(m.name || '')) && !/^(sky|tdome|tband|ring|hud|weather)/i.test(m.name || '');
     let clearNow = true;
