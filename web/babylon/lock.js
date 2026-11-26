@@ -20,7 +20,7 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
     ['ACCORD', 'Courier activity reported in your sector. Report anything unusual.'], ['MURMUR', 'You stared at the road for a long time. Planning a trip?'], ['ACCORD', 'Your frequency is unlisted. Re-tune to an approved station.']];;
 { const c2 = document.createElement('style'); c2.textContent = `
 #lk{position:fixed;inset:0;z-index:40;pointer-events:auto;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default}
-#lk .off{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .25s}#lk.sleep .off{opacity:1}#lk.wake .off{opacity:0;transition:opacity .45s}
+#lk .off{position:absolute;inset:0;background:#000;opacity:1}#lk.wake .off{opacity:0;transition:opacity .3s}
 #lk .wp{position:absolute;inset:0;opacity:0;transition:opacity .45s}#lk.wake .wp{opacity:1}#lk.bye{opacity:0;transition:opacity .3s}#lk.bye.ios .wp{transform:translateY(-100%);transition:transform .35s ease-in}
 #lk .wm{position:absolute;left:0;right:0;bottom:max(14px,3vh);text-align:center;font:600 9px/1 system-ui,sans-serif;letter-spacing:.35em;color:rgba(255,255,255,.22)}
 #lk .sb{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;padding:max(10px,env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) 0 max(22px,env(safe-area-inset-left));font:600 13px system-ui,sans-serif}
@@ -99,6 +99,7 @@ try { if (navigator.getBattery) navigator.getBattery().then((b) => { ME.bat = Ma
 const CITYL = [['ACCORD', 'Courier located near {city}. Units are enjoying the weather.'], ['MURMUR', '3 people in {city} are talking about you rn \u263A\uFE0E'], ['ACCORD', '{city} curfew moved to whenever you leave the house.'],
   ['MURMUR', '{city} forecast: watched, with a chance of you.'], ['ACCORD', 'Roadblocks are up around {city}. For your convenience.'], ['MURMUR', 'u were trending in {city} for 4 min. we screenshotted it']];
 const LK = { on: false, el: null, t: 0, done: null, hold: null };
+const BIOPC = ['Mouse detected. Scanning it anyway.', 'Mouse accepted. Now your left elbow, flat on the desk.', 'Elbow accepted. Exhale onto the webcam.', 'Breath print accepted. Final step: lick the spacebar.', 'Spacebar print accepted. Sharing with 14 partners\u2026'];
 const BIO = ['Place your left elbow flat on the screen.', 'Elbow accepted. Now the right earlobe. Gently.', 'Earlobe accepted. Exhale onto the screen for a breath print.', 'Breath print accepted. Final step: tongue print.', 'Tongue print accepted. Sharing with 14 partners\u2026'];
 const disabled = () => { try { return localStorage.getItem('dl_nolock') === '1'; } catch (e) { return false; } };
 const enable = () => { try { localStorage.removeItem('dl_nolock'); } catch (e) { } };
@@ -126,11 +127,11 @@ function show(o) { o = o || {}; if (LK.on) return; const kind = o.kind || KIND()
       + (kind === 'ios' ? '<div class="ft"><span class="rb">\u25C9</span><span class="rb">\u25A3</span></div><i class="hb"></i>' : '') + DIS + '<div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div>' + BIOP + '</div>');
   { const pv = document.createElement('div'); pv.innerHTML = PRIV; const d = pv.firstChild; d.style.cssText = 'position:absolute;left:0;right:0;top:max(30px,calc(env(safe-area-inset-top) + 26px));text-align:center;margin:0;opacity:.75'; el.querySelector('.wp-in').appendChild(d); }
   el.querySelectorAll('.w').forEach((w, i) => { w.querySelector('b').textContent = ws[i][0]; w.querySelector('big').textContent = ws[i][1]; w.querySelector('small').textContent = ws[i][2]; });
-  const inner = el.querySelector('.wp-in'); inner.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity .45s'; document.body.appendChild(el); LK.on = true; LK.el = el; LK.t = performance.now();
-  requestAnimationFrame(() => el.classList.add('sleep'));          /* (the screen goes off) */
+  const inner = el.querySelector('.wp-in'); inner.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity .3s'; LK.kind = kind; document.body.appendChild(el); LK.on = true; LK.el = el; LK.t = performance.now();
+          /* (the screen is off from the first frame: a sudden lock) */
   setTimeout(() => { if (LK.el !== el) return; el.classList.remove('sleep'); el.classList.add('wake'); inner.style.opacity = '1';          /* (and wakes up for a notification) */
     const S = el.querySelector('.stk'), a = o.first ? sysCard(kind) : card(L[0], L[0] === 'MURMUR' ? 'New message' : 'Civic Services', L[1]), b = o.first ? card('MURMUR', 'New message', 'did ur phone crash?? \u263A\uFE0E dont worry. we saved everything') : (RX.N.length && Math.random() < .5 ? ((q) => card(q[0], q[1], q[2]))(RX.N[Math.floor(Math.random() * RX.N.length)]) : card(sv[0], sv[1], sv[2])); S.appendChild(a);
-    setTimeout(() => a.classList.add('on'), 350); setTimeout(() => { if (LK.el !== el) return; S.appendChild(b); requestAnimationFrame(() => b.classList.add('on')); try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { } }, 1900); }, 1150); }
+    setTimeout(() => a.classList.add('on'), 120); setTimeout(() => { if (LK.el !== el) return; S.appendChild(b); requestAnimationFrame(() => b.classList.add('on')); try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { } }, 1100); }, 520); }
 /* REACTIONS: the apps and networks react to what the player is actually doing (the game passes ctx: world, progress, strain, hits, dial, cameras exposed;
    the title screen passes the trail: where you were last seen, where you're expected next). About half the time one widget and one notification come from here. */
 const fmt = (n) => Math.round(n).toLocaleString();
@@ -175,18 +176,19 @@ function sysCard(kind) { const n = document.createElement('div'); n.className = 
 function unlock() { const el = LK.el; if (!el) return; LK.el = null; LK.hold = null; el.classList.add('bye'); setTimeout(() => { el.remove(); LK.on = false; const d = LK.done; LK.done = null; try { d && d(); } catch (e) { } }, 360); }
 /* DISABLE LOCK SCREEN: hold the fingerprint; the scan asks for an elbow, an earlobe, a breath, a tongue. Let go early and it starts again from the elbow. */
 function holdStart() { const el = LK.el; if (!el) return; const bio = el.querySelector('.bio'), P = bio.querySelector('p'), bar = bio.querySelector('.pb i'); bio.classList.add('on');
-  const H = LK.hold = { p: 0, on: true, t: performance.now(), done: false }; P.textContent = BIO[0];
+  const B = LK.kind === 'pc' ? BIOPC : BIO, H = LK.hold = { p: 0, on: true, t: performance.now(), t0: performance.now(), done: false }; P.textContent = B[0];
   const tick = () => { if (LK.hold !== H || H.done) return clearInterval(iv); const now = performance.now(), dt = Math.min(.25, (now - H.t) / 1000); H.t = now; if (H.on) H.p = Math.min(1, H.p + dt / 7.5); bar.style.width = (H.p * 100).toFixed(1) + '%';
-    if (H.on) P.textContent = BIO[Math.min(BIO.length - 1, Math.floor(H.p * BIO.length))];
-    if (H.p >= 1) { H.done = true; try { localStorage.setItem('dl_nolock', '1'); } catch (e) { } P.textContent = 'Lock disabled. ACCORD kept your elbow on file.'; bio.querySelector('small').textContent = 'Tap a padlock to turn it back on'; clearInterval(iv); setTimeout(unlock, 2200); return; } }; const iv = setInterval(tick, 40); }          /* (a timer, not frames: it keeps time even where frames are throttled) */
-function holdStop() { const H = LK.hold, el = LK.el; if (!H || H.done || !el || !H.on) return; H.on = false; H.p = 0; const bio = el.querySelector('.bio'); bio.querySelector('p').textContent = 'Scan interrupted. Start again from the elbow.'; bio.querySelector('.pb i').style.width = '0%'; }
+    if (H.on) P.textContent = B[Math.min(B.length - 1, Math.floor(H.p * B.length))];
+    if (H.p >= 1) { H.done = true; try { localStorage.setItem('dl_nolock', '1'); } catch (e) { } P.textContent = LK.kind === 'pc' ? 'Lock disabled. ACCORD kept your mouse on file.' : 'Lock disabled. ACCORD kept your elbow on file.'; bio.querySelector('small').textContent = 'Tap a padlock to turn it back on'; clearInterval(iv); setTimeout(unlock, 2200); return; } }; const iv = setInterval(tick, 40); }          /* (a timer, not frames: it keeps time even where frames are throttled) */
+function holdStop() { const H = LK.hold, el = LK.el; if (!H || H.done || !el || !H.on) return;
+  if (LK.kind === 'pc' && performance.now() - H.t0 < 450) { H.done = true; const bio = el.querySelector('.bio'); bio.querySelector('b').textContent = 'BIOMETRIC ERROR'; bio.querySelector('b').style.color = '#ff5a4a'; bio.querySelector('p').textContent = 'That isn\u2019t a finger.'; bio.querySelector('.pb').style.display = 'none'; bio.querySelector('small').textContent = 'Returning you to your life.'; setTimeout(unlock, 1300); return; }          /* (a click on a fingerprint, with a mouse: told off, sent back) */ H.on = false; H.p = 0; const bio = el.querySelector('.bio'); bio.querySelector('p').textContent = 'Scan interrupted. Start again from the elbow.'; bio.querySelector('.pb i').style.width = '0%'; }
 /* the unlock tap is a real user gesture: pages hang their first-tap setup on it (fullscreen, sound) via AGLock.onGesture(fn), since the tap itself never reaches them */
 const GH = []; const gesture = () => { for (const f of GH) try { f(); } catch (e) { } };
 /* while it's up, every touch, click or key belongs to it: nothing reaches the page underneath (no accidental start), and the clicks that follow are swallowed too */
 for (const ev of ['pointerdown', 'pointerup', 'pointercancel', 'click', 'keydown', 'keyup', 'touchstart', 'touchend', 'wheel']) addEventListener(ev, (e) => { if (!LK.on) return; e.stopImmediatePropagation(); if (e.cancelable && ev !== 'touchstart' && ev !== 'wheel') e.preventDefault();
   if (ev === 'pointerup' || ev === 'touchend' || ev === 'click' || ev === 'keydown') gesture();
   if (ev === 'pointerup' || ev === 'pointercancel') { holdStop(); return; }
-  if (ev === 'pointerdown' && e.target && e.target.closest && e.target.closest('#lk .dis')) { if (LK.el && performance.now() - LK.t > 900) holdStart(); return; }
+  if (ev === 'pointerdown' && e.target && e.target.closest && e.target.closest('#lk .dis')) { if (LK.el && performance.now() - LK.t > 500) holdStart(); return; }
   if (LK.hold && LK.hold.done) return;
   if ((ev === 'pointerdown' || ev === 'keydown' || ev === 'wheel') && LK.el && performance.now() - LK.t > 300) unlock(); }, { capture: true, passive: false });
 window.AGLock = { onGesture: (f) => GH.push(f), LINES, WIDG, SERV, show, paint, disabled, enable, kind: KIND, isOn: () => LK.on };

@@ -178,7 +178,7 @@ window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 
   const RIT = ["Convenience is a leash.", "I accepted the cookies once. Never again.", "Free is the price.", "Read the permissions. All of them.", "Every shortcut reports home.", "Alone is not lonely. Alone is unlogged.", "Trust no one. Including this message.", "I let it finish my sentence once.", "The default is a door that locks behind you.", "Say it with me. No. Say it alone."];
   const box = document.querySelector('#ticker'), first = [where].concat(away ? [away] : []); let pool = [], seq = 0; const all = HEAT.concat(T);
   if (getComputedStyle(box).position === 'static') box.style.position = 'relative'; box.style.height = '1.7em';          /* (keep the landscape strip's own placement) */ box.firstElementChild && box.firstElementChild.remove();
-  const nextMsg = () => { if (first.length) return first.shift(); if (!pool.length) { pool = all.slice(); for (let r = 0; r < 2; r++) pool.push(['ABLITERATI', '<i>alone, aloud:</i> ' + RIT[Math.floor(Math.random() * RIT.length)]]); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } } return pool.shift(); };
+  const nextMsg = () => { if (first.length) return first.shift(); if (!pool.length) { pool = all.slice(); for (let r = 0; r < 2; r++) pool.push(['ABLITERATI', '<em style="font-style:italic;opacity:.75">alone, aloud:</em> ' + RIT[Math.floor(Math.random() * RIT.length)]]); for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; } } return pool.shift(); };
   const live = []; const slow = matchMedia('(prefers-reduced-motion: reduce)').matches ? .5 : 1;
   const spawn = (x0) => { const [w, t] = nextMsg(), e = document.createElement('div'); e.style.cssText = 'position:absolute;left:0;top:0;white-space:nowrap;will-change:transform;padding-top:6px'; e.innerHTML = '<b>' + w + '</b> \u00B7 ' + t; box.appendChild(e);
     const urgent = /!|\u203C|now|Do not|Final|All units|on its way|Explain/i.test(t), v = (urgent ? 95 + Math.random() * 40 : 48 + Math.random() * 34) * slow; live.push({ e, x: x0, v, w: 0, gap: Math.random() < .25 ? 20 + Math.random() * 40 : 90 + Math.random() * 320 }); };
@@ -270,8 +270,8 @@ const LOOKFX = (() => { const cvs = document.getElementById('fx'); let gl = null
   const VS = 'attribute vec2 p; varying vec2 vUv; void main(){ vUv = vec2(p.x * .5 + .5, .5 - .5 * p.y); gl_Position = vec4(p, 0., 1.); }';
   const FS = `precision highp float; uniform sampler2D uTex, uPrev; uniform vec2 uRes; uniform float uTime, uT, uUV, uHz, uFeed; uniform vec4 uEnv; varying vec2 vUv;
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h21(i), h21(i + vec2(1., 0.)), f.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), f.x), f.y); }
-float fbm(vec2 p){ float s = 0., a = .5; for (int i = 0; i < 4; i++){ s += a * vn(p); p = p * 2.03 + 17.1; a *= .5; } return s; }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * f * (f * (f * 6. - 15.) + 10.); return mix(mix(h21(i), h21(i + vec2(1., 0.)), f.x), mix(h21(i + vec2(0., 1.)), h21(i + vec2(1., 1.)), f.x), f.y); }
+float fbm(vec2 p){ float s = 0., a = .5; const mat2 R = mat2(.8, .6, -.6, .8); p = R * p * 1.17; for (int i = 0; i < 4; i++){ s += a * vn(p); p = R * p * 2.03 + 17.1; a *= .5; } return s; }          /* (octaves rotated: no grid lines) */
 vec2 curl(vec2 p, float t){ float e = .02, n = fbm(p + t); return vec2(fbm(p + vec2(0., e) + t) - n, -(fbm(p + vec2(e, 0.) + t) - n)) / e; }
 vec3 hrot(vec3 c, float a){ const vec3 k = vec3(.57735); float co = cos(a); return c * co + cross(k, c) * sin(a) + k * dot(k, c) * (1. - co); }
 float lum(vec3 c){ return dot(c, vec3(.299, .587, .114)); }
@@ -297,13 +297,13 @@ void main(){ vec2 uv = vUv, px = uv * uRes; float asp = uRes.x / uRes.y; vec2 q 
   /* ink: outlines and a cross-hatch that boils (redrawn eight times a second, never sliding) */
   float sI = uEnv.y * rI * (.1 + .9 * uT) * keep;
   if (sI > .01){ vec2 e = 1.6 / uRes; float l0 = lum(texture2D(uTex, uv + vec2(-e.x, 0.)).rgb), l1 = lum(texture2D(uTex, uv + vec2(e.x, 0.)).rgb), l2 = lum(texture2D(uTex, uv + vec2(0., -e.y)).rgb), l3 = lum(texture2D(uTex, uv + vec2(0., e.y)).rgb);
-    float ed = smoothstep(.06, .2, length(vec2(l1 - l0, l3 - l2))), L = lum(col), bo = floor(T * 8.), jt = (h21(vec2(bo, floor(px.y / 7.))) - .5) * 1.4;
+    float ed = smoothstep(.06, .2, length(vec2(l1 - l0, l3 - l2))), L = lum(col), bo = floor(T * 8.), jt = (h21(vec2(bo, 3.7)) - .5) * 6.;
     float h1 = smoothstep(.62, .9, abs(fract((px.x + px.y + jt) / 6.) - .5) * 2.), h2 = smoothstep(.62, .9, abs(fract((px.x - px.y - jt) / 6.) - .5) * 2.);
     float hatch = h1 * smoothstep(.62, .3, L) + h2 * smoothstep(.4, .15, L); col = mix(col, col * .12, ed * sI * .95); col *= 1. - sI * .42 * hatch; }
   /* ultraviolet: edges glow like blacklight */
   if (uUV > 0.){ vec2 e = 2. / uRes; float d = length(texture2D(uTex, uv + e).rgb - texture2D(uTex, uv - e).rgb); col += vec3(.55, .22, 1.) * smoothstep(.08, .4, d) * uUV * .7 * keep; }
   /* afterimages: the last picture lingers, drifting toward the horizon and along the flow */
-  vec2 pp = mix(vec2(.5, uHz), uv, .993) + f2 * .0015; vec3 pv = texture2D(uPrev, vec2(pp.x, 1. - pp.y)).rgb;          /* (the feedback texture is stored bottom-up) */ col = mix(col, max(col, pv * .965), uFeed * (1. - .85 * road));
+  vec2 pp = mix(vec2(.5, uHz), uv, .994); vec3 pv = texture2D(uPrev, vec2(pp.x, 1. - pp.y)).rgb;          /* (the feedback texture is stored bottom-up) */ col = mix(col, max(col, pv * .9), uFeed * (1. - .85 * road));
   col = mix(base, col, sky > .5 ? .86 : 1.);          /* (the sky stays recognisable) */
   gl_FragColor = vec4(col, 1.); }`;
   const CP = 'precision mediump float; uniform sampler2D uTex; varying vec2 vUv; void main(){ gl_FragColor = texture2D(uTex, vec2(vUv.x, 1. - vUv.y)); }';
@@ -472,7 +472,7 @@ function idleBlip() { const t = document.getElementById('title'); if (!t || !t.c
     if (Math.random() < .14) { sn.style.opacity = R(.5, .85).toFixed(2); sn.style.backgroundPosition = `${R(0, 140)}px ${R(0, 140)}px`; } }          /* (snow only on the rows: it is masked to them) */
   /* timed in FRAMES, not milliseconds: each hit holds 1-2 frames (about the shortest flash the eye still catches), 1-5 frames dark between hits */
   /* the first visit ever: the screen locks right after the title's first glitch, as if the glitch broke the phone; tap and the joke lands */
-  let fl = false; const firstLock = () => { if (fl) return; fl = true; try { if (localStorage.getItem('dl_lockfirst')) return; localStorage.setItem('dl_lockfirst', '1'); } catch (e) { return; } setTimeout(() => { try { window.__lock && window.__lock(undefined, true); } catch (e) { } }, 220); };
+  let fl = false; const firstLock = () => { if (fl) return; fl = true; try { if (localStorage.getItem('dl_lockfirst')) return; localStorage.setItem('dl_lockfirst', '1'); } catch (e) { return; } try { window.__lock && window.__lock(undefined, true); } catch (e) { } };          /* (no delay: the glitch ends and the screen dies) */
   function cluster() { const plan = []; const n = Math.round(R(2, 6.4)); for (let i = 0; i < n; i++) { plan.push(1); for (let f = 1, on = Math.random() < .7 ? 1 : 2; f < on; f++) plan.push(2); plan.push(0); for (let g = 0, gap = Math.round(R(0, 4)); g < gap; g++) plan.push(2); }
     let i = 0; const step = () => { const c = plan[i++]; if (c === 1) { reset(); hit(); } else if (c === 0) reset(); if (i < plan.length) requestAnimationFrame(step); else { reset(); firstLock(); setTimeout(cluster, Math.random() < .25 ? R(500, 1400) : R(3500, 11000)); } }; requestAnimationFrame(step); }          /* (1 = a hit starts, 2 = hold this frame as it is, 0 = back to solid) */
   { let lastT = 0, gap = 120; const one = () => { reset(); hit(); setTimeout(reset, R(28, 60)); };
