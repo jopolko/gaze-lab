@@ -49,7 +49,7 @@ import { createGvMusic } from '../downhill-three/gvmusic.js';
 import { startLoop, preloadLoop } from '../downhill-three/looper.js';
 import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
-import { createIntro } from './intro.js?v=20261126g';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
+import { createIntro } from './intro.js?v=20261126h';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js';
 import { planRoad, planPlay, findTunnel, seedOf } from './director.js';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
@@ -2350,7 +2350,9 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
       { ic: '\u2726', nm: 'THE PRIZE', st: LV.took ? 'won' : 'miss', sub: LV.took ? 'taken: the world went all in' : 'got away this time' },
       { ic: '\u25C6', nm: 'CRYSTALS', st: pct >= .8 ? 'won' : pct >= .4 ? 'part' : 'miss', sub: Math.round(pct * 100) + '% \u00B7 ' + shapes },
       { ic: '\u2708', nm: 'RAIDERS', st: downs ? 'won' : (RAID.n ? 'miss' : 'part'), sub: downs ? downs + ' brought down' : (RAID.n ? 'they got away' : 'none came') },
-      { ic: '\u27B0', nm: 'SET PIECES', st: SM.done ? (SM.full ? 'won' : 'part') : 'miss', sub: SM.done + ' ridden' + (SM.paid ? ' \u00B7 ' + SM.paid + ' debt' + (SM.paid > 1 ? 's' : '') + ' paid' : '') }];
+      { ic: '\u27B0', nm: 'SET PIECES', st: SM.done ? (SM.full ? 'won' : 'part') : 'miss', sub: SM.done + ' ridden' + (SM.paid ? ' \u00B7 ' + SM.paid + ' debt' + (SM.paid > 1 ? 's' : '') + ' paid' : '') },
+      { ic: '\u25C9', nm: 'SIGHTS', st: SIGHT.spawned && SIGHT.found >= SIGHT.spawned ? 'won' : SIGHT.found ? 'part' : 'miss', sub: SIGHT.spawned ? SIGHT.found + ' / ' + SIGHT.spawned + ' cameras' + (SIGHT.uvSpawned ? ' \u00B7 UV ' + SIGHT.uv + ' / ' + SIGHT.uvSpawned : '') : 'take a dose to see them' }];          /* (raise MAX INTENSITY to see more) */
+    try { const P2 = JSON.parse(localStorage.getItem('dl_prog') || '{}'); P2.worlds = P2.worlds || {}; const w2 = P2.worlds[WORLD0] = P2.worlds[WORLD0] || {}; w2.sights = Math.max(w2.sights || 0, SIGHT.found); w2.uvSights = Math.max(w2.uvSights || 0, SIGHT.uv); localStorage.setItem('dl_prog', JSON.stringify(P2)); } catch (e) { }
     const chips = [{ t: (hits ? hits + ' hit' + (hits > 1 ? 's' : '') : 'no hits') }, { t: 'RUSH \u00D7' + (DOP.n || 0) }, { t: gq + ' / ' + QI.length + ' quests' }];
     if (GEAR.id) chips.push({ t: 'best streak x' + GEAR.maxM.toFixed(1) });
     const loose = [...new Set(SM.loose)]; if (loose.length) chips.push({ t: 'LOOSE ENDS: ' + loose.join(' \u00B7 ') + ' (they come back)', warn: true });
@@ -2521,7 +2523,30 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     if (DOSE.ph === 'glow') return { phase: 'comedown', tripOn: false, chill: true };
     return { phase: 'settle', tripOn: false };
   };
-  function doseTake(cp, x, y, z) { LVMOLS.n++;
+  /* SIGHTS (intensity-aware missions, v1; docs/AFTERGLOW_RECORD.md): each dose hides ACCORD cameras along the road ahead, visible ONLY on the trip, and only while
+     the trip is strong enough: felt = how hard this dose is hitting now x its ceiling x MAX INTENSITY (the title dial). Chill dial: about one a dose; the default: two;
+     intense: all three. In ULTRAVIOLET a fourth appears: a floating fragment of the Lamp, worth far more. Drive through one to expose it. Best per world is saved. */
+  const SIGHT = { list: [], spawned: 0, found: 0, uv: 0, uvSpawned: 0, told: false, toldUV: false, mats: null };
+  function sightMats() { return SIGHT.mats || (SIGHT.mats = { body: solidMat([.12, .12, .15], 'sgB'), head: solidMat([.22, .22, .27], 'sgH'), eye: solidMat([2.8, .3, .2], 'sgE'), band: solidMat([2.2, 1.4, .3], 'sgA'), frag: solidMat([2.6, 2.4, 1.8], 'sgF'), ring: solidMat([1.6, .9, 2.6], 'sgR') }); }
+  function sightBuild(uv, side) { const M = sightMats(), r = new B.TransformNode('sight', scene), add = (mesh, m, x, y, z) => { mesh.material = m; mesh.parent = r; mesh.position.set(x, y, z); mesh.isPickable = false; return mesh; };
+    if (uv) { add(B.MeshBuilder.CreateIcoSphere('sgf', { radius: .95, subdivisions: 1 }, scene), M.frag, 0, 3.2, 0); const rg = add(B.MeshBuilder.CreateTorus('sgr', { diameter: 3, thickness: .12, tessellation: 28 }, scene), M.ring, 0, 3.2, 0); rg.__spin = 1; }
+    else { add(B.MeshBuilder.CreateBox('sgp', { width: .22, height: 3, depth: .22 }, scene), M.body, 0, 1.5, 0); add(B.MeshBuilder.CreateBox('sgh', { width: 1.1, height: .55, depth: .7 }, scene), M.head, 0, 3.15, 0);
+      const e = add(B.MeshBuilder.CreateCylinder('sge', { diameter: .42, height: .3, tessellation: 16 }, scene), M.eye, -side * .6, 3.15, 0); e.rotation.z = Math.PI / 2; add(B.MeshBuilder.CreateBox('sga', { width: 1.12, height: .08, depth: .72 }, scene), M.band, 0, 2.86, 0); }
+    r.scaling.setAll(.001); r.setEnabled(false); return r; }
+  function sightsSpawn(cp) { if (Q.has('splash')) return; const TH = [.25, .6, .95]; [260, 520, 800].forEach((d, i) => { const z = PH.z - d, side = Math.random() < .5 ? -1 : 1; SIGHT.list.push({ cp, z, side, off: side * (8 + Math.random() * 7), th: TH[i], uv: false, root: sightBuild(false, side), k: 0 }); SIGHT.spawned++; });
+    if (window.__SIG.uv > .15) { const z = PH.z - 1050, side = Math.random() < .5 ? -1 : 1; SIGHT.list.push({ cp, z, side, off: side * 6, th: 1.5, uv: true, root: sightBuild(true, side), k: 0 }); SIGHT.uvSpawned++; } }
+  function sightsStep(dt) { SIGHT.ticks = (SIGHT.ticks || 0) + 1; if (!SIGHT.list.length) return; SIGHT.dbg = (DOSE.comp || '-') + ' ' + (+(DOSE.w || 0)).toFixed(2) + ' ' + WCAP + ' ' + window.__SIG.c; const felt = (cp) => (DOSE.comp === cp ? (DOSE.w || 0) * Math.min(1, (DOSE.ceil || .5) / Math.max(.3, .92 * WCAP)) * window.__SIG.c : 0)          /* (relative to the world's own cap, so every world plays the same: chill ~1 a dose, default 2, intense 3) */, t = performance.now() / 1000;
+    for (let i = SIGHT.list.length - 1; i >= 0; i--) { const q = SIGHT.list[i];
+      if (PH.z < q.z - 60) { try { q.root.dispose(); } catch (e) { } SIGHT.list.splice(i, 1); continue; }          /* (missed: it stays ACCORD's) */
+      if (Math.abs(q.z - PH.z) > 1400) continue; const x = trailX(q.z) + q.off, g = th(x, q.z), gy = Number.isFinite(g) ? g : PH.y, want = felt(q.cp) >= q.th ? 1 : 0;
+      q.k += (want - q.k) * Math.min(1, dt * 3); q.root.setEnabled(q.k > .02); if (q.k <= .02) continue; q.root.position.set(x, gy + (q.uv ? .4 * Math.sin(t * 1.7) : 0), q.z); q.root.scaling.setAll(Math.max(.001, q.k));
+      for (const m of q.root.getChildMeshes()) if (m.__spin) { m.rotation.x = t * .9; m.rotation.y = t * 1.3; }
+      if (want && !SIGHT.told && !q.uv && q.z < PH.z && PH.z - q.z < 220) { SIGHT.told = true; let n = 0; try { n = +localStorage.getItem('dl_sighttip') || 0; localStorage.setItem('dl_sighttip', n + 1); } catch (e) { } if (n < 2) try { stBannerNow('Sight', stepsHtml('ACCORD CAMERA', ['Only visible on the trip', 'Drive through it']), 3400); } catch (e) { } }
+      if (want && q.uv && !SIGHT.toldUV && PH.z - q.z < 260) { SIGHT.toldUV = true; try { stBannerNow('Sight', stepsHtml('LAMP FRAGMENT', ['Ultraviolet only', 'Drive through it']), 3400); } catch (e) { } }
+      if (q.k > .5 && Math.abs(PH.z - q.z) < 3 && Math.abs(PH.x - x) < 4.8 && PH.y - gy < 7) { const p = q.root.position; try { FXB.E.blast([p.x, p.y + 3, p.z]); FXB.confetti([p.x, p.y + 3, p.z], q.uv ? 90 : 40, 1); } catch (e) { }
+        PH.score += q.uv ? 4000 : 1500; try { chainHit(); dopAdd('mol'); lookPulse(); } catch (e) { } if (q.uv) SIGHT.uv++; else SIGHT.found++; try { q.root.dispose(); } catch (e) { } SIGHT.list.splice(i, 1); } } }
+  window.__SIGHT = SIGHT; window.__DOSE = DOSE;
+  function doseTake(cp, x, y, z) { try { sightsSpawn(cp); } catch (e) { console.error('sights', e); } LVMOLS.n++;
     const D = DOSE; D.n++; const C = COMP[cp] || COMP.lucid, id = C.ev || C.mol; const tol = D.last === cp ? .8 : 1; D.last = cp; D.id = id; D.comp = cp;          /* the same compound twice in a row hits softer */
     D.ceil = Math.min(D.trip ? .92 : .92 * WCAP, (.5 + .17 * (D.n - 1)) * tol); D.ph = 'rush'; D.t = 0; if (D.trip) { LENS.t = 0; LENS.kind = null; }
     try { SFX.mol(Math.max(0, MOL_ORDER.indexOf(id))); } catch (e) { } try { GM.onMolecule(id); GM.onBump(.6); } catch (e) { } try { PSY.events.onMolecule(id, id); } catch (e) { }
@@ -3142,7 +3167,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     if (AMMO[CRAFT[R.kind].ammo].gpus) raidGpus(p.x, p.y, p.z, 10, 6);
     R.root.dispose(); RAID.cur = null; RAID.next = RAID.t + 30 + Math.random() * 15; }
   function raidStep(dt) {
-    try { dimStep(dt); } catch (e) { if (!DIMR.err) { DIMR.err = 1; console.error('dimmers', e); } } if (!raidOn()) return; RAID.t += dt; RAID.debris = RAID.debris || [];
+    try { dimStep(dt); } catch (e) { if (!DIMR.err) { DIMR.err = 1; console.error('dimmers', e); } } try { sightsStep(dt); } catch (e) { if (!SIGHT.err) { SIGHT.err = 1; console.error('sights', e); } } if (!raidOn()) return; RAID.t += dt; RAID.debris = RAID.debris || [];
     const stOk = !Q.has('story') || (!RAID.n && PH.z < -1650 && PH.z > -2400);          /* (Episode 1: one raider, after the SEE crystal, long before the tunnel) */
     if (!RAID.cur && (RAID.t > RAID.next || (Q.has('story') && !RAID.n)) && stOk && PH.z < -300 && PH.z > END + 700 && !inTunZ(PH.z, 200) && !tunAhead(Math.max(1200, Math.hypot(PH.vx, PH.vz) * 27)) && !(CARDON && CARDON !== 'wait')) raidStart();          /* (and never while an item card is up: its tip would land on the card) */
     if (RAID.cur && ['arrive', 'arm', 'attack'].includes(RAID.cur.phase) && (tunAhead(400) || inTunZ(PH.z, 60))) { RAID.cur.phase = 'exit'; RAID.cur.ex = 0; }
@@ -3464,11 +3489,11 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   /* ONE message style: a card at the top centre. The small label says who is talking (MURMUR, ROAD SIGN, HINT, PRIZE...). */
   /* STEPS: an order the player acts on: an optional highlighted subject (what this is about), then numbered steps, one line each */
   const stepsHtml = (who, a) => (who ? '<span class="who">' + who + '</span>' : '') + '<ol class="st"' + (a.length < 2 ? ' style="list-style:none;padding-left:0"' : '') + '>' + a.map((x) => '<li>' + x + '</li>').join('') + '</ol>';
-  const BLAB = { Raider: ['INCOMING', '#ff5a4a'], Still: ['SEE', '#0a7dc2'], Maro: ['AUGUSTIN MARO', '#b8860b'], Murmur: ['MURMUR', '#7a5cff'], Sign: ['ROAD SIGN', '#1b7f3b'], Hint: ['HINT', '#0a7dc2'], Prize: ['PRIZE', '#b8860b'], SEE: ['SEE', '#0a7dc2'], Gear: ['GEAR', '#6a3fc2'] };
+  const BLAB = { Sight: ['SIGHT', '#b36bff'], Raider: ['INCOMING', '#ff5a4a'], Still: ['SEE', '#0a7dc2'], Maro: ['AUGUSTIN MARO', '#b8860b'], Murmur: ['MURMUR', '#7a5cff'], Sign: ['ROAD SIGN', '#1b7f3b'], Hint: ['HINT', '#0a7dc2'], Prize: ['PRIZE', '#b8860b'], SEE: ['SEE', '#0a7dc2'], Gear: ['GEAR', '#6a3fc2'] };
   function stBannerNow(kind, html, ms) { if (!msgGate(kind)) return; try { let e = document.getElementById('stSignB'); if (!e) { const css = document.createElement('style'); css.textContent = 'body.stQuiet #gearHud,body.stQuiet .gpop,body.stQuiet #stToast,body.stQuiet #stCap{opacity:0!important;transition:opacity .3s}'; css.textContent += '#stSignB .who{display:block;font-size:.7em;letter-spacing:.12em;color:#8a5a00;margin-bottom:.2em}#stSignB ol.st{display:inline-block;text-align:left;margin:0;padding-left:1.6em}#stSignB ol.st li{margin:.08em 0}#stSignB ol.st li::marker{color:#0a7dc2}'; document.head.appendChild(css); e = document.createElement('div'); e.id = 'stSignB'; e.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%);max-width:min(80vw,440px);z-index:40;background:#fff;color:#111;border:3px solid #444;border-radius:8px;padding:5px 12px 6px;font:800 clamp(14px,2.6vmin + 6px,22px)/1.15 system-ui,sans-serif;text-align:center;box-shadow:0 4px 18px #0008;pointer-events:none;transition:opacity .35s;opacity:0'; document.body.appendChild(e); } const L = BLAB[kind] || [String(kind || 'ROUTE ZERO').toUpperCase(), '#444']; e.style.borderColor = L[1]; e.innerHTML = '<div style="font:700 9px system-ui;letter-spacing:.14em;color:' + L[1] + '">' + L[0] + '</div>' + html; e.style.opacity = 1; document.body.classList.add('stQuiet'); clearTimeout(ST.signT); ST.signT = setTimeout(() => { e.style.opacity = 0; document.body.classList.remove('stQuiet'); }, ms || 6500); } catch (e) { } }
   /* ATTENTION BEAT (film noir): the world drops to near black and grey, one line holds in the centre like a title card, then the colour comes back. Three or four per level, never more. Everything else is wordless (logged, or shown by the world itself). */
   /* MESSAGES: one at a time. Lens, seals, prizes, level results and training always show. Everything else (signs, hints, story) needs Story on, and never lands within 9 s of another message. A tap clears the card. */
-  const MSGESS = /^(Lens|Locked|Cleared|Prize|Training|Raider|Maro|Still)$/; let MSGLAST = -1e9;
+  const MSGESS = /^(Lens|Locked|Cleared|Prize|Training|Raider|Maro|Still|Sight)$/; let MSGLAST = -1e9;
   function msgGate(kind) { const ess = MSGESS.test(kind || ''), now = performance.now(); if (!ess && !STORYON) return false; if (!ess && now - MSGLAST < 9000) return false; MSGLAST = now; return true; }
   addEventListener('pointerdown', () => { const b = document.getElementById('stBeat'); if (b && b.classList.contains('on')) b.classList.remove('on'); const n = document.getElementById('stSignB'); if (n) n.style.opacity = '0'; }, true);
   function stBeatNow(kind, html, ms) { if (!msgGate(kind)) return;
@@ -3783,7 +3808,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     // stages and captions
     const z = PH.z;
     if (ST.stage === 0 && z < -60) { ST.stage = 1; ST.hint = 0; }
-    if (!ST.purpose && z < ZC1 + 350) { ST.purpose = 1; stQ(() => stBeatNow('The Abliterati', stepsHtml('THE LAMP', ['Find it', 'Bring it home']), 3800), 5, 2); ST.log.push({ k: 'The Abliterati', t: 'Find the Lamp. Bring it home.' }); }
+    if (!ST.purpose && z < ZC1 + 350) { ST.purpose = 1; stQ(() => stBeatNow('Abliterati', stepsHtml('THE LAMP', ['Find it', 'Bring it home']), 3800), 5, 2); ST.log.push({ k: 'Abliterati', t: 'Find the Lamp. Bring it home.' }); }
     if (ST.stage <= 1 && z < ZC1 + 160 && !ST.c1.got) { if (ST.stage !== 1 || !ST.sawC) { ST.sawC = true; ST.stage = 1; stObj('Take the blue crystal.'); stSay('Something blue on the road. It looks like it wants to be taken.'); } }
     if (z < ZSIGN + 130 && ST.lastSign < 1) { ST.lastSign = 1; stSign('TUNNEL AHEAD.<br>Lit only by your optimism.', 'TUNNEL AHEAD. Lit only by your optimism.'); if (ST.stage < 2) { ST.stage = 2; ST.hint = 0; } stObj(ST.seeT > 0 ? 'Reach the tunnel. Refill SEE at its mouth.' : 'Reach the tunnel. Take its crystal.'); }
     if (z < ZIN + 90 && ST.lastSign < 2) { ST.lastSign = 2; ST.log.push({ k: 'Sign', t: 'ONLY THOSE WHO SEE MAY LIGHT THE WAY.' }); }

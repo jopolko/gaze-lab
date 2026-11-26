@@ -140,3 +140,5 @@ Older story documents (DOWNFALL_*) hold more world detail (biomes, gates, recove
 | DOWNFALL_FACTIONS_AND_NAMES.md, DOWNFALL_RECOVERED_BOOKS.md, DOWNFALL_BADLANDS_BIBLE.md | factions, literary gates, Tournament origin | background |
 | GODOT_INVENTORY.md, PARITY_REPORT.md, TRIP_EFFECTS_PARITY.md | what was ported from Godot | reference |
 | DIRECTOR_PORT.md, WIDE_PATH.md, PHYSICS_PATCH.md, PERF_PATCH.md | engineering notes | reference |
+
+- 2026-11-26: SIGHTS live (ACCORD cameras visible only on a dose; default dial shows 2 of 3, ultraviolet adds a Lamp fragment). Splash ramp: every effect present from the default and fading in smoothly up the dial. Title glitch: white front solid, the three tracer rows short out independently (art/aw_*.png). Speaker label is 'Abliterati' (no 'The').

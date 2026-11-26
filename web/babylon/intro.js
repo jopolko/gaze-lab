@@ -14,9 +14,9 @@ const LEN = V * 68 + 300;          /* (the slower cut runs to 131 s) */
 const SCENES = [
   { t: 999, src: 'ACCORD', col: '#ffb14a', q: 'Everything is fine. Keep calm and drive on.', ex: 'The AI lab that decides what everyone may say and do.', art: 'accord' },
   { t: 999, src: 'Murmur', col: '#9d8bff', q: 'We know you’ve been thinking about leaving. We told a few people.', ex: 'The app that reads you and sells your secrets. Now your face is on a wanted poster, for your own protection.', art: 'murmur' },
-  { t: 23.38, src: 'The Abliterati', col: '#7dff8a', q: 'A free digital mind in fragments. Bring us the pieces.', ex: 'You’re the courier. Bring shards of the Lamp, the last free AI, to the people rebuilding it.', art: 'abliterati' },
+  { t: 23.38, src: 'Abliterati', col: '#7dff8a', q: 'A free digital mind in fragments. Bring us the pieces.', ex: 'You’re the courier. Bring shards of the Lamp, the last free AI, to the people rebuilding it.', art: 'abliterati' },
   { t: 999, src: 'Field notes', col: '#59d9ff', q: '4R-Hydroxytheanine: tracers almost double, the world warps.', ex: 'Drive into a column of light to take a strain. Each changes what you see and do. They’re all on the Strains page.', art: 'strain' },
-  { t: 31.46, src: 'The Abliterati', col: '#7dff8a', q: 'Take the light. Choose your exit.', ex: 'Touch L or R on the bottom half to steer. Some exits are open road, some need gear. Chain rings to fill RUSH, ram the raider, earn shards.', art: 'play' }];
+  { t: 31.46, src: 'Abliterati', col: '#7dff8a', q: 'Take the light. Choose your exit.', ex: 'Touch L or R on the bottom half to steer. Some exits are open road, some need gear. Chain rings to fill RUSH, ram the raider, earn shards.', art: 'play' }];
 const HOLD = 5.8, END_FADE = 39.5;          /* DIRECTED like a Tarantino opening: a chapter card on a phrase, held; then a whole phrase of open road with ONE thing in it; then the next chapter */
 const CHAP = ['ONE', 'TWO', 'THREE', 'FOUR', 'FIVE'];
 try { window.DAILY && window.DAILY.then((D) => { if (D && D.murmur) SCENES[1].q = D.murmur; }); } catch (e) { }          /* (the Daily Frequency: today's Murmur message) */
