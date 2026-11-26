@@ -301,7 +301,7 @@ function draw(t, dt) {
   if (!GAME.ready) cx.fillStyle = 'rgba(12,10,24,.9)'; cx.beginPath(); cx.moveTo(0, hz + 1); for (let x = 0; x <= W; x += W / 24) { const y = hz - (H * .03) * (1 + Math.sin(x * .013 + 1) * .6 + Math.sin(x * .041) * .3); cx.lineTo(x, y); } cx.lineTo(W, hz + 1); if (!GAME.ready) cx.fill();
   // trees by the road: every 18 m on both sides, 9 to 40 m out, drawn far to near; they come out of the haze and rush past. In waves they leave
   // tracers (fading copies a moment behind, the colour drifting along the trail) and their tops sway
-  if (DRIVE.k && !GAME.ready) { const z0 = DRIVE.z, kk = DRIVE.k, near = [], trc = CALM ? 0 : Math.pow(Math.max(0, Math.sin(t * .23 - .8)), 2) * (.7 + .3 * Math.sin(t * .07));
+  if (DRIVE.k && !GAME.ready) { const z0 = DRIVE.z, kk = DRIVE.k, near = [], I = INT(), trc0 = Math.pow(Math.max(0, Math.sin(t * .23 - .8)), 2) * (.7 + .3 * Math.sin(t * .07)), trc = CALM ? 0 : Math.min(1.8, trc0 * (.3 + 1.1 * I.a + 1.2 * I.uv) + .3 * I.a * I.a * I.a + .9 * I.uv), NK = 3 + Math.round(4 * I.uv);          /* (the tracers follow MAX INTENSITY: faint waves when chill, stronger toward violet, always on and longer in ultraviolet) */
     const at = (X, dist, h) => ({ px: cxm + (X - DRIVE.camX) / dist / kk, base: hz + DRIVE.camH / dist / kk, ht: (5 + h * 6) / dist / kk });
     for (let n = Math.ceil((z0 + 3) / 18); n * 18 < z0 + 260; n++) for (const side of [-1, 1]) { const zz = n * 18, h = ((n * 7919 + (side > 0 ? 13 : 0)) % 97) / 97, off = 9 + h * 31, X = roadC(zz) + side * off, dist = zz - z0;
       if (dist < 2) continue; const q = at(X, dist, h); if (q.px < -q.ht * 3 || q.px > W + q.ht * 3) continue; Object.assign(q, { dist, h, X, n }); near.push(q); }
@@ -310,7 +310,7 @@ function draw(t, dt) {
       cx.globalAlpha = fade; if (!shift) { cx.fillStyle = '#120c16'; cx.fillRect(q.px - w * .07, q.base - q.ht * .22, w * .14, q.ht * .22); }
       for (let i = 0; i < 3; i++) { const yb = q.base - q.ht * (.18 + i * .24), ww = w * (1 - i * .24), tip = sway * (i + 1) / 3; cx.beginPath(); cx.moveTo(q.px - ww + tip * .3, yb); cx.lineTo(q.px + ww + tip * .3, yb); cx.lineTo(q.px + tip, yb - q.ht * .42); cx.closePath();
         if (shift) { cx.fillStyle = `rgb(${c})`; } else { const gg = cx.createLinearGradient(q.px - ww, 0, q.px + ww, 0); gg.addColorStop(0, `rgba(${mix(c, [20, 12, 24], .35)},1)`); gg.addColorStop(1, `rgba(${mix(c, [20, 12, 24], .75)},1)`); cx.fillStyle = gg; } cx.fill(); } };
-    for (const q of near) { if (trc > .03 && q.dist < 120) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (let k = 3; k >= 1; k--) { const d2 = q.dist + k * 2.6 * trc; tree(Object.assign(at(q.X, d2, q.h), { dist: d2, h: q.h, n: q.n }), .22 * trc * (1 - k / 4), k); } cx.restore(); }
+    for (const q of near) { if (trc > .03 && q.dist < 120) { cx.save(); cx.globalCompositeOperation = 'lighter'; for (let k = NK; k >= 1; k--) { const d2 = q.dist + k * 2.6 * trc; tree(Object.assign(at(q.X, d2, q.h), { dist: d2, h: q.h, n: q.n }), Math.min(.5, .22 * trc * (1 - k / (NK + 1))), k); } cx.restore(); }
       tree(q, 1, 0); }
     cx.globalAlpha = 1; }
   // the strain, big in front of the sky's sun
@@ -346,7 +346,7 @@ const SPEC = [[0, [255, 42, 0]], [.128, [255, 122, 0]], [.227, [255, 212, 0]], [
 const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
 const wp = document.getElementById('wp'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
-const LOCK_AT = 2.6, TARGET = 460, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
+const LOCK_AT = 2.6, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
 /* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
 const TUNE = { f: TARGET, user: false, k: 0, down: false };
 try { const v = +localStorage.getItem('dl_freq'); if (v >= F0 && v <= F1) { TUNE.f = v; TUNE.user = true; } } catch (e) { }

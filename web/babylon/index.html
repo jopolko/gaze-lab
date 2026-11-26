@@ -91,9 +91,9 @@ for (const ev of ['pointerdown', 'keydown', 'touchstart', 'click']) addEventList
 setTimeout(() => { try { SFX.preload && SFX.preload(); } catch (e) { } }, 3000);
 const LAB = (() => { const d = { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, cmp: '', len: 'full', chl: false, sty: '', trn: 55, nrg: 80 }; try { return Object.assign(d, JSON.parse(localStorage.getItem('dl_lab') || '{}') || {}); } catch (e) { return d; } })();          /* THE FREQUENCY (lab.html): the player's own tuning, read at the start of every level */
 /* MAX INTENSITY (the title screen's dial, 400-950 THz, saved as dl_freq): the CEILING of the trip. Every level still eases in from calm; this sets how far it can go.
-   400 chill (half strength) . 460 the default (gentle) . 560 as designed . 790 intense . 790-950 ULTRAVIOLET, the absolute trip (twice the effects, colour and warp pushed, the hardest music).
+   400 chill (half strength) . 500 the default (0.83x) . 560 as designed . 790 intense . 790-950 ULTRAVIOLET, the absolute trip (twice the effects, colour and warp pushed, the hardest music).
    It also sets your signal colour (window.__SIG, CSS --sig). */
-const SIG = (() => { let f = 460; try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 950) f = v; } catch (e) { }
+const SIG = (() => { let f = 500;          /* (the default: a little under 'as designed', gentle but a real taste) */ try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 950) f = v; } catch (e) { }
   const K = [[400, .5], [460, .72], [560, 1], [790, 1.4], [950, 2]], c = (() => { for (let i = 1; i < K.length; i++) if (f <= K[i][0]) { const u = (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * u; } return 2; })();
   const uv = Math.max(0, (f - 790) / 160), u = Math.min(1, (f - 400) / 390), hue = 270 * u, l = .6 + .3 * uv, hex = (() => { const sat = 1, a = sat * Math.min(l, 1 - l), g = (m) => { const q = (m + hue / 30) % 12, cc = l - a * Math.max(-1, Math.min(q - 3, 9 - q, 1)); return Math.round(cc * 255).toString(16).padStart(2, '0'); }; return '#' + g(0) + g(8) + g(4); })();
   const k = c < 1 ? (c - 1) / .5 : Math.min(1, (c - 1) / .4);          /* (music: -1 chill ... +1 intense, ultraviolet stays at the top) */
