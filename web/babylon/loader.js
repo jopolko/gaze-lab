@@ -7,7 +7,7 @@
   if (window.__LDR) return;
   const Q = new URLSearchParams(location.search);
   if (Q.has('splash') || Q.has('shot')) { window.__LDR = { to() { }, done() { }, el: null }; return; }
-  const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const RM = false;
   const LINES = [
     // the work, Claude-Code style
     'Finagling', 'Tuning', 'Calibrating the wobble', 'Moonwalking', 'Untangling the antenna', 'Defragmenting the sky', 'Reticulating horizons',

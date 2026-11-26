@@ -70,7 +70,6 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 @media (orientation:portrait) { .cx { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } #sdet .box { grid-template-columns:1fr; } #sdet canvas { height:28vh; width:auto; justify-self:center; } }
 [hidden] { display:none !important; }
 @media (orientation:portrait) { .grid { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } .up { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); } .tag { display:none; } .txt b { font-size:clamp(20px,5vmin,36px); } }
-@media (prefers-reduced-motion: reduce) { .art { transition:none; } .lv:hover .art { transform:none; } }
 .card.upc{display:flex;flex-direction:column}.card.upc .upst{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 55%,#24304d,#090c14 75%);padding:6% 8% 2%}
 .card.upc .upst .art{z-index:auto!important;position:static!important;width:100%;height:100%;max-height:100%;object-fit:contain!important;object-position:50% 50%!important;filter:drop-shadow(0 6px 14px rgba(0,0,0,.6))}
 .card.upc .veil{display:none}.card.upc .txt{position:relative!important;inset:auto!important;flex:0 0 auto;background:linear-gradient(180deg,rgba(9,12,20,.6),#090c14);padding:8px 12px 12px}
@@ -165,7 +164,7 @@ function molDraw(cv, M, t) { const W = cv.clientWidth, H = cv.clientHeight; if (
   for (const [i, j] of M.bonds) { x.beginPath(); x.moveTo(P[i][0], P[i][1]); x.lineTo(P[j][0], P[j][1]); x.stroke(); }
   const ord = M.atoms.map((_, i) => i).sort((i, j) => P[i][2] - P[j][2]), cc = 'rgb(' + rgbOf(M.c) + ')';
   for (const i of ord) { const a = M.atoms[i], mut = !!a[4], r = k * (mut ? .5 : .38) * (1 + P[i][2] * .04); x.beginPath(); x.arc(P[i][0], P[i][1], Math.max(2, r), 0, 7); x.fillStyle = mut ? '#fffbe8' : a[0] === 'C' ? cc : (ELC[a[0]] || '#ccc'); if (mut) { x.shadowColor = cc; x.shadowBlur = k * .9; } x.fill(); x.shadowBlur = 0; } }
-const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const still = false;
 let spinOn = false;
 function spinLoop(now) { SPIN = SPIN.filter((q) => q.cv.isConnected && !q.cv.closest('[hidden]')); for (const q of SPIN) molDraw(q.cv, q.M, still ? .6 : q.o + now / 2600); spinOn = SPIN.length > 0 && !still; if (spinOn) requestAnimationFrame(spinLoop); }
 const spinAdd = (cv, M, o) => { SPIN.push({ cv, M, o }); if (!spinOn) { spinOn = true; requestAnimationFrame(spinLoop); } };
