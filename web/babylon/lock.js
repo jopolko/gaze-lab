@@ -23,7 +23,7 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 #lk .off{position:absolute;inset:0;background:#000;opacity:1}#lk.wake .off{opacity:0;transition:opacity .3s}
 #lk .wp{position:absolute;inset:0;opacity:0;transition:opacity .45s}#lk.wake .wp{opacity:1}#lk.bye{opacity:0;transition:opacity .3s}#lk.bye.ios .wp{transform:translateY(-100%);transition:transform .35s ease-in}
 #lk .wm{position:absolute;left:0;right:0;bottom:max(14px,3vh);text-align:center;font:600 9px/1 system-ui,sans-serif;letter-spacing:.35em;color:rgba(255,255,255,.22)}
-#lk .sb{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:center;padding:max(10px,var(--sa-top, env(safe-area-inset-top))) max(22px,var(--sa-right, env(safe-area-inset-right))) 0 max(22px,var(--sa-left, env(safe-area-inset-left)));font:600 13px system-ui,sans-serif}
+#lk .sb{position:absolute;left:0;right:0;top:0;z-index:3;display:flex;justify-content:space-between;align-items:center;padding:max(10px,var(--sa-top, env(safe-area-inset-top))) max(22px,var(--sa-right, env(safe-area-inset-right))) 0 max(22px,var(--sa-left, env(safe-area-inset-left)));font:600 13px system-ui,sans-serif}
 #lk .bars{display:inline-flex;gap:2px;align-items:flex-end;margin-left:6px;vertical-align:middle}#lk .bars i{width:3px;background:#fff;border-radius:1px}#lk .bars i.x{opacity:.35}
 #lk .bat{display:inline-block;width:22px;height:11px;border:1.5px solid rgba(255,255,255,.8);border-radius:3px;position:relative;vertical-align:middle;margin-left:6px}#lk .bat:after{content:"";position:absolute;left:1.5px;top:1.5px;bottom:1.5px;width:calc(var(--bl,30%) - 3px);background:#ffd23a;border-radius:1px}
 #lk .nt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-radius:18px;background:rgba(40,36,58,.86);box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:0;transform:translateY(-12px) scale(.97);transition:opacity .35s,transform .35s;text-align:left}
@@ -33,14 +33,14 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 #lk .stk{display:flex;flex-direction:column;gap:8px}
 /* phone, iPhone manner: padlock, big centred clock, cards under it, two round buttons at the foot */
 #lk.ios .wp{background:radial-gradient(120% 70% at 50% 110%,#ff7a3a 0%,#b3306a 30%,#3b1d6e 62%,#120d2a 100%)}
-#lk.ios .mid{position:absolute;left:0;right:0;top:9vh;display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 max(14px,4vw)}
+#lk.ios .mid{position:absolute;left:0;right:0;top:calc(var(--sa-top, env(safe-area-inset-top, 0px)) + max(9vh, 44px));display:flex;flex-direction:column;align-items:center;gap:2px;padding:0 max(14px,4vw)}
 #lk.ios .pl{width:18px;height:22px;margin-bottom:6px}#lk.ios .dt{font:600 clamp(16px,2.4vh,21px) system-ui,sans-serif;opacity:.9}
 #lk.ios .tm{font:700 clamp(64px,13vh,108px)/1 system-ui,-apple-system,sans-serif;letter-spacing:-.02em;margin-bottom:3vh}
 #lk.ios .stk{width:min(100%,400px)}#lk.ios .ft{position:absolute;left:0;right:0;bottom:max(26px,5vh);display:flex;justify-content:space-between;padding:0 max(40px,12vw)}
 #lk.ios .rb{width:46px;height:46px;border-radius:50%;background:rgba(30,26,46,.7);display:grid;place-items:center}#lk.ios .hb{position:absolute;left:50%;bottom:8px;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:rgba(255,255,255,.85)}
 /* phone, Android manner: two-line clock on the left, flat cards, a fingerprint at the foot */
 #lk.and .wp{background:linear-gradient(160deg,#0f3a4a 0%,#14254a 45%,#2a1446 100%)}
-#lk.and .mid{position:absolute;left:0;right:0;top:9vh;padding:0 max(22px,6vw)}#lk.and .tm{font:400 clamp(72px,15vh,128px)/.92 system-ui,Roboto,sans-serif;white-space:pre;color:#cfe9ff}
+#lk.and .mid{position:absolute;left:0;right:0;top:calc(var(--sa-top, env(safe-area-inset-top, 0px)) + max(9vh, 44px));padding:0 max(22px,6vw)}#lk.and .tm{font:400 clamp(72px,15vh,128px)/.92 system-ui,Roboto,sans-serif;white-space:pre;color:#cfe9ff}
 #lk.and .dt{font:500 15px system-ui,sans-serif;margin:12px 0 3vh;opacity:.9}#lk.and .nt{border-radius:22px;background:rgba(22,34,52,.92)}#lk.and .stk{max-width:440px}
 #lk.and .fp{position:absolute;left:50%;bottom:max(30px,7vh);transform:translateX(-50%);width:54px;height:54px;opacity:.75}
 /* desktop: a big clock bottom left over an ACCORD wallpaper, toasts bottom right, a little tray */
@@ -55,11 +55,11 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 #lk.vr .pn{position:absolute;left:50%;top:50%;width:min(92vw,560px);transform:translate(-50%,-54%) perspective(900px) rotateX(4deg);background:rgba(24,26,36,.92);border:1px solid rgba(255,255,255,.12);border-radius:26px;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
 #lk.vr .ph{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font:500 12px system-ui,sans-serif;color:rgba(255,255,255,.65);margin-bottom:12px}#lk.vr .tm{font:300 clamp(36px,8vh,60px)/1 system-ui,sans-serif;color:#fff}
 #lk.vr .ht{position:absolute;left:0;right:0;bottom:max(16px,4vh);text-align:center;font:500 12px system-ui,sans-serif;letter-spacing:.12em;color:rgba(255,255,255,.55)}
-@media (max-height:480px){#lk.ios .mid,#lk.and .mid{top:13vh}#lk.ios .ft,#lk.and .fp,#lk.ios .hb{display:none}#lk.ios .tm{font-size:clamp(44px,15vh,70px);margin-bottom:2vh}#lk.and .tm{font-size:clamp(44px,14vh,70px)}#lk .ft,#lk .fp{display:none}
+@media (max-height:480px){#lk.ios .mid,#lk.and .mid{top:calc(var(--sa-top, env(safe-area-inset-top, 0px)) + 13vh)}#lk.ios .ft,#lk.and .fp,#lk.ios .hb{display:none}#lk.ios .tm{font-size:clamp(44px,15vh,70px);margin-bottom:2vh}#lk.and .tm{font-size:clamp(44px,14vh,70px)}#lk .ft,#lk .fp{display:none}
   #lk.ios .mid,#lk.and .mid{display:grid;grid-template-columns:auto minmax(0,400px);column-gap:5vw;align-items:start;justify-content:center}#lk.ios .mid>.stk,#lk.and .mid>.stk{grid-column:2;grid-row:1/5}#lk.ios .mid{align-items:center}}
 #lk .wg{display:flex;gap:8px;margin:0 0 10px;width:100%}#lk .w{flex:1;min-width:0;background:rgba(255,255,255,.1);border-radius:16px;padding:8px 10px;text-align:left;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s}#lk.wake .w{opacity:1;transform:none}
 #lk .w b{display:block;font:700 9px system-ui,sans-serif;letter-spacing:.14em;color:rgba(255,255,255,.62);text-transform:uppercase}#lk .w big{display:block;font:700 21px/1.1 system-ui,sans-serif;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#lk .w small{display:block;font:400 11px/1.25 system-ui,sans-serif;color:rgba(255,255,255,.8)}
-#lk.ios .wg{width:min(100%,400px)}#lk.and .wg{max-width:440px}#lk.pc .wg{position:absolute;right:max(20px,2vw);top:max(48px,8vh);width:min(380px,44vw)}#lk.pc .w{background:rgba(28,32,48,.8);border-radius:8px}#lk.vr .w{background:rgba(255,255,255,.07)}
+#lk.ios .wg{width:min(100%,400px)}#lk.and .wg{max-width:440px}#lk.pc .wg{position:absolute;right:max(20px,2vw);top:calc(var(--sa-top, env(safe-area-inset-top, 0px)) + max(48px,8vh));width:min(380px,44vw)}#lk.pc .w{background:rgba(28,32,48,.8);border-radius:8px}#lk.vr .w{background:rgba(255,255,255,.07)}
 #lk .dis{position:absolute;left:50%;bottom:calc(max(64px,11vh) + var(--sa-bottom, 0px));transform:translateX(-50%);font:600 12px system-ui,sans-serif;letter-spacing:.04em;color:rgba(255,255,255,.9);cursor:pointer;touch-action:none;z-index:4;padding:8px 16px;border-radius:999px;background:rgba(20,18,34,.72);border:1px solid rgba(255,255,255,.22);white-space:nowrap}
 #lk.and .dis{bottom:max(26px,6vh)}#lk.pc .dis{bottom:max(14px,2.6vh)}#lk.vr .dis{bottom:calc(max(16px,4vh) + 26px)}
 #lk .bio{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(86vw,340px);background:rgba(14,16,26,.97);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:18px 18px 14px;text-align:center;z-index:5;display:none;box-shadow:0 14px 40px rgba(0,0,0,.55)}#lk .bio.on{display:block}
@@ -74,11 +74,11 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 @media (max-height:480px){#lk .sys{top:50%;width:min(60vw,380px)}#lk .sys p{font-size:12px;margin-bottom:6px}#lk .sys pre{margin-bottom:8px}}
 #lk .bio small{display:block;margin-top:8px;font:400 11px system-ui,sans-serif;color:rgba(255,255,255,.55)}
 #lk.mn{position:absolute;inset:0;z-index:0;pointer-events:none}#lk.mn .wp{opacity:.93}#lk.mn .wp-in{position:absolute;inset:0}
-#lk.mn .mid{position:absolute;left:max(18px,var(--sa-left, env(safe-area-inset-left)));right:auto;top:max(34px,6vh);bottom:auto;width:min(52vw,440px);display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0;text-align:left}
+#lk.mn .mid{position:absolute;left:max(18px,var(--sa-left, env(safe-area-inset-left)));right:auto;top:calc(var(--sa-top, env(safe-area-inset-top, 0px)) + max(34px,6vh));bottom:auto;width:min(52vw,440px);display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0;text-align:left}
 #lk.mn .tm{font:700 clamp(40px,11vh,84px)/1 system-ui,-apple-system,sans-serif;white-space:normal;color:#fff;margin:0}#lk.mn .dt{font:600 14px system-ui,sans-serif;margin:2px 0 10px;opacity:.9}
 #lk.mn .wg,#lk.mn .stk{position:static;width:100%;max-width:440px}#lk.mn .stk{gap:6px}#lk.mn .nt{padding:8px 11px;border-radius:14px}#lk.mn .nt p{font-size:13px}#lk.mn .w{opacity:1;transform:none}
 #lk .pv{margin-top:8px;font:600 10.5px/1.3 system-ui,sans-serif;letter-spacing:.03em;color:#8df5b0;opacity:.9}
-@media (max-width:640px) and (orientation:portrait){#lk.mn .mid{width:auto;right:max(16px,var(--sa-right, env(safe-area-inset-right)));top:max(36px,5vh)}}
+@media (max-width:640px) and (orientation:portrait){#lk.mn .mid{width:auto;right:max(16px,var(--sa-right, env(safe-area-inset-right)));top:calc(var(--sa-top, env(safe-area-inset-top, 0px)) + max(36px,5vh))}}
 @media (max-height:480px){#lk.mn .tm{font-size:clamp(34px,12vh,52px)}#lk.mn .dt{margin-bottom:6px}#lk.mn .stk .nt:nth-child(n+2){display:none}#lk.mn .w:nth-child(n+2){display:block}#lk.mn .w small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:10.5px}
   #lk:not(.pc) .wm{display:none}#lk .dis{bottom:calc(8px + var(--sa-bottom, 0px));padding:6px 14px}#lk .w:nth-child(n+2){display:none}#lk .wg{margin-bottom:6px}#lk .w big{font-size:17px}}`;
   document.head.appendChild(c2); }
