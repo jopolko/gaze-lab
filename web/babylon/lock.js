@@ -64,7 +64,14 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
 #lk .bio{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(86vw,340px);background:rgba(14,16,26,.97);border:1px solid rgba(255,255,255,.16);border-radius:20px;padding:18px 18px 14px;text-align:center;z-index:5;display:none;box-shadow:0 14px 40px rgba(0,0,0,.55)}#lk .bio.on{display:block}
 #lk .bio b{display:block;font:700 11px system-ui,sans-serif;letter-spacing:.18em;color:#ffb14a}#lk .bio p{margin:10px 0 12px;font:500 15px/1.35 system-ui,sans-serif;min-height:2.7em}#lk .bio .pb{height:6px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}#lk .bio .pb i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38e8ff,#b36bff)}
 #lk .bio small{display:block;margin-top:8px;font:400 11px system-ui,sans-serif;color:rgba(255,255,255,.55)}
-@media (max-height:480px){#lk:not(.pc) .wm{display:none}#lk .dis{bottom:8px;flex-direction:row;gap:8px}#lk .dis svg{width:28px;height:28px}#lk .w:nth-child(n+2){display:none}#lk .wg{margin-bottom:6px}#lk .w big{font-size:17px}}`;
+#lk.mn{position:absolute;inset:0;z-index:0;pointer-events:none}#lk.mn .wp{opacity:.93}#lk.mn .wp-in{position:absolute;inset:0}
+#lk.mn .mid{position:absolute;left:max(18px,env(safe-area-inset-left));right:auto;top:max(34px,6vh);bottom:auto;width:min(52vw,440px);display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:0;text-align:left}
+#lk.mn .tm{font:700 clamp(40px,11vh,84px)/1 system-ui,-apple-system,sans-serif;white-space:normal;color:#fff;margin:0}#lk.mn .dt{font:600 14px system-ui,sans-serif;margin:2px 0 10px;opacity:.9}
+#lk.mn .wg,#lk.mn .stk{position:static;width:100%;max-width:440px}#lk.mn .stk{gap:6px}#lk.mn .nt{padding:8px 11px;border-radius:14px}#lk.mn .nt p{font-size:13px}#lk.mn .w{opacity:1;transform:none}
+#lk .pv{margin-top:8px;font:600 10.5px/1.3 system-ui,sans-serif;letter-spacing:.03em;color:#8df5b0;opacity:.9}
+@media (max-width:640px) and (orientation:portrait){#lk.mn .mid{width:auto;right:max(16px,env(safe-area-inset-right));top:max(36px,5vh)}}
+@media (max-height:480px){#lk.mn .tm{font-size:clamp(34px,12vh,52px)}#lk.mn .dt{margin-bottom:6px}#lk.mn .stk .nt:nth-child(n+2){display:none}#lk.mn .w:nth-child(n+2){display:block}#lk.mn .w small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:10.5px}
+  #lk:not(.pc) .wm{display:none}#lk .dis{bottom:8px;flex-direction:row;gap:8px}#lk .dis svg{width:28px;height:28px}#lk .w:nth-child(n+2){display:none}#lk .wg{margin-bottom:6px}#lk .w big{font-size:17px}}`;
   document.head.appendChild(c2); }
 const KIND = () => { const ua = navigator.userAgent; if (/OculusBrowser|Quest|Pico|VR|Wolvic|PlayStation VR|Vision/i.test(ua) && !/iPhone|Android.*Mobile/.test(ua)) return 'vr'; if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios'; if (/Android/.test(ua)) return 'and'; return navigator.maxTouchPoints > 0 && Math.min(innerWidth, innerHeight) < 600 ? 'and' : 'pc'; };
 const SERV = {
@@ -126,12 +133,31 @@ function show(o) { o = o || {}; if (LK.on) return; const kind = o.kind || KIND()
     ? '<div class="wp-in"><div class="mid"><div class="tm">' + hm + AP + '</div><div class="dt">' + dt + '</div></div>' + wg + stk + '<div class="tray"><span>ACCORD-Guest \u2022 Connected, watched</span>' + BARS + '<span class="bat"></span></div><div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div>' + DIS + BIOP + '</div>'
     : '<div class="wp-in"><div class="sb"><span>' + (kind === 'ios' ? 'StarLeash \u2726' : hm + ' ' + ap + '  StarLeash 6G') + BARS + '</span><span>' + BAT + '<span class="bat" style="--bl:' + BAT + '"></span></span></div><div class="mid">' + (kind === 'ios' ? PAD + '<div class="dt">' + dt + '</div><div class="tm">' + hm + AP + '</div>' : '<div class="tm">' + hh + '\n' + mm + AP + '</div><div class="dt">' + dt + '</div>') + wg + stk + '</div>'
       + (kind === 'ios' ? '<div class="ft"><span class="rb">\u25C9</span><span class="rb">\u25A3</span></div><i class="hb"></i>' : '') + DIS + '<div class="wm">WALLPAPER PROVIDED BY ACCORD \u00B7 STAY ALIGNED</div>' + BIOP + '</div>');
+  { const pv = document.createElement('div'); pv.innerHTML = PRIV; const d = pv.firstChild; d.style.cssText = 'position:absolute;left:0;right:0;top:max(30px,calc(env(safe-area-inset-top) + 26px));text-align:center;margin:0;opacity:.75'; el.querySelector('.wp-in').appendChild(d); }
   el.querySelectorAll('.w').forEach((w, i) => { w.querySelector('b').textContent = ws[i][0]; w.querySelector('big').textContent = ws[i][1]; w.querySelector('small').textContent = ws[i][2]; });
   const inner = el.querySelector('.wp-in'); inner.style.cssText = 'position:absolute;inset:0;opacity:0;transition:opacity .45s'; document.body.appendChild(el); LK.on = true; LK.el = el; LK.t = performance.now();
   requestAnimationFrame(() => el.classList.add('sleep'));          /* (the screen goes off) */
   setTimeout(() => { if (LK.el !== el) return; el.classList.remove('sleep'); el.classList.add('wake'); inner.style.opacity = '1';          /* (and wakes up for a notification) */
     const S = el.querySelector('.stk'), a = o.first ? sysCard(kind) : card(L[0], L[0] === 'MURMUR' ? 'New message' : 'Civic Services', L[1]), b = o.first ? card('MURMUR', 'New message', 'did ur phone crash?? \u263A\uFE0E dont worry. we saved everything') : card(sv[0], sv[1], sv[2]); S.appendChild(a);
     setTimeout(() => a.classList.add('on'), 350); setTimeout(() => { if (LK.el !== el) return; S.appendChild(b); requestAnimationFrame(() => b.classList.add('on')); try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { } }, 1900); }, 1150); }
+/* THE PAUSE SCREEN (owner 2026-11-26): pausing shows the lock screen too, so the jokes get seen. It paints into a container (the menu panel sits on top).
+   Content changes slowly: a fresh notification each pause (the last one stays under it), the widgets every third pause or after three minutes. */
+const PRIV = '<div class="pv">\u25C8 On this device only: camera, location, progress. Nothing is uploaded.</div>';
+function paint(box, o) { o = o || {}; const kind = o.kind || KIND(); let M = null; try { M = JSON.parse(localStorage.getItem('dl_lkmf') || 'null'); } catch (e) { }
+  const nowMs = Date.now(); M = M && M.w ? M : { w: null, at: 0, n: 0, prev: null }; M.n++;
+  if (!M.w || M.n % 3 === 0 || nowMs - M.at > 180000) { M.w = []; for (let i = 0; i < 2; i++) M.w.push(deal('w', WIDG)); M.at = nowMs; }
+  const fresh = M.n % 2 ? ((q) => [q[0], q[0] === 'MURMUR' ? 'New message' : 'Civic Services', q[1]])(ME.city && Math.random() < .3 ? ((c) => [c[0], c[1].replace('{city}', ME.city)])(deal('c', CITYL)) : deal('l', LINES))
+    : deal(SERV[kind] && Math.random() < .4 ? kind : 'all', SERV[kind] && Math.random() < .4 ? SERV[kind] : SERV.all);
+  const notes = [fresh].concat(M.prev ? [M.prev] : []); M.prev = fresh; try { localStorage.setItem('dl_lkmf', JSON.stringify(M)); } catch (e) { }
+  const now = new Date(), h12 = now.getHours() % 12 || 12, ap = now.getHours() < 12 ? 'AM' : 'PM', mm = String(now.getMinutes()).padStart(2, '0'), BAT = (ME.bat == null ? 12 : ME.bat) + '%';
+  const dt = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  box.innerHTML = ''; const el = document.createElement('div'); el.id = 'lk'; el.className = kind + ' mn wake';
+  el.innerHTML = '<div class="wp"></div><div class="wp-in"><div class="sb"><span>' + (kind === 'pc' ? 'ACCORD-Guest \u2022 Connected, watched' : kind === 'vr' ? 'Headset OS' : 'StarLeash \u2726') + '</span><span>' + BAT + '<span class="bat" style="--bl:' + BAT + '"></span></span></div>'
+    + '<div class="mid"><div class="tm">' + h12 + ':' + mm + '<small style="font-size:.32em;font-weight:500;margin-left:.2em">' + ap + '</small></div><div class="dt">' + dt + '</div><div class="wg">' + M.w.map(() => '<div class="w"><b></b><big></big><small></small></div>').join('') + '</div><div class="stk"></div>' + PRIV + '</div></div>';
+  el.querySelectorAll('.w').forEach((w, i) => { w.querySelector('b').textContent = M.w[i][0]; w.querySelector('big').textContent = M.w[i][1]; w.querySelector('small').textContent = M.w[i][2]; });
+  const S = el.querySelector('.stk'); notes.forEach((q, i) => { const n = document.createElement('div'); n.className = 'nt on'; n.innerHTML = '<i class="ic"></i><div class="nb"><div class="nh"><b></b><span>' + (i ? Math.max(2, (M.n * 7) % 50) + 'm ago' : 'now') + '</span></div><strong></strong><p></p></div>';
+    const ic = n.querySelector('.ic'); ic.style.background = ICON[q[0]] || HUE(q[0]); ic.textContent = SYM[q[0]] || q[0][0]; n.querySelector('b').textContent = q[0] === 'ACCORD' ? 'ACCORD Civic' : q[0]; n.querySelector('strong').textContent = q[1]; n.querySelector('p').textContent = String(q[2]).replace('{s}', '30'); S.appendChild(n); });
+  box.appendChild(el); return el; }
 /* the first lock ever: a system alert naming AFTERGLOW as an unauthorised app, with a fake crash dump, so the player half-believes the phone fell over */
 function sysCard(kind) { const n = document.createElement('div'); n.className = 'nt'; n.style.background = 'rgba(58,16,22,.94)'; n.style.border = '1px solid rgba(255,90,74,.5)';
   const os = kind === 'pc' ? 'Security Center' : kind === 'vr' ? 'Headset OS' : 'StarLeash OS' + (ME.model ? ' \u00B7 ' + ME.model : '');
@@ -152,5 +178,5 @@ for (const ev of ['pointerdown', 'pointerup', 'pointercancel', 'click', 'keydown
   if (ev === 'pointerdown' && e.target && e.target.closest && e.target.closest('#lk .dis')) { if (LK.el && performance.now() - LK.t > 900) holdStart(); return; }
   if (LK.hold && LK.hold.done) return;
   if ((ev === 'pointerdown' || ev === 'keydown' || ev === 'wheel') && LK.el && performance.now() - LK.t > 300) unlock(); }, { capture: true, passive: false });
-window.AGLock = { LINES, WIDG, SERV, show, disabled, enable, kind: KIND, isOn: () => LK.on };
+window.AGLock = { LINES, WIDG, SERV, show, paint, disabled, enable, kind: KIND, isOn: () => LK.on };
 })();
