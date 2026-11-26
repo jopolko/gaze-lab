@@ -216,17 +216,17 @@ function build() {
   const rev = new Tone.Reverb({ decay: 2.4, wet: 1 }).connect(comp), revS = new Tone.Gain(.35).connect(rev);
   const dly = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: .38, wet: 1 }).connect(comp), dlyS = new Tone.Gain(.3).connect(dly);
   const duck = new Tone.Gain(1).connect(comp);          /* the sidechain: everything melodic pumps under the kick */
-  const drumBus = new Tone.Gain(1).connect(comp), drums = new Tone.Players({}).connect(drumBus);
+  const beatG = new Tone.Gain(1).connect(comp), drumBus = new Tone.Gain(1).connect(beatG), drums = new Tone.Players({}).connect(drumBus);
   // the kick: a tuned synth kick, driven so it has a body small speakers can play, with a sample on top for texture
   const kick = new Tone.MembraneSynth({ pitchDecay: .05, octaves: 6, oscillator: { type: 'sine' }, envelope: { attack: .001, decay: .38, sustain: 0, release: .08 } });
-  const kd = new Tone.Distortion(.32); kick.chain(kd, new Tone.Gain(.9), comp);
+  const kd = new Tone.Distortion(.32); kick.chain(kd, new Tone.Gain(.9), beatG);
   const rumbleSrc = new Tone.MembraneSynth({ pitchDecay: .03, octaves: 4, envelope: { attack: .001, decay: .3, sustain: 0, release: .1 } }); const rumLP = new Tone.BiquadFilter(110, 'lowpass'), rumG = new Tone.Gain(0); rumbleSrc.chain(new Tone.Distortion(.4), rumLP, rumG, duck); rumG.connect(revS);
   // pads: two detuned saws per voice, a slowly breathing filter, chorus and lots of space
   const padLP = new Tone.BiquadFilter(1100, 'lowpass'), padLFO = new Tone.LFO(.05, 600, 2400).start(); padLFO.connect(padLP.frequency); const padG = new Tone.Gain(0); padLP.chain(padG, duck); padG.connect(revS);
   const pad = new Lite(padLP, { type: 'sawtooth', count: 2, spread: 24, attack: 1.1, decay: .6, sustain: .85, release: 2, peak: .42, max: 12 });
   // the riser: noise swept up before a drop (started only while it rises)
   const rn = new Tone.Noise('white'), rnBP = new Tone.BiquadFilter(400, 'bandpass'), rnG = new Tone.Gain(0); rnBP.Q.value = 2; rn.chain(rnBP, rnG, comp); rnG.connect(revS);
-  S = { drums, drumBus, kick, kd, rumbleSrc, rumG, pad, padG, padLP, padLFO, rn, rnG, rnBP, duck, revS, dlyS, comp, built: {}, ready: () => Promise.all([rev.ready].filter(Boolean)) };
+  S = { drums, drumBus, beatG, kick, kd, rumbleSrc, rumG, pad, padG, padLP, padLFO, rn, rnG, rnBP, duck, revS, dlyS, comp, built: {}, ready: () => Promise.all([rev.ready].filter(Boolean)) };
   const MODS = {
     bass() {          // the rolling techno bass (a resonant saw) and the trance gallop (a cleaner square)
       const bass = new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { Q: 4, type: 'lowpass', rolloff: -24 }, envelope: { attack: .003, decay: .16, sustain: .2, release: .08 }, filterEnvelope: { attack: .002, decay: .12, sustain: .15, release: .1, baseFrequency: 90, octaves: 3.2 } }); const baG = new Tone.Gain(0); bass.chain(baG, duck);
@@ -245,7 +245,7 @@ function build() {
       const hnLP = new Tone.BiquadFilter(2600, 'lowpass'), hnG = new Tone.Gain(0); hnLP.chain(hnG, comp); const horn = new Lite(hnLP, { type: 'sawtooth', count: 2, spread: 18, attack: .012, decay: .22, sustain: .35, release: .12, peak: .5, max: 6 }); hnG.connect(revS);
       Object.assign(S, { fbass, fbG, clav, cvG, ep, epG, horn, hnG }); },
     jungle() {          // the break (three velocity players), a sine sub, a reese (two detuned saws, a slowly moving filter), and the atmosphere loop (85 BPM at double time)
-      const brkG = new Tone.Gain(.8).connect(comp);          /* three players at fixed loudness: automating one player's volume per hit breaks when rolls schedule out of order. (Each loads the file itself: a shared buffer is copied before it has loaded.) */
+      const brkG = new Tone.Gain(.8).connect(S.beatG || comp);          /* three players at fixed loudness: automating one player's volume per hit breaks when rolls schedule out of order. (Each loads the file itself: a shared buffer is copied before it has loaded.) */
       const brk = [1, .62, .36].map((g) => { const p = new Tone.Player({ url: 'samples/Drums_170BPM.wav', fadeIn: .002, fadeOut: .012 }); p.chain(new Tone.Gain(g), brkG); return p; });
       const sub = new Tone.MonoSynth({ oscillator: { type: 'sine' }, filter: { type: 'lowpass', frequency: 200 }, envelope: { attack: .01, decay: .2, sustain: .9, release: .25 }, filterEnvelope: { baseFrequency: 200, octaves: 0 } }); const subG = new Tone.Gain(0); sub.chain(subG, comp);
       const reese = new Tone.MonoSynth({ portamento: .03, oscillator: { type: 'fatsawtooth', count: 2, spread: 28 }, filter: { Q: 2.5, type: 'lowpass', rolloff: -24 }, envelope: { attack: .02, decay: .3, sustain: .8, release: .2 }, filterEnvelope: { attack: .05, decay: .4, sustain: .6, release: .3, baseFrequency: 160, octaves: 2 } });
@@ -274,13 +274,13 @@ const pT = (p, v, time, tc) => { if (!p) return; if (p._lv !== undefined && Math
 /* ---------- the sequencer: one step = a sixteenth */
 function hit(name, time, vel) { try { if (!S.drums.has(name)) { S.drums.add(name, 'samples/' + name + '.wav'); return; } const p = S.drums.player(name); if (!p.loaded) return; try { p.volume.setValueAtTime(Tone.gainToDb(Math.max(.001, vel)), time); } catch (e) { } p.start(time); } catch (e) { } }          /* (a volume that can't be scheduled never costs the hit itself) */
 let step = 0, dose = 0, doseBar = -99, lastSec = -1;
-let ME_TR = .5, ME_EN = .8; const TR = () => ME_TR, EN = () => ME_EN;
+let ME_TR = .5, ME_EN = .8, BEATK = 1; const TR = () => ME_TR, EN = () => ME_EN;
 function secAt(bar) { const b = bar % T.bars; for (let i = T.secs.length - 1; i >= 0; i--) if (b >= T.secs[i].b0) return [T.secs[i], i]; return [T.secs[0], 0]; }
 /* every style uses its own instruments; the rest stay silent */
 const USE = { acid: ['acG', 'padG', 'rumG'], techno: ['baG', 'b2G', 'rumG', 'padG', 'arpG', 'ldG'], jungle: ['subG', 'rsG', 'atmG', 'padG', 'ldG'], eastern: ['droneG', 'oudG', 'neyG', 'padG', 'baG', 'rumG'], funk: ['fbG', 'cvG', 'epG', 'hnG'] };
 const ALLG = [...new Set(Object.values(USE).flat())];
 function quiet(time, kind) { const u = USE[kind]; for (const g of ALLG) if (!u.includes(g) && S[g]) pT(S[g].gain, 0, time, .08); }
-function pump(time, depth, len) { const g = S.duck.gain; g.cancelScheduledValues(time); g.setValueAtTime(depth, time); g.linearRampToValueAtTime(1, time + len); }
+function pump(time, depth, len) { if (BEATK < .5) return; const g = S.duck.gain;          /* (no kick, no pumping: the instrumental floats) */ g.cancelScheduledValues(time); g.setValueAtTime(depth, time); g.linearRampToValueAtTime(1, time + len); }
 function kickHit(time, v) { S.kick.triggerAttackRelease(midi(T.kroot || 33), '8n', time, v); hit(T.kit.kick, time, (T.kind === 'techno' ? .28 : .45) * v); }
 function kickSet(p) { if (S.kcur === p) return; S.kcur = p; try { S.kick.envelope.decay = p.kdec; S.kick.pitchDecay = p.kpd; S.kick.octaves = p.koct; S.kd.distortion = p.drive; } catch (e) { } }
 function bassSet(p) { const b = S.bass; if (S.bcur === p) return; S.bcur = p; try { b.filter.Q.value = p.q; b.filterEnvelope.baseFrequency = p.base; b.filterEnvelope.octaves = p.oct; b.envelope.sustain = p.sus; b.envelope.decay = p.dec; } catch (e) { } }
@@ -471,6 +471,11 @@ window.ME = {
   chords() { return T ? chordNames() : ''; },
   next() { if (!this.on) return; SEED = Math.floor(Math.random() * 1e9); step = 0; lastSec = -1; makeTrack(); Tone.Transport.bpm.rampTo(T.bpm, .5); Tone.Transport.swing = swingOf(); try { if (S.atm) S.atm.stop(); } catch (e) { } need(T.kind); },
   mood(m) { const b = this.base || { tr: ME_TR, en: ME_EN }; if (m === 'glow') { ME_TR = Math.min(1, b.tr + .35); ME_EN = b.en * .45; } else if (m === 'rush' || m === 'fight') { ME_TR = b.tr * .7; ME_EN = 1; } else { ME_TR = b.tr; ME_EN = b.en; } },
+  /* beat(on): the drums fade out over o.fade seconds (an instrumental stretch: pads, bass and melody carry on), or come back hard on the next bar */
+  beat(on, o = {}) { if (!this.on || !S || !S.beatG) return; on = !!on; if (this.beatOn === undefined) this.beatOn = true; if (this.beatOn === on) return; this.beatOn = on; BEATK = on ? 1 : 0;
+    try { const g = S.beatG.gain, now = Tone.now(); g.cancelScheduledValues(now); g.setValueAtTime(g.value, now);
+      if (on) { const at = o.now ? now + .02 : Math.max(now + .02, Tone.Transport.nextSubdivision('1m')); g.setValueAtTime(g.value, at); g.linearRampToValueAtTime(1, at + .03); }
+      else g.linearRampToValueAtTime(0, now + (o.fade || 1.5)); } catch (e) { } },
   beatPos() { return this.on ? Tone.Transport.ticks / Tone.Transport.PPQ : 0; },
   volume(db) { try { Tone.getDestination().volume.value = db; } catch (e) { } },          /* (getDestination: Tone.Destination is the first context's, stale after setContext) */
   render: (o) => renderOffline(o),

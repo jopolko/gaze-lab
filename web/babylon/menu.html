@@ -71,6 +71,10 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 [hidden] { display:none !important; }
 @media (orientation:portrait) { .grid { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } .up { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); } .tag { display:none; } .txt b { font-size:clamp(20px,5vmin,36px); } }
 @media (prefers-reduced-motion: reduce) { .art { transition:none; } .lv:hover .art { transform:none; } }
+.card.upc{display:flex;flex-direction:column}.card.upc .upst{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 55%,#24304d,#090c14 75%);padding:6% 8% 2%}
+.card.upc .upst .art{z-index:auto!important;position:static!important;width:100%;height:100%;max-height:100%;object-fit:contain!important;object-position:50% 50%!important;filter:drop-shadow(0 6px 14px rgba(0,0,0,.6))}
+.card.upc .veil{display:none}.card.upc .txt{position:relative!important;inset:auto!important;flex:0 0 auto;background:linear-gradient(180deg,rgba(9,12,20,.6),#090c14);padding:8px 12px 12px}
+@media (orientation:landscape) and (max-height:540px){.card.upc .upst{padding:3% 6% 0}.card.upc .txt{padding:4px 10px 8px}.card.upc .txt p{font-size:12px!important;margin:0 0 .2em}}
 </style></head><body>
 <header><h1>THE FREQUENCY</h1><span class="tag">The last road nobody watches.</span><span class="sh" id="shards" title="Shards: spend them on upgrades"></span></header>
 <nav><button id="tPlay" aria-pressed="true">Play</button><button id="tUp" aria-pressed="false">Upgrades</button><button id="tCx" aria-pressed="false">Strains</button><a class="btn" href="index.html?tutorial=1&nointake=1">Tutorial</a><a class="btn" href="dressup.html?next=menu.html">Character</a><a class="btn" href="lab.html" style="border-color:rgba(255,177,74,.6);color:#ffd9a8">&#9673; The Dial</a></nav>
@@ -139,7 +143,7 @@ function render() {
     if (!nextG) h.textContent = 'Every upgrade owned.';
     else h.append('Shards come from the prize at the end of each level and from the molecule, rail and relay quests. ', el('b', null, have >= COST ? 'You can buy an upgrade now.' : '✦ ' + have + ' of ' + COST + ' toward the next one.')); }
   const u = document.getElementById('upgrades'); u.textContent = '';
-  GEARS.forEach((G) => { const k = el('div', 'card'); k.appendChild(art('art/gear_' + G.id + '.jpg')); k.appendChild(el('span', 'veil')); const own = (T[G.id] || 1) >= 2;
+  GEARS.forEach((G) => { const k = el('div', 'card upc'); const stg = el('span', 'upst'); stg.appendChild(art('art/gear_' + G.id + '.png')); k.appendChild(stg); k.appendChild(el('span', 'veil')); const own = (T[G.id] || 1) >= 2;
     if (own) k.appendChild(el('span', 'chip m-GOLD', 'Owned'));
     const tx = el('span', 'txt'); tx.appendChild(el('b', null, G.name)); tx.appendChild(el('p', null, G.what));
     if (!own) { const bt = el('button', 'btn' + (shards() >= COST ? ' pri' : ''), 'Unlock · ✦ ' + COST); bt.disabled = shards() < COST; bt.onclick = () => { if (shards() < COST) return; T[G.id] = 2; wr('dl_gtier', T); render(); }; tx.appendChild(bt); }

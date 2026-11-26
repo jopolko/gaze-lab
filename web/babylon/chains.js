@@ -244,10 +244,10 @@ export function createSets(d) {
     for (let i = ST.boosts.length - 1; i >= 0; i--) if (PH.z < ST.boosts[i].z) { const bo = ST.boosts.splice(i, 1)[0]; if (Math.abs(PH.x - d.trailX(bo.z) - bo.x) < 4.5 && !ST.A) { PH.vx *= 1.18; PH.vz *= 1.18; PH.boost_t = Math.max(PH.boost_t || 0, 2.4); d.sfx('powerup'); d.fx('orb', [PH.x, PH.y + 1, PH.z]); } }
     for (let i = ST.charges.length - 1; i >= 0; i--) if (PH.z < ST.charges[i].z) { const ch = ST.charges.splice(i, 1)[0]; if (Math.abs(PH.x - d.trailX(ch.z) - ch.x) < 8) { const D = d.DOP(); if (!D.on) { D.v = Math.max(D.v, .97); d.dopAdd('mol'); } } } }          /* (a RUSH charge counts only if you took its line of crystals) */
   /* THE FORK (the director's lock-and-key): two keys, one each side of the road, each under a sign naming it. You can only take one. */
-  function fork(z, a, b) { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 60 }; SETS.push(S);
+  function fork(z, a, b) { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 60, fork: [a, b] }; SETS.push(S);
     for (const [need, side] of [[a, -1], [b, 1]]) { provide(need, z, null, side); const x = d.trailX(z) + side * 9; sign(S, (side < 0 ? '◀ ' : '') + NEED[need].txt + (side > 0 ? ' ▶' : ''), NEED[need].col, [x, gnd(x, z) + 7.5, z + 8], 10); }
     return 140; }
-  function key(z, need, side) { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 60 }; SETS.push(S); provide(need, z, null, side); const x = d.trailX(z) + side * 9; sign(S, NEED[need].txt, NEED[need].col, [x, gnd(x, z) + 7.5, z + 8], 9); return 120; }
+  function key(z, need, side) { const S = { z0: z, meshes: [], extra: [], segs: [], ghosts: [], state: 'prop', len: 60, keyNeed: need }; SETS.push(S); provide(need, z, null, side); const x = d.trailX(z) + side * 9; sign(S, NEED[need].txt, NEED[need].col, [x, gnd(x, z) + 7.5, z + 8], 9); return 120; }
   const summary = () => ({ done: ST.done, full: ST.full, paid: ST.paid, loose: ST.loose.map((q) => NEED[q.need] ? NEED[q.need].txt : q.need) });
   return { section, fork, key, step, abort, summary, build, CAT, ST, SETS, NEED, active: () => !!ST.A };
 }
