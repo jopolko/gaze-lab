@@ -238,7 +238,7 @@ window.DAILY.then((D) => { if (!D) return; const L = D.launch || []; let line = 
   const tk = document.querySelector('#ticker div'); if (false && tk && (line || D.title)) {          /* (off: the ticker carries only the search for you) */ const b = document.createElement('span'); b.innerHTML = '<b>ACCORD</b> \u00B7 '; b.append(String(line || D.title) + ' \u00B7 '); tk.prepend(b); } });          /* (the line of the launch runs first in the ticker; the subtitle under the title never changes) */</script>
   <div class="grow"></div>
   <div id="strain"></div>
-  <div id="tap">TAP TO TUNE IN</div>
+  <div id="tap" style="cursor:pointer">TAP TO TUNE IN</div>
   <div id="hint"><span class="hp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="4" height="7" rx="1.5" fill="currentColor"/><rect x="17" y="13" width="4" height="7" rx="1.5" fill="currentColor"/></svg>Best with headphones</span><span class="rot"><svg class="ph" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/></svg>Turn your phone sideways</span></div>
   <div id="ticker" aria-hidden="true"><div></div></div><script>/* THE TRAIL: what the authorities know. Where you were last seen and where they expect you next (so a returning player can read where they are),
    a heat level from how far you've got (0 new, 1 Route Zero done, 2 two to four worlds, 3 five or more), and how long you've been gone. */
@@ -507,7 +507,7 @@ let gone = false; const go = () => { if (gone) return; gone = true; location.hre
 const ui = document.getElementById('ui'); let drag = null;
 /* THE CAROUSEL: a sideways swipe anywhere drags the molecule and its notes with the finger; let go past a third of the way (or flick) and they slide off
    that way while the next strain slides in from the other side (left: the next one, right: the one before); a short swipe springs back.
-   A drag that starts ON the molecule turns it in 3D instead. A tap tunes in. */
+   A drag that starts ON the molecule turns it in 3D instead. Only a tap on TAP TO TUNE IN starts (owner 2026-11-26: a missed touch anywhere else does nothing). */
 const MOL = { x: 0, y: 0, r: 60, fit: 0 }, SL = { off: 0, anim: null };
 function slideApply() { strainEl.style.transform = `translateX(${SL.off.toFixed(1)}px)`; strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
 function slideTo(target, ms, then) { const from = SL.off, t0 = performance.now(); SL.anim = (now) => { const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3); SL.off = from + (target - from) * e; slideApply(); if (u >= 1) { SL.anim = null; if (then) then(); } }; }
@@ -520,7 +520,8 @@ ui.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id
   else if (drag.mode === 'spin' && drag.moved) { const k = .012, ddt = Math.max(.008, (e.timeStamp - drag.ts) / 1000); SPIN.yaw += dx * k; SPIN.pitch = Math.max(-1.4, Math.min(1.4, SPIN.pitch + dy * k)); SPIN.vy = dx * k / ddt; SPIN.held = 2; }
   drag.x = e.clientX; drag.y = e.clientY; drag.ts = e.timeStamp; });
 ui.addEventListener('pointerup', (e) => { if (!drag || e.pointerId !== drag.id) return; const tx = e.clientX - drag.x0, ms = e.timeStamp - drag.t0, D = drag; drag = null;
-  if (!D.moved) { go(); return; }
+  if (!D.moved) { const tp = document.getElementById('tap'), r = tp && tp.getBoundingClientRect(), pad = 10;          /* (a little slack round the button for fingers) */
+    if (r && r.width && e.clientX >= r.left - pad && e.clientX <= r.right + pad && e.clientY >= r.top - pad && e.clientY <= r.bottom + pad) go(); return; }
   if (D.mode === 'slide') { if (Math.abs(tx) > W * .3 || (Math.abs(tx) > 40 && ms < 300)) swipeTo(tx < 0 ? 1 : -1); else slideTo(0, 220); } });
 ui.addEventListener('pointercancel', () => { drag = null; slideTo(0, 220); });
 ui.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') go(); });
