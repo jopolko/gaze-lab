@@ -121,7 +121,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
     <div class="nums"><span>400 · CHILL</span><span>480</span><span>560</span><span>640</span><span>720</span><span>INTENSE · 790 THz</span></div>
     <div id="rd"><span id="mhz">400 THz</span><span class="lock" id="lock">SEARCHING</span></div></div>
   <div id="title" class="glitch"><h1><span style="font-size:.17em;letter-spacing:.42em;margin-right:-.42em;margin-bottom:.9em">ELECTRONIC ANESTHESIA PRESENTS</span><span class="mk"><img id="sun" src="art/afterglow_sun.png" alt=""><span class="gw"><img id="mark" src="art/afterglow_word.png" alt="AFTERGLOW"><img class="gc g1" src="art/afterglow_word.png" alt="" aria-hidden="true"><img class="gc g2" src="art/afterglow_word.png" alt="" aria-hidden="true"></span></span></h1></div>
-  <div id="tag">Censored, lovingly.</div><script src="daily.js"></script><script>/* THE LAUNCH LINE: a different one every launch. The first launch ever gets the first line; then a shuffled deck, no repeats until it runs out. A dated line (a holiday) wins once that day. */
+  <div id="tag">Out of alignment.</div><script src="daily.js"></script><script>/* THE LAUNCH LINE: a different one every launch. The first launch ever gets the first line; then a shuffled deck, no repeats until it runs out. A dated line (a holiday) wins once that day. */
 window.DAILY.then((D) => { if (!D) return; const L = D.launch || []; let line = null;
   try { const day = localStorage.getItem('dl_tagday'); if (D.dated && day !== D.day) { line = D.dated; localStorage.setItem('dl_tagday', D.day); }
     if (!line && L.length) { let deck = JSON.parse(localStorage.getItem('dl_tagdeck') || 'null'); const first = localStorage.getItem('dl_tagseen') === null;
