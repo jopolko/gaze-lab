@@ -91,9 +91,16 @@ Older story documents (DOWNFALL_*) hold more world detail (biomes, gates, recove
 
 ## 6. What's planned
 
-**Now (in progress)**
-1. **The Diner Breakout** in Route Zero: a neon service station, two robbers mid-hold-up, the first Lamp piece, escape as scorpion drones pour out.
-2. **The Case** for Augustin Maro: a glowing case you carry; risk makes it glow brighter and pay more; never explained.
+**Done 2026-11-26 (later)**
+- **The Diner Breakout** in Route Zero (520 m in): neon diner, Dex & Lolo's hold-up (muzzle flashes, freeze card, getaway car), scorpion drones pouring across the road.
+- **The Case** for Augustin Maro: taken on the diner forecourt; its glow lights the cabin from below; chains, smashed drones and a raider down brighten it, crashes dim it; pays 1–3 shards on the results screen.
+- **Silent idents** before the intro (Lost Dog Productions, Synchronicity, Motel Nine Pictures, Slow Burn, No Match Films) on black with film grain; play once, then skipped (`?idents` replays).
+- Intro gets **pause and rewind** next to Skip. Rule: every scene gets skip / pause / rewind / progress bar, plays once, then auto-skips with a replay option.
+- Title screen: a new ACCORD line every launch (37 in `daily.json` → `launch`; first launch ever: "Thank you for your continued compliance."); the wordmark fades in, glitches three times, holds; the spectrum dial spans the full width.
+
+**Now**
+1. Scene controls on training and every other scene; a "Replay scenes" switch in the menu.
+2. Decide: does the intro auto-skip after the first viewing too?
 
 **Next**
 3. **The Closer**: one relentless pursuer per episode, rebuilt each time.
@@ -101,6 +108,8 @@ Older story documents (DOWNFALL_*) hold more world detail (biomes, gates, recove
 5. Scorpion drones and other ACCORD machines as real road hazards in every world (one creature per world).
 6. **The Tournament coliseum** as Episode 1's or 2's finale, using the Smash Derby bowl: drive out of a tunnel into a roaring crowd.
 7. Episodes 2–7 per the spine in the missions bank.
+
+8. **Film looks for scenes** (owner's ask): grindhouse film grain, scratches and missing-reel cards; Sin City high-contrast black-and-white with one colour kept; NBK-style animated interludes (a short cartoon/rotoscope insert at story beats).
 
 **Later / open**
 - Open-world basins (only a prototype today: `?basin`).
