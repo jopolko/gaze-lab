@@ -141,7 +141,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   const done = new Set(); setInterval(() => { if (busy || document.hidden) return; const idle = (performance.now() - last) / 1000, e = EV.find((q) => !done.has(q.k) && idle >= q.at); if (!e) return; done.add(e.k); if (e.again) setTimeout(() => { done.delete(e.k); e.at = (performance.now() - last) / 1000 + e.again; }, 4500); busy = true; e.go(); }, 1000);
   window.__idle = (k) => { const e = EV.find((q) => q.k === k); if (e) { busy = true; e.go(); } };          /* (test hook) */ })();</script>
 <div id="ui" role="button" tabindex="0" aria-label="Electronic Anesthesia presents Afterglow. Tap to begin.">
-  <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><path id="wp" fill="none" stroke-width="2.5" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
+  <div id="dial" aria-hidden="true"><svg id="wave" viewBox="0 0 600 40" preserveAspectRatio="none"><defs><linearGradient id="wg" x1="0" x2="600" y1="0" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#ff2a00"/><stop offset="12.8%" stop-color="#ff7a00"/><stop offset="22.7%" stop-color="#ffd400"/><stop offset="29.8%" stop-color="#9dff2a"/><stop offset="36.9%" stop-color="#2aff7a"/><stop offset="44%" stop-color="#00e5ff"/><stop offset="55.3%" stop-color="#2f6bff"/><stop offset="70.9%" stop-color="#7a3dff"/><stop offset="80%" stop-color="#b040ff"/><stop offset="90%" stop-color="#d68cff"/><stop offset="100%" stop-color="#f6e4ff"/></linearGradient></defs><path id="wp" fill="none" stroke="url(#wg)" stroke-width="1.6" stroke-linecap="round" opacity=".5"/><path id="wh" fill="none" stroke-width="2.6" stroke-linecap="round"/></svg><div class="scale"><div id="needle"></div></div>
     <div class="nums"><span>400 THz · CHILL</span><span>520</span><span>650</span><span>790</span><span>ULTRAVIOLET · 950 THz</span></div>
     <div id="rd"><span id="mhz">400 THz</span><span class="lock" id="lock">SEARCHING</span></div></div>
   <div id="title" class="glitch"><h1><span style="font-size:.17em;letter-spacing:.42em;margin-right:-.42em;margin-bottom:.9em">ELECTRONIC ANESTHESIA PRESENTS</span><span class="mk"><img id="sun" src="art/afterglow_sun.png" alt=""><span class="gw"><img id="mark" src="art/afterglow_word.png" alt="AFTERGLOW"><img class="ly" data-r="3" src="art/aw_b3.png" alt="" aria-hidden="true"><img class="ly" data-r="2" src="art/aw_b2.png" alt="" aria-hidden="true"><img class="ly" data-r="1" src="art/aw_b1.png" alt="" aria-hidden="true"><img class="ly" id="awF" src="art/aw_front.png" alt="" aria-hidden="true"><i class="snow" aria-hidden="true"></i></span></span></h1></div>
@@ -348,7 +348,7 @@ function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let
 /* the light: the marker hunts across the spectrum and locks on 540 THz (green-gold: the frequency the SI defines brightness by) */
 const SPEC = [[0, [255, 42, 0]], [.128, [255, 122, 0]], [.227, [255, 212, 0]], [.298, [157, 255, 42]], [.369, [42, 255, 122]], [.44, [0, 229, 255]], [.553, [47, 107, 255]], [.709, [122, 61, 255]], [.8, [176, 64, 255]], [.9, [214, 140, 255]], [1, [246, 228, 255]]];          /* (the visible spectrum to 790, then ultraviolet glowing toward white) */
 const specAt = (u) => { for (let i = 1; i < SPEC.length; i++) if (u <= SPEC[i][0]) { const [a, ca] = SPEC[i - 1], [b, cb] = SPEC[i], k = (u - a) / (b - a); return ca.map((v, j) => Math.round(v + (cb[j] - v) * k)); } return SPEC[SPEC.length - 1][1]; };
-const wp = document.getElementById('wp'), dialEl = document.getElementById('dial');
+const wp = document.getElementById('wp'), wh = document.getElementById('wh'), dialEl = document.getElementById('dial');
 const needle = document.getElementById('needle'), mhz = document.getElementById('mhz'), lock = document.getElementById('lock'), title = document.getElementById('title'), tap = document.getElementById('tap');
 const LOCK_AT = 2.6, TARGET = 500, F0 = 400, F1 = 950, FV = 790; let locked = false;          /* MAX INTENSITY: the ceiling of the trip (every level still eases in). 400-790 visible light, chill to intense; 790-950 ULTRAVIOLET, the absolute trip. Locks chill by default. */
 /* TUNE: the frequency the viewer chose (remembered on this device). k: how strongly the sun takes that colour (eases in; stronger while the thumb is down) */
@@ -366,7 +366,14 @@ function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
   const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; mhz.textContent = 'MAX INTENSITY \u00B7 ' + Math.round(f) + ' THz' + (f > FV ? ' \u00B7 UV' : ''); dialEl.style.setProperty('--lc', `rgb(${c})`); 
-  { const lam = 4200 / f * 9, ph = RM ? 0 : t * 9; let d = ''; for (let x = 0; x <= 600; x += 4) { const env = Math.sin(Math.PI * x / 600); d += (x ? 'L' : 'M') + x + ' ' + (20 + 15 * env * Math.sin(2 * Math.PI * x / lam - ph)).toFixed(1); } wp.setAttribute('d', d); wp.setAttribute('stroke', `rgb(${c})`); wp.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
+  /* the wave matches the band under it, as real light does: red (400 THz) is the low frequency, long slow smooth waves = chill; violet and ultraviolet (950 THz) the
+     high frequency, tight and taller = intense. The wavelength at each point is the light at that point of the scale (the spread exaggerated so the eye reads it),
+     drawn faint in the spectrum's own colours; the stretch around your setting glows. */
+  { const ph = RM ? 0 : t * 5, nx = u * 600; let d = '', dh = '', a = 0;
+    for (let x = 0; x <= 600; x += 2) { const fx = F0 + (F1 - F0) * x / 600, lam = 120 * Math.pow(F0 / fx, 2); if (x) a += 2 * Math.PI * 2 / lam;
+      const env = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, x / 600 * .985 + .0075))), .35), amp = (5 + 11 * x / 600) * env, y = (20 + amp * Math.sin(a - ph)).toFixed(1);
+      d += (x ? 'L' : 'M') + x + ' ' + y; if (Math.abs(x - nx) <= 60) dh += (dh ? 'L' : 'M') + x + ' ' + y; }
+    wp.setAttribute('d', d); wh.setAttribute('d', dh); wh.setAttribute('stroke', `rgb(${c})`); wh.style.filter = `drop-shadow(0 0 4px rgb(${c}))`; }
 }
 { const sc = dialEl.querySelector('.scale'), setF = (e) => { const b = sc.getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - b.left) / b.width)); TUNE.f = F0 + u * (F1 - F0); TUNE.user = true; doLock(); };
   dialEl.addEventListener('pointerdown', (e) => { e.stopPropagation(); TUNE.down = true; try { dialEl.setPointerCapture(e.pointerId); } catch (er) { } setF(e); });
