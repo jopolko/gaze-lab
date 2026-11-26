@@ -38,7 +38,7 @@ const FUNKP = [[0, 3], [0, 0, 3, 3], [0, 3, 0, 4], [3, 3, 0, 0], [0, 6, 5, 3], [
 const STYLES = { acid: { bpm: [128, 134] }, techno: { bpm: [122, 133] }, jungle: { bpm: [168, 175] }, eastern: { bpm: [116, 126] }, disco: { bpm: [116, 122] }, boogie: { bpm: [104, 112] }, break: { bpm: [92, 102] } };
 const FUNKS = ['disco', 'boogie', 'break'];
 /* each level's music: what hypes it or calms it (the game uses these): name, style, bpm range, trance 0-100, energy 0-100 */
-const LVLP = { routezero: ['Route Zero', 'techno', [126, 130], 30, 92], candy: ['Sugarfall', 'boogie', [106, 110], 55, 70], alpine: ['The Safe Peaks', 'techno', [116, 120], 85, 40], egypt: ['Tomb of the Old Servers', 'eastern', [118, 124], 40, 80],
+const LVLP = { routezero: ['Route Zero', 'techno', [126, 130], 30, 92], candy: ['Sugarfall', 'techno', [122, 126], 55, 70], alpine: ['The Safe Peaks', 'techno', [116, 120], 85, 40], egypt: ['Tomb of the Old Servers', 'eastern', [118, 124], 40, 80],
   synthwave: ['Neon Accord', 'disco', [118, 122], 70, 80], tunnel: ['The Undertow', 'jungle', [170, 174], 35, 100], matrix: ['Cold Rack', 'break', [94, 100], 25, 90], psychedelic: ['The Open Channel', 'techno', [130, 134], 90, 95] };
 /* your saves teach it: progressions and scales you keep come up more */
 const rdT0 = () => { try { return JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { return []; } };
@@ -152,7 +152,7 @@ function rememberParts() { if (OVR || !T || !T.parts) return; RECENT = RECENT.fi
 /* ---------- the track (made from the seed) */
 let T = null;
 let STYLE = 'techno', LV = null;
-function makeTrack() { R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; for (const t of sv) { if (t.prog) pc[[].concat(t.prog).join(',')] = (pc[[].concat(t.prog).join(',')] || 0) + 1; if (t.mode) mc[t.mode] = (mc[t.mode] || 0) + 1; }
+function makeTrack() { if (FUNKS.includes(STYLE)) STYLE = 'techno';          /* (owner 2026-11-26: no funk anywhere in the game, techno until the music is settled) */ R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; for (const t of sv) { if (t.prog) pc[[].concat(t.prog).join(',')] = (pc[[].concat(t.prog).join(',')] || 0) + 1; if (t.mode) mc[t.mode] = (mc[t.mode] || 0) + 1; }
   const funk = FUNKS.includes(STYLE), P0 = LV ? LVLP[LV] : null, canon = STYLE === 'acid' && +SEED === 132; let [kn, root] = pick(KEYS); if (canon) { kn = 'F'; root = 53; }
   const br = P0 ? P0[2] : STYLES[STYLE].bpm; let bpm = br[0] + Math.floor(R() * (br[1] - br[0] + 1)); if (canon) bpm = 128;
   const kit = { kick: pick(KIT.kick), clap: pick(KIT.clap), hat: pick(KIT.hat), oh: pick(KIT.oh), ride: pick(KIT.ride), perc: pick(KIT.perc), crash: KIT.crash[0] }, pmask = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 || i === 6 || i === 10) && R() < .45 ? 1 : 0);
