@@ -480,7 +480,9 @@ function molRoom(short) { let top, bot; const R = (id) => { const e = document.g
   const y = (top + bot) / 2, r = Math.max(24, Math.min((bot - top) / 2 * .9, W * (short ? .2 : .42)));
   /* a wide window that isn't tall enough (a desktop browser, not fullscreen): the strip under the title is too thin, so the molecule moves into the open space
      beside the title at a proper size, with its name under it (owner 2026-11-26: it was tiny) */
-  if (!short && W > H && bot - top < H * .26) { const t = R('title'); if (t && W - t.right > 160) { const room = W - t.right, r2 = Math.min(room / 2 * .8, H * .2); if (r2 > r * 1.3) return { x: t.right + room / 2, y: (t.top + t.bottom) / 2, r: r2, side: true }; } }
+  /* (owner 2026-11-26, second pass: beside the title was the wrong place. It stays centred under the title, as in fullscreen, and grows into the space down to
+     TAP TO TUNE IN; its name and notes move under it, just above the button) */
+  if (!short && W > H && bot - top < H * .26) { const tp = R('tap'), sh = (strainEl.getBoundingClientRect().height || 40), tpTop = tp && tp.height > 0 ? tp.top : H * .82; { const b2 = tpTop - sh - 20, r2 = Math.max(24, Math.min((b2 - top) / 2 * .95, H * .2, W * .2)); if (r2 > r) return { x: W / 2, y: (top + b2) / 2, r: r2, side: true }; } }
   return { y, r }; }
 function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let mx = 0, my = 0, mz = 0, rr = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } mx /= p.atoms.length; my /= p.atoms.length; mz /= p.atoms.length; for (const at of p.atoms) rr = Math.max(rr, Math.hypot(at[1] - mx, at[2] - my, at[3] - mz)); sc = Math.min(sc, (MOL.fit || Math.min(W, H) * .3) / Math.max(1, rr + .6)); }          /* (the long ones are scaled down so every strain fits well inside the screen) */ const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
   let mx = 0, my = 0, mz = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } const n = p.atoms.length; mx /= n; my /= n; mz /= n;
