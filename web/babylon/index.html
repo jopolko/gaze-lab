@@ -3480,14 +3480,18 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) {
       const a = OG.get((cx + i) + ',' + (cz + j)); if (!a) continue;
       for (const o of a) {
-        if (o.dead) continue; const tree = o.k !== undefined && o.k < .5; if (hazOff && !tree) continue; let tt = sl > 1e-6 ? ((o.x - px) * sx + (o.z - pz) * sz) / sl : 1; tt = Math.max(0, Math.min(1, tt)); const qx = px + sx * tt, qz = pz + sz * tt, R = o.r + C.SLED_R + (tree ? .7 : 0), ex = qx - o.x, ez = qz - o.z;
+        if (o.dead) continue; const tree = o.k !== undefined && o.k < .5; if (hazOff && !tree) continue; if (tree && performance.now() < (PH.treeFree || 0)) continue;          /* (unsticking: trees let you through for a moment) */ let tt = sl > 1e-6 ? ((o.x - px) * sx + (o.z - pz) * sz) / sl : 1; tt = Math.max(0, Math.min(1, tt)); const qx = px + sx * tt, qz = pz + sz * tt, R = o.r + C.SLED_R + (tree ? .7 : 0), ex = qx - o.x, ez = qz - o.z;
         if (ex * ex + ez * ez < R * R && above < (tree ? (PH.vy < 0 ? 15 : 7) : 3)) {          /* trees: a fatter trunk closes the gaps between them, and coming down from a jump into the canopy counts too */
           if (!tree && !o.gate && !o.pylon && !o.hard) { smashProp(o); return; }          /* rocks, plants, posts, signs: you crush through them */
           if (o.pylon) pylonHit(o);
           const dx = ex || .01, dz = ez || .01, d = Math.hypot(dx, dz) || 1, nx = dx / d, nz = dz / d; PH.x = o.x + nx * (R + .1); PH.z = o.z + nz * (R + .1); if (PH.grounded) { PH.y = th(PH.x, PH.z); PH.gh_prev = PH.y; }
           const sp0 = Math.hypot(PH.vx, PH.vz), dp = PH.vx * nx + PH.vz * nz; let bx = PH.vx - (1 + .35) * Math.min(dp, 0) * nx, bz = PH.vz - (1 + .35) * Math.min(dp, 0) * nz;
           bx += Math.sign(trailX(PH.z) - PH.x) * .18 * sp0; bz = Math.min(bz, -.55 * sp0); const nn = Math.hypot(bx, bz) || 1, keep = .9 * sp0; PH.vx = bx / nn * keep; PH.vz = bz / nn * keep; PH.heading *= .5; PH.steer *= .5; PH.sv = 0; PH.mom = Math.max(PH.mom, 1.5); shake = Math.max(shake, .28);
-          if (o.gate) { try { exGateBump(o); } catch (e) { } return; }
+          if (tree) { const now = performance.now(); PH.treeHits = (PH.treeHits || []).filter((t) => now - t < 1000); PH.treeHits.push(now);
+            if (PH.treeHits.length >= 3) { PH.treeHits = []; PH.treeFree = now + 900; const sg = Math.sign(trailX(PH.z) - PH.x) || 1, sp = Math.max(Math.hypot(PH.vx, PH.vz), 22); PH.vx = sg * .55 * sp; PH.vz = -.84 * sp; PH.heading = Math.atan2(PH.vx, -PH.vz); } }          /* (owner 2026-11-26, 'stuck': off the road in a row of trees, each bounce sent you into the next one and you stood still. Three hits in a second: the trees let you through for 0.9 s and you are headed back toward the road) */
+          if (o.gate) { try { exGateBump(o); } catch (e) { }          /* (owner 2026-11-26, 'stuck': the bounce sent you forward into the same locked gate again and again, 10% slower each time,
+             until you stood still against it. A locked gate now slides you round its road-side end and on toward the main road, at full speed.) */
+            const sgn = Math.sign(trailX(PH.z) - o.x) || 1, spg = Math.max(sp0, 20); PH.x = o.x + sgn * (R + .6); PH.vx = sgn * .5 * spg; PH.vz = -.87 * spg; PH.heading = Math.atan2(PH.vx, -PH.vz); if (PH.grounded) { PH.y = th(PH.x, PH.z); PH.gh_prev = PH.y; } return; }
           if (tree) { try { FXB.E.treeHit(o.x, th(o.x, o.z), o.z, Math.hypot(PH.vx, PH.vz) / SPK); AW.onRockSmash(); } catch (e) { } if (!PH.grounded && PH.vy < 0) { PH.vy = Math.abs(PH.vy) * .35 + 3; } PH.mom = Math.max(PH.mom || 0, .8); return; }          /* a bounce, not a crash: the tree line is a wall */
           try { FXB.E.rockHit(o.x, th(o.x, o.z), o.z, o.r); } catch (e) { }
           crash('ROCK!', 'rock'); return;
