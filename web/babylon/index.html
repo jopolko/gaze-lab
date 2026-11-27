@@ -1456,7 +1456,10 @@ void main() {
   /* (now musical: soft sine and triangle voices, their pitch snapped to the notes of the level's own key (the generated music's key; A minor pentatonic under a recorded track),
      gliding from note to note as you speed up. A rev is a gentle swell: a fifth and an octave fade in over the hum and the filter opens a little, then it all settles.) */
   const PENTA = [0, 3, 5, 7, 10];
-  function engineScale() { try { const k = window.ME && ME.on && ME.key && ME.key(); if (k && k.root) return { root: k.root % 12, mode: k.mode }; } catch (e) { } return { root: 9, mode: PENTA }; }
+  /* each recorded track's key (measured 2026-11-26 from the audio, Krumhansl key profiles; the Alien Warfare stems check out as A minor, their known key):
+     the pad plays the playing track's root, fifth and third. Unlisted tracks and the stems: A minor. */
+  const TRACKKEY = { 'electric_exodus.ogg': [9, 0], 'bouncer.ogg': [9, 0], 'dnb_minute.ogg': [4, 0], 'moodless_refrain.mp3': [2, 1] }, PENTA_MAJ = [0, 2, 4, 7, 9];
+  function engineScale() { try { const k = window.ME && ME.on && ME.key && ME.key(); if (k && k.root) return { root: k.root % 12, mode: k.mode }; } catch (e) { } try { const tr = biomeTrack(), K = tr && TRACKKEY[tr[0]]; if (K) return { root: K[0], mode: K[1] ? PENTA_MAJ : PENTA }; } catch (e) { } return { root: 9, mode: PENTA }; }
   const snapNote = (f, sc) => { const m = 69 + 12 * Math.log2(Math.max(20, f) / 440); let best = m, bd = 99; for (let o = -1; o <= 1; o++) for (const iv of sc.mode) { const n = 12 * (Math.floor(m / 12) + o) + sc.root + iv, d = Math.abs(n - m); if (d < bd) { bd = d; best = n; } } return 440 * Math.pow(2, (best - 69) / 12); };
   function engineTick(dt) { if (SFXOFF || Q.has('splash') || !window.__go) return; const ac = ACX; if (!ac || ac.state !== 'running') return;
     if (!ENG.ok) { ENG.ok = true; const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0; out.connect(ac.destination);
