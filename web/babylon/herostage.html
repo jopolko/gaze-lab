@@ -37,6 +37,9 @@ const PH = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true };
 const BST = createBeasts({ B, scene, PH, th: () => 0, trailX: () => 0, END: -1e6, world: Q.get('world') || 'desert', tier: 3, cam: () => cam, audio: () => null, fx() { }, shake() { }, chain() { }, score() { }, look() { }, emp() { }, sfx() { }, drain() { }, inTunZ: () => false, tunnel: () => false });
 for (const spec of (Q.get('m') || '').split(';').filter(Boolean)) { const [nm, x, z, t, s] = spec.split(','); const R = BST.pose(decodeURIComponent(nm), 0, 10); if (!R) continue; R.position.set(+x, 0, +z); R.rotation.y = +(t || 0); if (s) R.scaling.scaleInPlace(+s); }
 { const gl = new B.GlowLayer('glow', scene, { blurKernelSize: 64, mainTextureSamples: 4 }); gl.intensity = +(Q.get('glow') || .9); gl.customEmissiveColorSelector = (m, sm, mat, res) => { const e = mat && mat.emissiveColor; const bright = e && (e.r + e.g + e.b) > 1.6 && !mat.emissiveFresnelParameters; if (bright) res.set(e.r, e.g, e.b, 1); else res.set(0, 0, 0, 0); }; }
+/* ?fit: frame the first machine tightly (for the Brochure's close-ups) */
+if (Q.has('fit')) { const first = scene.transformNodes.find((n) => n.name === 'pose'); if (first) { first.computeWorldMatrix(true); const ms = first.getChildMeshes(); let mn = new B.Vector3(1e9, 1e9, 1e9), mx = new B.Vector3(-1e9, -1e9, -1e9); for (const m of ms) { m.computeWorldMatrix(true); const bb = m.getBoundingInfo().boundingBox; mn = B.Vector3.Minimize(mn, bb.minimumWorld); mx = B.Vector3.Maximize(mx, bb.maximumWorld); }
+  const c = mn.add(mx).scale(.5), r = mx.subtract(mn).length() / 2, k = +(Q.get('fit') || 1.6), dir = new B.Vector3(+(Q.get('fx') || .45), +(Q.get('fy') || .22), -1).normalize(); cam.position.copyFrom(c.add(dir.scale(r * k / Math.tan(cam.fov / 2) * .62))); cam.setTarget(c); } }
 eng.runRenderLoop(() => scene.render()); addEventListener('resize', () => eng.resize());
 window.__ready = true;
 </script></body></html>

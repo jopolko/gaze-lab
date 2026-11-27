@@ -496,7 +496,7 @@ function draw(t, dt) {
 /* the gap the molecule may fill: portrait, from under the tagline to above the strain's notes; phone landscape (words at the sides), from under the
    spectrum to the bottom. Measured from the page, so it follows the real text sizes */
 function sideStrain(room) { const on = !!room.side; if (on !== strainEl.classList.contains('side')) strainEl.classList.toggle('side', on);
-  if (on) { strainEl.style.left = Math.round(room.x) + 'px'; strainEl.style.top = Math.round(room.y + room.r + 10) + 'px'; strainEl.style.position = ''; strainEl.style.transform = ''; } else if (innerWidth > innerHeight) { strainEl.style.position = 'fixed'; strainEl.style.left = Math.round(MOL.x) + 'px'; strainEl.style.transform = 'translateX(-50%)'; strainEl.style.top = ''; } else { strainEl.style.position = ''; strainEl.style.left = ''; strainEl.style.top = ''; strainEl.style.transform = ''; } }          /* (owner 2026-11-27: the name and its line always centred under the molecule) */
+  if (on) { strainEl.style.left = Math.round(room.x) + 'px'; strainEl.style.top = Math.round(room.y + room.r + 10) + 'px'; strainEl.style.position = ''; strainEl.style.transform = ''; } else if (innerWidth > innerHeight) { strainEl.style.position = 'fixed'; strainEl.style.left = Math.round(MOL.x) + 'px'; strainEl.style.transform = 'translateX(-50%)'; strainEl.style.top = Math.round(Math.min(MOL.y + MOL.r * .95 + 8, innerHeight - (strainEl.offsetHeight || 50) - 30)) + 'px'; strainEl.style.bottom = 'auto';          /* (always right under the plant) */ } else { strainEl.style.position = ''; strainEl.style.left = ''; strainEl.style.top = ''; strainEl.style.transform = ''; } }          /* (owner 2026-11-27: the name and its line always centred under the molecule) */
 function molRoom(short) { let top, bot; const R = (id) => { const e = document.getElementById(id); return e ? e.getBoundingClientRect() : null; };
   if (short) { const d = R('dial'); top = d ? d.bottom + 6 : H * .2; bot = H - 12; }
   else { const tg = R('tag'), st = strainEl.getBoundingClientRect(); top = tg ? tg.bottom + 8 : H * .32; bot = st && st.top > top + 40 ? st.top - 8 : H * .75; }
@@ -513,13 +513,13 @@ const PIMG = {};
 function plantImg(name) { if (PIMG[name] !== undefined) return PIMG[name]; const svg = window.AGPLANTS && AGPLANTS.svg(name); if (!svg) return (PIMG[name] = null);
   const im = new Image(); im.decoding = 'async'; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg ', '<svg width="512" height="512" ')); PIMG[name] = im; return im; }
 const PSHEET = {};
-function plantSheet(name) { if (PSHEET[name] !== undefined) return PSHEET[name]; const im = new Image(); im.decoding = 'async'; im.src = 'art/plants/' + name.replace(/ /g, '-') + '.webp?v=1'; return (PSHEET[name] = im); }
+function plantSheet(name) { if (PSHEET[name] !== undefined) return PSHEET[name]; const im = new Image(); im.decoding = 'async'; im.src = 'art/plants/' + name.replace(/ /g, '-') + '-1.webp?v=1'; return (PSHEET[name] = im); }
 /* the 3D plant (owner 2026-11-27): a turntable rendered from plants3d.js, rocking gently either side so the face stays in view, glowing in the strain's colour */
 /* THE PLANT AS A HOLOGRAM (owner 2026-11-27): projected from a small emitter, additive light so it needs no backdrop (the same treatment works on the road in game).
    Baked once per plant and colour (tint, scan lines, a cyan/red fringe); per frame only a light cone, the sprite, one scan band and a rare glitch. No blur. */
 const HOLO = {};
 function holoBake(p, c) { const key = p.plant + c.join(','); if (HOLO[key]) return HOLO[key]; const sh = plantSheet(p.plant); if (!sh.complete || !sh.naturalWidth) return null;
-  const fs = sh.naturalWidth / 8, F = 1, sx = (F % 8) * fs, sy = Math.floor(F / 8) * fs, N = 256, cv2 = document.createElement('canvas'); cv2.width = cv2.height = N; const g = cv2.getContext('2d');
+  const fs = sh.naturalWidth, sx = 0, sy = 0, N = 256, cv2 = document.createElement('canvas'); cv2.width = cv2.height = N; const g = cv2.getContext('2d');
   g.drawImage(sh, sx, sy, fs, fs, 0, 0, N, N);
   g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(${c},.28)`; g.fillRect(0, 0, N, N);
   g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.4)'; for (let y = 0; y < N; y += 3) g.fillRect(0, y, N, 1);

@@ -2,7 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><script>/* THE SHELL: a page opened on its own reloads inside app.html, so fullscreen (and the installed app) survive every page change. &noshell skips it. */
 (() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Rye&family=Michroma&family=Chewy&family=Audiowide&family=Monoton&family=VT323&family=Cinzel+Decorative:wght@700&family=Rubik+Glitch&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js"></script>
 <title>Afterglow</title>
 <style>
@@ -40,7 +40,7 @@
 <a id="back" href="/">menu</a>
 <script type="importmap">{"imports":{"three":"../stargaze/vendor/three/three.module.min.js"}}</script>
 <script>addEventListener('load', () => setTimeout(() => { if (!new URLSearchParams(location.search).has('fps')) { const e = document.getElementById('status'); if (e) e.style.display = 'none'; } }, 8000));</script>
-<script src="plants.js"></script><script src="plants3d.js"></script>
+<script src="plants.js"></script>
 <script type="module">
 // DOWNHILL on Babylon.js. The course is the SAME Godot level dump as the three.js game (terrain, rocks, trees, ramps, rails, pads, pickups) and the board rides it with a port of the "type 1" handling:
 // slope pull, drag, the adaptive steering spring, grip, momentum chains, ramp swirls and the lip blast, boost pads, floaty air time, lane-hold nudges away from trees. Everything psychedelic lives in the SURFACES (moire, breathing,
@@ -895,7 +895,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   const HOLOP = {};
   function holoPlant(cp) { if (HOLOP[cp] !== undefined) return HOLOP[cp]; const P = PANTRY[cp]; if (!P) return (HOLOP[cp] = null);
     /* the plant: the same pre-rendered 3/4 view as the title screen (art/plants), on a plane that always faces you */
-    const tex = new B.Texture('art/plants/' + P.plant.replace(/ /g, '-') + '.webp?v=1', scene, true, true); tex.hasAlpha = true; tex.uScale = -1 / 8; tex.uOffset = 2 / 8; tex.vScale = 1 / 4; tex.vOffset = 3 / 4; tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
+    const tex = new B.Texture('art/plants/' + P.plant.replace(/ /g, '-') + '-1.webp?v=1', scene, true, true); tex.hasAlpha = true; tex.uScale = -1; tex.uOffset = 1; tex.wrapU = tex.wrapV = B.Texture.CLAMP_ADDRESSMODE;
     const pm = new B.StandardMaterial('holoP_' + cp, scene); pm.disableLighting = true; pm.emissiveTexture = tex; pm.opacityTexture = tex; pm.diffuseColor = new B.Color3(0, 0, 0); pm.specularColor = new B.Color3(0, 0, 0); pm.backFaceCulling = false;          /* (emissive only: diffuse on top overflowed past white and the trip filter turned it black) */
     const merged = B.MeshBuilder.CreatePlane('holo_' + cp, { size: 2.6 }, scene); merged.material = pm; merged.billboardMode = B.Mesh.BILLBOARDMODE_Y; merged.alphaIndex = 1e6; merged.isVisible = false; merged.isPickable = false; merged.alwaysSelectAsActiveMesh = true;
     const c = new B.Color3(P.c[0], P.c[1], P.c[2]), add = (mesh, a, addv) => { const mt = new B.StandardMaterial('holoA_' + cp + mesh.name, scene); mt.disableLighting = true; mt.emissiveColor = c.scale(addv ? .9 : 1); mt.alpha = a; mt.alphaMode = addv ? B.Engine.ALPHA_ADD : B.Engine.ALPHA_COMBINE;          /* (the cone is plain see-through: adding it over the plant overflowed to black) */ mt.backFaceCulling = false; mesh.material = mt; mesh.isVisible = false; mesh.isPickable = false; mesh.alwaysSelectAsActiveMesh = true; return mesh; };
@@ -1438,6 +1438,7 @@ void main() {
   try { __LDR.to(.8); const fin = () => { try { __LDR.done(); } catch (e) { } window.__ldrDone = true; try { window.__onLdrDone && window.__onLdrDone(); } catch (e) { } }; scene.executeWhenReady(fin); setTimeout(fin, 15000); } catch (e) { }
   (() => { if (Q.has('notap') || Q.has('shot')) { window.__go = true; return; }
     const lastCam = (() => { try { return localStorage.getItem('dl_cam') === '1'; } catch (e) { return false; } })(), hasCam = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    { const WFN = { desert: 'Rye', alpine: 'Michroma', candy: 'Chewy', tunnel: 'Audiowide', synthwave: 'Monoton', matrix: 'VT323', egypt: 'Cinzel+Decorative:wght@700', psychedelic: 'Rubik+Glitch' }[Q.has('story') ? 'desert' : WORLD0]; if (WFN && !Q.has('tutorial')) { const lk = document.createElement('link'); lk.rel = 'stylesheet'; lk.href = 'https://fonts.googleapis.com/css2?family=' + WFN + '&display=swap'; document.head.appendChild(lk); } }          /* (only this world's lettering is fetched) */
     const nm = Q.has('story') ? 'ROUTE ZERO' : Q.has('tutorial') ? 'TRAINING' : String(({ desert: 'Route Zero', candy: 'Sugarfall', alpine: 'The Safe Peaks', egypt: 'Tomb of the Old Servers', synthwave: 'Neon Accord', tunnel: 'The Undertow', matrix: 'Cold Rack', psychedelic: 'The Open Channel' })[WORLD0] || (typeof BNAME !== 'undefined' && BNAME[WORLD0]) || WORLD0).toUpperCase();          /* (the destination names, as the guide and the menu) */
     const d = document.createElement('div'); try { if (window.ME && Q.has('genmusic') && !Q.has('nomusic')) ME.preload(ME_OPTS()); } catch (e) { console.warn('music preload', e); } d.id = 'goCard'; d.style.cssText = 'position:fixed;inset:0;z-index:85;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;text-align:center;background:radial-gradient(ellipse at 50% 55%,rgba(8,11,20,.45),rgba(3,4,8,.9));cursor:pointer;color:#f4f1ea';
     const bs = 'font:700 clamp(16px,2.2vmin + 8px,22px)/1 Barlow Condensed,sans-serif;letter-spacing:.14em;text-transform:uppercase;padding:.8em 1.4em;border-radius:12px;cursor:pointer;';

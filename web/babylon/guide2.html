@@ -128,7 +128,7 @@ button.it:hover, button.it:focus-visible { background:#1c1106 !important; }
 .it small { font:15px "VT323", monospace !important; color:var(--amb2) !important; letter-spacing:.08em !important; }
 .it .go { color:var(--amb2) !important; font-family:"VT323", monospace !important; }
 .th { box-shadow:0 0 0 1px var(--amb2), 0 0 8px rgba(255,150,30,.3) !important; border-radius:3px !important; background-color:#120b04 !important; color:var(--amb) !important; }
-.haz .th { background:var(--amb) !important; color:var(--crt) !important; text-shadow:none; }
+.haz .th:not([style]) { background:var(--amb) !important; color:var(--crt) !important; text-shadow:none; }
 .pp u { background:var(--amb3) !important; border-radius:0 !important; } .pp u.on { background:var(--amb) !important; }
 .drive { background:var(--amb) !important; color:var(--crt) !important; font:20px "VT323", monospace !important; letter-spacing:.08em !important; text-shadow:none; border-radius:0 !important; }
 .bar { background:linear-gradient(transparent,#050302ee 35%) !important; } .bar a { font:19px "VT323", monospace !important; letter-spacing:.06em !important; border-color:var(--amb3) !important; background:#0b0703 !important; color:var(--amb) !important; border-radius:0 !important; }
@@ -161,6 +161,15 @@ body.tearing .wrap { animation:tear2 .16s steps(2) 1; }
   font:700 19px/1 "Courier New", monospace; color:#ffa040; text-shadow:0 0 4px #ff6a00, 0 0 9px #ff4a00 !important; position:relative; }
 .nx b::after { content:""; position:absolute; inset:2px; border-radius:6px 6px 2px 2px; background:repeating-linear-gradient(90deg, rgba(255,140,60,.08) 0 1px, transparent 1px 3px), repeating-linear-gradient(0deg, rgba(255,140,60,.08) 0 1px, transparent 1px 3px); }
 .nx em { font:16px "VT323", monospace; color:var(--amb2); margin-left:2px; font-style:normal; align-self:center; }
+
+/* (owner 2026-11-27: pictures big and clear on a phone) */
+.it, button.it { grid-template-columns:72px minmax(0,1fr) 14px !important; gap:12px !important; }
+.th { width:72px !important; height:72px !important; border-radius:3px !important; background-size:cover; background-position:center; }
+.it .go { line-height:72px !important; }
+.th.ic { font-size:32px !important; }
+#sheet .pi.crop { aspect-ratio:1; background-repeat:no-repeat; }
+.it b .stamp, #sheet .ph h3 .stamp { display:inline-block !important; width:auto !important; color:var(--crt) !important; font:16px "VT323", monospace !important; vertical-align:middle; margin-left:6px; }
+.th[style] { background-color:#120b04 !important; }
 </style></head><body>
 <div id="bezel"></div><div id="scan"></div><div id="roll"></div><div id="vig"></div><div id="dead"></div>
 <div id="crack"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><g fill="none" stroke-linecap="round">
@@ -178,7 +187,7 @@ body.tearing .wrap { animation:tear2 .16s steps(2) 1; }
 <script src="plants.js"></script><script src="codex.js"></script>
 <script>
 /* type: do (things to do), wild (wildlife), air (overhead), flora (local plant), haz (hazard), loc (locals). soon = not in the game yet */
-const P = (n) => 'guide/por-' + n + '.jpg';
+const P = (n) => 'guide/por-' + n + '.jpg?v=2';
 const D = [
  { w: 'desert', name: 'Route Zero', kick: 'The Desert · first stop', hook: 'The last road nobody watches. Mostly.',
    feat: ['The Diner at Mile Zero', 'The last pumps with fuel for two hundred kilometres, so somebody is always robbing them. Tonight it’s Dex and Lolo. The first Piece of the Lamp is humming inside the jukebox. Take it and leave at full speed; the Stingers are already awake.', 1],
@@ -282,7 +291,16 @@ function links(o) { const L = []; const e = o.e;
   return L; }
 const lkHtml = (L) => L.length ? '<span class="lk">' + L.map(([c, t]) => '<i class="' + c + '">' + esc(t) + '</i>').join('') + '</span>' : '';
 const row = (th, b, span, soon, cls, o) => '<button type="button" class="it' + (cls ? ' ' + cls : '') + '" data-k="' + reg(o) + '">' + th + '<div><b>' + esc(b) + (soon ? SOON : '') + '</b>' + (span ? '<span>' + esc(span) + '</span>' : '') + (o.e && o.e.threat ? '<small>Threat ' + pips(o.e.threat) + '</small>' : '') + lkHtml(links(o).filter((x) => x[1] !== 'OPENING SOON')) + '</div><i class="go">\u203A</i></button>';
-const thImg = (src) => '<div class="th" style="background-image:url(\'' + src + '\')"></div>', thTx = (t) => '<div class="th">' + t + '</div>';
+const PLANTPIC = (plant) => 'art/plants/' + plant.replace(/ /g, '-') + '-1.webp';
+const thPlant = (plant) => '<div class="th" style="background:#120b04 url(\'' + PLANTPIC(plant) + '\') no-repeat;background-size:cover;background-position:center"></div>';
+const thCrop = (src, x, y, z) => '<div class="th" style="background:#120b04 url(\'' + src + '\') no-repeat;background-size:' + (z || 300) + '% auto;background-position:' + x + '% ' + y + '%"></div>';
+/* locals and hazards: a crop of their destination's story set, aimed at the part that shows them */
+const CROPS = { 'Dex & Lolo': ['desert', 62, 62, 320], 'Marshal Kade Ransom': ['alpine', 22, 18, 330], 'Warden Pell': ['tunnel', 98, 40, 330], 'WREN': ['matrix', 40, 40, 300], 'The Abliterati': ['psychedelic', 92, 75, 330],
+  'Yellow rings on the tarmac': ['desert', 50, 95, 260], 'Orange DROP arches': ['desert', 30, 70, 240], 'Snow walls': ['alpine', 40, 90, 260], 'Ledges': ['alpine', 10, 50, 220], 'The better route': ['candy', 40, 15, 300], 'Fake crystals': ['candy', 50, 70, 260],
+  'Tunnel walls': ['tunnel', 50, 40, 220], 'The Long Throat': ['tunnel', 50, 55, 300], 'Overpass Nine': ['synthwave', 50, 30, 240], 'The applause sign': ['synthwave', 50, 5, 360], 'Mast Hill': ['matrix', 80, 40, 260], 'Green rain': ['matrix', 60, 20, 220],
+  'Loose sand': ['egypt', 50, 95, 240], 'The riddle gate': ['egypt', 50, 50, 320], 'Beige': ['psychedelic', 20, 60, 260], 'The Brood Cathedral': ['psychedelic', 50, 30, 220] };
+const thLoc = (t, ic) => { const c = CROPS[t]; return c ? thCrop('guide/hero-' + c[0] + '.jpg?v=2', c[1], c[2], c[3]) : '<div class="th ic">' + ic + '</div>'; };
+const thImg = (src) => '<div class="th" style="background-image:url(\'' + src + '\')"></div>', thTx = (t) => '<div class="th ic">' + t + '</div>';
 const sec = (h, inner) => inner ? '<div class="sec"><h4>' + h + '</h4>' + inner + '</div>' : '';
 const CX = window.AGCODEX || { E: {}, X: {}, K: {} };
 document.getElementById('toc').innerHTML = D.map((d) => '<a href="#' + d.w + '">' + esc(d.name) + '</a>').join('');
@@ -290,10 +308,10 @@ document.getElementById('dests').innerHTML = D.map((d) => {
   const hero = 'guide/hero-' + d.w + '.jpg?v=2';
   const wild = d.wild.map(([n, t, s]) => { const img = n === '__skit' ? 'guide/hero-skitters.jpg' : P(n); return row(thImg(img), t, s, 0, '', { t, w: d, e: CX.E[t], img, line: s }); }).join('');
   const air = row(thImg('guide/hero-raid-' + d.w + '.jpg'), d.air[0], d.air[1], 0, '', { t: d.air[0], w: d, e: CX.E[d.air[0]], line: d.air[1] });
-  const fl = d.flora ? row('<div class="th" style="background:#f4ecd8">' + PL(d.flora[0]) + '</div>', d.flora[1], d.flora[2].split(':')[0], 0, '', { t: d.flora[1], w: d, e: CX.E[d.flora[1]], line: d.flora[2] }) : '';
+  const fl = d.flora ? row(thPlant(d.flora[0]), d.flora[1], d.flora[2].split(':')[0], 0, '', { t: d.flora[1], w: d, e: CX.E[d.flora[1]], line: d.flora[2] }) : '';
   const dos = d.do.map(([ic, t, s, tip]) => row(thTx(ic), t, s, 0, '', { t, w: d, ic, line: s, tip, kind: 'do' })).join('');
-  const haz = d.haz.map(([t, s, soon]) => row(thTx('!'), t, null, soon, 'haz', { t, w: d, ic: '!', line: s, kind: 'haz', soon })).join('');
-  const loc = d.loc.map(([ic, t, s, soon]) => row(thTx(ic), t, null, soon, '', { t, w: d, ic, line: s, kind: 'loc', soon })).join('');
+  const haz = d.haz.map(([t, s, soon]) => row(thLoc(t, '!'), t, null, soon, 'haz', { t, w: d, ic: '!', line: s, kind: 'haz', soon })).join('');
+  const loc = d.loc.map(([ic, t, s, soon]) => row(thLoc(t, ic), t, null, soon, '', { t, w: d, ic, line: s, kind: 'loc', soon })).join('');
   return '<section class="dest w-' + d.w + '" id="' + d.w + '"><div class="hero" style="background-image:url(\'' + hero + '\'),url(\'guide/dest-' + d.w + '.jpg\')"><div class="cap"><small>' + esc(d.kick) + '</small><h2>' + esc(d.name) + '</h2><p>' + esc(d.hook) + '</p></div></div>'
     + '<div class="feat"><h3>Featured: ' + esc(d.feat[0]) + (d.feat[2] ? SOON : '') + '</h3><p>' + esc(d.feat[1]) + '</p><div>' + (() => { const i = ORDER.findIndex((o) => o.w === d.w); return openAt(i) ? '<a class="drive" href="' + ORDER[i].url + '">\u25B6 Drive ' + esc(d.name) + '</a>' : '<a class="drive" style="opacity:.6" href="menu.html">\uD83D\uDD12 Locked \u00B7 clear ' + esc((D.find((x) => x.w === ORDER[i - 1].w) || {}).name || '') + '</a>'; })() + '</div></div>'
     + '<div class="cols"><div>' + sec('Things to do', dos) + sec('Wildlife you may meet', wild) + '</div><div>' + sec('Overhead', air) + sec('Local flora', fl) + sec('When in ' + d.name + ', beware', haz) + sec('Locals', loc) + '</div></div>' + (wrenOk(d.w) ? '<div class="wren"><small>RECOVERED \u00B7 WREN</small>' + esc(WREN[d.w]) + '\u2014</div>' : '<div class="wren" style="border-color:#ff5a7a;color:#6d7690"><small style="color:#ff5a7a">ENCRYPTED TRANSMISSION</small>Repair: ' + (d.w === 'desert' ? 'clear Route Zero' : 'bring down the relay in ' + esc(d.name)) + '.</div>') + '</section>'; }).join('');
@@ -306,8 +324,8 @@ const sheet = document.getElementById('sheet'), sbody = sheet.querySelector('.sb
 const bar = (lab, n, max, note) => '<div class="mt"><span>' + lab + '</span><b><i style="width:' + Math.round(100 * Math.max(0, Math.min(max, n)) / max) + '%"></i></b><em>' + note + '</em></div>';
 const WORD = { 0: 'none', 1: 'low', 2: 'some', 3: 'fair', 4: 'high', 5: 'extreme' };
 function openSheet(id) { const o = REG[id]; if (!o) return; const e = o.e, x = CX.X[o.t] || {}, w = o.w; let h = '';
-  const pic = (e && e.img) || o.img, plant = e && e.kind === 'flora' ? PL(e.plant) : '';
-  h += '<div class="pf' + (pic || plant ? '' : ' nopic') + '">' + (pic ? '<div class="pi" style="background-image:url(\'' + pic + '\')"></div>' : plant ? '<div class="pi pl">' + plant + '</div>' : '<div class="pi ic">' + esc(o.ic || '\u25C8') + '</div>')
+  const pic = (e && e.img) || o.img, plant = e && e.kind === 'flora' ? e.plant : '', crop = !pic && !plant && CROPS[o.t];
+  h += '<div class="pf' + (pic || plant || crop ? '' : ' nopic') + '">' + (pic ? '<div class="pi" style="background-image:url(\'' + pic + '\')"></div>' : plant ? '<div class="pi crop" style="background:#120b04 url(\'' + PLANTPIC(plant) + '\') no-repeat;background-size:cover;background-position:center"></div>' : crop ? '<div class="pi crop" style="background:#120b04 url(\'guide/hero-' + crop[0] + '.jpg?v=2\') no-repeat;background-size:' + crop[3] + '% auto;background-position:' + crop[1] + '% ' + crop[2] + '%"></div>' : '<div class="pi ic">' + esc(o.ic || '\u25C8') + '</div>')
     + '<div class="ph"><small>' + esc(w.name) + ' \u00B7 ' + esc((e && e.cls) || ({ do: 'Thing to do', haz: 'Local hazard', loc: 'Local' })[o.kind] || '') + '</small><h3>' + esc(o.t) + (o.soon ? SOON : '') + '</h3><p>' + esc(o.line) + '</p></div></div>';
   if (e && (e.kind === 'machine' || e.kind === 'raider')) {
     h += '<div class="mts">' + bar('Threat', e.threat, 5, WORD[e.threat]) + bar('Toughness', e.hp, 9, e.hp === 1 ? 'one hit' : e.hp + ' hits') + bar('Speed', e.spd, 5, WORD[e.spd]) + bar('Hits you', e.dmg, 5, WORD[e.dmg]) + bar('Numbers', e.num, 5, e.num === 1 ? 'alone' : e.num >= 5 ? 'swarm' : e.num === 2 ? 'a pair' : 'a few') + '</div>';

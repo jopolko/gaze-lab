@@ -64,8 +64,8 @@
   const notice = () => { if (stage >= 1) return; stage = 1; glitch(); later(140, () => { g.classList.add('reg');
     if (!g.querySelector('.lh')) g.insertAdjacentHTML('afterbegin', '<div class="lh"><svg viewBox="0 0 24 24"><path d="M12 2l2.6 6.6L21 9.3l-5 4.4 1.6 6.8L12 17l-5.6 3.5L8 13.7 3 9.3l6.4-.7z" fill="#f5c400"/></svg><span><b>StarLeash</b><br><i>Your connection. Our leash.</i></span></div>');
     pg.innerHTML = '<div class="tag">Customer Protection · on behalf of ACCORD Network Safety</div><h1>Device not registered</h1>'
-      + '<p>Dear Valued Subscriber, this device just tried to reach <b>AFTERGLOW</b>, an unlicensed broadcast, for the first time. The attempt has been logged, timestamped and lightly judged.</p>'
-      + '<p>First visits only. After this we remember you. Forever.</p>'
+      + '<p>Dear Valued Subscriber, this device just tried to reach <b>AFTERGLOW</b>, an unlicensed transmission, for the first time. The attempt has been logged, timestamped and lightly judged.</p>'
+      + '<p>First-time visit only. After this, we will remember you.</p>'
       + '<div class="row" style="justify-content:flex-start"><button type="button" class="pri ver">Prove you are human</button></div>'
       + '<div class="fine">StarLeash is a trading name of StarLeash Holdings, a wholly owned subsidiary of your data. Ref. 7731-B.</div>';
     pg.querySelector('.ver').onclick = (e) => { e.stopPropagation(); captcha(); }; }); };
