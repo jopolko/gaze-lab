@@ -196,7 +196,7 @@ button.go{background:var(--acc)!important;color:#06101f!important;border:0!impor
     <div id="tabs"></div>
     <div id="ph"><span id="pt"></span><span id="ps"></span></div>
     <div id="grid"></div>
-    <div id="bar"><button id="back" title="Back to the menu">&#9776;<small>Menu</small></button><div id="diff"></div><button class="go" id="go">Drive &#9658;</button></div>
+    <div id="bar"><button id="back" title="Back to where you came from">&#8592;<small>Back</small></button><div id="diff"></div><button class="go" id="go">Drive &#9658;</button></div>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@7.0.0/babylon.js"></script>
@@ -239,7 +239,7 @@ button.go{background:var(--acc)!important;color:#06101f!important;border:0!impor
   for (const k in CATS) if (!CATS[k][2].some((o) => o.id === CH[k])) CH[k] = DEF[k];
 
   const NEXT = new URLSearchParams(location.search).get('next') || 'menu.html', $ = (id) => document.getElementById(id);
-  setTimeout(() => { const b = document.getElementById('back'); if (b) b.onclick = () => { location.href = 'menu.html'; }; }, 0);
+  setTimeout(() => { const b = document.getElementById('back'); if (b) b.onclick = () => { if (window.__goBack) window.__goBack('menu.html'); else location.href = 'menu.html'; }; }, 0);
   const opt = (k, id) => CATS[k][2].find((o) => o.id === id) || CATS[k][2][0];
   const GP = (() => { const g = new URLSearchParams(location.search).get('gear'); return ['rocket', 'pole', 'shield', 'bull'].includes(g) ? g : null; })(); if (GP) { CH.gear = GP; try { localStorage.setItem('dl_char', JSON.stringify(CH)); } catch (e) { } }
   let open = GP ? 'gear' : 'mask', prev = null, ANIMST = { calm: 5, spd: 5, vol: false, cope: 'denial' }, MODEL = GP ? 'car' : 'driver', MODE = GP ? 'loadout' : 'looks';

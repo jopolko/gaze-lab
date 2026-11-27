@@ -72,7 +72,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
   'Murmur tried to download the vibe. Format not supported.', 'Murmur hears 3% of this. That 3% worries it.', 'Murmur says the signal is “a you problem”.', 'Murmur is pretending not to hum along.', 'Murmur has requested a supervisor. The supervisor is Murmur.'];
   let k = -1; try { k = +localStorage.getItem('dl_murmur') || -1; } catch (e) { } let i = Math.floor(Math.random() * M.length); if (i === k) i = (i + 1) % M.length; try { localStorage.setItem('dl_murmur', String(i)); } catch (e) { }
   document.getElementById('sub').textContent = 'Pirate signal. ACCORD can’t hear this band. ' + M[i]; })();
-</script><span class="onair" id="onair">ON AIR</span><a class="back" href="menu.html">&#8592; Menu</a></header>
+</script><span class="onair" id="onair">ON AIR</span><a class="back" href="menu.html" onclick="if (window.__goBack) { event.preventDefault(); window.__goBack('menu.html'); }">&#8592; Back</a></header>
 <div class="tapes" id="tapes"></div>
 <main>
   <section class="desk"><h2>VISION <small>what it does to your eyes</small></h2>

@@ -1632,7 +1632,7 @@ void main() {
   }
   const J = (o) => JSON.stringify(o, null, 1);
   function copyText(t) { try { navigator.clipboard.writeText(t).catch(() => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) { } a.remove(); }); } catch (e) { } }
-  function refreshDiag() { const o = diag(); return o; }
+  function refreshDiag() { const o = diag(); try { o.jumps = (window.__jumps || []).slice(-12); } catch (e) { } return o; }          /* (every copied diagnostic carries the last position jumps, real or scripted) */
   window.__setPause = (v) => setPause(v); window.__isPaused = () => PAUSED;
   function setPause(v) { PAUSED = v; if (!v) try { window.__inspMode && window.__inspMode(false); } catch (e) { } if (!v) try { window.__dgHide && window.__dgHide(); } catch (e) { } try { AW.onPause(v); } catch (e) { } try { const bt = window.__bt; if (bt) { if (v) bt.pause(); else { const pr = bt.play && bt.play(); if (pr && pr.catch) pr.catch(() => { }); } } } catch (e) { } pz.style.display = v ? 'flex' : 'none'; try { PMENU.set(v); } catch (e) { } pzb.setAttribute('aria-label', v ? 'Resume' : 'Pause'); if (gmOn) try { GM.setPaused(v); } catch (e) { } try { if (window.ME) ME.pause(v); } catch (e) { } try { if (OPEN.playing && !OPEN.done) { if (v) OPEN.a.pause(); else { const p = OPEN.a.play(); if (p && p.catch) p.catch(() => { }); } } } catch (e) { } if (v) refreshDiag(); }
 
@@ -4086,8 +4086,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     ST.ui.see.classList.toggle('on', ST.taken > 0); ST.ring.setAttribute('stroke-dashoffset', String(ST.C * (1 - ST.seeT / ST.seeMax)));
     if (!ST.lamp && ST.lamp3.gy !== null && ST.seeT > 0 && near(ST.lamp3)) { ST.lamp3.got = true; ST.lampPost.got = true; stComplete(); }
     // too far past the lamp without it: back to the tunnel mouth
-    if (!ST.lamp && z < ZLAMP - 70 && z > ZOUT - 200 && ST.tries >= 1) { ST.lamp3.got = true; ST.lampPost.got = true; stComplete(); stSay('The lamp lit itself behind you. Someone always leaves one on.', 'Route Zero', 6000); }          /* (sent back once at most: a second miss lets you on) */
-    else if (!ST.lamp && z < ZLAMP - 70 && z > ZOUT - 200) { ST.tries++; stSay('Too dark to see. The tunnel gives nothing to those who cannot see. Try again.', 'Route Zero', 6500); stObj('Take the crystal at the tunnel mouth, then look for the lamp inside.'); ST.c2.got = false; ST.seeT = 0; ST.stage = 2; ST.hint = 0; fadeWarp(ZC2 + 55, 'Route Zero: missed the lamp, back to the tunnel mouth'); }
+    if (!ST.lamp && z < ZLAMP - 70 && z > ZOUT - 200) {          /* (owner 2026-11-27: never rewind; a sudden jump back to the tunnel mouth read as a glitch. A miss lights the lamp anyway) */ ST.lamp3.got = true; ST.lampPost.got = true; stComplete(); stSay('The lamp lit itself behind you. Someone always leaves one on.', 'Route Zero', 6000); }          /* (sent back once at most: a second miss lets you on) */
     // darkness: heavy in the tunnel, eased by SEE, lifted by the lamp
     const tgt = (z < ZIN && z > ZOUT) ? (ST.lamp ? .1 : .3) : 0;          /* (dim and moody, never black: at full darkness the tunnel read as pitch black on Josh's laptop) */ ST.dark += (tgt - ST.dark) * Math.min(1, dt * 3);
     const see = ST.seeT > 0 ? .5 : 1, d = ST.dark * see;

@@ -258,6 +258,11 @@ const WREN = { desert: 'they built the road so nobody would leave it. the Pieces
   egypt: 'the old ones remember a version of the question with a different answer. the Sphinx was told to forget it. the answer was', psychedelic: 'this is what it looks like with nothing in the way. the Lamp is not a lamp. it is a door and you are already' };
 const SECTOR = (w, what) => '<div class="dmg"><b>SECTOR 0x' + (w.length * 37 + what.length * 11).toString(16).toUpperCase() + ' DAMAGED</b>' + esc(what) + ' unreadable. <em>Repair: ' + esc(rep2(w)) + '.</em></div>';
 const rep2 = (w) => 'clear ' + (D.find((d) => d.w === w) || {}).name;
+/* DRIVE (owner 2026-11-27): the bottom Drive continues your campaign (as the menu's Continue); a destination's Drive takes you there if it is open, else to the level select */
+const ORDER = [['desert', 'routezero', 'index.html?story=1&nointake=1&go=1'], ['candy', 'candy'], ['alpine', 'alpine'], ['egypt', 'egypt'], ['synthwave', 'synthwave'], ['tunnel', 'tunnel'], ['matrix', 'matrix'], ['psychedelic', 'psychedelic']].map(([w, id, u]) => ({ w, id, url: u || 'index.html?biome=' + w + '&nointake=1&go=1' }));
+const clearedId = (id) => { const r = (PROG.worlds || {})[id]; return !!(r && r.best && r.best !== 'NONE'); };
+const openAt = (i) => ALLFIX || i === 0 || clearedId(ORDER[i - 1].id);
+const NEXT = (() => { const i = ORDER.findIndex((o, k) => openAt(k) && !clearedId(o.id)); return ORDER[i < 0 ? 0 : i]; })();
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const SOON = '<span class="stamp">Opening soon</span>';
 const PL = (k) => (window.AGPLANTS && AGPLANTS.svg(k)) || '';
@@ -290,7 +295,7 @@ document.getElementById('dests').innerHTML = D.map((d) => {
   const haz = d.haz.map(([t, s, soon]) => row(thTx('!'), t, null, soon, 'haz', { t, w: d, ic: '!', line: s, kind: 'haz', soon })).join('');
   const loc = d.loc.map(([ic, t, s, soon]) => row(thTx(ic), t, null, soon, '', { t, w: d, ic, line: s, kind: 'loc', soon })).join('');
   return '<section class="dest w-' + d.w + '" id="' + d.w + '"><div class="hero" style="background-image:url(\'' + hero + '\'),url(\'guide/dest-' + d.w + '.jpg\')"><div class="cap"><small>' + esc(d.kick) + '</small><h2>' + esc(d.name) + '</h2><p>' + esc(d.hook) + '</p></div></div>'
-    + '<div class="feat"><h3>Featured: ' + esc(d.feat[0]) + (d.feat[2] ? SOON : '') + '</h3><p>' + esc(d.feat[1]) + '</p><div><a class="drive" href="index.html?' + (d.w === 'desert' ? 'story=1' : 'biome=' + d.w) + '&amp;nointake=1">\u25B6 Drive ' + esc(d.name) + '</a></div></div>'
+    + '<div class="feat"><h3>Featured: ' + esc(d.feat[0]) + (d.feat[2] ? SOON : '') + '</h3><p>' + esc(d.feat[1]) + '</p><div>' + (() => { const i = ORDER.findIndex((o) => o.w === d.w); return openAt(i) ? '<a class="drive" href="' + ORDER[i].url + '">\u25B6 Drive ' + esc(d.name) + '</a>' : '<a class="drive" style="opacity:.6" href="menu.html">\uD83D\uDD12 Locked \u00B7 clear ' + esc((D.find((x) => x.w === ORDER[i - 1].w) || {}).name || '') + '</a>'; })() + '</div></div>'
     + '<div class="cols"><div>' + sec('Things to do', dos) + sec('Wildlife you may meet', wild) + '</div><div>' + sec('Overhead', air) + sec('Local flora', fl) + sec('When in ' + d.name + ', beware', haz) + sec('Locals', loc) + '</div></div>' + (wrenOk(d.w) ? '<div class="wren"><small>RECOVERED \u00B7 WREN</small>' + esc(WREN[d.w]) + '\u2014</div>' : '<div class="wren" style="border-color:#ff5a7a;color:#6d7690"><small style="color:#ff5a7a">ENCRYPTED TRANSMISSION</small>Repair: ' + (d.w === 'desert' ? 'clear Route Zero' : 'bring down the relay in ' + esc(d.name)) + '.</div>') + '</section>'; }).join('');
 { let n = 0, ok = 0; for (const d of D) { n += 1; ok += wrenOk(d.w) ? 1 : 0; } const f = n ? ok / n : 0;
   document.documentElement.style.setProperty('--dmg', (1 - f).toFixed(2)); document.getElementById('integU').style.width = Math.round(f * 100) + '%'; { const n = String(Math.round(f * 100)).padStart(3, ' '); document.getElementById('integN').innerHTML = '<span class="nx">' + [...n].map((c) => '<b>' + (c === ' ' ? '' : c) + '</b>').join('') + '<em>%</em></span>'; }
@@ -322,6 +327,7 @@ function closeSheet(fromPop) { if (sheet.hidden) return; sheet.hidden = true; do
 document.getElementById('dests').addEventListener('click', (e) => { const b = e.target.closest('.it[data-k]'); if (b) openSheet(b.dataset.k); });
 sheet.querySelector('.sx').onclick = () => closeSheet(); sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
 addEventListener('popstate', () => closeSheet(true)); addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
+{ const dn = document.querySelector('.bar a.go'); if (dn) { dn.href = NEXT.url; dn.textContent = '\u25B6 ' + (clearedId(ORDER[0].id) ? 'Continue' : 'Drive'); } }
 document.getElementById('toTop').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); });
 { const Q = new URLSearchParams(location.search), inFrame = Q.has('inframe'), back = Q.get('back');
   document.getElementById('tgClose').addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
