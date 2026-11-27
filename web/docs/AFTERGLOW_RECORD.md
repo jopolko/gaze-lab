@@ -92,6 +92,20 @@ Names over time: Downhill → Downfall → The Frequency → **Afterglow**.
 - **The only sober thing** — a recurring mechanic: under a heavy strain the world melts and the key object stays plain. First used for the Lamp in Route Zero's tunnel; reuse for later Lamp pieces and for spotting ACCORD's hidden cameras.
 - Planned cast (see the missions bank): Augustin Maro (kingpin), the Cleaner, the Closer, Mama Tallow, Warden Pell, the Feral Kid, Dex & Lolo.
 
+### The open road: Dead Air and the Static (owner 2026-11-26)
+
+- **Dead Air** — the long straight roads between the worlds. ACCORD's signal doesn't reach them: no cameras, no Murmur feed, no raiders. That is why the straights are calm. Raiders peel off at the edge of Dead Air (raids already end before tunnels and finishes; this is the reason). In play: Dead Air is where the music swells, the trip breathes, and (when Heat exists) your wanted level cools.
+- **The Static** — the people who live out in Dead Air, off the grid and Out of Alignment, like the Courier. Mad Max / Waterworld road communities in the game's own language (signal, frequency, alignment). *Insert Dissent* (the link-preview tagline) is how you join them.
+- **The Abliterati** are the Static's true believers: the ones rebuilding the Lamp. Every Abliterati is Static; not every Static is Abliterati. Their ritual lines stay theirs.
+- **The Lamp, in this light:** WREN's pieces let the Static broadcast back. Each piece the Courier carries home widens Dead Air a little (a story reason for quests to matter).
+- **Static outposts** — one at the edge of each world, where its quests start; the road leads through them, so they also join the worlds together:
+  - **Mile Zero** — the diner on Route Zero (Dex & Lolo's hold-up, Maro's case). The first outpost, already built.
+  - **Low Band** — a market junction where the Static trades salvage: raider wreckage, GPUs dropped by downed craft, black-market strains.
+  - **Sideband** — a convoy town that never stops: trucks, tankers and buses lashed together, driving the straights forever, because a stopped town can be found. (The Waterworld one.)
+  - **The Squelch** — the quiet place. Static elders who can silence any signal; where finished Lamp pieces are kept. Late-game.
+- **Tone:** the Static is the warm, human side of the world (gallows humour, barter, pirate radio); ACCORD stays cold and polite. Static voices speak plainly, never in ACCORD's service-prompt register.
+- **Still to decide:** the Static's pirate-radio voice (a DJ who comments on your runs, the counterweight to Sterling Vance); whether outposts are places you stop in (menus, quests) or drive through (scenes); which outpost sits in which world beyond Mile Zero.
+
 Older story documents (DOWNFALL_*) hold more world detail (biomes, gates, recovered books, bosses). Where they conflict with this record, **this record wins** (names, tone, villain).
 
 ---
