@@ -31,7 +31,7 @@ export function createBeasts(d) {
     else if (kind === 'tor') m = B.MeshBuilder.CreateTorus('bp', { diameter: o.dd, thickness: o.th, tessellation: o.tess || 32 }, scene);
     else if (kind === 'tube') m = B.MeshBuilder.CreateTube('bp', { path: o.path.map((p) => new B.Vector3(p[0], p[1], p[2])), radius: o.r, tessellation: 8 }, scene);
     m.material = o.m; m.parent = root; m.isPickable = false; if (o.p) m.position.set(o.p[0], o.p[1], o.p[2]); if (o.r3) m.rotation.set(o.r3[0], o.r3[1], o.r3[2]); return m; }
-  const legs = (R, m, n, sx, len, y, z0, dz, th) => { const out = []; for (const s of [-1, 1]) for (let i = 0; i < n; i++) { const z = z0 + i * dz, L = part(R, 'tube', { path: [[s * sx, y, z], [s * (sx + len * .55), y + len * .45, z - .1 * len], [s * (sx + len), 0, z - .2 * len]], r: th, m }); out.push({ L, s, i }); } return out; };
+  const legs = (R, m, n, sx, len, y, z0, dz, th) => { const out = []; for (const s of [-1, 1]) for (let i = 0; i < n; i++) { const z = z0 + i * dz, L = part(R, 'tube', { path: [[s * sx, y, z], [s * (sx + len * .55), y + len * .45, z - .1 * len], [s * (sx + len), 0, z - .2 * len]], r: th, m }); L.setPivotPoint(new B.Vector3(s * sx, y, z)); out.push({ L, s, i }); }          /* (pivot at the hip, so a step swings the leg instead of the whole leg orbiting the body) */ return out; };
 
   // the build for each model. Forward is -z (the way you drive); size in metres
   const BUILD = {
@@ -309,7 +309,7 @@ export function createBeasts(d) {
       const yo = (b.mode === 'drop' || b.mode === 'fly') ? (b.yOff || 0) : b.mode === 'sysadmin' ? -10 * b.sc * (b.crouch || 0) : b.mode === 'sphinx' ? -12 * b.sc * (b.bow || 0) : (b.g.hover ? 1.2 + Math.sin(b.t * 2 + b.ph) * .4 : 0), up = b.mode === 'ridge' ? -b.h * (1 - (b.up || 0)) : 0;
       b.R.position.set(b.x, b.y + yo + up, b.z); const hd = Math.atan2(-(b.vx || 0), -1); b.R.rotation.y = b.mode === 'swarm' && !b.latched ? Math.atan2(PH.x - b.x, b.z - PH.z) + Math.PI : 0;
       if (b.spec.shift) { const c = [[1, .69, .13], [.22, .91, 1], [.49, 1, .54]][Math.floor(((b.t + b.ph) % 3))]; if (b.g.tip) b.g.tip.material.emissiveColor.set(...c); }
-      if (b.g.legs) for (const L of b.g.legs) L.L.rotation.x = Math.sin(b.t * (b.g.quad ? 14 : 22) + L.i * 1.4 + (L.s > 0 ? Math.PI : 0)) * .25;
+      if (b.g.legs) { const w = b.latched ? 26 : (b.g.quad ? 14 : 22), sw = b.latched ? .55 : .4; for (const L of b.g.legs) { const ph = b.t * w + ((L.i + (L.s > 0 ? 1 : 0)) % 2 ? Math.PI : 0); L.L.rotation.x = Math.sin(ph) * sw; L.L.rotation.z = L.s * Math.max(0, Math.cos(ph)) * .4; } }          /* (owner 2026-11-27: the legs run, a tripod gait: each leg swings from the hip and lifts on the way forward; a stinger riding the car scrambles) */
       if (b.hitT > 0) b.R.scaling.setAll(b.sc * (1 + .15 * Math.sin(b.hitT * 40)));
       if (b.tell && b.g.lr) { b.g.lr.material.emissiveColor.set(1, .2, .25); b.g.lb.material.emissiveColor.set(1, .2, .25); } else if (b.g.lr) { const f = Math.sin(b.t * 14) > 0; b.g.lr.material.emissiveColor.set(f ? 1 : .2, .2, .25); b.g.lb.material.emissiveColor.set(.3, .6, f ? .2 : 1); }
       contact(b); }
@@ -323,7 +323,8 @@ export function createBeasts(d) {
     const R = new B.TransformNode('pose', scene), g = BUILD[spec.model](R, spec.v), sc = g.scale || 1; R.scaling.setAll(sc); const FR = { brood: 62, sphinx: 36, mast: 30, sysadmin: 30, bore: 26 }, k = dist ?? FR[spec.model] ?? (g.len * sc < 4 ? 4.4 : (g.len + g.h) * sc * .5 + 3), x = cp.x + f.x * k, z = cp.z + f.z * k;          /* (framing by size: small ones close, giants far enough to fit) */
     R.position.set(x, ground(x, z) + (spec.model === 'spotter' ? 1.3 : g.hover ? 2.2 : 0), z); R.rotation.y = Math.atan2(-(cp.x - x), -(cp.z - z)) + turn;
     if (g.tip && g.tip.material) g.tip.material.emissiveColor.set(1, 1, 1); if (g.lr) { g.lr.material.emissiveColor.set(1, .2, .25); g.lb.material.emissiveColor.set(.3, .6, 1); }
-    if (g.legs) for (const L of g.legs) L.L.rotation.x = Math.sin(L.i * 1.4 + (L.s > 0 ? Math.PI : 0)) * .25; return R; }
+    if (g.legs) { let t = 0; const ob = scene.onBeforeRenderObservable.add(() => { if (R.isDisposed()) { scene.onBeforeRenderObservable.remove(ob); return; } t += Math.min(.05, scene.getEngine().getDeltaTime() / 1000);          /* (owner 2026-11-27: the introduction pose runs on the spot instead of standing stiff) */
+      for (const L of g.legs) { const ph = t * (g.quad ? 12 : 18) + ((L.i + (L.s > 0 ? 1 : 0)) % 2 ? Math.PI : 0); L.L.rotation.x = Math.sin(ph) * .5; L.L.rotation.z = L.s * Math.max(0, Math.cos(ph)) * .4; } }); } return R; }
   /* WARM-UP (owner 2026-11-27): build this world's machines and a rack once while the level loads and compile their materials, so the first one on the road
      never stalls a frame; then throw the copies away (the materials stay cached). */
   { try { for (const spec of ROS.concat([{ model: 'rack' }])) { const R = new B.TransformNode('warm', scene); BUILD[spec.model](R, spec.v); for (const m of R.getChildMeshes()) { if (m.material && m.material.forceCompilation) m.material.forceCompilation(m); } R.dispose(false, false); } } catch (e) { console.warn('beasts warm-up', e); } }
