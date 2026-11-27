@@ -5,7 +5,7 @@
 <title>Intake Form</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
 <style>
-:root{--ink:#2b2250;--mut:#7a6fb0;--acc:#ff3fa4;--teal:#17c3b2;--sun:#ffd23f;--good:#2fc57a;--bad:#ff5d73}
+:root{--ink:#2b2250;--mut:#7a6fb0;--acc:#ff8a3d;--teal:#17c3b2;--sun:#ffd23f;--good:#2fc57a;--bad:#ff5d73}
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:linear-gradient(#ffe6f2,#fff1dc);color:var(--ink);font:800 17px/1.25 ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold","Trebuchet MS",system-ui,sans-serif;overflow:hidden}
 button{font-family:inherit;color:var(--ink)}
 #app{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(400px,.9fr);height:100%;max-width:1200px;margin:0 auto}
@@ -26,8 +26,8 @@ button{font-family:inherit;color:var(--ink)}
 .dl{position:absolute;right:-4px;top:-10px;font-size:15px;font-weight:900;padding:1px 7px;border-radius:99px;border:2px solid var(--ink);animation:fl 1.8s forwards}.dl.p{background:var(--good);color:#fff}.dl.m{background:var(--bad);color:#fff}@keyframes fl{0%{opacity:1;transform:translateY(0) scale(1.15)}100%{opacity:0;transform:translateY(-12px)}}
 #trip{position:absolute;left:8px;right:8px;bottom:8px;padding:5px 12px;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;border-radius:18px;background:#fff;border:3px solid var(--ink);box-shadow:0 4px 0 var(--ink);z-index:2}
 #tl{font-size:13px;white-space:nowrap}#tn{font-size:13px;color:var(--mut);white-space:nowrap}#trip.vol{flex-wrap:wrap}#trip.vol #tn{flex:0 0 100%;text-align:center;white-space:normal;color:var(--ink)}
-#tb{position:relative;height:16px;border-radius:99px;border:3px solid var(--ink);background:#eee7ff;flex:1;min-width:60px;overflow:hidden}#tf{height:100%;width:0;background:linear-gradient(90deg,#17c3b2,#ff3fa4,#ffd23f);transition:width .3s}#tm{position:absolute;top:0;bottom:0;width:3px;background:var(--ink)}
-#trip.vol{background:linear-gradient(90deg,#ffe066,#ff9ed2,#9ef0ff);animation:pulse 1s infinite}@keyframes pulse{50%{transform:scale(1.02)}}
+#tb{position:relative;height:16px;border-radius:99px;border:3px solid var(--ink);background:#eee7ff;flex:1;min-width:60px;overflow:hidden}#tf{height:100%;width:0;background:linear-gradient(90deg,#17c3b2,#ff8a3d,#ffd23f);transition:width .3s}#tm{position:absolute;top:0;bottom:0;width:3px;background:var(--ink)}
+#trip.vol{background:linear-gradient(90deg,#ffe066,#ffc38a,#9ef0ff);animation:pulse 1s infinite}@keyframes pulse{50%{transform:scale(1.02)}}
 #panel{display:flex;flex-direction:column;min-height:0;min-width:0;margin:10px 10px 10px 12px;background:#fff;border:4px solid var(--ink);border-radius:26px;box-shadow:0 6px 0 var(--ink)}
 #tabs{display:flex;gap:10px;overflow-x:auto;padding:12px 12px 10px;align-items:center;scrollbar-width:none;-webkit-overflow-scrolling:touch}#tabs::-webkit-scrollbar{display:none}
 .sep{flex:0 0 4px;height:34px;background:var(--ink);opacity:.25;border-radius:3px}
@@ -480,7 +480,7 @@ button.go{background:var(--acc)!important;color:#06101f!important;border:0!impor
     S = 'bumper';
     if (CH.bumper === 'stock') { P(bx(1.8, .18, .2), 0, .32, 1.72, gm); P(bx(1.6, .03, .03), 0, .4, 1.83, steel); }
     if (CH.bumper === 'bull') { P(bx(1.9, .14, .16), 0, .5, 1.8, dark); P(bx(1.9, .14, .16), 0, .2, 1.8, dark); [-.8, -.4, 0, .4, .8].forEach((x) => P(cyl(.08, .5, 10), x, .36, 1.8, dark)); }
-    if (CH.bumper === 'noodle') { P(cyl(.2, 1.9, 14), 0, .42, 1.82, mat('#ff6fb5')).rotation.z = Math.PI / 2; P(cyl(.2, 1.9, 14), 0, .2, 1.82, mat('#2fd6c5')).rotation.z = Math.PI / 2; }
+    if (CH.bumper === 'noodle') { P(cyl(.2, 1.9, 14), 0, .42, 1.82, mat('#ff8a3d')).rotation.z = Math.PI / 2; P(cyl(.2, 1.9, 14), 0, .2, 1.82, mat('#2fd6c5')).rotation.z = Math.PI / 2; }
     S = 'roof'; const RY = 1.4;
     if (CH.roof === 'siren') { P(bx(.9, .08, .3), 0, RY, -.25, gm); blinkOn(P(cyl(.22, .2, 16), -.25, RY + .14, -.25, glowM('#ff3b3b')), 0); blinkOn(P(cyl(.22, .2, 16), .25, RY + .14, -.25, glowM('#3b7bff')), Math.PI); }
     if (CH.roof === 'cone') { P(bx(.5, .06, .5), 0, RY, -.25, mat('#ff7a1a')); P(cone(.42, .6, 20), 0, RY + .33, -.25, mat('#ff7a1a')); P(cyl(.3, .08, 20), 0, RY + .3, -.25, mat('#ffffff')); }
