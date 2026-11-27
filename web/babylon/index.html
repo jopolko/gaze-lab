@@ -1307,7 +1307,7 @@ void main() {
   } catch (e) { say('VR setup: ' + e.message); }
   // ---- AUTOMATIC TUNING (the same rules as the three.js demo): shed, one step at a time, whatever costs the most and shows the least; restore when there is room; the refresh steps down (never under 60) and back up.
   const SHEDN = ['far1000', 'far650', 'dots', 'rim', 'moire'];
-  function applyShed(l) { TUNE.level = l; TUNE.far = Math.min(OPT.far, l >= 2 ? 650 : (l >= 1 ? 1000 : 1800)); TUNE.lod = Math.max(OPT.lod, l >= 5 ? 3 : (l >= 4 ? 2 : (l >= 3 ? 1 : 0))); cam.maxZ = TUNE.far; try { if (xr && xr.baseExperience && xr.baseExperience.camera) xr.baseExperience.camera.maxZ = TUNE.far; } catch (e) { } }
+  function applyShed(l) { TUNE.level = l; TUNE.far = Math.min(OPT.far, l >= 2 ? 650 : (l >= 1 ? 1000 : 1800)); TUNE.lod = Math.max(OPT.lod, l >= 5 ? 3 : (l >= 4 ? 2 : (l >= 3 ? 1 : 0))); if (!TUNE.glide) { TUNE.glide = true; scene.onBeforeRenderObservable.add(() => { const goal = TUNE.far, d = goal - cam.maxZ; if (Math.abs(d) < 1) return; const step = Math.sign(d) * Math.min(Math.abs(d), 400 * Math.min(.05, engine.getDeltaTime() / 1000)); cam.maxZ += step; try { if (xr && xr.baseExperience && xr.baseExperience.camera) xr.baseExperience.camera.maxZ = cam.maxZ; } catch (e) { } }); } }          /* (owner 2026-11-26: the draw distance glides to its new value, about 400 m a second, instead of snapping) */
   function stepRate(dir) { if (OPT.hz) return false; const r = TUNE.rates, s = TUNE.sess, j = r.indexOf(hzTarget) + (dir < 0 ? 1 : -1), nr = r[j]; if (!s || !s.updateTargetFrameRate || nr === undefined || nr < 60) return false; s.updateTargetFrameRate(nr).then(() => { hzTarget = nr; TUNE.settle = 3; TUNE.good = 0; }).catch(() => { }); return true; }
   // ---- FLAT-SCREEN TUNING (desktop, laptop, phone, 4K): resolution is spent first (down to a floor), then the picture effects, then the far view and surface detail; it all comes back in the reverse order.
   // The start is picked from the graphics chip and the screen (a pixel budget), measured by a short probe of the display's refresh rate, and logged so each kind of device can be tuned from real numbers.
@@ -1325,10 +1325,11 @@ void main() {
   function tune2d(f) {
     if (inXR || !started || panelOpen || Q.get('postcap') || POST.settle-- > 0) return; POST.settle = Math.max(0, POST.settle); const target = Math.min(POST.refresh, 60);
     /* (owner 2026-11-26: the old rule cut below 50 fps but only gave back above 59, so a phone holding 56 lost resolution and never got it back. Now: give back from 55;
-       when cutting, resolution only down to .8, then draw distance, then the rest of the resolution, then post) */
-    const RS_SOFT = Math.max(POST.rsMin, .8);
-    if (f < target * .84) { POST.good = 0; if (POST.rs > RS_SOFT + .001) applyRes(Math.max(RS_SOFT, POST.rs - (f < target * .75 ? .1 : .05))); else if (TUNE.level < SHEDN.length) applyShed(TUNE.level + 1); else if (POST.rs > POST.rsMin + .001) applyRes(Math.max(POST.rsMin, POST.rs - .05)); else if (POST.level > (P3 ? 1 : 0)) applyPost(POST.level - 1); POST.settle = 2; }
-    else if (f > target * .92) { if (++POST.good >= 6) { POST.good = 0; if (POST.level < POST.cap) applyPost(POST.level + 1); else if (POST.rs < RS_SOFT - .001) applyRes(POST.rs + .05); else if (TUNE.level > 0) applyShed(TUNE.level - 1); else if (POST.rs < POST.rsMax - .001) applyRes(POST.rs + .05); POST.settle = 2; } }
+       see the trade-off below) */
+    /* (owner 2026-11-26, the trade-off: SMOOTH first, the world immersive and trippy second, sharpness last. So resolution goes first, all the way to its floor;
+       only then draw distance and detail; the trip's effects are never cut. Coming back: draw distance and detail first, then resolution.) */
+    if (f < target * .84) { POST.good = 0; if (POST.rs > POST.rsMin + .001) applyRes(Math.max(POST.rsMin, POST.rs - (f < target * .6 ? .05 : .025)));          /* (small steps: it eases down, owner 2026-11-26) */ else if (TUNE.level < SHEDN.length) applyShed(TUNE.level + 1); POST.settle = 2; }
+    else if (f > target * .92) { if (++POST.good >= 6) { POST.good = 0; if (POST.level < POST.cap) applyPost(POST.level + 1); else if (TUNE.level > 0) applyShed(TUNE.level - 1); else if (POST.rs < POST.rsMax - .001) applyRes(POST.rs + .025); POST.settle = 2; } }
     else POST.good = 0;
   }
   function tune(f, hz) {
@@ -1600,7 +1601,7 @@ void main() {
     btn('\uD83D\uDD12\uFE0E Lock', () => { const go = () => { try { AGLock.enable(); AGLock.show({ ctx: window.__lkCtx && window.__lkCtx() }); } catch (e) { } }; if (window.AGLock) go(); else { const sc = document.createElement('script'); sc.src = 'lock.js'; sc.onload = go; document.head.appendChild(sc); } });          /* (the lock screen gag on demand; also switches the idle lock back on) */
     btn('Restart', () => { location.reload(); });
     if (!Q.has('story') && !Q.has('tutorial')) { const w = PZ('pzW'); if (w) { w.title = 'World'; G.appendChild(w); } }
-    btn('Quit to menu', () => { location.href = 'menu.html'; });
+    btn('Worlds', () => { location.href = 'menu.html'; }); btn('Title screen', () => { location.href = 'splash.html'; });          /* (owner 2026-11-26: the level select is 'Worlds'; the title screen is one tap away, progress kept, no training) */
     const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Settings'; { const ib = document.createElement('button'); ib.className = 'sm'; ib.textContent = '\u2316 Inspect & copy'; ib.onclick = () => { try { window.__inspMode(true); } catch (e) { } }; G.appendChild(ib); } dv.onclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
     /* MAX INTENSITY, changeable mid-game (owner 2026-11-26: if someone changes their mind): re-tunes the trip live and is remembered for the next run */
     { const R = el.querySelector('#pmSigR'), V = el.querySelector('#pmSigV'), show = (f) => { V.textContent = Math.round(f) + ' THz' + (f > 790 ? ' \u00B7 UV' : ''); V.style.color = f > 790 ? '#d68cff' : '#9fd8ff'; };

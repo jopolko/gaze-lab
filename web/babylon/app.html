@@ -14,7 +14,10 @@ iframe { position:fixed; left:0; top:0; width:100%; height:100%; height:100dvh; 
 <iframe id="f" title="Afterglow" allow="fullscreen; camera; microphone; autoplay; gyroscope; accelerometer; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
 <script>
 window.__SHELL = true; window.__fsAt = -1e9; for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { if (document.fullscreenElement || document.webkitFullscreenElement) window.__fsAt = performance.now(); });          /* (when fullscreen began: phone browsers show an exit notice for a few seconds, and pages keep their buttons clear of it) */          /* the pages look for this: inside the shell they fullscreen the shell itself */
-(() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'splash.html';          /* the title screen first; it taps through to the menu */
+(() => { const f = document.getElementById('f'), q = new URLSearchParams(location.search); let p = q.get('p') || 'splash.html';
+  /* (owner 2026-11-26: anyone opening the link gets the title screen first, returning players too. The address bar keeps the current page, so a RELOAD in the
+     same visit stays put; a new visit (a fresh tab, the app reopened, the link pasted again) always starts at the title. &keep honours ?p= on a fresh visit.) */
+  try { if (!sessionStorage.getItem('dl_visit') && !q.has('keep')) p = 'splash.html'; sessionStorage.setItem('dl_visit', '1'); } catch (e) { }          /* the title screen first; it taps through to the menu */
   if (!/^[A-Za-z0-9_-]+\.html([?#].*)?$/.test(p)) p = 'menu.html';          /* only this folder's own pages */
   /* ELECTRONIC ANESTHESIA FIRST (owner 2026-11-26): on a first launch the studio's logo is the very first thing seen, about 2.4 s on black (a tap skips it).
      The title screen loads underneath and holds its clock until the logo has gone. Later launches go straight in. (?ea shows it again.) */
