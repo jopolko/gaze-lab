@@ -87,7 +87,10 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
   #strain { position:absolute; margin:0; left:50%; transform:translateX(-50%); bottom:calc(max(10px,var(--sa-bottom, env(safe-area-inset-bottom))) + 22px); width:max-content; max-width:44vw; text-align:center; }          /* (centred under the molecule) */
   #tap { position:absolute; right:max(18px,var(--sa-right, env(safe-area-inset-right))); bottom:24%; margin-right:0; font-size:clamp(13px,4vh,20px); }
   #hint { position:absolute; margin:0; right:max(18px,var(--sa-right, env(safe-area-inset-right))); bottom:calc(24% - 3.2em); max-width:30vw; text-align:right; }
-#hint { bottom:auto; top:calc(76% + .8em); max-width:26vw; flex-direction:column; align-items:flex-end; gap:.5em; } #strain { max-width:40vw; }          /* (owner 2026-11-27: hangs below TAP TO TUNE IN, never over it or the caption) */ }
+#hint { bottom:auto; top:calc(76% + .8em); max-width:26vw; flex-direction:column; align-items:flex-end; gap:.5em; } #strain { max-width:40vw; }
+#strain { background:rgba(8,6,14,.78); padding:6px 14px 7px; border-radius:10px; box-shadow:0 0 0 1px rgba(255,255,255,.12); z-index:7 !important; font-size:clamp(12px,1.8vmin + 7px,17px) !important; } #strain .fx { font-size:clamp(13px,1.6vmin + 8px,18px) !important; }          /* (owner 2026-11-27: name, molecule and what it does, always readable over the road) */          /* (owner 2026-11-27: hangs below TAP TO TUNE IN, never over it or the caption) */ }
+
+#strain { background:rgba(8,6,14,.78); padding:6px 14px 7px; border-radius:10px; box-shadow:0 0 0 1px rgba(255,255,255,.12); z-index:7; width:max-content; max-width:min(92vw,560px); margin-left:auto; margin-right:auto; }          /* (both orientations: the caption on its own plate) */
 </style></head>
 <body>
 <script>window.__PRIVMS = 0; if (/[?&]firstvisit\b/.test(location.search)) try { for (const k of ['dl_lockfirst', 'dl_firstlock']) localStorage.removeItem(k); } catch (e) { }          /* (?firstvisit: see the first-visit gag again) */</script>
