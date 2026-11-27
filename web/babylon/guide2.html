@@ -50,6 +50,32 @@ body { font:16px/1.45 Georgia,"Times New Roman",serif; padding:0 max(10px,env(sa
 .bar { position:fixed; left:0; right:0; bottom:0; display:flex; gap:8px; justify-content:center; padding:10px max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); background:linear-gradient(transparent,#15110dee 35%); z-index:5; }
 .bar a { font:700 14px "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; padding:10px 16px; border-radius:3px; text-decoration:none; color:#f2e8cf; border:1px solid #6d5a45; background:#15110d; }
 .bar a.go { background:var(--gold); color:#15110d; border:0; }
+button.it { width:100%; text-align:left; background:none; border:0; padding:4px 2px; cursor:pointer; font:inherit; color:inherit; grid-template-columns:44px minmax(0,1fr) 14px; border-radius:6px; }
+button.it:hover, button.it:focus-visible { background:rgba(168,70,26,.08); outline:none; }
+.it .go { font:700 22px/44px Georgia,serif; color:#b9a57f; font-style:normal; }
+.it small { display:block; margin-top:2px; font:700 10.5px "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); }
+.pp { display:inline-flex; gap:2px; vertical-align:middle; margin-left:3px; } .pp u { width:9px; height:6px; background:#d3c19b; border-radius:1px; } .pp u.on { background:#b0261c; }
+body.lock { overflow:hidden; }
+#sheet { position:fixed; inset:0; z-index:50; background:rgba(10,7,4,.72); overflow:auto; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); }
+#sheet .sc { max-width:640px; margin:0 auto; background:var(--paper); border-radius:4px; box-shadow:0 8px 30px #000c; padding:12px 16px 18px; position:relative; min-height:calc(100% - 4px); }
+#sheet .sx { position:sticky; top:0; z-index:2; box-shadow:0 -12px 0 12px var(--paper), 0 0 0 0 transparent; font:700 14px "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; background:#15110d; color:#f2e8cf; border:0; border-radius:3px; padding:8px 14px; cursor:pointer; margin-bottom:10px; }
+#sheet .pf { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:14px; align-items:end; }
+@media (max-width:560px) { #sheet .pf { grid-template-columns:1fr; } }
+#sheet .pi { aspect-ratio:1; border-radius:4px; background:#2a2118 center/cover no-repeat; box-shadow:0 0 0 3px #fff, 0 3px 10px #0006; transform:rotate(-1.5deg); }
+#sheet .pi.pl { background:#f4ecd8; } #sheet .pi.pl svg { width:100%; height:100%; } #sheet .pi.ic { display:grid; place-items:center; font:64px/1 system-ui,sans-serif; color:var(--gold); aspect-ratio:2; }
+#sheet .ph small { font:700 11px "Barlow Condensed",sans-serif; letter-spacing:.2em; text-transform:uppercase; color:var(--rust); }
+#sheet .ph h3 { margin:.1em 0 .2em; font:400 clamp(30px,8vw,44px)/.95 "Bebas Neue",sans-serif; letter-spacing:.03em; }
+#sheet .ph p { margin:0; font:italic 16px/1.4 Georgia,serif; color:#3b2f24; }
+.mts { margin:14px 0 8px; display:grid; gap:6px; }
+.mt { display:grid; grid-template-columns:88px minmax(0,1fr) 64px; gap:8px; align-items:center; font:700 12px "Barlow Condensed",sans-serif; letter-spacing:.12em; text-transform:uppercase; }
+.mt b { height:10px; background:#d8c7a2; border-radius:2px; overflow:hidden; box-shadow:inset 0 1px 2px #0003; } .mt b i { display:block; height:100%; background:linear-gradient(90deg,#e0a21a,#b0261c); }
+.mt em { font-style:normal; color:var(--dim); text-align:right; }
+.kb { display:flex; flex-wrap:wrap; gap:5px; align-items:center; margin:6px 0 10px; } .kb span { font:700 12px "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); margin-right:4px; }
+.kb i { font:700 12.5px "Barlow Condensed",sans-serif; letter-spacing:.06em; font-style:normal; background:#15110d; color:var(--gold); padding:3px 8px; border-radius:3px; }
+#sheet dl { margin:8px 0 0; } #sheet dt { font:700 12px "Barlow Condensed",sans-serif; letter-spacing:.18em; text-transform:uppercase; color:var(--dim); margin-top:9px; } #sheet dd { margin:2px 0 0; font:15.5px/1.45 Georgia,serif; }
+#sheet dt.hot { color:var(--rust); } #sheet dd.hot { font-weight:700; }
+#sheet dl.lore { border-top:2px dashed #b9a57f; margin-top:14px; padding-top:4px; }
+#sheet blockquote { margin:14px 0 0; padding:8px 12px; border-left:4px solid var(--rust); font:italic 17px/1.35 Georgia,serif; background:rgba(168,70,26,.07); }
 </style></head><body>
 <div class="wrap">
 <header class="mast"><small>Visitor Services · Free to take · Please return to rack</small><h1><a href="splash.html">Afterglow</a></h1><p>The Brochure, Issue One. Eight destinations, one road, no refunds. Every attraction below has been reviewed for your comfort by people who will never visit.</p></header>
@@ -57,7 +83,8 @@ body { font:16px/1.45 Georgia,"Times New Roman",serif; padding:0 max(10px,env(sa
 <main id="dests"></main>
 </div>
 <div class="bar"><a class="go" href="index.html?story=1&amp;nointake=1">&#9654; Drive</a><a href="#" id="tgClose">&#10005; Close</a><a href="#" id="toTop">&#9650; Top</a></div>
-<script src="plants.js"></script>
+<div id="sheet" hidden><div class="sc"><button type="button" class="sx" aria-label="Back to the Brochure">‹ Back</button><div class="sb"></div></div></div>
+<script src="plants.js"></script><script src="codex.js"></script>
 <script>
 /* type: do (things to do), wild (wildlife), air (overhead), flora (local plant), haz (hazard), loc (locals). soon = not in the game yet */
 const P = (n) => 'guide/por-' + n + '.jpg';
@@ -69,14 +96,14 @@ const D = [
    air: ['ACCORD Patrol Jet', 'Drops compliance pods. Polite about it.', 'Steer out of the yellow rings. Dodge a whole volley for the gold ramp.'],
    flora: ['green tea', 'Roadside green tea', 'Gives you Lucid: tracers almost double. Steeped in exhaust, for flavour.'],
    haz: [['Yellow rings on the tarmac', 'The Patrol Jet has picked a spot. Do not be the spot.'], ['Orange DROP arches', '240 m of hard downhill. Hold on to something you believe in.']],
-   loc: [['📺', 'Sterling Vance', 'Host of ACCORD Live. Narrates your run as a warning to others.'], ['🍔', 'Dex & Lolo', 'Robbers. Comic, deadly, wrong time, wrong station.', 1]] },
+   loc: [['🍔', 'Dex & Lolo', 'Robbers. Comic, deadly, wrong time, wrong station.', 1]] },
  { w: 'alpine', name: 'The Safe Peaks', kick: 'The Alps', hook: 'Altitude is a privilege. Breathe responsibly.',
    feat: ['The Hunt, live on ACCORD Live', 'Marshal Kade Ransom, celebrity bounty hunter, chases you down the mountain from a gunship while Vance calls the action. He does not want the Lamp. He wants the shot.', 1],
    do: [['═', 'Ride a rail to its end', 'One shard for the full ride.', 'Stay on: falling off early counts as sightseeing.'], ['◎', 'Fly a perfect ring set', 'Every ring in a row, in the air.', 'Line up before the ramp, not on it.']],
    wild: [['__skit', 'The Skitters of Crag Rock Cemetery', 'Tiny, sociable, keen on windscreens.', 'Hit the zappers to blast them back; thunder clouds wash them off.'], ['frost-tick', 'Frost Ticks', 'A living carpet that keeps the road warm and slightly slower.', 'Land in the middle and the carpet pops.'], ['snow-burrower', 'The Snow Burrower', 'Shy. Surfaces to say hello.', 'Watch the moving ridge; land on it or hit it fast for big air.'], ['plow-warden', 'The Plow Warden', 'Keeps the road clear of snow, and of you.', 'Land on its cab, or lead it off the edge.']],
    air: ['Safe Peaks Rescue (Hostile)', 'A helicopter that rescues you with snowballs.', 'Watch the rings, not the helicopter.'],
    flora: ['peppermint', 'Glacier peppermint', 'Gives you Hollow: a wider, out-of-body view. Grown at a premium altitude.'],
-   haz: [['The ridge that moves', 'It is not a ridge. It is the Burrower, and it has opinions.'], ['Petting the Skitters', 'Do not. They will come with you, on the glass.']],
+   haz: [['Snow walls', 'Ploughed across the road with one gap. The gap moves when you look at it.'], ['Ledges', 'The Safe Peaks are mostly downhill and partly air. Long jumps end where they end.']],
    loc: [['🎯', 'Marshal Kade Ransom', 'Bounty hunter. The raiders are his crews.', 1]] },
  { w: 'candy', name: 'Sugarfall', kick: 'Candy Land', hook: 'Every day is the same day, and it is delicious.',
    feat: ['The Comfort Belt', 'A sanitized broadcast town where it is always 4 pm on a nice Tuesday, a laugh track plays when you crash, and nobody remembers yesterday. The concierge would love to show you a better route.', 1],
@@ -84,15 +111,15 @@ const D = [
    wild: [['glass-stinger', 'Glass Stingers', 'Hand-blown sugar glass. Fragile, numerous, keen.', 'Sweep across the swarm side to side.'], ['sweet-concierge', 'The Sweet Concierge', 'Always smiling, always suggesting a better route.', 'Head-on bounces you. Hit it from the side.'], ['gumball-adjuster', 'The Gumball Adjuster', 'Keeps everything you missed safe, in a dome, forever.', 'When it pulls alongside, sideswipe it. Dodge the crane.']],
    air: ['Sweet Nothings Blimp', 'Fast for a blimp. Rains jellybeans you will regret.', 'Dodge the volley, take the gold ramp, ram the blimp.'],
    flora: ['ginger root', 'Feral ginger root', 'Gives you Haze: the world melts like wet paint. Escaped from a stir-fry.'],
-   haz: [['The better route', 'It has billboards. It is always the better route. Do not take the better route.'], ['The crane', 'The Adjuster reaches for your crystals. Swerve and keep them.']],
-   loc: [['🛎️', 'The Sweet Concierge', 'Customer service as a pursuit vehicle.']] },
+   haz: [['The better route', 'It has billboards. It is always the better route. Do not take the better route.'], ['Fake crystals', 'Some crystals here are ads. A TRUTH lens shows them in red.']],
+   loc: [] },
  { w: 'tunnel', name: 'The Undertow', kick: 'The Tunnel', hook: 'No light down here, which keeps the crowds away.',
    feat: ['The Server Raid', 'Under the city run the cables everyone pretends are not there. Warden Pell keeps checkpoints down here, and something tunnel-sized follows you home through the Long Throat.', 1],
    do: [['✦', 'Take the hidden exit', 'The Undertow keeps a door nobody advertises.', 'A SEE lens shows it. Or a very good guess.'], ['★', 'Earn a gold grade', 'Clean lines, big chains, no excuses.', 'The walls are not your friends; neither is braking.']],
    wild: [['wire-stinger', 'Wire Stingers', 'Ceiling-dwellers who drop in tidy lines with one polite gap.', 'Find the gap in each line.'], ['tunnel-spotter', 'The Tunnel Spotter', 'Lights your way with a red grid. Tells everyone where you are.', 'Hug a wall and it clips the tunnel.'], ['the-bore', 'The Bore', 'A tunnel-sized admirer that digs after you all the way down.', 'It can’t turn. Swing round the pillars and it drills into them.']],
    air: ['Undertow Saucer', 'Spins, blinks, drops glowing rings. It’s not lost.', 'No drops in the tunnels. Out in the open, watch the rings.'],
    flora: ['coffee', 'Contraband coffee', 'Gives you Velocity: you keep your boost, and time slows when trouble is ahead.'],
-   haz: [['The red grid', 'If you are standing in it, everyone knows. Move.'], ['The Long Throat', 'Straight, narrow and occupied. Pillars are your friends.']],
+   haz: [['Tunnel walls', 'Real walls, all the way down. Brushing them costs speed; hitting them costs more.'], ['The Long Throat', 'Straight, narrow and occupied. Pillars are your friends.']],
    loc: [['🔒', 'Warden Pell', 'Runs ACCORD’s data fortress like a prison. Every road in is his.', 1]] },
  { w: 'synthwave', name: 'Neon Accord', kick: 'Synthwave', hook: 'The city that knows your name.',
    feat: ['Crash the Live Show', 'Sterling Vance broadcasts from a studio at the end of the long straight. A live audience would love to see you lose. Drive through the set and give them something else to watch.', 1],
@@ -108,7 +135,7 @@ const D = [
    wild: [['glyph-stinger', 'Glyph Stingers', 'Made of falling code. They come back, which is very green of them.', 'They return while a mast is near. Take the mast.'], ['relay-mast', 'Relay Masts', 'Free connectivity for every machine in range. Terms apply.', 'Ram the mast, or let a rack find it.'], ['the-sysadmin', 'The Sysadmin', 'A walking data centre on its rounds.', 'When it crouches, drive into the masts on its back. Then ram it.']],
    air: ['Orbital Datacenter', 'Decommissioned, still falling. Drops satellites that crack into GPUs.', 'Drive through the GPUs. They’re worth more than you.'],
    flora: ['chilli', 'Server-rack chilli', 'Gives you Deep: everything, all the way up.'],
-   haz: [['Mast Hill', 'Everything is connected to everything, especially the things chasing you.'], ['Stingers that come back', 'They do, while a mast stands. Take the mast first.']],
+   haz: [['Mast Hill', 'Everything is connected to everything, especially the things chasing you.'], ['Green rain', 'Looks lovely. Hides everything green, which is everything.']],
    loc: [['📻', 'WREN', 'Talks only through pirate radio, in fragments.', 1]] },
  { w: 'egypt', name: 'Tomb of the Old Servers', kick: 'Egypt', hook: 'Here lie the old models. Pay your respects at walking pace.',
    feat: ['Ghost Road', 'A road that only exists while a lens is on. Drive it and a ghost convoy of deprecated models keeps you company. The reward stays when the lens wears off.', 1],
@@ -116,8 +143,8 @@ const D = [
    wild: [['scarab-stinger', 'Scarab Stingers', 'Gold-plated, ceremonial, approachable only from the side.', 'Head-on bounces off. Sides and top only.'], ['jackal-hound', 'The Jackal Hound', 'A gifted singer whose howl brings the whole pack running.', 'Take the hound first and the pack scatters.'], ['sphinx-cordon', 'The Sphinx Cordon', 'An ancient gatekeeper with modern lane management.', 'Rockets hit while its eyes glow. When it bows, ram its head.']],
    air: ['Solar Barge', 'Sails the sand, drops canopic jars of somebody’s old weights.', 'Each ram knocks loose a century of junk.'],
    flora: ['turmeric', 'Tomb-dust turmeric', 'Gives you Fold: the edges of the world fold like pages.'],
-   haz: [['Scarabs, head-on', 'Gold plating works. You will bounce.'], ['The howl', 'One Jackal sings, the pack comes. Silence the singer.']],
-   loc: [['🗿', 'The Sphinx Cordon', 'Has asked the same riddle since before the internet. The answer is a lane.']] },
+   haz: [['Loose sand', 'The least grip of any destination and the most drag. Turn early, and keep your speed up.'], ['The riddle gate', 'Walls with one gap, then the Sphinx sweeps the gap. Choose late.']],
+   loc: [] },
  { w: 'psychedelic', name: 'The Open Channel', kick: 'The Trip · final stop', hook: 'Nothing filtered.',
    feat: ['The Spiral', 'Everything you have met comes back to say hello, louder, under the gaze of the Brood Cathedral. One exit leads to a roadside shrine where the colours settle. Reach it before the screen whites out.', 1],
    do: [['✦', 'Take the hidden exit', 'It moves. Of course it moves.', 'A SEE lens, or follow the colour that doesn’t belong.'], ['★', 'Earn a gold grade', 'The last road, done properly.', 'Everything is louder. So are you.']],
@@ -130,21 +157,50 @@ const D = [
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const SOON = '<span class="stamp">Opening soon</span>';
 const PL = (k) => (window.AGPLANTS && AGPLANTS.svg(k)) || '';
-const row = (th, b, span, em, soon, cls) => '<div class="it' + (cls ? ' ' + cls : '') + '">' + th + '<div><b>' + esc(b) + (soon ? SOON : '') + '</b>' + (span ? '<span>' + esc(span) + '</span>' : '') + (em ? '<em>' + em + '</em>' : '') + '</div></div>';
+/* every listing is a button: one line here, the whole story on its own page */
+const REG = {}; let RID = 0;
+const reg = (o) => { const id = 'k' + (RID++); REG[id] = o; return id; };
+const pips = (n) => '<i class="pp">' + [1, 2, 3, 4, 5].map((i) => '<u' + (i <= n ? ' class="on"' : '') + '></u>').join('') + '</i>';
+const row = (th, b, span, soon, cls, o) => '<button type="button" class="it' + (cls ? ' ' + cls : '') + '" data-k="' + reg(o) + '">' + th + '<div><b>' + esc(b) + (soon ? SOON : '') + '</b>' + (span ? '<span>' + esc(span) + '</span>' : '') + (o.e && o.e.threat ? '<small>Threat ' + pips(o.e.threat) + '</small>' : '') + '</div><i class="go">\u203A</i></button>';
 const thImg = (src) => '<div class="th" style="background-image:url(\'' + src + '\')"></div>', thTx = (t) => '<div class="th">' + t + '</div>';
 const sec = (h, inner) => inner ? '<div class="sec"><h4>' + h + '</h4>' + inner + '</div>' : '';
+const CX = window.AGCODEX || { E: {}, X: {}, K: {} };
 document.getElementById('toc').innerHTML = D.map((d) => '<a href="#' + d.w + '">' + esc(d.name) + '</a>').join('');
 document.getElementById('dests').innerHTML = D.map((d) => {
   const hero = 'guide/hero-' + d.w + '.jpg';
-  const wild = d.wild.map(([n, t, s, tip]) => row(thImg(n === '__skit' ? 'guide/hero-skitters.jpg' : P(n)), t, s, '▸ Beat it: ' + esc(tip))).join('');
-  const air = row(thImg('guide/hero-raid-' + d.w + '.jpg'), d.air[0], d.air[1], '▸ Beat it: ' + esc(d.air[2]));
-  const fl = d.flora ? row('<div class="th" style="background:#f4ecd8">' + PL(d.flora[0]) + '</div>', d.flora[1], null, '✦ ' + esc(d.flora[2]) + ' Drive into its column of light.') : '';
-  const dos = d.do.map(([ic, t, s, tip]) => row(thTx(ic), t, s, '▸ Tip: ' + esc(tip))).join('');
-  const haz = d.haz.map(([t, s, soon]) => row(thTx('!'), t, s, null, soon, 'haz')).join('');
-  const loc = d.loc.map(([ic, t, s, soon]) => row(thTx(ic), t, s, null, soon)).join('');
+  const wild = d.wild.map(([n, t, s]) => { const img = n === '__skit' ? 'guide/hero-skitters.jpg' : P(n); return row(thImg(img), t, s, 0, '', { t, w: d, e: CX.E[t], img, line: s }); }).join('');
+  const air = row(thImg('guide/hero-raid-' + d.w + '.jpg'), d.air[0], d.air[1], 0, '', { t: d.air[0], w: d, e: CX.E[d.air[0]], line: d.air[1] });
+  const fl = d.flora ? row('<div class="th" style="background:#f4ecd8">' + PL(d.flora[0]) + '</div>', d.flora[1], d.flora[2].split(':')[0], 0, '', { t: d.flora[1], w: d, e: CX.E[d.flora[1]], line: d.flora[2] }) : '';
+  const dos = d.do.map(([ic, t, s, tip]) => row(thTx(ic), t, s, 0, '', { t, w: d, ic, line: s, tip, kind: 'do' })).join('');
+  const haz = d.haz.map(([t, s, soon]) => row(thTx('!'), t, null, soon, 'haz', { t, w: d, ic: '!', line: s, kind: 'haz', soon })).join('');
+  const loc = d.loc.map(([ic, t, s, soon]) => row(thTx(ic), t, null, soon, '', { t, w: d, ic, line: s, kind: 'loc', soon })).join('');
   return '<section class="dest w-' + d.w + '" id="' + d.w + '"><div class="hero" style="background-image:url(\'' + hero + '\'),url(\'guide/dest-' + d.w + '.jpg\')"><div class="cap"><small>' + esc(d.kick) + '</small><h2>' + esc(d.name) + '</h2><p>' + esc(d.hook) + '</p></div></div>'
-    + '<div class="feat"><h3>Featured: ' + esc(d.feat[0]) + (d.feat[2] ? SOON : '') + '</h3><p>' + esc(d.feat[1]) + '</p><div><a class="drive" href="index.html?' + (d.w === 'desert' ? 'story=1' : 'biome=' + d.w) + '&amp;nointake=1">▶ Drive ' + esc(d.name) + '</a></div></div>'
+    + '<div class="feat"><h3>Featured: ' + esc(d.feat[0]) + (d.feat[2] ? SOON : '') + '</h3><p>' + esc(d.feat[1]) + '</p><div><a class="drive" href="index.html?' + (d.w === 'desert' ? 'story=1' : 'biome=' + d.w) + '&amp;nointake=1">\u25B6 Drive ' + esc(d.name) + '</a></div></div>'
     + '<div class="cols"><div>' + sec('Things to do', dos) + sec('Wildlife you may meet', wild) + '</div><div>' + sec('Overhead', air) + sec('Local flora', fl) + sec('When in ' + d.name + ', beware', haz) + sec('Locals', loc) + '</div></div></section>'; }).join('');
+/* THE PROFILE PAGE: picture, meters, how it hurts you, how to beat it, then the reading */
+const sheet = document.getElementById('sheet'), sbody = sheet.querySelector('.sb');
+const bar = (lab, n, max, note) => '<div class="mt"><span>' + lab + '</span><b><i style="width:' + Math.round(100 * Math.max(0, Math.min(max, n)) / max) + '%"></i></b><em>' + note + '</em></div>';
+const WORD = { 0: 'none', 1: 'low', 2: 'some', 3: 'fair', 4: 'high', 5: 'extreme' };
+function openSheet(id) { const o = REG[id]; if (!o) return; const e = o.e, x = CX.X[o.t] || {}, w = o.w; let h = '';
+  const pic = (e && e.img) || o.img, plant = e && e.kind === 'flora' ? PL(e.plant) : '';
+  h += '<div class="pf' + (pic || plant ? '' : ' nopic') + '">' + (pic ? '<div class="pi" style="background-image:url(\'' + pic + '\')"></div>' : plant ? '<div class="pi pl">' + plant + '</div>' : '<div class="pi ic">' + esc(o.ic || '\u25C8') + '</div>')
+    + '<div class="ph"><small>' + esc(w.name) + ' \u00B7 ' + esc((e && e.cls) || ({ do: 'Thing to do', haz: 'Local hazard', loc: 'Local' })[o.kind] || '') + '</small><h3>' + esc(o.t) + (o.soon ? SOON : '') + '</h3><p>' + esc(o.line) + '</p></div></div>';
+  if (e && (e.kind === 'machine' || e.kind === 'raider')) {
+    h += '<div class="mts">' + bar('Threat', e.threat, 5, WORD[e.threat]) + bar('Toughness', e.hp, 9, e.hp === 1 ? 'one hit' : e.hp + ' hits') + bar('Speed', e.spd, 5, WORD[e.spd]) + bar('Hits you', e.dmg, 5, WORD[e.dmg]) + bar('Numbers', e.num, 5, e.num === 1 ? 'alone' : e.num >= 5 ? 'swarm' : e.num === 2 ? 'a pair' : 'a few') + '</div>';
+    h += '<div class="kb"><span>Beaten by</span>' + e.kills.map((k) => '<i>' + esc(CX.K[k] || ({ ZAP: 'Zappers', STORM: 'Thunder clouds' })[k] || k) + '</i>').join('') + '</div>';
+    h += '<dl><dt>How it comes at you</dt><dd>' + esc(e.attack) + '</dd><dt>What it does to you</dt><dd>' + esc(e.toYou) + '</dd><dt class="hot">How to beat it</dt><dd class="hot">' + esc(e.beat) + '</dd></dl>';
+    h += '<dl class="lore"><dt>Origin</dt><dd>' + esc(e.story) + '</dd><dt>Diet</dt><dd>' + esc(e.diet) + '</dd><dt>Life cycle</dt><dd>' + esc(e.life) + '</dd><dt>Habitat</dt><dd>' + esc(e.habitat) + '</dd><dt>Little-known fact</dt><dd>' + esc(e.fact) + '</dd></dl>';
+    if (e.quote) h += '<blockquote>' + esc(e.quote) + '</blockquote>';
+  } else if (e && e.kind === 'flora') {
+    h += '<dl><dt class="hot">What it gives you</dt><dd class="hot">' + esc(e.gives) + '</dd><dt>Where to find it</dt><dd>' + esc(e.find) + '</dd></dl><dl class="lore"><dt>Origin</dt><dd>' + esc(e.story) + '</dd><dt>Life cycle</dt><dd>' + esc(e.life) + '</dd><dt>Little-known fact</dt><dd>' + esc(e.fact) + '</dd></dl>';
+  } else {
+    h += '<dl>' + (o.tip ? '<dt class="hot">Tip</dt><dd class="hot">' + esc(o.tip) + '</dd>' : '') + (x.story ? '<dt>Who they are</dt><dd>' + esc(x.story) + '</dd>' : '') + (x.fact ? '<dt>Little-known fact</dt><dd>' + esc(x.fact) + '</dd>' : '') + (o.soon ? '<dt>Status</dt><dd>Not in the game yet. Opening soon.</dd>' : '') + '</dl>';
+  }
+  sbody.innerHTML = h; sheet.hidden = false; sheet.scrollTop = 0; document.body.classList.add('lock'); try { history.pushState({ sh: 1 }, ''); } catch (er) { } }
+function closeSheet(fromPop) { if (sheet.hidden) return; sheet.hidden = true; document.body.classList.remove('lock'); if (!fromPop) try { history.back(); } catch (er) { } }
+document.getElementById('dests').addEventListener('click', (e) => { const b = e.target.closest('.it[data-k]'); if (b) openSheet(b.dataset.k); });
+sheet.querySelector('.sx').onclick = () => closeSheet(); sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+addEventListener('popstate', () => closeSheet(true)); addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 document.getElementById('toTop').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); });
 { const Q = new URLSearchParams(location.search), inFrame = window.top !== window || Q.has('inframe'), back = Q.get('back');
   document.getElementById('tgClose').addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
