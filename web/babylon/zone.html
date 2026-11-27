@@ -63,7 +63,7 @@
    Debug hooks: window.__Z (car, H, mission), ?warp=x,z, ?nomusic, ?fp (first person). */
 const Q = new URLSearchParams(location.search);
 const B = BABYLON, canvas = document.getElementById('c');
-const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false, antialias: true });
+const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false, antialias: true, alpha: false, premultipliedAlpha: false });
 engine.setHardwareScalingLevel(1 / Math.min(2, devicePixelRatio || 1));
 const scene = new B.Scene(engine); scene.clearColor = new B.Color4(.07, .04, .12, 1);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, t) => a + (b - a) * t, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
@@ -182,7 +182,7 @@ const car = new B.TransformNode('car', scene);
   for (const [x, z] of [[-1.05, -1.45], [1.05, -1.45], [-1.05, 1.45], [1.05, 1.45]]) { const w = B.MeshBuilder.CreateCylinder('cWheel', { height: .35, diameter: .82, tessellation: 14 }, scene); w.rotation.z = Math.PI / 2; w.position.set(x, .41, z); w.material = mW; p(w); } }
 
 /* ---------- driving: an engine, not a sled (throttle, brakes, reverse, grip, drift, air) ---------- */
-const C = { acc: 32, vmax: 62, boostAcc: 44, boostMax: 88, brake: 42, revAcc: 14, revMax: 14, roll: .35, drag: .00006, grav: 26, grip: 7.5, driftGrip: 2.2, jumpV: 12, yawLow: 2.5, yawHigh: 1.15 };
+const C = { acc: 40, vmax: 84, boostAcc: 62, boostMax: 124, brake: 46, revAcc: 14, revMax: 14, roll: .35, drag: .00004, grav: 26, grip: 7.5, driftGrip: 2.2, jumpV: 12, yawLow: 2.6, yawHigh: .95 };          /* (owner 2026-11-27: the zone needs the runs' speed) */
 const P = { x: DINER.x - 30, z: 30, y: 0, h: Math.PI, vx: 0, vz: 0, vy: 0, grounded: true, air: 0, boost: 1, pitch: 0, roll: 0, gearT: 0, gvyPrev: 0, speed: 0 };
 if (Q.get('warp')) { const [wx, wz] = Q.get('warp').split(',').map(Number); P.x = wx; P.z = wz; }
 P.y = Hg(P.x, P.z);
@@ -192,7 +192,7 @@ function drive(dt, I) {
   const boosting = I.boost && P.boost > .02 && I.throttle > -.2; P.boost = clamp(P.boost + (boosting ? -dt / 3.2 : dt / 7), 0, 1);
   if (P.grounded) {
     const thr = boosting ? Math.max(I.throttle, 1) : I.throttle, vmax = boosting ? C.boostMax : C.vmax;
-    if (thr > 0) vf += thr * (boosting ? C.boostAcc : C.acc) * Math.max(0, 1 - vf / vmax) * dt;
+    if (thr > 0) vf += thr * (boosting ? C.boostAcc : C.acc) * Math.max(0, 1 - vf / (P.padT > 0 ? vmax * 1.5 : vmax)) * dt;
     else if (thr < 0) { if (vf > .5) vf = Math.max(0, vf + thr * C.brake * dt); else vf = Math.max(-C.revMax, vf + thr * C.revAcc * dt); }
     else vf -= Math.sign(vf) * Math.min(Math.abs(vf), C.roll * dt * 9);
     vf -= vf * Math.abs(vf) * C.drag * dt * 60;
@@ -219,7 +219,7 @@ function drive(dt, I) {
   car.position.set(P.x, P.y, P.z); car.rotation.set(P.pitch, -P.h, P.roll);          /* (the model's nose is -z; heading turns it the way the car actually travels) */ car.rotationQuaternion = null;
   P.speed = vf; P.boosting = boosting;
 }
-function land(hard) { U.beat = 1; shake = Math.min(.8, hard / 40); if (P.air > .9) toast('<b>LANDED</b>' + (P.air > 1.6 ? 'Big air.' : 'Clean.'), 1400); P.vx *= 1.04; P.vz *= 1.04; }
+function land(hard) { U.beat = 1; if (P.air > .6) { lookBurst(clamp(P.air / 1.6, .5, 1)); if (P.air > 1.2) LOOKFX.glass = 1; } shake = Math.min(.8, hard / 40); if (P.air > .9) toast('<b>LANDED</b>' + (P.air > 1.6 ? 'Big air.' : 'Clean.'), 1400); P.vx *= 1.04; P.vz *= 1.04; }
 
 /* ---------- camera: chase by default, first person on CAM ---------- */
 const cam = new B.FreeCamera('zcam', new B.Vector3(P.x, P.y + 4, P.z + 10), scene); cam.minZ = .2; cam.maxZ = 6000; cam.fov = 1.05; scene.activeCamera = cam; cam.inputs.clear();
@@ -232,10 +232,48 @@ function camStep(dt, I) {
     for (const m of car.getChildMeshes()) m.isVisible = true; }
   else { cam.position.set(P.x - Math.sin(P.h) * .35, P.y + 1.62 + Math.sin(P.pitch) * .3, P.z + Math.cos(P.h) * .35); CP.copyFrom(cam.position);
     cam.setTarget(new B.Vector3(cam.position.x + fx * 20, cam.position.y + (Math.tan(P.pitch) - ly) * 20 - 1.2, cam.position.z + fz * 20));
-    for (const m of car.getChildMeshes()) m.isVisible = !/^(cCab|cTail|cWheel)/.test(m.name); }          /* the hood, its neon trim and the dash stay in view */
+    for (const m of car.getChildMeshes()) m.isVisible = false; }          /* (owner 2026-11-27: the hood read as a strip of road stuck to the bottom of the screen; first person is the open view, like the runs) */
   if (shake > 0) { cam.position.x += (Math.random() - .5) * shake * .4; cam.position.y += (Math.random() - .5) * shake * .4; shake *= Math.exp(-dt * 6); }
   cam.fov = lerp(cam.fov, 1.0 + clamp(sp / 90, 0, 1) * .32 + (P.boosting ? .08 : 0), Math.min(1, dt * 3));          /* speed widens the view */
 }
+
+
+/* ---------- THE TRIP: the runs' own picture looks and desert sky, driven by the beat and by what you do (owner 2026-11-27: effects first) ---------- */
+const LOOKFX = { pp: null, mix: 3, sty: 0, base: 0, ev: 0, ea: 0, glass: 0, next: 0, names: [] };
+const LOOK_POOL = [10, 13, 14, 16, 17, 19, 15, 9, 11, 12, 18, 5, 6];          /* kaleidoscope, stained glass, liquid melt, moire, hue cycle, prism, neon edges, halftone, thermal, mosaic, zoom blur, oil, cel */
+function lookBurst(power, which) { if (!LOOKFX.pp) return; LOOKFX.mix = which || LOOK_POOL[Math.floor(Math.random() * LOOK_POOL.length)]; LOOKFX.sty = Math.max(LOOKFX.sty, clamp(power, 0, 1)); if (power > .8 && Math.random() < .3) LOOKFX.ev = 1; }
+import('./psylook.js?v=1').then((m) => {
+  B.Effect.ShadersStore.psylookFragmentShader = m.PSYLOOK_FS; LOOKFX.names = m.LOOKNAMES;
+  const pp = new B.PostProcess('zlook', 'psylook', ['uTexel', 'uRes', 'uCell', 'uVec', 'uAsc', 'uTime', 'uSty', 'uMix'], null, 1, cam, B.Texture.BILINEAR_SAMPLINGMODE, engine);
+  pp.onApply = (e) => { const w = engine.getRenderWidth(), h = engine.getRenderHeight(); e.setFloat2('uTexel', 1 / w, 1 / h); e.setFloat2('uRes', w, h); e.setFloat('uCell', Math.max(4, Math.round(w / 110))); e.setFloat('uVec', LOOKFX.ev); e.setFloat('uAsc', LOOKFX.ea); e.setFloat('uTime', U.time); e.setFloat('uSty', clamp(Math.max(LOOKFX.sty, LOOKFX.base), 0, 1)); e.setFloat('uMix', Math.max(1, LOOKFX.mix - 2)); };
+  LOOKFX.pp = pp;
+  /* the desert sky from the runs replaces the placeholder */
+  B.Effect.ShadersStore.zdskyFragmentShader = m.skyFragment('desert');
+  const dm = new B.ShaderMaterial('zdsky', scene, { vertex: 'zs', fragment: 'zdsky' }, { attributes: ['position'], uniforms: ['worldViewProjection', 'uTime', 'uBeat', 'uGlass', 'uPsy', 'uTint'] }); dm.backFaceCulling = false;
+  dm.onCompiled = () => { sky.material = dm; }; dm.forceCompilation(sky); LOOKFX.sky = dm;
+}).catch((e) => console.warn('looks', e));
+function lookStep(dt) {
+  LOOKFX.sty *= Math.exp(-dt * 1.4); LOOKFX.ev *= Math.exp(-dt * 2); LOOKFX.glass *= Math.exp(-dt * 1.6);
+  LOOKFX.base = clamp((U.trip - .45) * .55, 0, .35) * (.6 + .4 * U.beat);          /* the higher the trip, the more the picture itself keeps breathing */
+  if (U.time > LOOKFX.next && U.trip > .55) { LOOKFX.next = U.time + 8 + Math.random() * 10; lookBurst(.55 + U.trip * .4); }          /* now and then a wave on its own */
+  if (LOOKFX.sky) { const s = LOOKFX.sky; s.setFloat('uTime', U.time); s.setFloat('uBeat', U.beat); s.setFloat('uGlass', LOOKFX.glass > .35 ? 1 : 0); s.setFloat('uPsy', clamp(U.trip * 1.1 - .2, 0, 1)); s.setVector4('uTint', new B.Vector4(1, 1, 1, 0)); }
+}
+
+/* ---------- action: boost pads on and off the road, molecules everywhere (each one lifts the trip) ---------- */
+const PADS = [], MOLS = [];
+{ const mPad = solid('zpad', [0, 0, 0], [.4, 2.6, 2.3]), mMolA = solid('zmol', [0, 0, 0], [2.4, 1.2, 2.6]);
+  const padAt = (x, z, h) => { const g = new B.TransformNode('padG', scene); for (let k = 0; k < 3; k++) { const c = B.MeshBuilder.CreatePlane('padC', { width: 3.2, height: 1.1 }, scene); c.material = mPad; c.rotation.x = Math.PI / 2; c.position.set(0, .06, -k * 1.6 + 1.6); c.parent = g; c.isPickable = false; } g.position.set(x, Hg(x, z) + .05, z); g.rotation.y = -h; PADS.push({ x, z, h, g, cool: 0 }); };
+  for (let z = -640; z <= 640; z += 160) padAt(roadX(z), z, Math.atan2(roadX(z - 5) - roadX(z + 5), -10) + Math.PI);          /* down the road, both ways */
+  for (let k = 0; k < 14; k++) { const x = (hash(k, 41) - .5) * 1100, z = (hash(k, 43) - .5) * 1100; if (H(x, z) > 25 || Math.abs(x - roadX(z)) < 20) continue; padAt(x, z, hash(k, 47) * 6.28); }
+  for (let k = 0; k < 40; k++) { const x = (hash(k, 61) - .5) * 1200, z = (hash(k, 67) - .5) * 1200; if (Math.hypot(x - DINER.x, z - DINER.z) < 60) continue;
+    const m = B.MeshBuilder.CreateIcoSphere('zMol', { radius: 1.1, subdivisions: 1 }, scene); m.material = mMolA; m.isPickable = false; m.position.set(x, Hg(x, z) + 1.8, z); MOLS.push({ m, x, z, back: 0 }); } }
+function actionStep(dt) {
+  for (const p of PADS) { p.cool -= dt; if (p.cool <= 0 && Math.hypot(P.x - p.x, P.z - p.z) < 3.4 && P.grounded) { p.cool = 1.5; const fx = Math.sin(P.h), fz = -Math.cos(P.h); P.vx += fx * 22; P.vz += fz * 22; P.boost = 1; P.padT = 1.2; U.beat = 1; shake = Math.max(shake, .25); lookBurst(.7); } }
+  for (const o of MOLS) { if (o.back > 0) { o.back -= dt; if (o.back <= 0) o.m.setEnabled(true); continue; } o.m.rotation.y += dt * 1.8; o.m.position.y = Hg(o.x, o.z) + 1.8 + Math.sin(U.time * 2.5 + o.x) * .35; o.m.scaling.setAll(1 + .25 * U.beat);
+    if (Math.hypot(P.x - o.x, P.z - o.z) < 3.8 && Math.abs(P.y + 1 - o.m.position.y) < 4) { o.m.setEnabled(false); o.back = 45; TRIP.dose = Math.min(1, TRIP.dose + .14); P.boost = Math.min(1, P.boost + .35); P.padT = .8; U.beat = 1; lookBurst(.95); LOOKFX.glass = 1; } }
+  if (P.padT > 0) P.padT -= dt;
+}
+const TRIP = { dose: .2 };          /* molecules raise it, it fades slowly; it sets how hard the world trips */
 
 /* ---------- the burner phone: toasts in play, the phone itself when paused ---------- */
 const toastEl = document.getElementById('toast'); let toastT = 0;
@@ -318,7 +356,7 @@ function eventsStep(dt) {
     else if (EV.t > e.medals[2] * 1.6) { toast('<b>' + e.name + '</b>Out of time.', 2200); EV.on = null; EV.cool = 3; evClear(); } return; }
   if (e.kind === 'air') { if (!P.grounded) EV.score += dt; if (EV.t >= e.dur) return evEnd(+EV.score.toFixed(1)); if (EV.t - dt < e.dur - 10 && EV.t >= e.dur - 10) toast('<b>10 SECONDS</b>' + EV.score.toFixed(1) + ' s in the air', 1500); return; }
   if (e.kind === 'mols') { for (const m of EV.things) { if (!m.__live) continue; m.rotation.y += dt * 2; m.position.y = Hg(m.position.x, m.position.z) + 1.8 + Math.sin(U.time * 3 + m.position.x) * .4; m.scaling.setAll(1 + .3 * U.beat);
-      if (Math.hypot(P.x - m.position.x, P.z - m.position.z) < 4.2 && Math.abs(P.y + 1 - m.position.y) < 4) { m.__live = false; m.setEnabled(false); EV.score++; U.beat = 1; toast('<b>MOLECULE ' + EV.score + ' / ' + e.n + '</b>', 900); if (EV.score >= e.n) return evEnd(EV.score); } }
+      if (Math.hypot(P.x - m.position.x, P.z - m.position.z) < 4.2 && Math.abs(P.y + 1 - m.position.y) < 4) { m.__live = false; m.setEnabled(false); EV.score++; U.beat = 1; lookBurst(.85); toast('<b>MOLECULE ' + EV.score + ' / ' + e.n + '</b>', 900); if (EV.score >= e.n) return evEnd(EV.score); } }
     if (EV.t >= e.dur) return evEnd(EV.score); if (EV.t - dt < e.dur - 10 && EV.t >= e.dur - 10) toast('<b>10 SECONDS</b>' + EV.score + ' / ' + e.n, 1500); }
 }
 
@@ -362,17 +400,17 @@ engine.runRenderLoop(() => {
   if (I.camP && !PAUSED) camMode = camMode === 'chase' ? 'first' : 'chase';
   if (toastEl.__acts && I.gearP && !PAUSED && M.st === 'ringing') { toastEl.classList.remove('on'); toastEl.__acts = null; accept(); }          /* pad/keys can answer the phone */
   if (toastT && now > toastT) { toastEl.classList.remove('on'); toastT = 0; }
-  if (!PAUSED) { drive(dt, I); missionStep(dt); eventsStep(dt); }
+  if (!PAUSED) { drive(dt, I); missionStep(dt); eventsStep(dt); actionStep(dt); }
   camStep(dt, PAUSED ? { lookX: 0, lookY: 0 } : I);
   const bp = AC ? ((AC.currentTime - beatT0) * BPM / 60) % 1 : (U.time * BPM / 60) % 1; U.beat = Math.max(U.beat * Math.exp(-dt * 5), Math.pow(1 - bp, 6));
-  U.trip = clamp(.35 + .4 * sstep(0, 1, (P.boosting ? 1 : 0)) + .25 * Math.sin(U.time * .05) ** 2, 0, 1);
+  TRIP.dose = Math.max(.2, TRIP.dose - dt * .004); U.trip = clamp(TRIP.dose + (P.boosting ? .25 : 0) + (P.padT > 0 ? .2 : 0) + .15 * Math.sin(U.time * .05) ** 2, 0, 1); lookStep(dt);
   for (const m of [gMat]) { m.setFloat('uTime', U.time); m.setFloat('uBeat', U.beat); m.setFloat('uTrip', U.trip); m.setVector3('uCar', car.position); m.setVector3('uCam', cam.position); }
   sMat.setFloat('uTime', U.time); sMat.setFloat('uBeat', U.beat); sMat.setFloat('uTrip', U.trip);
   scene.render();
 });
 addEventListener('resize', () => engine.resize());
 setTimeout(() => document.getElementById('fade').classList.add('off'), 200);
-window.__Z = { P, H: Hg, M, C, car, scene, roadX, DINER, GATES, EVENTS, EV, input: AGINPUT, phone, APPS, setCam: (m) => { camMode = m; } };
+window.__Z = { LOOKFX, lookBurst, TRIP, P, H: Hg, M, C, car, scene, roadX, DINER, GATES, EVENTS, EV, input: AGINPUT, phone, APPS, setCam: (m) => { camMode = m; } };
 </script>
 </body>
 </html>
