@@ -221,4 +221,8 @@ if (new URLSearchParams(location.search).has('strains')) document.getElementById
   if (/[?&]nofs\b/.test(location.search) || (window.top !== window.self && !SH) || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const D = SH ? SH.document : document, de = D.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(D.fullscreenElement || D.webkitFullscreenElement);
   if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
   for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); try { window.AGLock && AGLock.onGesture(go); } catch (e) { }          /* (the fake lock's unlock tap counts as the first tap) */ })();</script>
+<script src="prefetch.js"></script><script>/* (owner 2026-11-27) while you look at this page, the level you are about to play downloads quietly in the background */
+setTimeout(() => { try { const P = JSON.parse(localStorage.getItem('dl_prog') || '{}').worlds || {}, done = (id) => { const w = P[id]; return !!(w && w.best && w.best !== 'NONE'); };
+  const ORD = [['routezero', 'story'], ['candy', 'candy'], ['alpine', 'alpine'], ['egypt', 'egypt'], ['synthwave', 'synthwave'], ['tunnel', 'tunnel'], ['matrix', 'matrix'], ['psychedelic', 'psychedelic']];
+  const nx = ORD.find(([id]) => !done(id)) || ORD[0]; window.AGPrefetch && AGPrefetch.level(nx[1]); } catch (e) { } }, 3500);</script>
 <script src="chrome.js"></script></body></html>
