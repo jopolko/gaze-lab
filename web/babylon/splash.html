@@ -464,7 +464,7 @@ function surgeStep(t, dt) { if (CALM) return; const I = INT();
 function draw(t, dt) {
   surgeStep(t, dt || 0);
   const short = W > H && H <= 500, hz = H * (short ? .8 : W > H ? .68 : .62), cxm = W / 2, k = wave(t);
-  const room = molRoom(short), my = room.y, sk = .28 / Math.max(20, hz - my) * SURGE.k;          /* (the surge tightens the view) */          /* the molecule sits midway between the words, on the sky's sun */
+  const room = roomCached(short), my = room.y, sk = .28 / Math.max(20, hz - my) * SURGE.k;          /* (the surge tightens the view) */          /* the molecule sits midway between the words, on the sky's sun */
   cx.clearRect(0, 0, W, H); bx.clearRect(0, 0, W, H); mxc.clearRect(0, 0, W, H); let g;
   gameTint();
   if (GAME.ready && skyc.style.display === 'none') { } else if (!drawSky(t, dt || 0, cxm, hz, sk)) { g = bx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#05060f'); g.addColorStop(.6, '#4a2a2a'); g.addColorStop(1, '#07060a'); bx.fillStyle = g; bx.fillRect(0, 0, W, H); }
@@ -495,8 +495,11 @@ function draw(t, dt) {
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
 /* the gap the molecule may fill: portrait, from under the tagline to above the strain's notes; phone landscape (words at the sides), from under the
    spectrum to the bottom. Measured from the page, so it follows the real text sizes */
-function sideStrain(room) { const on = !!room.side; if (on !== strainEl.classList.contains('side')) strainEl.classList.toggle('side', on);
+function sideStrain(room) { const key = (room.side ? 's' : '') + Math.round(room.x) + ',' + Math.round(room.y) + ',' + Math.round(MOL.x) + ',' + Math.round(MOL.y) + ',' + Math.round(MOL.r) + ',' + W + 'x' + H + ',' + si; if (RC.cap === key) return; RC.cap = key; sideStrain0(room); }
+function sideStrain0(room) { const on = !!room.side; if (on !== strainEl.classList.contains('side')) strainEl.classList.toggle('side', on);
   if (on) { strainEl.style.left = Math.round(room.x) + 'px'; strainEl.style.top = Math.round(room.y + room.r + 10) + 'px'; strainEl.style.position = ''; strainEl.style.transform = ''; } else if (innerWidth > innerHeight) { strainEl.style.position = 'fixed'; strainEl.style.left = Math.round(MOL.x) + 'px'; strainEl.style.transform = 'translateX(-50%)'; strainEl.style.top = Math.round(Math.min(MOL.y + MOL.r * .95 + 8, innerHeight - (strainEl.offsetHeight || 50) - 30)) + 'px'; strainEl.style.bottom = 'auto';          /* (always right under the plant) */ } else { strainEl.style.position = ''; strainEl.style.left = ''; strainEl.style.top = ''; strainEl.style.transform = ''; } }          /* (owner 2026-11-27: the name and its line always centred under the molecule) */
+const RC = { k: '', t: 0, v: null };
+function roomCached(short) { const k = W + 'x' + H + (short ? 's' : ''), n = performance.now(); if (RC.v && RC.k === k && n - RC.t < 2000) return RC.v; RC.k = k; RC.t = n; RC.v = molRoom(short); RC.cap = null; return RC.v; }          /* (owner 2026-11-27: measuring the page every frame forced a full layout 60 times a second and slowed the sky) */
 function molRoom(short) { let top, bot; const R = (id) => { const e = document.getElementById(id); return e ? e.getBoundingClientRect() : null; };
   if (short) { const d = R('dial'); top = d ? d.bottom + 6 : H * .2; bot = H - 12; }
   else { const tg = R('tag'), st = strainEl.getBoundingClientRect(); top = tg ? tg.bottom + 8 : H * .32; bot = st && st.top > top + 40 ? st.top - 8 : H * .75; }
