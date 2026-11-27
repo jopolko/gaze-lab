@@ -126,7 +126,7 @@ const cleared = (id) => { const w = (P.worlds || {})[id]; return !!(w && w.best 
 /* demo mode: menu.html?all=1 opens every level and the journey (remembered on this device; ?all=0 turns it off) */
 const ALLQ = new URLSearchParams(location.search).get('all'); try { if (ALLQ === '1') localStorage.setItem('dl_all', '1'); if (ALLQ === '0') localStorage.removeItem('dl_all'); } catch (e) { }
 const ALL = (() => { try { return localStorage.getItem('dl_all') === '1'; } catch (e) { return false; } })();
-const unlocked = (i) => ALL || i === 0 || cleared(LEVELS[i - 1].id);
+const unlocked = (i) => true || ALL || i === 0 || cleared(LEVELS[i - 1].id);          /* (owner 2026-11-27: every level open from the start; the next one is still lit as the suggestion) */
 const spent = () => Object.values(T).filter((v) => v >= 2).length * COST;
 const questShards = () => Object.values(P.worlds || {}).reduce((n, w) => n + ['mols', 'rail', 'relay', 'rings'].filter((k) => (w.quests || {})[k]).length, 0);
 const shards = () => Math.max(0, (P.icosa || 0) + questShards() - spent());

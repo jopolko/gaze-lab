@@ -55,7 +55,7 @@ export function createBeasts(d) {
       const ls = []; for (const [x, z] of [[-.5, -.8], [.5, -.8], [-.5, .9], [.5, .9]]) ls.push({ L: part(R, 'box', { s: [.2, 1, .25], p: [x, .5, z], m: sh }), s: Math.sign(x), i: z < 0 ? 0 : 1 });
       part(R, 'tube', { path: [[0, 1.4, 1.2], [0, 2.2, 1.8], [0, 2.8, 1.5]], r: .08, m: sh });
       return { legs: ls, quad: true, h: 2, r: 1, len: 3, scale: v === 'jackal' ? 1.6 : 1 }; },
-    tick(R) { const sh = shellM('tk', [.2, .24, .3]), gl = glowM('tkg', P.b); part(R, 'sph', { s: [.6, .3, .6], p: [0, .12, 0], m: sh }); part(R, 'sph', { s: [.12, .12, .12], p: [0, .3, 0], m: gl }); return { h: .4, r: .4, len: .7 }; },
+    tick(R) { const sh = shellM('tk', [.2, .24, .3]), gl = glowM('tkg', P.b); part(R, 'sph', { s: [.6, .3, .6], p: [0, .12, 0], m: sh }); part(R, 'sph', { s: [.12, .12, .12], p: [0, .3, 0], m: gl }); return { legs: legs(R, sh, 3, .22, .32, .14, -.2, .2, .025), h: .4, r: .4, len: .7 }; },          /* (owner 2026-11-27: the tick scuttles on legs too) */
     burrower(R) { const sh = shellM('bw', [.12, .15, .22]), gl = glowM('bwg', P.b); for (let k = 0; k < 4; k++) part(R, 'sph', { s: [2.4 - k * .3, 2 - k * .25, 2], p: [0, 1, k * 1.8], m: sh });
       const drill = part(R, 'cyl', { h: 2.4, dd: 2.2, dt: .05, p: [0, 1.1, -2.1], r3: [-Math.PI / 2, 0, 0], m: gl, tess: 10 }); return { h: 2.2, r: 1.6, len: 8, drill }; },
     plow(R) { const sh = shellM('pl', [.08, .09, .12]), gl = glowM('plg', P.a), blade = shellM('pb', [.25, .3, .38]);
@@ -307,7 +307,7 @@ export function createBeasts(d) {
       behave(b, dt); if (b.gone) { b.R.dispose(false, true); if (b.ridge) b.ridge.dispose(); if (b.grid) b.grid.dispose(false, true); LIVE.splice(i, 1); continue; }
       if (b.mode !== 'swarm' || !b.latched) b.y = ground(b.x, b.z);
       const yo = (b.mode === 'drop' || b.mode === 'fly') ? (b.yOff || 0) : b.mode === 'sysadmin' ? -10 * b.sc * (b.crouch || 0) : b.mode === 'sphinx' ? -12 * b.sc * (b.bow || 0) : (b.g.hover ? 1.2 + Math.sin(b.t * 2 + b.ph) * .4 : 0), up = b.mode === 'ridge' ? -b.h * (1 - (b.up || 0)) : 0;
-      b.R.position.set(b.x, b.y + yo + up, b.z); const hd = Math.atan2(-(b.vx || 0), -1); b.R.rotation.y = b.mode === 'swarm' && !b.latched ? Math.atan2(PH.x - b.x, b.z - PH.z) + Math.PI : 0;
+      b.R.position.set(b.x, b.y + yo + up, b.z); const hd = Math.atan2(-(b.vx || 0), -1); b.R.rotation.y = b.mode === 'swarm' && !b.latched ? Math.atan2(PH.x - b.x, b.z - PH.z) + Math.PI : 0; if (!b.g.legs && !b.spec.boss && !b.g.hover && b.mode !== 'ridge') { b.R.rotation.z = Math.sin(b.t * 4.2 + b.ph) * .035; b.R.position.y += Math.abs(Math.sin(b.t * 7 + b.ph)) * .06 * Math.min(2, b.h); }          /* (owner 2026-11-27: nothing stands stiff: machines without legs rock and judder a little as they go) */
       if (b.spec.shift) { const c = [[1, .69, .13], [.22, .91, 1], [.49, 1, .54]][Math.floor(((b.t + b.ph) % 3))]; if (b.g.tip) b.g.tip.material.emissiveColor.set(...c); }
       if (b.g.legs) { const w = b.latched ? 26 : (b.g.quad ? 14 : 22), sw = b.latched ? .55 : .4; for (const L of b.g.legs) { const ph = b.t * w + ((L.i + (L.s > 0 ? 1 : 0)) % 2 ? Math.PI : 0); L.L.rotation.x = Math.sin(ph) * sw; L.L.rotation.z = L.s * Math.max(0, Math.cos(ph)) * .4; } }          /* (owner 2026-11-27: the legs run, a tripod gait: each leg swings from the hip and lifts on the way forward; a stinger riding the car scrambles) */
       if (b.hitT > 0) b.R.scaling.setAll(b.sc * (1 + .15 * Math.sin(b.hitT * 40)));
