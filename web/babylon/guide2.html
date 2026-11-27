@@ -305,7 +305,7 @@ const sec = (h, inner) => inner ? '<div class="sec"><h4>' + h + '</h4>' + inner 
 const CX = window.AGCODEX || { E: {}, X: {}, K: {} };
 document.getElementById('toc').innerHTML = D.map((d) => '<a href="#' + d.w + '">' + esc(d.name) + '</a>').join('');
 document.getElementById('dests').innerHTML = D.map((d) => {
-  const hero = 'guide/hero-' + d.w + '.jpg?v=2';
+  const hero = 'guide/hero-' + d.w + '.jpg?v=3';
   const wild = d.wild.map(([n, t, s]) => { const img = n === '__skit' ? 'guide/hero-skitters.jpg' : P(n); return row(thImg(img), t, s, 0, '', { t, w: d, e: CX.E[t], img, line: s }); }).join('');
   const air = row(thImg('guide/hero-raid-' + d.w + '.jpg'), d.air[0], d.air[1], 0, '', { t: d.air[0], w: d, e: CX.E[d.air[0]], line: d.air[1] });
   const fl = d.flora ? row(thPlant(d.flora[0]), d.flora[1], d.flora[2].split(':')[0], 0, '', { t: d.flora[1], w: d, e: CX.E[d.flora[1]], line: d.flora[2] }) : '';

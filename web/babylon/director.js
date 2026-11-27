@@ -68,27 +68,35 @@ const KEYABLE = ['WINGS', 'MAGNET', 'SHIELD', 'SPEED', 'LENS'];          // keys
 /* the level's script: an ordered list of beats the game's level script builds one after another.
    kinds: warm, speed, threat, breath, mix, pressure, lensbreath, gearpair, finale (the game's own sections), set {id}, fork {a, b}, key {need} */
 export function planPlay({ seed, lvIdx, setTiers, plainSets, hardSets }) {
-  const R = rng(seed ^ 0xd1ec), pick = (a) => a[Math.floor(R() * a.length)], usedSets = new Set();
-  const setOf = (pool) => { const free = pool.filter((id) => !usedSets.has(id) && (setTiers[id] ?? 0) <= lvIdx); const id = free.length ? pick(free) : pick(pool); usedSets.add(id); return { k: 'set', id }; };
-  const keys = KEYABLE.filter((n) => (GATETIER[n] || 0) <= Math.max(1, lvIdx)), shuffled = keys.slice().sort(() => R() - .5);
+  /* PHRASES (owner 2026-11-27: "use phrases for paths, procedurally generated"; the old fixed 17-beat template made every level feel the same).
+     A level is an arc of phrases: OPEN, then BUILDs, a CHOICE (the fork and its first gate), RESTs between, a PEAK or two, the RETURN (the second gate)
+     and the FINALE. Each phrase has several variants; which ones, how many and in what order come from the seed. Early worlds rest more and get the
+     plain set pieces; later worlds build longer and get the harder ones, never brutal (it's meant to be relaxing). The fork, both gates and the finale always come. */
+  const R = rng(seed ^ 0xd1ec), pick = (a) => a[Math.floor(R() * a.length)], usedSets = new Set(), L = Math.max(0, Math.min(7, lvIdx)), hardK = L / 7;
+  const setOf = (pool) => { const free = pool.filter((id) => !usedSets.has(id) && (setTiers[id] ?? 0) <= Math.max(1, L)); const id = free.length ? pick(free) : pick(pool); usedSets.add(id); return { k: 'set', id }; };
+  const keys = KEYABLE.filter((n) => (GATETIER[n] || 0) <= Math.max(1, L)), shuffled = keys.slice().sort(() => R() - .5);
   const [ka, kb] = shuffled.length >= 2 ? shuffled : ['SPEED', 'WINGS'];
-  const late = Object.keys(GATESET).filter((n) => n !== ka && n !== kb && (GATETIER[n] || 0) <= Math.max(1, lvIdx)); const kc = late.length ? pick(late) : null;
+  const late = Object.keys(GATESET).filter((n) => n !== ka && n !== kb && (GATETIER[n] || 0) <= Math.max(1, L)); const kc = L >= 1 && late.length ? pick(late) : null;
+  const plainOrHard = () => setOf(R() < .25 + .5 * hardK ? hardSets : plainSets);
+  const PH = {
+    open: [() => [{ k: 'warm' }, setOf(plainSets)], () => [{ k: 'warm' }, { k: 'speed' }], () => [{ k: 'warm' }, { k: 'breath' }, setOf(plainSets)]],
+    build: [() => [{ k: 'speed' }, plainOrHard()], () => [{ k: 'threat' }, { k: 'mix' }], () => [{ k: 'mix' }, plainOrHard()], () => [plainOrHard(), { k: 'threat' }], () => [{ k: 'speed' }, { k: 'threat' }, plainOrHard()]],
+    rest: [() => [{ k: 'breath' }], () => [{ k: 'lensbreath' }], () => [{ k: 'breath' }, { k: 'lensbreath' }]],
+    peak: [() => [{ k: 'pressure' }, setOf(hardSets)], () => [setOf(hardSets), { k: 'gearpair' }], () => [{ k: 'pressure' }, { k: 'gearpair' }], () => [setOf(L >= 2 ? hardSets.concat(['remix']) : hardSets)]],
+  };
+  const take = (name) => pick(PH[name])();
   const S = [];
-  S.push({ k: 'warm' });
-  S.push(setOf(plainSets));
-  S.push({ k: R() < .5 ? 'speed' : 'threat' });
+  S.push(...take('open'));
+  const builds1 = 1 + (L >= 3 ? 1 : 0) + (R() < .3 ? 1 : 0); for (let i = 0; i < builds1; i++) { S.push(...take('build')); if (L <= 2 || R() < .45) S.push(...take('rest')); }
   S.push({ k: 'fork', a: ka, b: kb });                                   // the choice
-  S.push({ k: 'set', id: GATESET[R() < .5 ? ka : kb], gate: true });    // the first of its two gates comes soon
-  S.push({ k: 'breath' });
-  S.push({ k: R() < .5 ? 'mix' : 'threat' });
-  S.push(setOf(lvIdx >= 2 && R() < .5 ? ['remix'] : plainSets));
-  S.push({ k: 'pressure' });
-  const first = S.find((b) => b.gate).id, second = GATESET[first === GATESET[ka] ? kb : ka]; S.push({ k: 'set', id: second, gate: true });   // and the other gate: the key you left behind
-  S.push({ k: 'lensbreath' });
-  if (kc) { if (KEYABLE.includes(kc) && R() < .7) S.push({ k: 'key', need: kc, side: R() < .5 ? -1 : 1 }); S.push(setOf(hardSets)); S.push({ k: 'set', id: GATESET[kc], gate: true }); }
-  else S.push(setOf(hardSets));
-  S.push({ k: 'gearpair' });
-  S.push(setOf(hardSets.concat(lvIdx >= 2 ? ['remix'] : [])));
+  S.push({ k: 'set', id: GATESET[R() < .5 ? ka : kb], gate: true });    // its first gate comes soon
+  S.push(...take('rest'));
+  const builds2 = 1 + (L >= 4 ? 1 : 0); for (let i = 0; i < builds2; i++) S.push(...take(R() < .35 + .4 * hardK ? 'peak' : 'build'));
+  if (L <= 3 || R() < .5) S.push(...take('rest'));
+  const first = S.find((b) => b.gate).id, second = GATESET[first === GATESET[ka] ? kb : ka]; S.push({ k: 'set', id: second, gate: true });   // the return: the key you left behind
+  if (kc) { if (KEYABLE.includes(kc) && R() < .7) S.push({ k: 'key', need: kc, side: R() < .5 ? -1 : 1 }); S.push(...take('build')); S.push({ k: 'set', id: GATESET[kc], gate: true }); }
+  S.push(...take('rest'));
+  S.push(...take('peak'));
   S.push({ k: 'finale' });
   return { beats: S, keys: [ka, kb], late: kc };
 }

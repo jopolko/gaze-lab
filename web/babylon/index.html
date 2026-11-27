@@ -55,7 +55,7 @@ import { createIntro } from './intro.js?v=20261127c';          /* (bump on every
 import { createSets } from './chains.js?v=20261127c';
 import { createSpiders } from './spiders.js?v=20261127j';
 import { createBeasts } from './beasts.js?v=20261127g';
-import { planRoad, planPlay, findTunnel, seedOf } from './director.js';
+import { planRoad, planPlay, findTunnel, seedOf } from './director.js?v=20261127b';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
 import { createPsyFx } from '../downhill-three/psyfx.js';
 import { createPostFx, toGLSLPost } from '../downhill-three/postfx.js';
@@ -134,7 +134,7 @@ const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a)
   const cam = new B.FreeCamera('cam', new B.Vector3(0, 3, 0), scene); cam.minZ = .2; cam.maxZ = 1800; cam.fov = 1.2; cam.inputs.clear(); scene.activeCamera = cam;
   say('loading the course (' + NROWS + ' rows)...'); try { __LDR.to(.12); } catch (e) { }
   const COMPOSE = COMPOSE0;
-  const LSEED = seedOf(WORLD0 + ':' + (Q.get('seed') || 'v1'));
+  const LSEED = seedOf(WORLD0 + ':' + (Q.get('seed') || ('d' + new Date().toISOString().slice(0, 10))));          /* (owner 2026-11-27: a new road and a new arc of phrases every day; the same all day so a run can be retried; ?seed= pins one) */
   let meta = null, phys = null, rows = [];
   if (COMPOSE) try {
     const BK = '../downhill-three/data/', getJ = (p) => fetch(BK + p).then((r) => { if (!r.ok) throw new Error(p + ' ' + r.status); return r.json(); });
