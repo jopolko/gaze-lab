@@ -203,6 +203,14 @@
     if (nm < 440) { r = (440 - nm) / 60; b = 1; } else if (nm < 490) { g = (nm - 440) / 50; b = 1; } else if (nm < 510) { g = 1; b = (510 - nm) / 20; } else if (nm < 580) { r = (nm - 510) / 70; g = 1; } else if (nm < 645) { r = 1; g = (645 - nm) / 65; } else r = 1;
     return [r, g, b].map((v) => Math.round(255 * Math.pow(Math.max(0, Math.min(1, v)), .8))); };
   let hold = 2000;
+  /* AN HONEST BAR (owner 2026-11-26: "slow to 45, then it zips to 100; a bar that makes the wait feel longer works in reverse").
+     The game reports raw stages (0..1) that are not time. Each load records WHEN each stage was reached on this device; the next load fills the bar by
+     time instead: stage v shows as the share of the last load's time it took to get there, and between stages the bar moves with the clock against
+     the estimated total, so it climbs evenly and arrives at 100 as the level is ready. A first load uses a default split (the road download is most of it). */
+  const LC = (() => { try { const o = JSON.parse(localStorage.getItem('dl_ldrcurve') || 'null'); return o && Array.isArray(o.c) && o.c.length > 2 ? o : null; } catch (e) { return null; } })();
+  const CURVE = LC ? LC.c : [[0, 0], [.12, .04], [.18, .07], [.63, .84], [.8, .92], [1, 1]];
+  const timeAt = (v) => { for (let i = 1; i < CURVE.length; i++) if (v <= CURVE[i][0]) { const a = CURVE[i - 1], b = CURVE[i], u = (v - a[0]) / Math.max(1e-6, b[0] - a[0]); return a[1] + (b[1] - a[1]) * u; } return 1; };
+  const M = { raw: 0, pts: [], est: LC && LC.T > 500 ? LC.T : 0 };
   const show = (n) => { stEl.textContent = n.t; stEl.classList.toggle('clue', n.clue); hold = n.clue ? 3200 + n.t.length * 35 : 1700 + Math.random() * 600; };
   const setLine = () => { stEl.classList.add('go'); setTimeout(() => { show(next()); stEl.classList.remove('go'); }, 250); };
   show({ t: nextStatus() + '…', clue: false });
@@ -211,8 +219,8 @@
     if (!el.isConnected && L.done) return;
     const t = (now - L.t0) / 1000;
     // the meter eases toward its target, and creeps on its own (never stalls, never passes the target by much)
-    if (!L.done) L.target = Math.min(.97, L.target + .0004);
-    L.v += (L.target - L.v) * Math.min(1, (L.done ? .16 : .05));
+    if (!L.done) { const el = now - L.t0; if (M.est > 0) L.target = Math.max(L.target, Math.min(.97, el / M.est)); else L.target = Math.min(.97, L.target + .0004); }          /* (with an estimate the bar moves with the clock; without one it creeps) */
+    L.v += (L.target - L.v) * Math.min(1, (L.done ? .16 : .12));
     if (now - L.lastLine > (L.done ? 1e9 : hold)) { L.lastLine = now; if (t > .5) setLine(); }
     const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
@@ -244,5 +252,8 @@
   requestAnimationFrame(frame);
   // too long: say so plainly, under the jokes
   setTimeout(() => { if (!L.done && el.isConnected) { const n = document.createElement('div'); n.className = 'pc'; n.textContent = 'Still loading. A slow connection can take a minute.'; el.appendChild(n); } }, 40000);
-  window.__LDR = { el, to(v) { if (!L.done) L.target = Math.max(L.target, Math.min(.97, v)); }, done() { if (L.done) return; L.done = true; L.target = 1; stEl.textContent = 'Locked on.'; }, lines: LINES };
+  window.__LDR = { el, to(v) { if (L.done || !(v > M.raw)) return; M.raw = v; const el = performance.now() - L.t0, f = timeAt(v); M.pts.push([v, el]); if (f > .03) M.est = el / f; L.target = Math.max(L.target, Math.min(.97, f)); },
+    done() { if (L.done) return; L.done = true; L.target = 1; stEl.textContent = 'Locked on.';
+      try { const T = performance.now() - L.t0; if (T > 300 && M.pts.length) { const c = [[0, 0]]; for (const [v, t] of M.pts) { const f = t / T, g = LC ? .5 * f + .5 * timeAt(v) : f; if (v > c[c.length - 1][0] && v < 1) c.push([+v.toFixed(3), +Math.max(c[c.length - 1][1], Math.min(1, g)).toFixed(3)]); } c.push([1, 1]); localStorage.setItem('dl_ldrcurve', JSON.stringify({ c, T: Math.round(LC ? .5 * T + .5 * LC.T : T) })); } } catch (e) { } },          /* (learn this load's timing for the next one; half-weight with the last, so one slow load doesn't skew it) */
+    lines: LINES };
 })();
