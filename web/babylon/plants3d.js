@@ -34,7 +34,7 @@
         for (const [x, y] of [[-.3, .18], [.32, -.14]]) { sph(.26, V(x, y, .3), WHITE, V(1, 1, .5)); sph(.12, V(x + .02, y, .38), INK); } break; }
       case 'ginger root': { const G = [.88, .5, .2], s = V(1, 1, .5);          /* a gingerbread man, mid-sprint */
         sph(.62, V(.05, .78, 0), G, V(1, 1, .55)); add(B.MeshBuilder.CreateCapsule('t', { height: .95, radius: .27 }, scene), V(0, .12, 0), mat(G), s, V(0, 0, -.12));
-        const limb = (a, b) => tube([a, b], .13, G); limb([.15, .38, 0], [.62, .55, 0]); limb([-.15, .35, 0], [-.55, .12, 0]); limb([.1, -.25, 0], [.42, -.55, 0]); limb([.42, -.55, 0], [.38, -.9, 0]); limb([-.1, -.25, 0], [-.48, -.62, 0]);
+        const limb = (a, b) => tube([a, b], .13, G); limb([.15, .38, 0], [.62, .55, 0]); limb([-.15, .35, 0], [-.55, .12, 0]); limb([.1, -.25, 0], [.42, -.55, 0]); limb([.42, -.55, 0], [.38, -.9, 0]); limb([-.1, -.25, 0], [-.48, -.62, 0]); limb([-.48, -.62, 0], [-.72, -.86, 0]); limb([.38, -.9, 0], [.56, -.94, 0]); limb([-.72, -.86, 0], [-.6, -1.02, 0]);          /* (owner 2026-11-27: the back leg had no lower half) */
         for (const y of [.3, .05]) sph(.09, V(0, y, .15), WHITE, null, null, 'glow'); eye(-.07, .83, .17, .055); eye(.17, .83, .17, .055); smile(.05, .7, .18, .12, WHITE);
         for (const y of [.3, 0, -.3]) box(.26, .03, .03, V(-.85, y, 0), [1, .85, .65], null, 'glow'); break; }
       case 'chamomile': { const PET = [.99, .98, .93], MID = [1, .78, .15];          /* a white daisy, dozing */
