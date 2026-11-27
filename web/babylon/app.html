@@ -21,7 +21,7 @@ window.__SHELL = true; window.__fsAt = -1e9; for (const ev of ['fullscreenchange
   if (!/^[A-Za-z0-9_-]+\.html([?#].*)?$/.test(p)) p = 'menu.html';          /* only this folder's own pages */
   /* ELECTRONIC ANESTHESIA FIRST (owner 2026-11-26): on a first launch the studio's logo is the very first thing seen, about 2.4 s on black (a tap skips it).
      The title screen loads underneath and holds its clock until the logo has gone. Later launches go straight in. (?ea shows it again.) */
-  const eaFirst = /^splash\.html/.test(p) && (q.has('ea') || (() => { try { return !localStorage.getItem('dl_ea'); } catch (e) { return false; } })());
+  const eaFirst = /^splash\.html/.test(p) && q.has('ea');          /* (owner 2026-11-26: the logo lives in ONE place, the intro's studio card over the opening black, the more dramatic one; ?ea still shows this for testing) */
   if (eaFirst) { window.__eaHold = true; const w = document.createElement('div'); w.id = 'eaLogo'; w.style.cssText = 'position:fixed;inset:0;z-index:50;background:#040305;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .6s ease';
     w.innerHTML = '<img src="art/ea_ident.png" alt="Electronic Anesthesia" style="width:min(46vmin,340px);height:auto;opacity:0;transform:scale(.97);transition:opacity .7s ease,transform 2.6s ease-out">'; document.body.appendChild(w); const im = w.firstChild;
     let done = false; const end = () => { if (done) return; done = true; try { localStorage.setItem('dl_ea', '1'); } catch (e) { } w.style.opacity = '0'; window.__eaHold = false; try { f.contentWindow.__eaGo && f.contentWindow.__eaGo(); } catch (e) { } setTimeout(() => w.remove(), 700); };

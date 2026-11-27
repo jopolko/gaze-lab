@@ -1462,9 +1462,11 @@ void main() {
     if (!ENG.ok) { ENG.ok = true; const t = ac.currentTime, out = ac.createGain(); out.gain.value = 0; out.connect(ac.destination);
       const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500; lp.Q.value = .7; lp.connect(out);
       const mk = (type, g) => { const o = ac.createOscillator(), gg = ac.createGain(); o.type = type; gg.gain.value = g; o.connect(gg); gg.connect(lp); o.start(t); return { o, g: gg }; };
-      ENG.v = { base: mk('triangle', .45), sub: mk('sine', .7), fifth: mk('sine', .06), oct: mk('sine', 0) };
+      ENG.v = { base: mk('triangle', .38), sub: mk('sine', .7), fifth: mk('sine', .06), oct: mk('sine', 0), third: mk('sine', 0), twelfth: mk('sine', 0) };
+      /* (owner 2026-11-26, 'more beautiful: chorus, sweet harmonics, deep and moving'): a long soft reverb under the pad, so it blooms instead of buzzing */
+      { const cv = ac.createConvolver(), len = Math.floor(ac.sampleRate * 3.2), ir = ac.createBuffer(2, len, ac.sampleRate); for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2) * (i < 400 ? i / 400 : 1); } cv.buffer = ir; const wet = ac.createGain(); wet.gain.value = .5; lp.connect(cv); cv.connect(wet); wet.connect(out); }
       /* the chorus: two more triangles a few cents either side, panned apart, and a short modulated delay on the whole hum: it opens up instead of buzzing in the middle */
-      for (const [cents, pan] of [[-9, -.55], [9, .55]]) { const o = ac.createOscillator(), g = ac.createGain(), p = ac.createStereoPanner ? ac.createStereoPanner() : null; o.type = 'triangle'; o.detune.value = cents; g.gain.value = .22; o.connect(g); if (p) { p.pan.value = pan; g.connect(p); p.connect(lp); } else g.connect(lp); o.start(t); (ENG.ch = ENG.ch || []).push(o); }
+      for (const [cents, pan] of [[-14, -.85], [-7, -.45], [-3, -.15], [3, .15], [7, .45], [14, .85]]) { const o = ac.createOscillator(), g = ac.createGain(), p = ac.createStereoPanner ? ac.createStereoPanner() : null; o.type = Math.abs(cents) > 10 ? 'sine' : 'triangle'; o.detune.value = cents; g.gain.value = .13; { const l = ac.createOscillator(), lgn = ac.createGain(); l.frequency.value = .13 + Math.random() * .3; lgn.gain.value = 5; l.connect(lgn); lgn.connect(o.detune); l.start(t); } o.connect(g); if (p) { p.pan.value = pan; g.connect(p); p.connect(lp); } else g.connect(lp); o.start(t); (ENG.ch = ENG.ch || []).push(o); }
       { const dl = ac.createDelay(.05), dg = ac.createGain(), mod = ac.createOscillator(), mg = ac.createGain(); dl.delayTime.value = .016; mod.frequency.value = .6; mg.gain.value = .004; mod.connect(mg); mg.connect(dl.delayTime); mod.start(t); dg.gain.value = .55; lp.connect(dl); dl.connect(dg); dg.connect(out); }
       /* the take-off growl: two rough saws a little apart and a breath of noise, through a low-pass that sweeps open as the pitch climbs, then settles into the hum */
       { const gl = ac.createBiquadFilter(), gg = ac.createGain(); gl.type = 'lowpass'; gl.frequency.value = 160; gl.Q.value = 4; gg.gain.value = 0; gl.connect(gg); gg.connect(ac.destination);
@@ -1482,11 +1484,12 @@ void main() {
       setTimeout(() => { try { for (const o of G.gs) o.stop(); } catch (e) { } }, 4500); }
     if (PH.boost_t > ENG.lastBoost + .3) ENG.rev = 1; ENG.lastBoost = PH.boost_t; if (air && !ENG.wasAir && PH.vy > 3) ENG.rev = Math.max(ENG.rev, .8); ENG.wasAir = air;
     ENG.rev = Math.max(0, ENG.rev - dt / 1.8); const rv = ENG.rev * ENG.rev * (3 - 2 * ENG.rev);
-    const sc = engineScale(), f = snapNote(55 + sp * .9, sc), t = ac.currentTime, k = .18;          /* (a note in the key, rising with speed through the low register) */
+    const sc0e = engineScale(), sc = { root: sc0e.root, mode: [0, 7] }, f = snapNote(46 + sp * .55, sc), t = ac.currentTime, k = .7, sn = Math.min(1, sp / 80);          /* (root and fifth only, gliding slowly: it rises with speed without playing a tune over the music) */          /* (a note in the key, rising with speed through the low register) */
     ENG.v.base.o.frequency.setTargetAtTime(f, t, k); ENG.v.sub.o.frequency.setTargetAtTime(f / 2, t, k); ENG.v.fifth.o.frequency.setTargetAtTime(f * 1.5, t, k); ENG.v.oct.o.frequency.setTargetAtTime(f * 2, t, k);
-    ENG.v.fifth.g.gain.setTargetAtTime(.06 + .3 * rv, t, .25); if (ENG.ch) for (const [i, o] of ENG.ch.entries()) o.frequency.setTargetAtTime(i ? f * 1.003 : f * .997, t, k); ENG.v.oct.g.gain.setTargetAtTime(.18 * rv * rv, t, .35);
-    ENG.lp.frequency.setTargetAtTime(380 + sp * 4 + 500 * rv, t, .3);
-    ENG.out.gain.setTargetAtTime(PAUSED || FXO.hold || (OPEN.on && OPEN.playing && !OPEN.done) ? 0 : (.04 + .015 * Math.min(1, sp / 70) + .02 * rv) * (LAB.chl ? .7 : 1), t, .25); }
+    ENG.v.third.o.frequency.setTargetAtTime(f * 2 * Math.pow(2, (sc0e.mode.includes(4) && !sc0e.mode.includes(3) ? 4 : 3) / 12), t, k); ENG.v.twelfth.o.frequency.setTargetAtTime(f * 3, t, k); ENG.v.third.g.gain.setTargetAtTime(.03 + .07 * sn + .05 * rv, t, .6); ENG.v.twelfth.g.gain.setTargetAtTime(.02 + .05 * sn + .08 * rv, t, .6);
+    ENG.v.fifth.g.gain.setTargetAtTime(.1 + .12 * sn + .25 * rv, t, .4); if (ENG.ch) for (const [i, o] of ENG.ch.entries()) o.frequency.setTargetAtTime(i ? f * 1.003 : f * .997, t, k); ENG.v.oct.g.gain.setTargetAtTime(.18 * rv * rv, t, .35);
+    ENG.lp.frequency.setTargetAtTime(520 + sp * 6 + 700 * rv, t, .5);
+    ENG.out.gain.setTargetAtTime(PAUSED || FXO.hold || (OPEN.on && OPEN.playing && !OPEN.done) ? 0 : (.032 + .014 * sn + .02 * rv) * (LAB.chl ? .7 : 1), t, .4); }
   const MDIR = { t: 0, offUntil: 0, nextBreak: 75 + Math.random() * 40 }; window.__MDIR = MDIR;
   function musicDirector(dt) { if (!window.ME || !ME.on || !ME.beat || PAUSED || (OPEN.on && !OPEN.done) || Q.has('story') && !window.__go) return; MDIR.t += dt; const now = MDIR.t;
     const raid = !!(RAID.cur && ['arrive', 'arm', 'attack'].includes(RAID.cur.phase)), inT = inTunZ(PH.z, 0), action = raid || !!PH.set || DOP.on;
