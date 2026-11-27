@@ -97,11 +97,11 @@ setTimeout(() => { try { SFX.preload && SFX.preload(); } catch (e) { } }, 3000);
 const LAB = (() => { const d = { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, cmp: '', len: 'full', chl: false, sty: '', trn: 55, nrg: 80 }; try { return Object.assign(d, JSON.parse(localStorage.getItem('dl_lab') || '{}') || {}); } catch (e) { return d; } })();          /* THE FREQUENCY (lab.html): the player's own tuning, read at the start of every level */
 /* MAX INTENSITY (the title screen's dial, 400-950 THz, saved as dl_freq): the CEILING of the trip. Every level still eases in from calm; this sets how far it can go.
    Re-graduated 2026-11-26 (owner: the bottom was already a strong trip). ONE curve now runs everything the dial touches (trip shader, colour, warp, tracers,
-   the look bursts, the stained-glass sky, the dose sky): 400 a hint (0.15x) . 500 the default, mild (0.35x) . 620 medium (0.6x) . 720 as designed, the full trip (1x)
+   the look bursts, the stained-glass sky, the dose sky): 400 a hint (0.3x) . 500 the default, mild (0.55x) . 620 medium (0.8x) . 700 as designed, the full trip (1x)  (raised 2026-11-26 evening: 'not high enough')
    . 790 intense (1.25x) . 790-950 ULTRAVIOLET, the absolute trip (up to 2x). Below 0.5x the heavy looks (halftone, mosaic, ascii...) and the glass sky stay away.
    It also sets your signal colour (window.__SIG, CSS --sig). */
 const SIG = (() => { let f = 500;          /* (the default: mild, a real taste without the full trip) */ try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 950) f = v; } catch (e) { } { const qv = +new URLSearchParams(location.search).get('freq'); if (qv >= 400 && qv <= 950) f = qv; }          /* (?freq=950: test a dial setting without touching the saved one) */
-  const K = [[400, .15], [500, .35], [620, .6], [720, 1], [790, 1.25], [870, 1.55], [950, 2]], c = (() => { for (let i = 1; i < K.length; i++) if (f <= K[i][0]) { const u = (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * u; } return 2; })();
+  const K = [[400, .3], [500, .55], [620, .8], [700, 1], [790, 1.3], [870, 1.6], [950, 2]], c = (() => { for (let i = 1; i < K.length; i++) if (f <= K[i][0]) { const u = (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * u; } return 2; })();
   const uv = Math.max(0, (f - 790) / 160), u = Math.min(1, (f - 400) / 390), hue = 270 * u, l = .6 + .3 * uv, hex = (() => { const sat = 1, a = sat * Math.min(l, 1 - l), g = (m) => { const q = (m + hue / 30) % 12, cc = l - a * Math.max(-1, Math.min(q - 3, 9 - q, 1)); return Math.round(cc * 255).toString(16).padStart(2, '0'); }; return '#' + g(0) + g(8) + g(4); })();
   const k = c < 1 ? Math.max(-1, (c - 1) / .85) : Math.min(1, (c - 1) / .55);          /* (music: -1 chill ... +1 intense, ultraviolet stays at the top) */
   return { f, c, uv, k, hex }; })();
@@ -110,7 +110,7 @@ const LAB0 = { int: LAB.int, nrg: LAB.nrg, trn: LAB.trn, col: LAB.col, wrp: LAB.
 LAB.int = Math.round(LAB.int * SIG.c); LAB.nrg = Math.round(LAB.nrg * (1 + .25 * SIG.k)); LAB.trn = Math.round(LAB.trn + 12 * SIG.k);
 { const x = SIG.c > 1 ? 1 + .5 * (SIG.c - 1) : .25 + .75 * SIG.c;          /* (below as-designed only warp and tracers come down; colour stays full at every setting, owner 2026-11-26: plain colour read as awful) */ LAB.col = Math.round(LAB.col * Math.max(1, x)); LAB.wrp = Math.round(LAB.wrp * x); LAB.trc = Math.round(LAB.trc * Math.min(1.4, x)); }
 /* live re-tune (the title screen's dial drives the real level behind it): the same sums as above, from the designed values */
-window.__sigSet = (f) => { f = Math.max(400, Math.min(950, +f || 500)); const K = [[400, .15], [500, .35], [620, .6], [720, 1], [790, 1.25], [870, 1.55], [950, 2]]; let cc = 2; for (let i = 1; i < K.length; i++) if (f <= K[i][0]) { cc = K[i - 1][1] + (K[i][1] - K[i - 1][1]) * (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); break; }
+window.__sigSet = (f) => { f = Math.max(400, Math.min(950, +f || 500)); const K = [[400, .3], [500, .55], [620, .8], [700, 1], [790, 1.3], [870, 1.6], [950, 2]]; let cc = 2; for (let i = 1; i < K.length; i++) if (f <= K[i][0]) { cc = K[i - 1][1] + (K[i][1] - K[i - 1][1]) * (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); break; }
   SIG.f = f; SIG.c = cc; SIG.uv = Math.max(0, (f - 790) / 160); SIG.k = cc < 1 ? Math.max(-1, (cc - 1) / .85) : Math.min(1, (cc - 1) / .55); const x = cc > 1 ? 1 + .5 * (cc - 1) : .25 + .75 * cc;
   LAB.int = Math.round(LAB0.int * cc); LAB.nrg = Math.round(LAB0.nrg * (1 + .25 * SIG.k)); LAB.trn = Math.round(LAB0.trn + 12 * SIG.k); LAB.col = Math.round(LAB0.col * Math.max(1, x)); LAB.wrp = Math.round(LAB0.wrp * x); LAB.trc = Math.round(LAB0.trc * Math.min(1.4, x)); };          /* (above 'as designed', colour, warp and tracers rise too, by half as much: balanced, never a smear) */
 const Q = new URLSearchParams(location.search), $ = (id) => document.getElementById(id), say = (t) => { $('status').textContent = t; };
@@ -884,7 +884,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   for (const b of BUFFS) { const bm = BEAM[b.mi % MOL_ORDER.length].createInstance('beam'); bm.isPickable = false; bm.alwaysSelectAsActiveMesh = true; b.bm = bm; }
   const TILT = B.Quaternion.RotationYawPitchRoll(0, .5, .3), qy = new B.Quaternion();
   function pillsUpdate() { for (const b of BUFFS) { const im = b.im; if (!im) continue; if (b.taken || Math.abs(b.z - PH.z) > 420) { if (im.isEnabled()) { im.setEnabled(false); b.bm.setEnabled(false); } continue; } if (!im.isEnabled()) { im.setEnabled(true); b.bm.setEnabled(false); } b.bm.position.set(b.x, th(b.x, b.z) + 4.6, b.z); const age = U.time; im.position.set(b.x, th(b.x, b.z) + 1.7 + .2 * Math.sin(age * 2.8 + b.x), b.z); B.Quaternion.RotationYawPitchRollToRef(age * 2.4, 0, 0, qy); qy.multiplyToRef(TILT, im.rotationQuaternion); } }
-  const K = { l: 0, r: 0 }; let headSteer = 0, padSteer = 0, started = false, tStart = 0, shake = 0, lastJump = 0;
+  const K = { l: 0, r: 0 }; let headSteer = 0, padSteer = 0, touchSteer = 0, started = false, tStart = 0, shake = 0, lastJump = 0;
   addEventListener('keydown', (e) => { if (e.key === 'a' || e.key === 'ArrowLeft') K.l = 1; if (e.key === 'd' || e.key === 'ArrowRight') K.r = 1; });
   addEventListener('keyup', (e) => { if (e.key === 'a' || e.key === 'ArrowLeft') K.l = 0; if (e.key === 'd' || e.key === 'ArrowRight') K.r = 0; });
   const big = (t) => { /* no on-screen callouts */ };
@@ -935,7 +935,7 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   }
   function step(dt) {
     PH.zPrev = PH.z; PH.xPrev = PH.x; PH.hurt = Math.max(PH.hurt - dt, 0); PH.boost_t = Math.max(PH.boost_t - dt, 0); const prog = Math.min(Math.max(-PH.z, 0) / 3500, 1);
-    const hs = headCond(headSteer, dt); let sIn = clamp(K.r - K.l + hs + padSteer, -1, 1); gazeOrbStep(dt, sIn);
+    const hs = headCond(headSteer, dt); let sIn = clamp(K.r - K.l + hs + padSteer + touchSteer, -1, 1); gazeOrbStep(dt, sIn);
     // lane hold: the smallest shift that clears the trees and rocks coming up, and a nudge toward one is cancelled
     if (PH.grounded) { const spd = Math.max(Math.hypot(PH.vx, PH.vz), 20), look = Math.min(90, spd * 1.15), cx = Math.floor(PH.x / 8), cz = Math.floor(PH.z / 8), reach = Math.ceil(look / 8) + 1; let push = 0, block = 0;
       for (let ci = -2; ci <= 2; ci++) for (let cj = -reach; cj <= 1; cj++) { const a = OG.get((cx + ci) + ',' + (cz + cj)); if (!a) continue;
@@ -1368,7 +1368,27 @@ void main() {
   }
   addEventListener('keydown', (e) => { if (e.key === 'o' || e.key === 'O') togglePanel(); const n = +e.key; if (panelOpen && n >= 1 && n <= OPTDEF.length) cycle(n - 1); });
   // touch (phones and tablets): hold the left or right half of the screen to steer
-  canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' || inXR || panelOpen) return; if (e.clientX < innerWidth / 2) K.l = 1; else K.r = 1; }); const touchEnd = () => { if (!inXR) { K.l = 0; K.r = 0; } }; canvas.addEventListener('pointerup', touchEnd); canvas.addEventListener('pointercancel', touchEnd);
+  /* TOUCH STEERING (owner 2026-11-26: a one-handed joystick). Wherever the thumb lands, a glowing stick appears; slide left or right to steer, as hard as
+     you slide (analog). Slide past the ring and it follows the thumb. A thumb that lands and holds still for a moment steers like before: left half
+     of the screen left, right half right. Lifting the thumb lets go. */
+  const JSTK = { id: null, x0: 0, y0: 0, t0: 0, moved: false, el: null, knob: null, R: 52 };
+  { const st = document.createElement('style'); st.textContent = '#jStick{position:fixed;width:124px;height:124px;margin:-62px 0 0 -62px;border-radius:50%;border:2px solid var(--sig,#38e8ff);background:radial-gradient(circle,rgba(10,8,20,.35) 0,rgba(10,8,20,.08) 70%);box-shadow:0 0 18px rgba(56,232,255,.25),inset 0 0 14px rgba(0,0,0,.5);z-index:42;pointer-events:none;opacity:0;transition:opacity .12s}#jStick.on{opacity:.8}#jStick i{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff 0,var(--sig,#38e8ff) 55%,rgba(5,6,12,.6) 100%);box-shadow:0 0 16px var(--sig,#38e8ff)}#jStick b{position:absolute;top:50%;width:0;height:0;margin-top:-7px;border:7px solid transparent;opacity:.6}#jStick b.l{left:8px;border-right:9px solid var(--sig,#38e8ff);border-left:0}#jStick b.r{right:8px;border-left:9px solid var(--sig,#38e8ff);border-right:0}';
+    document.head.appendChild(st); const el = document.createElement('div'); el.id = 'jStick'; el.innerHTML = '<b class="l"></b><b class="r"></b><i></i>'; document.body.appendChild(el); JSTK.el = el; JSTK.knob = el.querySelector('i'); }
+  const stkShow = (x, y) => { JSTK.el.style.left = x + 'px'; JSTK.el.style.top = y + 'px'; JSTK.el.classList.add('on'); JSTK.knob.style.transform = ''; };
+  canvas.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse' || inXR || panelOpen || JSTK.id !== null) return; JSTK.id = e.pointerId; JSTK.x0 = e.clientX; JSTK.y0 = e.clientY; JSTK.t0 = performance.now(); JSTK.moved = false; touchSteer = 0; stkShow(e.clientX, e.clientY);
+    setTimeout(() => { if (JSTK.id === e.pointerId && !JSTK.moved) { if (JSTK.x0 < innerWidth / 2) K.l = 1; else K.r = 1; } }, 200); });          /* (held still: the old half-screen steering) */
+  addEventListener('pointermove', (e) => { if (e.pointerId !== JSTK.id) return; let dx = e.clientX - JSTK.x0; if (!JSTK.moved && Math.abs(dx) > 9) { JSTK.moved = true; K.l = 0; K.r = 0; }
+    if (!JSTK.moved) return; if (Math.abs(dx) > JSTK.R) { JSTK.x0 += dx - Math.sign(dx) * JSTK.R; dx = Math.sign(dx) * JSTK.R; JSTK.el.style.left = JSTK.x0 + 'px'; }          /* (the ring follows the thumb) */
+    touchSteer = clamp(dx / JSTK.R, -1, 1); JSTK.knob.style.transform = 'translateX(' + dx.toFixed(0) + 'px)'; }, { passive: true });
+  const touchEnd = (e) => { if (e && e.pointerId !== undefined && JSTK.id !== null && e.pointerId !== JSTK.id) return; JSTK.id = null; touchSteer = 0; JSTK.el.classList.remove('on'); if (!inXR) { K.l = 0; K.r = 0; } };
+  addEventListener('pointerup', touchEnd); addEventListener('pointercancel', touchEnd);
+  /* THE HUD, themed (owner 2026-11-26): the gear slots and the pause padlock as neon-noir panels, clipped corners, lit in your signal colour, kept off the
+     screen's rounded corners and the camera hole */
+  { const st = document.createElement('style'); st.textContent = '#hudSlots{left:calc(max(10px,var(--sa-left, env(safe-area-inset-left,0px))) + 4.5vw)!important;top:calc(max(10px,var(--sa-top, env(safe-area-inset-top,0px))) + 4px)!important}'
+      + '.hs{border-radius:4px!important;clip-path:polygon(0 0,calc(100% - 11px) 0,100% 11px,100% 100%,11px 100%,0 calc(100% - 11px));background:linear-gradient(155deg,rgba(18,12,32,.88),rgba(5,6,12,.88))!important;border:1px solid var(--sig,#38e8ff)!important;box-shadow:inset 0 0 14px rgba(0,0,0,.65),0 0 0 1px rgba(0,0,0,.4)!important}'
+      + '#pzb{border-radius:8px!important;clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));background:linear-gradient(155deg,rgba(18,12,32,.88),rgba(5,6,12,.88))!important;border:1px solid var(--sig,#38e8ff)!important;width:40px!important;height:40px!important}'
+      + '#fpsCorner{border:1px solid rgba(255,255,255,.1);border-radius:3px!important;font-family:"Barlow Condensed",ui-monospace,monospace!important;letter-spacing:.08em!important}';
+    document.head.appendChild(st); }
   // ---- CAMERA HEAD TRACKING (not in VR): the same on-device face tracker as the other demos. Turn your head to steer. The first second sets "straight ahead"; it follows a head that rests; FLIP reverses it.
   let tr = null, camOn = false, camState = 'off', camYaw0 = 0, camRoll0 = 0, camRCal = [], tiltFlip = 1, headRollNow = 0, camBank = 0, camSpin = 0, camCal = [], camFlip = Q.has('flipyaw') ? -1 : 1, camSeen = 0, camVideo = null, camT0 = 0;
   const camUI = document.createElement('div'); camUI.style.cssText = 'position:fixed;left:10px;bottom:46px;z-index:7;display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:94vw';
@@ -1618,7 +1638,7 @@ void main() {
     btn('Worlds', () => { location.href = 'menu.html'; }); btn('Title screen', () => { location.href = 'splash.html'; });          /* (owner 2026-11-26: the level select is 'Worlds'; the title screen is one tap away, progress kept, no training) */
     const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Settings'; { const ib = document.createElement('button'); ib.className = 'sm'; ib.textContent = '\u2316 Inspect & copy'; ib.onclick = () => { try { window.__inspMode(true); } catch (e) { } }; G.appendChild(ib); } dv.onclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
     /* MAX INTENSITY, changeable mid-game (owner 2026-11-26: if someone changes their mind): re-tunes the trip live and is remembered for the next run */
-    { const R = el.querySelector('#pmSigR'), V = el.querySelector('#pmSigV'), show = (f) => { V.textContent = Math.round(f) + ' THz' + (f > 790 ? ' \u00B7 UV' : ''); V.style.color = f > 790 ? '#d68cff' : '#9fd8ff'; };
+    { const R = el.querySelector('#pmSigR'), V = el.querySelector('#pmSigV'), show = (f) => { V.textContent = Math.round(f) + ' THz \u00B7 ' + ((f) => f < 450 ? 'HINT' : f < 560 ? 'MILD' : f < 660 ? 'MEDIUM' : f < 745 ? 'FULL' : f <= 790 ? 'INTENSE' : 'ULTRAVIOLET')(f); V.style.color = f > 790 ? '#d68cff' : '#9fd8ff'; };
       R.value = String(window.__SIG ? window.__SIG.f : 500); show(+R.value); for (const ev of ['pointerdown', 'touchstart']) R.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
       R.addEventListener('input', () => { const f = +R.value; show(f); try { window.__sigSet(f); } catch (e) { } try { localStorage.setItem('dl_freq', String(f)); } catch (e) { } }); }
     const VRL = el.querySelector('#pmVR');
@@ -2971,7 +2991,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   function dopStart() { try { strikeStart(); rushLooks(); } catch (e) { } DOP.stg = 0; DOP.on = true; DOP.t = RUSHLEN; DOP.n++; DOP.v = 1; try { gearPop('RUSH', 2); SFX.mol(0); lookPulse(); FXB.E.cheer([PH.x, PH.y + 2, PH.z]); } catch (e) { } shake = Math.max(shake, .6); U.beat = 1; U.trip = 1; }
   function dopEnd() { DOP.on = false; DOP.v = 0; try { gearPop('Coming down. Nice.'); } catch (e) { } }
   const DM = { el: null, icons: [], t: 0 };
-  function dmBuild() { const d = document.createElement('div'); d.id = 'dopMeter'; d.style.cssText = 'position:fixed;left:max(12px,var(--sa-left, env(safe-area-inset-left,0px)));top:calc(max(10px,var(--sa-top, env(safe-area-inset-top,0px))) + 76px);display:flex;gap:4px;z-index:41;pointer-events:none;opacity:.9';
+  function dmBuild() { const d = document.createElement('div'); d.id = 'dopMeter'; d.style.cssText = 'position:fixed;left:calc(max(10px,var(--sa-left, env(safe-area-inset-left,0px))) + 4.5vw);top:calc(max(10px,var(--sa-top, env(safe-area-inset-top,0px))) + 78px);display:flex;gap:4px;z-index:41;pointer-events:none;opacity:.9';
     const st = document.createElement('style'); st.textContent = '#dopMeter svg{width:22px;height:27px;overflow:visible;transition:transform .25s}#dopMeter.hot svg{filter:drop-shadow(0 0 6px #ffd23a)}#dopMeter.crit svg{animation:dmShake .09s infinite;filter:drop-shadow(0 0 10px #fff) drop-shadow(0 0 18px #ffd23a)}#dopMeter.rush svg{filter:drop-shadow(0 0 8px #ff8a3d)}@keyframes dmShake{0%{transform:translate(1px,0) scale(var(--s))}50%{transform:translate(-1px,1px) scale(var(--s))}100%{transform:translate(0,-1px) scale(var(--s))}}'; document.head.appendChild(st);
     for (let i = 0; i < 5; i++) { const id = 'dmc' + i, svg = '<svg viewBox="-11 -14 22 28"><defs><clipPath id="' + id + '"><polygon points="0,-13 10,-4 6,13 -6,13 -10,-4"/></clipPath><linearGradient id="' + id + 'g" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#38e8ff"/><stop offset=".6" stop-color="#9b6bff"/><stop offset="1" stop-color="#ffd23a"/></linearGradient></defs><polygon points="0,-13 10,-4 6,13 -6,13 -10,-4" fill="rgba(6,9,16,.7)"/><rect clip-path="url(#' + id + ')" x="-11" y="13" width="22" height="0" fill="url(#' + id + 'g)"/><polygon points="0,-13 10,-4 6,13 -6,13 -10,-4" fill="none" stroke="rgba(190,240,255,.8)" stroke-width="1.4"/><path d="M-10,-4 L0,-1 L10,-4 M0,-1 L0,13" fill="none" stroke="rgba(255,255,255,.25)" stroke-width=".8"/></svg>'; d.insertAdjacentHTML('beforeend', svg); }
     d.insertAdjacentHTML('beforeend', '<span style="align-self:center;margin-left:4px;font:700 11px/1 Barlow Condensed,sans-serif;letter-spacing:.14em;color:#e6f6ff;text-shadow:0 1px 3px #000">RUSH</span>'); document.body.appendChild(d); DM.el = d; DM.icons = [...d.querySelectorAll('svg')]; }
@@ -3817,7 +3837,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
   }
   let IRS = null; const IRD = { cp: null, t0: 0 };
   function irBegin() { if (IRS || !OPEN.on) return; try {
-    IRS = createIntro({ B, scene, OPEN, BEATFX, COMP, MOLS, HOOK: STRAIN_HOOK, hex, signTex, molGeo, steer: () => clamp(K.r - K.l + (typeof headSteer === 'number' ? headSteer : 0) + (typeof padSteer === 'number' ? padSteer : 0), -1, 1),
+    IRS = createIntro({ B, scene, OPEN, BEATFX, COMP, MOLS, HOOK: STRAIN_HOOK, hex, signTex, molGeo, steer: () => clamp(K.r - K.l + (typeof headSteer === 'number' ? headSteer : 0) + (typeof padSteer === 'number' ? padSteer : 0) + (typeof touchSteer === 'number' ? touchSteer : 0), -1, 1),
       onPad: () => { try { SFX.mol(1); } catch (e) { } U.beat = 1; },
       onHit: (cp) => { const C = COMP[cp]; IRD.cp = cp; IRD.t0 = performance.now(); tlook(C.looks[0], 1, 0, 3.2, .78, 'snap'); tlook(rndOf(LOOKHEAVY), 2, 0, .6, .5, 'snap'); BEATFX.glass = 1; U.beat = 1; try { SFX.mol(2); } catch (e) { } },
       sky: (id) => { try { if (id) sky.material = skyFor(id); else applyBiome(); } catch (e) { } BEATFX.glass = 1; },

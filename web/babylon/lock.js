@@ -115,7 +115,7 @@ const TONE = { 'Air quality': 'b', 'AGI ETA': 'w', Forecast: 'b', 'Datacenter we
   'Live odds': 'w', Traffic: 'w', Bounty: 'b', Pharmacy: 'w', Spectrum: 'w', 'Car insurance': 'b', 'Camera network': 'b', 'Last seen': 'w', 'Altitude permit': 'b', Glucose: 'g', Signal: 'b',
   'Facial match': 'g', 'Server temp': 'g', Archaeology: 'w', Filter: 'b', 'Driving record': 'w' };
 const TONEC = { g: '#5fd37e', w: '#f2c14e', b: '#ff5f56' };
-const toneOf = (q) => { if (q[0] === 'Spectrum') { const f = parseFloat(q[1]); return f > 790 ? 'b' : f > 720 ? 'w' : 'g'; } if (q[0] === 'Car insurance' && /Flagged/.test(q[1])) return 'w'; return TONE[q[0]] || ''; };
+const toneOf = (q) => { if (q[0] === 'Spectrum') { const f = parseFloat(q[1]); return f > 790 ? 'b' : f > 700 ? 'w' : 'g'; } if (q[0] === 'Car insurance' && /Flagged/.test(q[1])) return 'w'; return TONE[q[0]] || ''; };
 const paintW = (w, q) => { w.querySelector('b').textContent = q[0]; const big = w.querySelector('big'); big.textContent = q[1]; const t = toneOf(q); big.style.color = t ? TONEC[t] : ''; w.querySelector('small').textContent = q[2]; };
 const LK = { on: false, el: null, t: 0, done: null, hold: null };
 const BIOPC = ['Mouse detected. Scanning it anyway.', 'Mouse accepted. Now your left elbow, flat on the desk.', 'Elbow accepted. Exhale onto the webcam.', 'Breath print accepted. Final step: lick the spacebar.', 'Spacebar print accepted. Sharing with 14 partners\u2026'];
@@ -161,7 +161,7 @@ function react(c) { const W = [], N = [], C = (typeof window !== 'undefined' && 
   const fill = (q) => q.map((x) => String(x).replace(/\{(\w+)\}/g, (m, k) => (k in T ? T[k] : m)));
   const add = (k) => { const e = C.react[k]; if (!e) return; (e.W || []).forEach((q) => W.push(fill(q))); (e.N || []).forEach((q) => N.push(fill(q))); };
   if (c.world) add('world'); if (c.wkey) add('world:' + c.wkey); if (c.strain) add('strain'); if (c.skey) add('strain:' + c.skey);
-  if (c.f) add(c.f > 790 ? 'dial:uv' : c.f > 720 ? 'dial:high' : 'dial:low');
+  if (c.f) add(c.f > 790 ? 'dial:uv' : c.f > 700 ? 'dial:high' : 'dial:low');
   if (c.hits > 0) { add('hits'); if (c.hits > 2) add('hits:many'); } else if (c.world && (c.pct || 0) > .2) add('clean');
   if (c.sights > 0) add('sights'); (c.quests || []).forEach((q) => add('quest:' + q)); if (c.craft) add('craft:' + c.craft);
   if (C.sponsors && C.sponsors.length && Math.random() < .6) { const s = C.sponsors[Math.floor(Math.random() * C.sponsors.length)]; N.push(['Sponsored', s[0], s[1]]); }          /* (an ACCORD-sponsored studio's ad, now and then) */

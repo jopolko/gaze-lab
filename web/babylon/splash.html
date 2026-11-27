@@ -520,7 +520,7 @@ function digi(u, c) { if (!DG.el) { DG.el = document.getElementById('digi'); DG.
 function dial(t) { let f; if (TUNE.user && (TUNE.down || t >= LOCK_AT)) f = TUNE.f; else if (t < LOCK_AT) { const k = t / LOCK_AT; const hunt = F0 + (F1 - F0) * (.5 + .5 * Math.sin(k * 9.5 + Math.sin(k * 23) * .6)), w = k * k * k; f = hunt * (1 - w) + TARGET * w; }
   else f = TARGET + (RM ? 0 : Math.sin(t * 3) * .3);
   TUNE.k += ((TUNE.user ? (TUNE.down ? 1 : .75) : 0) - TUNE.k) * .08;
-  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; gameDial(f); mhz.textContent = 'MAX INTENSITY \u00B7 ' + Math.round(f) + ' THz' + (f > FV ? ' \u00B7 UV' : ''); dialEl.style.setProperty('--lc', `rgb(${c})`); 
+  const u = (f - F0) / (F1 - F0), c = specAt(u); needle.style.left = (u * 100) + '%'; gameDial(f); mhz.textContent = 'MAX INTENSITY \u00B7 ' + Math.round(f) + ' THz \u00B7 ' + ((f) => f < 450 ? 'HINT' : f < 560 ? 'MILD' : f < 660 ? 'MEDIUM' : f < 745 ? 'FULL' : f <= 790 ? 'INTENSE' : 'ULTRAVIOLET')(f); dialEl.style.setProperty('--lc', `rgb(${c})`); 
   /* the wave matches the band under it, as real light does: red (400 THz) is the low frequency, long slow smooth waves = chill; violet and ultraviolet (950 THz) the
      high frequency, tight and taller = intense. The wavelength at each point is the light at that point of the scale (the spread exaggerated so the eye reads it),
      drawn faint in the spectrum's own colours; the stretch around your setting glows. */
