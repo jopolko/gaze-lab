@@ -170,12 +170,18 @@ export function createIntro(d) {
         part('sph', { s: [.7, .7, .9], p: [0, 0, -4.3] }, mJx, jt); part('sph', { s: [.3, .3, .3], p: [-4.1, -.05, -1.7] }, mJr, jt); part('sph', { s: [.3, .3, .3], p: [4.1, -.05, -1.7] }, mJg, jt); }
       // THE DINER behind the scorpion (the shot's background: the camera looks across the road at it): neon sign, lit windows, a canopy with pumps, two cars parked out front
       { const dn = keep(new B.TransformNode('irDiner', scene)); dn.position.set(X0 + 17, Y0, Z0 + 8); IR.diner = dn;
-        const mW = mat('irDnW', '#2a2433'), mR = mat('irDnR', '#141118'), mTr = mat('irDnT', '#ffb14a'), mWin = mat('irDnWin', '#ffcf8a'), mCan = mat('irDnC', '#e9e4da'), mPm = mat('irDnP', '#38e8ff'); IR.dinWin = mWin;
+        /* (the diner keeps the player's own hours: open and neon-lit in the evening, CLOSED in the small hours, softer by day; local clock, no permission needed) */
+        const HR = new Date().getHours(), DNIGHT = HR >= 18 || HR < 2, DCLOSED = HR >= 2 && HR < 6;
+        const mW = mat('irDnW', '#2a2433'), mR = mat('irDnR', '#141118'), mTr = mat('irDnT', DCLOSED ? '#5a3a1a' : '#ffb14a'), mWin = mat('irDnWin', DCLOSED ? '#2a2230' : DNIGHT ? '#ffcf8a' : '#c9a87a'), mCan = mat('irDnC', '#e9e4da'), mPm = mat('irDnP', '#38e8ff'); IR.dinWin = mWin;
         part('box', { w: 9, h: 4.4, d: 20, p: [4.5, 2.2, 0] }, mW, dn); part('box', { w: 9.6, h: .5, d: 20.6, p: [4.5, 4.65, 0] }, mR, dn); part('box', { w: .14, h: .22, d: 20.4, p: [-.05, 4.3, 0] }, mTr, dn); part('box', { w: .14, h: .22, d: 20.4, p: [-.05, .35, 0] }, mTr, dn);
         for (let i = 0; i < 4; i++) part('box', { w: .1, h: 1.9, d: 3.4, p: [-.06, 2.2, -7 + i * 4.7] }, mWin, dn);
+        /* (owner 2026-11-26: closed, but not dead: the blinds are drawn and warm light leaks round their edges, and someone is moving behind one of them) */
+        if (DCLOSED) { const mLk = mat('irDnLeak', '#ffcf8a'), mSil = mat('irDnSil', '#0a0810'); for (let i = 0; i < 4; i++) { const zc = -7 + i * 4.7;
+            part('box', { w: .12, h: .06, d: 3.5, p: [-.07, 3.17, zc] }, mLk, dn); part('box', { w: .12, h: .04, d: 3.5, p: [-.07, 1.23, zc] }, mLk, dn); for (const e of [-1, 1]) part('box', { w: .12, h: 1.9, d: .05, p: [-.07, 2.2, zc + e * 1.72] }, mLk, dn); }
+          part('box', { w: .13, h: 1.1, d: .5, p: [-.08, 2.05, -2.3] }, mSil, dn); part('box', { w: .13, h: .36, d: .32, p: [-.08, 2.75, -2.3] }, mSil, dn); }
         part('box', { w: .1, h: 2.6, d: 1.4, p: [-.06, 1.3, 9] }, mat('irDnDoor', '#ffdba0'), dn);
         const st = new B.DynamicTexture('irDnSignT', { width: 600, height: 250 }, scene, true), sx = st.getContext(); sx.fillStyle = '#07060c'; sx.fillRect(0, 0, 600, 250); sx.textAlign = 'center'; sx.shadowBlur = 18;
-        sx.shadowColor = '#38e8ff'; sx.fillStyle = '#38e8ff'; sx.font = '700 150px Impact, "Barlow Condensed", sans-serif'; sx.fillText('DINER', 300, 150); sx.shadowColor = '#ffb14a'; sx.fillStyle = '#ffb14a'; sx.font = '700 46px Impact, "Barlow Condensed", sans-serif'; sx.fillText('OPEN 24 HRS \u00B7 GAS', 300, 222); st.update();
+        sx.shadowColor = '#38e8ff'; sx.fillStyle = DCLOSED ? '#1c6a78' : '#38e8ff'; if (DCLOSED) sx.shadowBlur = 4; sx.font = '700 150px Impact, "Barlow Condensed", sans-serif'; sx.fillText('DINER', 300, 150); sx.shadowColor = DCLOSED ? '#ff3a2a' : '#ffb14a'; sx.fillStyle = DCLOSED ? '#ff3a2a' : '#ffb14a'; sx.font = '700 46px Impact, "Barlow Condensed", sans-serif'; sx.fillText(DCLOSED ? 'CLOSED \u00B7 BACK AT 6' : DNIGHT ? 'OPEN 24 HRS \u00B7 GAS' : 'OPEN \u00B7 GAS', 300, 222); st.update();
         const sm = mat('irDnSignM', '#ffffff'); sm.emissiveTexture = st; sm.diffuseTexture = st; sm.backFaceCulling = false; const sg = keep(B.MeshBuilder.CreatePlane('irDnSign', { width: 6.2, height: 2.6 }, scene)); sg.material = sm; sg.parent = dn; sg.position.set(-8.5, 4.4, -3.5); sg.rotation.y = Math.PI / 2 - .5;          /* (a roadside pole sign, so the close-up sees it) */ part('box', { w: .25, h: 3.2, d: .25, p: [-8.5, 1.6, -3.5] }, mR, dn);
         
         // canopy and pumps on the forecourt (between the road and the diner)
@@ -185,8 +191,8 @@ export function createIntro(d) {
         const parked = (x, z, col) => { const c = keep(new B.TransformNode('irParked', scene)); c.parent = dn; c.position.set(x, 0, z); c.rotation.y = -Math.PI / 2;
           part('box', { w: 2, h: .7, d: 4.3, p: [0, .65, 0] }, mat('irPkB' + col, col), c); part('box', { w: 1.7, h: .55, d: 2.1, p: [0, 1.25, .3] }, mat('irPkT', '#16131c'), c);
           for (const wx of [-1, 1]) for (const wz of [-1.4, 1.4]) part('cyl', { d: .7, h: .3, p: [wx * 1, .35, wz], r: [0, 0, Math.PI / 2] }, mat('irPkW', '#0b0b0e'), c);
-          for (const wx of [-.7, .7]) part('box', { w: .4, h: .12, d: .06, p: [wx, .8, -2.16] }, mat('irPkTl', '#ff3a2a'), c); };
-        parked(-9.5, 4.5, '#7a2a20'); parked(-9.5, 9.2, '#25506a'); }
+          for (const wx of [-.7, .7]) part('box', { w: .4, h: .12, d: .06, p: [wx, .8, -2.16] }, mat('irPkTl', '#3a1410'), c); };
+        parked(-9.5, 4.5, '#2e2724'); parked(-9.5, 9.2, '#222a33'); }          /* (art/quality pass 2026-11-26: parked cars dark and unlit, so the first car you notice is the one that matters) */
       // sparks for the crush
       const mSp = mat('irSpark', '#ffd27a'); mSp.fogEnabled = false; IR.sparks = []; for (let i = 0; i < 18; i++) { const sp = keep(B.MeshBuilder.CreateBox('irSp', { size: .05 }, scene)); sp.material = mSp; IR.sparks.push({ m: sp, v: new B.Vector3(0, 0, 0) }); }
       for (const m of IR.sc.loose) m.__home = { par: m.parent, p: m.position.clone(), r: m.rotation.clone(), sc: m.scaling.clone() };
