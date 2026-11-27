@@ -175,7 +175,7 @@ document.getElementById('dests').addEventListener('click', (e) => { const r = e.
 document.getElementById('vwb').addEventListener('click', () => { if (history.state && history.state.vw) history.back(); else closeVw(); });
 addEventListener('popstate', closeVw);
 /* Close goes back to wherever you came from: over the game it just closes (you are exactly where you were); from the title it goes back to the title */
-{ const Q = new URLSearchParams(location.search), inFrame = window.top !== window || Q.has('inframe'), back = Q.get('back'), c = document.getElementById('tgClose');
+{ const Q = new URLSearchParams(location.search), inFrame = Q.has('inframe'), back = Q.get('back'), c = document.getElementById('tgClose');
   c.addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
   if (inFrame) for (const a of document.querySelectorAll('a.drive, #driveNow, #vwd, .mast a')) a.target = '_top'; }
 document.getElementById('toTop').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); });

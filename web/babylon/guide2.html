@@ -323,7 +323,7 @@ document.getElementById('dests').addEventListener('click', (e) => { const b = e.
 sheet.querySelector('.sx').onclick = () => closeSheet(); sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
 addEventListener('popstate', () => closeSheet(true)); addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
 document.getElementById('toTop').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); });
-{ const Q = new URLSearchParams(location.search), inFrame = window.top !== window || Q.has('inframe'), back = Q.get('back');
+{ const Q = new URLSearchParams(location.search), inFrame = Q.has('inframe'), back = Q.get('back');
   document.getElementById('tgClose').addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
   if (inFrame) for (const a of document.querySelectorAll('a.drive, .bar a.go, .mast a')) a.target = '_top'; }
 </script>
