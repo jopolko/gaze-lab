@@ -509,13 +509,21 @@ function molRoom(short) { let top, bot; const R = (id) => { const e = document.g
 const PIMG = {};
 function plantImg(name) { if (PIMG[name] !== undefined) return PIMG[name]; const svg = window.AGPLANTS && AGPLANTS.svg(name); if (!svg) return (PIMG[name] = null);
   const im = new Image(); im.decoding = 'async'; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg ', '<svg width="512" height="512" ')); PIMG[name] = im; return im; }
-function drawPlant(p, x0, y0, r, t, c) { const im = plantImg(p.plant); if (!im || !im.complete || !im.naturalWidth) return false;
-  const S = r * (W > H ? 1.38 : 1.55) * (1 + Math.sin(t * 1.6) * .035), turn = Math.cos(SPIN.yaw), sway = Math.sin(t * .9) * .07 + (SPIN.vy || 0) * .002;
-  mxc.save(); mxc.translate(x0, y0 + Math.sin(t * 1.1) * r * .04); mxc.rotate(sway); mxc.scale(Math.max(.08, Math.abs(turn)) * (turn < 0 ? -1 : 1), 1);
-  const glow = .55 + .25 * Math.sin(t * 2.2);
-  mxc.shadowColor = `rgba(${c},${glow.toFixed(2)})`; mxc.shadowBlur = r * .5; mxc.drawImage(im, -S / 2, -S / 2, S, S);
-  mxc.shadowColor = 'rgba(255,240,200,.35)'; mxc.shadowBlur = r * .12; mxc.drawImage(im, -S / 2, -S / 2, S, S);
-  mxc.restore(); return true; }
+const PSHEET = {};
+function plantSheet(name) { if (PSHEET[name] !== undefined) return PSHEET[name]; const im = new Image(); im.decoding = 'async'; im.src = 'art/plants/' + name.replace(/ /g, '-') + '.webp?v=1'; return (PSHEET[name] = im); }
+/* the 3D plant (owner 2026-11-27): a turntable rendered from plants3d.js, rocking gently either side so the face stays in view, glowing in the strain's colour */
+function drawPlant(p, x0, y0, r, t, c) { const sh = plantSheet(p.plant), ok = sh.complete && sh.naturalWidth, im = ok ? null : plantImg(p.plant); if (!ok && (!im || !im.complete || !im.naturalWidth)) return false;
+  const S = r * (W > H ? 1.3 : 1.7) * (1 + Math.sin(t * 1.6) * .03), glow = .5 + .25 * Math.sin(t * 2.2);
+  mxc.save(); mxc.translate(x0, y0 + Math.sin(t * 1.1) * r * .04); mxc.rotate(Math.sin(t * .9) * .05);
+  const draw = () => { if (ok) { const f = ((Math.round(Math.sin(t * .75) * 4) % 32) + 32) % 32, fs = sh.naturalWidth / 8; mxc.drawImage(sh, (f % 8) * fs, Math.floor(f / 8) * fs, fs, fs, -S / 2, -S / 2, S, S); } else mxc.drawImage(im, -S / 2, -S / 2, S, S); };
+  mxc.shadowColor = `rgba(${c},${glow.toFixed(2)})`; mxc.shadowBlur = r * .45; draw(); mxc.shadowBlur = 0; draw();
+  mxc.restore(); placeArrows(x0, y0, S); return true; }
+/* the arrows either side of the plant: tap for the next or the previous strain (a swipe anywhere still works too) */
+const ARW = (() => { const mk = (d) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'parw'; b.setAttribute('aria-label', d > 0 ? 'Next strain' : 'Previous strain'); b.innerHTML = d > 0 ? '&#8250;' : '&#8249;';
+    for (const ev of ['pointerdown', 'pointerup', 'pointermove']) b.addEventListener(ev, (e) => e.stopPropagation()); b.addEventListener('click', (e) => { e.stopPropagation(); swipeTo(d); }); document.body.appendChild(b); return b; };
+  const st = document.createElement('style'); st.textContent = '.parw{position:fixed;z-index:6;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(10,8,18,.45);color:#fff;font:400 34px/40px Georgia,serif;cursor:pointer;padding:0;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);text-shadow:0 0 8px #000;opacity:.85}.parw:active{transform:scale(.92)}';
+  document.head.appendChild(st); return [mk(-1), mk(1)]; })();
+function placeArrows(x0, y0, S) { const off = Math.min(S * .62, W * .42); ARW[0].style.left = Math.round(Math.max(28, x0 - SL.off - off)) + 'px'; ARW[1].style.left = Math.round(Math.min(W - 28, x0 - SL.off + off)) + 'px'; ARW[0].style.top = ARW[1].style.top = Math.round(y0) + 'px'; }
 function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let mx = 0, my = 0, mz = 0, rr = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } mx /= p.atoms.length; my /= p.atoms.length; mz /= p.atoms.length; for (const at of p.atoms) rr = Math.max(rr, Math.hypot(at[1] - mx, at[2] - my, at[3] - mz)); sc = Math.min(sc, (MOL.fit || Math.min(W, H) * .3) / Math.max(1, rr + .6)); }          /* (the long ones are scaled down so every strain fits well inside the screen) */ const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
   let mx = 0, my = 0, mz = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } const n = p.atoms.length; mx /= n; my /= n; mz /= n;
   const P = p.atoms.map((at) => { const x = at[1] - mx, y = at[2] - my, z = at[3] - mz; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb; const pz = 1 + z2 * .05; return { x: x0 + x1 * sc * pz, y: y0 + y2 * sc * pz, z: z2, e: at[0], m: !!at[4] }; });
@@ -619,9 +627,9 @@ function slideApply() { strainEl.style.marginLeft = SL.off.toFixed(1) + 'px'; st
 function slideTo(target, ms, then) { const from = SL.off, t0 = performance.now(); SL.anim = (now) => { const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3); SL.off = from + (target - from) * e; slideApply(); if (u >= 1) { SL.anim = null; if (then) then(); } }; }
 function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 1; showStrain(); }
 function swipeTo(d) { slideTo(-d * W * .7, 170, () => { stepStrain(d); SL.off = d * W * .7; slideApply(); slideTo(0, 260); }); }
-ui.addEventListener('pointerdown', (e) => { const onMol = Math.hypot(e.clientX - MOL.x - SL.off, e.clientY - MOL.y) < MOL.r; drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, moved: false, id: e.pointerId, ts: e.timeStamp, mode: onMol ? 'spin' : null }; SL.anim = null; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
+ui.addEventListener('pointerdown', (e) => { const onMol = Math.hypot(e.clientX - MOL.x - SL.off, e.clientY - MOL.y) < MOL.r; drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, moved: false, id: e.pointerId, ts: e.timeStamp, mode: null }; SL.anim = null; try { ui.setPointerCapture(e.pointerId); } catch (er) { } });
 ui.addEventListener('pointermove', (e) => { if (!drag || e.pointerId !== drag.id) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y, tx = e.clientX - drag.x0, ty = e.clientY - drag.y0;
-  if (!drag.moved && Math.hypot(tx, ty) > 8) { drag.moved = true; if (!drag.mode) drag.mode = Math.abs(tx) > Math.abs(ty) ? 'slide' : 'spin'; }
+  if (!drag.moved && Math.hypot(tx, ty) > 8) { drag.moved = true; if (!drag.mode) drag.mode = Math.abs(tx) > Math.abs(ty) ? 'slide' : 'none'; }
   if (drag.mode === 'slide' && drag.moved) { SL.off = tx; slideApply(); }
   else if (drag.mode === 'spin' && drag.moved) { const k = .012, ddt = Math.max(.008, (e.timeStamp - drag.ts) / 1000); SPIN.yaw += dx * k; SPIN.pitch = Math.max(-1.4, Math.min(1.4, SPIN.pitch + dy * k)); SPIN.vy = dx * k / ddt; SPIN.held = 2; }
   drag.x = e.clientX; drag.y = e.clientY; drag.ts = e.timeStamp; });
