@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Hero stage</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{width:100%;height:100%;display:block}</style>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.0.0/babylon.js"></script><script src="sets.js"></script></head><body><canvas id="c"></canvas>
+<script type="module">
+/* HERO STAGE (tool page, owner 2026-11-27): a clean photo stage for the Brochure's destination shots. Its own ground, road, sky and time of day,
+   one story set from sets.js, and the real machine models from beasts.js placed by hand.
+   ?world=desert&set=diner&tod=night&cam=x,y,z&at=x,y,z&m=Name,x,z,turn,scale;Name,x,z,turn ... */
+import { createBeasts } from './beasts.js';
+const Q = new URLSearchParams(location.search), B = BABYLON, cv = document.getElementById('c'), eng = new B.Engine(cv, true, { preserveDrawingBuffer: true }), scene = new B.Scene(eng); scene.useRightHandedSystem = true;          /* (as the game: the machines and sets are built for it) */
+const v3 = (s, d) => { const a = (s || d).split(',').map(Number); return new B.Vector3(a[0], a[1], a[2]); };
+const cam = new B.UniversalCamera('cam', v3(Q.get('cam'), '0,3,-26'), scene); cam.setTarget(v3(Q.get('at'), '0,4,8')); cam.fov = +(Q.get('fov') || .9); cam.minZ = .2; cam.maxZ = 3000;
+/* TIME OF DAY: sky top, horizon, ground tint, sun/moon colour and height, stars */
+const TOD = { night: { top: '#05030f', mid: '#1a0f3a', hor: '#5a2a6a', gnd: [.06, .04, .08], sun: '#e8e6ff', sunY: .55, sunR: 26, stars: 1, fog: [.12, .06, .16] },
+  dusk: { top: '#140a2e', mid: '#6a1f5a', hor: '#ff7a3a', gnd: [.22, .1, .08], sun: '#ffb05a', sunY: .16, sunR: 70, stars: .4, fog: [.5, .2, .2] },
+  dawn: { top: '#2a3a7a', mid: '#9a7ab8', hor: '#ffd0a0', gnd: [.3, .24, .22], sun: '#fff0c0', sunY: .12, sunR: 60, stars: .1, fog: [.7, .6, .6] },
+  day: { top: '#2a6ad0', mid: '#6ab0f0', hor: '#d8f0ff', gnd: [.5, .42, .3], sun: '#ffffff', sunY: .7, sunR: 40, stars: 0, fog: [.75, .85, .95] },
+  neon: { top: '#08001a', mid: '#2a004a', hor: '#ff2a9d', gnd: [.05, .02, .08], sun: '#ffd23a', sunY: .2, sunR: 90, stars: .6, fog: [.25, .02, .2] } };
+const T = TOD[Q.get('tod') || 'night'];
+{ const sky = B.MeshBuilder.CreateSphere('sky', { diameter: 2400, segments: 48, sideOrientation: B.Mesh.BACKSIDE }, scene); const dt = new B.DynamicTexture('skyt', { width: 1024, height: 1024 }, scene, false), g = dt.getContext();
+  const gr = g.createLinearGradient(0, 0, 0, 1024); gr.addColorStop(0, T.top); gr.addColorStop(.25, T.top); gr.addColorStop(.42, T.mid); gr.addColorStop(.5, T.hor); gr.addColorStop(.53, T.hor); gr.addColorStop(.6, T.top); gr.addColorStop(1, T.top); g.fillStyle = gr; g.fillRect(0, 0, 1024, 1024);
+  if (T.stars) { g.fillStyle = '#fff'; for (let i = 0; i < 700; i++) { g.globalAlpha = Math.random() * T.stars; const y = Math.random() * 480; g.fillRect(Math.random() * 1024, y, 1.4, 1.4); } g.globalAlpha = 1; }
+  const sx = 512 + (+(Q.get('sunx') || 0)) * 512, sy = 512 - T.sunY * 512; const sg = g.createRadialGradient(sx, sy, 0, sx, sy, T.sunR * 2.2); sg.addColorStop(0, T.sun); sg.addColorStop(.45, T.sun); sg.addColorStop(.5, T.sun + '88'); sg.addColorStop(1, T.sun + '00'); g.fillStyle = sg; g.beginPath(); g.arc(sx, sy, T.sunR * 2.2, 0, 7); g.fill();
+  dt.update(); const m = new B.StandardMaterial('skym', scene); m.disableLighting = true; m.emissiveTexture = dt; m.backFaceCulling = false; m.fogEnabled = false; sky.material = m; sky.rotation.y = Math.PI / 2 + (+(Q.get('skyr') || 0)); sky.infiniteDistance = true; }
+scene.clearColor = new B.Color4(0, 0, 0, 1); scene.fogMode = B.Scene.FOGMODE_EXP2; scene.fogDensity = +(Q.get('fogd') || .006); scene.fogColor = new B.Color3(...T.fog);
+/* ground: a world-coloured plain with a grid, and the road in front of the set */
+const WG = { desert: [.55, .26, .12], alpine: [.75, .8, .9], candy: [.85, .6, .8], tunnel: [.1, .1, .18], synthwave: [.1, .02, .16], matrix: [.02, .12, .04], egypt: [.7, .5, .2], psychedelic: [.3, .05, .4] }[Q.get('world') || 'desert'];
+{ const gd = B.MeshBuilder.CreateGround('g', { width: 1200, height: 1200, subdivisions: 2 }, scene), dt = new B.DynamicTexture('gt', { width: 512, height: 512 }, scene, true), g = dt.getContext();
+  g.fillStyle = '#000'; g.fillRect(0, 0, 512, 512); g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 2; for (let i = 0; i <= 512; i += 32) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 512); g.stroke(); g.beginPath(); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); } dt.update(); dt.uScale = dt.vScale = 60;
+  const m = new B.StandardMaterial('gm', scene); m.disableLighting = true; m.emissiveColor = new B.Color3(WG[0] * (T.gnd[0] + .3), WG[1] * (T.gnd[1] + .3), WG[2] * (T.gnd[2] + .3)); m.emissiveTexture = dt; gd.material = m;
+  const rd = B.MeshBuilder.CreateGround('road', { width: 9, height: 1200 }, scene); rd.position.set(+(Q.get('roadx') || 0), .02, 0); const rm = new B.StandardMaterial('rm', scene); rm.disableLighting = true; rm.emissiveColor = new B.Color3(.08, .08, .1); rd.material = rm;
+  for (let z = -300; z < 600; z += 9) { const d = B.MeshBuilder.CreateGround('dash', { width: .25, height: 4 }, scene); d.position.set(+(Q.get('roadx') || 0), .04, z); const dm = scene.getMaterialByName('dm') || (() => { const x = new B.StandardMaterial('dm', scene); x.disableLighting = true; x.emissiveColor = new B.Color3(1, .85, .4); return x; })(); d.material = dm; }
+  for (const s of [-1, 1]) { const e = B.MeshBuilder.CreateGround('edge', { width: .18, height: 1200 }, scene); e.position.set(+(Q.get('roadx') || 0) + s * 4.4, .04, 0); const em = new B.StandardMaterial('em' + s, scene); em.disableLighting = true; em.emissiveColor = new B.Color3(.3, .9, 1); e.material = em; } }
+/* the set */
+const setName = Q.get('set'); if (setName && window.AGSETS) { const R = AGSETS.build(B, scene, setName); const p = v3(Q.get('setp'), '0,0,0'); R.position.copyFrom(p); R.rotation.y = +(Q.get('setr') || 0); }
+/* the machines, by hand */
+const PH = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, grounded: true };
+const BST = createBeasts({ B, scene, PH, th: () => 0, trailX: () => 0, END: -1e6, world: Q.get('world') || 'desert', tier: 3, cam: () => cam, audio: () => null, fx() { }, shake() { }, chain() { }, score() { }, look() { }, emp() { }, sfx() { }, drain() { }, inTunZ: () => false, tunnel: () => false });
+for (const spec of (Q.get('m') || '').split(';').filter(Boolean)) { const [nm, x, z, t, s] = spec.split(','); const R = BST.pose(decodeURIComponent(nm), 0, 10); if (!R) continue; R.position.set(+x, 0, +z); R.rotation.y = +(t || 0); if (s) R.scaling.scaleInPlace(+s); }
+{ const gl = new B.GlowLayer('glow', scene, { blurKernelSize: 64, mainTextureSamples: 4 }); gl.intensity = +(Q.get('glow') || .9); gl.customEmissiveColorSelector = (m, sm, mat, res) => { const e = mat && mat.emissiveColor; const bright = e && (e.r + e.g + e.b) > 1.6 && !mat.emissiveFresnelParameters; if (bright) res.set(e.r, e.g, e.b, 1); else res.set(0, 0, 0, 0); }; }
+eng.runRenderLoop(() => scene.render()); addEventListener('resize', () => eng.resize());
+window.__ready = true;
+</script></body></html>
