@@ -24,7 +24,7 @@
 <script>/* SCENE CONTROLS for TRAINING (owner's rule: every scene gets restart / pause / skip and a progress bar). The same three buttons as the intro, top centre, from the
    first moment (over the loading screen) and through play: restart = training from the start, pause = the game's pause, skip = straight to Route Zero. */
 (() => { if (!/[?&]tutorial\b/.test(location.search)) return; const css = document.createElement('style');
-  css.textContent = '#scCtl{position:fixed;top:max(10px,var(--sa-top, env(safe-area-inset-top)));left:50%;transform:translateX(-50%);z-index:96;display:flex;flex-direction:column;align-items:center;gap:6px}#scCtl .bt{display:flex;gap:10px}#scCtl button{font:700 clamp(16px,2.6vmin + 8px,22px) "Barlow Condensed","Arial Narrow",sans-serif;color:#f2efe6;background:rgba(3,5,10,.72);border:1px solid rgba(56,232,255,.45);border-radius:999px;padding:.4em .9em;min-width:3em;cursor:pointer}#scCtl .pg{width:min(240px,50vw);height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}#scCtl .pg i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38e8ff,#b36bff,#ffd23a);transition:width .5s}';
+  css.textContent = '#scCtl{position:fixed;top:auto;bottom:calc(max(10px,var(--sa-bottom, env(safe-area-inset-bottom))) + 46px);left:50%;transform:translateX(-50%);z-index:96;display:flex;flex-direction:column;align-items:center;gap:6px}#scCtl .bt{display:flex;gap:10px}#scCtl button{font:700 clamp(16px,2.6vmin + 8px,22px) "Barlow Condensed","Arial Narrow",sans-serif;color:#f2efe6;background:rgba(3,5,10,.72);border:1px solid rgba(56,232,255,.45);border-radius:999px;padding:.4em .9em;min-width:3em;cursor:pointer}#scCtl .pg{width:min(240px,50vw);height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}#scCtl .pg i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38e8ff,#b36bff,#ffd23a);transition:width .5s}';
   document.head.appendChild(css); const w = document.createElement('div'); w.id = 'scCtl'; w.innerHTML = '<div class="bt"><button type="button" data-k="rst" aria-label="Restart training" title="Restart">\u23EE</button><button type="button" data-k="pau" aria-label="Pause" title="Pause">\u23F8</button><button type="button" data-k="skp" aria-label="Skip training" title="Skip">\u23ED</button></div><div class="pg"><i></i></div>';
   document.body.appendChild(w); w.addEventListener('pointerdown', (e) => e.stopPropagation(), true);
   w.onclick = (e) => { e.stopPropagation(); const b = e.target.closest('button'); if (!b) return; const k = b.dataset.k;
@@ -51,7 +51,7 @@ import { createGvMusic } from '../downhill-three/gvmusic.js';
 import { startLoop, preloadLoop } from '../downhill-three/looper.js?v=20261126b';
 import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
-import { createIntro } from './intro.js?v=20261127a';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
+import { createIntro } from './intro.js?v=20261127b';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js?v=20261127c';
 import { createSpiders } from './spiders.js?v=20261127j';
 import { createBeasts } from './beasts.js?v=20261127d';

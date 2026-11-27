@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Afterglow · Credits</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+/* CREDITS (owner 2026-11-27): every track, sample and library, with its licence. Keep in step with CREDITS.md and gvmusic.js CREDITS. */
+:root { --bg:#05070c; --fg:#f2efe6; --dim:#9fb0c8; --sea:#38e8ff; --gold:#ffd23a; }
+* { box-sizing:border-box; }
+html, body { margin:0; background:var(--bg); color:var(--fg); }
+body { font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 90px max(16px,env(safe-area-inset-left)); }
+.wrap { max-width:720px; margin:0 auto; }
+h1 { margin:0; font:400 clamp(40px,11vw,72px)/.9 "Bebas Neue",Impact,sans-serif; letter-spacing:.06em; }
+h1 a { color:inherit; text-decoration:none; }
+.sub { font:700 13px "Barlow Condensed",sans-serif; letter-spacing:.22em; text-transform:uppercase; color:var(--dim); margin:.3em 0 1.4em; }
+h2 { font:700 15px "Barlow Condensed",sans-serif; letter-spacing:.22em; text-transform:uppercase; color:var(--gold); margin:1.6em 0 .5em; border-bottom:1px solid #ffffff22; padding-bottom:.3em; }
+ul { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+li { background:#0d1220; border-left:3px solid var(--sea); padding:9px 12px; border-radius:2px; }
+li b { display:block; font-size:16px; } li span { display:block; color:var(--dim); font-size:14px; }
+li a { color:var(--sea); word-break:break-word; }
+.lic { display:inline-block; margin-top:3px; font:700 12px "Barlow Condensed",sans-serif; letter-spacing:.08em; color:#05070c; background:var(--gold); padding:1px 6px; }
+p.note { color:var(--dim); font-size:14px; }
+.bar { position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; padding:10px max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); background:linear-gradient(transparent,#05070cee 35%); }
+.bar a { font:700 15px "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; padding:10px 20px; color:var(--fg); border:1px solid #ffffff44; background:#0d1220; text-decoration:none; border-radius:3px; }
+</style></head><body>
+<div class="wrap">
+<h1><a href="splash.html">Afterglow</a></h1>
+<div class="sub">Electronic Anesthesia · Credits</div>
+
+<h2>Music</h2>
+<ul>
+<li><b>“Legalize”</b><span>MalreDeszik ft. Synomo &amp; IAComplexe · Route Zero’s opening · <a href="https://ccmixter.org/files/MalreDeszik/71331">ccmixter.org/files/MalreDeszik/71331</a></span><span class="lic">CC BY 4.0</span></li>
+<li><b>“Electric Exodus”</b><span>FoxSynergy · The Open Channel</span><span class="lic">CC BY 3.0</span></li>
+<li><b>“Bouncer”</b><span>Of Far Different Nature · Sugarfall</span><span class="lic">CC0 / CC BY 4.0</span></li>
+<li><b>“1 Minute DnB”</b><span>Of Far Different Nature · The Undertow</span><span class="lic">CC BY 4.0</span></li>
+<li><b>“Moodless Refrain” (ft. Quiana Nadine)</b><span>Apoxode · Cold Rack</span><span class="lic">CC BY-NC 4.0</span></li>
+<li><b>“Alien Warfare” stems</b><span>Kamihamiha · <a href="https://ccmixter.org/files/Kamihamiha/60882">ccmixter.org/files/Kamihamiha/60882</a></span><span class="lic">CC BY-NC 3.0</span></li>
+<li><b>“Funk it!”</b><span>SunnyScy · <a href="https://freemusicarchive.org/music/sunnyscy/single/funk-it-1/">freemusicarchive.org</a></span><span class="lic">CC BY-NC-SA 4.0</span></li>
+<li><b>“Quirky Funk”</b> and <b>“Funk Express”</b><span>butterflystudio · <a href="https://freemusicarchive.org/music/butterflystudio/">freemusicarchive.org</a> · used unedited</span><span class="lic">CC BY-NC-ND 4.0</span></li>
+<li><b>Everything else you hear</b><span>Generated live by the game’s own music engine.</span></li>
+</ul>
+
+<h2>Sounds</h2>
+<ul><li><b>Drum and ambience samples</b><span>Stargate sample pack and freesound.org contributors (rodrigo-the-mad, hard3eat, twentytwentymusic, synthnisse)</span><span class="lic">CC0</span></li>
+<li><b>Sound effects</b><span>Made by the game, live.</span></li></ul>
+
+<h2>Code</h2>
+<ul><li><b>Babylon.js</b><span>Apache 2.0</span></li><li><b>Tone.js</b><span>MIT</span></li><li><b>three.js</b><span>MIT</span></li></ul>
+
+<p class="note">Licences: <a href="https://creativecommons.org/licenses/" style="color:var(--sea)">creativecommons.org/licenses</a>. Afterglow is free and non-commercial.</p>
+</div>
+<div class="bar"><a href="splash.html" id="bk">&#8592; Back</a></div>
+<script src="chrome.js"></script>
+<script>document.getElementById('bk').addEventListener('click', (e) => { if (window.__goBack) { e.preventDefault(); window.__goBack('splash.html'); } });</script>
+</body></html>
