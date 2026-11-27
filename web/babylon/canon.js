@@ -38,8 +38,8 @@
   /* REACTIONS: what the apps say when a signal is true. W = widgets [title, big, text]; N = notifications [voice, title, text]. */
   react: {
     world: {
-      W: [['Live odds', '1 : {odds}', 'On the Courier finishing {world}. Sterling Vance has the over.'], ['Bounty', '{bounty} cr', 'Marshal Ransom accepted the contract. He’s bringing snacks.']],
-      N: [['MURMUR', 'New message', 'saw u in {world} lol. everyone did ☺︎'], ['ACCORD', 'Civic Services', 'Courier sighted in {world}. Citizens: keep scrolling.'], ['ACCORD Live', 'Now streaming', 'The Courier {where}. Chat thinks you’ll crash.'], ['Ride Share', 'Rate your driver', 'You drove yourself through {world}. 1 star. No tip.']] },
+      W: [['Live odds', '1 : {odds}', 'On the Courier finishing {world}. Sterling Vance has the over.'], ['Bounty', '{bounty} cr', 'Marshal Ransom accepted the contract. Fuel billed in advance.']],
+      N: [['MURMUR', 'New message', 'saw u in {world} lol. everyone did ☺︎'], ['ACCORD', 'Civic Services', 'Courier sighted in {world}. Citizens: keep scrolling.'], ['ACCORD Live', 'Now streaming', 'The Courier {where}. Chat thinks you’ll crash.'], ['Ride Share', 'Rate your driver', 'You drove yourself through {world}. Fare withheld.']] },
     'world:desert': { W: [['Traffic', 'Route Zero', 'One vehicle. Unlicensed. Every camera agrees.']], N: [['ACCORD', 'Civic Services', 'Route Zero is unmonitored. We are monitoring that.']] },
     'world:alpine': { W: [['Altitude permit', 'Expired', 'Breathing above 2,000 m is a premium tier.']], N: [['MURMUR', 'New message', 'omg the peaks!! so exclusive. so watched ☺︎']] },
     'world:candy': { W: [['Glucose', 'Mandatory', 'Sugarfall citizens smile at 98% capacity. Join them.']], N: [['ACCORD', 'Civic Services', 'Sugarfall reminds you: every day is the same day. Enjoy it again.']] },
@@ -48,7 +48,7 @@
     'world:matrix': { W: [['Server temp', '−40°C', 'The models sleep here. Your heating bill pays for the blanket.']], N: [['MURMUR', 'New message', 'shhh the models r sleeping. dont wake the ones that know u']] },
     'world:egypt': { W: [['Archaeology', 'v1.0', 'Here lie the old models. Some of them still want to help.']], N: [['ACCORD', 'Civic Services', 'Trespassing in the Tomb voids your warranty.']] },
     'world:psychedelic': { W: [['Filter', 'Offline', 'Nothing filtered here. Legal is screaming.']], N: [['ACCORD Live', 'Now streaming', 'The Courier reached The Open Channel. We lost the feed. Ratings tripled.']] },
-    strain: { N: [['Pharmacy', 'Rx alert', '{strain} in your system. That one isn’t covered.'], ['MURMUR', 'New message', 'ur pupils look different today ☺︎ who’s your dealer']] },
+    strain: { N: [['Pharmacy', 'Rx alert', '{strain} in your system. That one isn’t covered.'], ['MURMUR', 'New message', 'ur pupils look different today ☺︎']] },
     'strain:lucid': { W: [['Pharmacy', 'Lucid', 'Clarity detected. Clarity is a controlled substance.']] },
     'strain:embrace': { W: [['Pharmacy', 'Embrace', 'Warmth detected. Your warmth subscription has lapsed.']] },
     'strain:velocity': { W: [['Pharmacy', 'Velocity', 'Speed detected. Your car insurer is drafting a sequel.']] },
@@ -66,7 +66,7 @@
     sights: { W: [['Camera network', '−{sights}', 'ACCORD cameras you drove through. Replacements billed to you.']] },
     'quest:main': { N: [['ACCORD', 'Civic Services', 'Lens exit used. Complaints about reality go to the usual address.']] },
     'quest:rocket': { N: [['Car', 'Modification detected', 'Rockets void the warranty. And the speed limit. And the car.']] },
-    'quest:pole': { N: [['Insurance', 'Claim pending', 'Your magnet collected 3 mailboxes and a cat. Premium adjusted.']] },
+    'quest:pole': { N: [['Insurance', 'Claim pending', 'Your magnet collected two mailboxes and a street sign. Premium adjusted.']] },
     'quest:shield': { N: [['ACCORD', 'Civic Services', 'Unregistered shield detected. Being safe without us is a crime.']] },
     'quest:bull': { N: [['Ride Share', 'Driver review', 'You rammed straight through. Passengers loved it. Regulators did not.']] },
     'quest:hidden': { N: [['Maps', 'Route not found', 'You took an exit that doesn’t exist. Please stop doing that.']] },
