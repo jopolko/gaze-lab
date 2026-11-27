@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Afterglow · Machines test</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+:root { --bg:#05070c; --card:#0d1020; --line:rgba(56,232,255,.22); --ink:#f2efe6; --dim:#aab3c5; }
+* { box-sizing:border-box; }
+html, body { margin:0; background:var(--bg); color:var(--ink); font:500 16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+body { padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left)); }
+h1 { margin:.1em 0 0; font:400 clamp(40px,9vw,64px)/.95 "Bebas Neue",Impact,sans-serif; letter-spacing:.07em; }
+p.lede { margin:.4em 0 1em; color:var(--dim); max-width:60ch; }
+.world { margin:22px 0 8px; display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.world h2 { margin:0; font:400 32px/1 "Bebas Neue",Impact,sans-serif; letter-spacing:.07em; color:var(--wc); }
+.world span { font:700 13px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; color:var(--dim); }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:10px; }
+a.m { display:grid; gap:4px; text-decoration:none; color:var(--ink); background:var(--card); border:1px solid var(--line); border-left:4px solid var(--wc); border-radius:12px; padding:12px 14px; }
+a.m:active, a.m:hover { border-color:var(--wc); }
+a.m b { font:700 20px/1.1 "Barlow Condensed",sans-serif; letter-spacing:.06em; }
+a.m i { font-style:normal; font:700 12px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#06101f; background:var(--wc); padding:4px 6px; border-radius:4px; justify-self:start; }
+a.m small { color:var(--dim); font-size:14px; }
+footer { margin-top:24px; color:var(--dim); font-size:14px; }
+</style></head><body>
+<div style="font:700 13px/1 'Barlow Condensed',sans-serif;letter-spacing:.34em;color:#9fe8ff">AFTERGLOW · TEST BUILD</div>
+<h1>The Machines</h1>
+<p class="lede">Tap one to drive against that machine on repeat in its own world. Rocket Racks sit on the road every few hundred metres: drive through one and its rockets find the machine by themselves. Rate each one: fun, fair, funny?</p>
+<div id="list"></div>
+<footer>Test build: machines are not in the live game yet. Steer with the keys, or touch the side you want to go.</footer>
+<script>
+const W = [
+  ['desert', 'Desert', '#ffb020', 'teaches: ram', [['Sand Stinger', 'swarm', 'Drive through the swarm at speed.'], ['Dune Scrapper', 'pack', 'Ram or sideswipe them off the road.'], ['Dune Tailgater', 'boss', 'Jump when its tail goes white, then ram it from behind.']]],
+  ['alpine', 'Alps', '#bfe8ff', 'teaches: stomp', [['Frost Tick', 'carpet', 'Land in the middle and they all pop.'], ['Snow Burrower', 'ambush', 'Watch the moving ridge. Stomp it, or hit it fast for big air.'], ['Plow Warden', 'boss', 'Land on its cab, or lead it off the road edge.'], ['Skitters', 'spiders', 'Hit the zappers to blast them back; the next thunder storm washes the glass.']]],
+  ['candy', 'Candy Land', '#c9a8ff', 'teaches: sideswipe', [['Glass Stinger', 'swarm', 'Big swarms. Sweep across them.'], ['Sweet Concierge', 'lure', 'Head-on bounces you. Hit it from the side.'], ['Gumball Adjuster', 'boss', 'When it pulls alongside, sideswipe it. Dodge the crane.']]],
+  ['tunnel', 'Tunnel', '#38e8ff', 'teaches: bait', [['Wire Stinger', 'drop lines', 'Lines drop in front of you. Find the gap.'], ['Tunnel Spotter', 'drone', 'Hug a wall and it clips the tunnel.'], ['The Bore', 'boss', 'Swing round the pillars: it can’t turn and drills into them.']]],
+  ['synthwave', 'Synthwave', '#b07bff', 'teaches: rockets', [['Chrome Tailgater', 'pair', 'Two at once. A rack splits its rockets between them.'], ['Grid Drones', 'flyers', 'Too high to ram. Rockets, or jump into them.'], ['Interceptor Wing', 'boss', 'Sideswipe one into another.']]],
+  ['matrix', 'Matrix', '#7dff8a', 'teaches: node', [['Glyph Stinger', 'swarm', 'They rebuild while a mast is near.'], ['Relay Mast', 'node', 'Ram the roadside mast, or let a rack find it.'], ['The Sysadmin', 'boss', 'When it crouches, drive into the masts on its back (or rocket them), then ram it.']]],
+  ['egypt', 'Egypt', '#ffd23a', 'teaches: combos', [['Scarab Stinger', 'armoured swarm', 'Head-on bounces off. Sides and top only.'], ['Jackal Hound', 'pack leader', 'Its howl pulls the pack in. Take it out first.'], ['Sphinx Cordon', 'boss', 'Rockets hit while its eyes glow. When it bows its head, ram it.']]],
+  ['psychedelic', 'Trip', '#7dff8a', 'teaches: everything', [['Breathing Stinger', 'shifting swarm', 'Changes colour with the beat.'], ['Murmur Unit', 'trip drain', 'Knock it down and the trip comes back.'], ['Broodmother Prime', 'final boss', 'When she lowers her belly node, drive into it, or rocket it. Three times.'], ['Skitters', 'spiders', 'They come back for the finale. Zappers and storms.']]],
+];
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+document.getElementById('list').innerHTML = W.map(([id, name, col, teach, ms]) => `<div class="world" style="--wc:${col}"><h2>${esc(name)}</h2><span>${esc(teach)}</span></div><div class="grid">` + ms.map(([n, role, how]) => `<a class="m" style="--wc:${col}" href="test.html?noshell&biome=${id}&nointake=1&beast=${encodeURIComponent(n)}"><i>${esc(role)}</i><b>${esc(n)}</b><small>${esc(how)}</small></a>`).join('') + '</div>').join('');
+</script>
+</body></html>
