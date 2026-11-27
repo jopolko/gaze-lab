@@ -14,6 +14,7 @@
 - Route Zero with the intro road ("Legalize", five scenes, skip after the first hit): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?story=1&nointake=1
 - Tutorial (Route Zero's lesson): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?tutorial=1&nointake=1
 - Mile Zero, the open-world sketch (free driving, burner phone, three events, one job): https://joshuaopolko.com/afterglow/?zone
+- Spider swarm test (robot spiders climb onto the glass and pile up; steer into the soap bar or under the storm to wash them off): https://joshuaopolko.com/gaze-lab/three/babylon/spiders.html
 - Trip level (the dose loop, three waves): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?biome=psychedelic&trip
 - Basin prototype (desert, an open bowl at 1.4 km): https://joshuaopolko.com/gaze-lab/three/babylon/index.html?biome=desert&basin=1&nointake=1
 - Strains codex: https://joshuaopolko.com/gaze-lab/three/babylon/menu.html?strains=1

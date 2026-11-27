@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Afterglow · Spider swarm test</title>
+<style>
+html, body { margin: 0; height: 100%; background: #05060c; overflow: hidden; touch-action: none; }
+canvas { width: 100%; height: 100%; display: block; outline: none; }
+#cap { position: fixed; left: max(12px, env(safe-area-inset-left, 0px)); top: max(10px, env(safe-area-inset-top, 0px)); font: 600 12px/1.3 system-ui, sans-serif; letter-spacing: .12em; color: rgba(160, 230, 255, .7); text-transform: uppercase; pointer-events: none; }
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="cap">Spider swarm test · steer: A / D, arrows, or touch a side · hit the soap or the storm</div>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.0.0/babylon.js"></script>
+<script>
+/* SPIDER SWARM PROTOTYPE (owner 2026-11-27): little robot spiders swarm the road, climb onto the windscreen from the edges inward and pile up across your view.
+   Steer into a glistening soap bar (a foam wave wipes them off) or under a storm cloud (rain and lightning wash them down). One draw call per swarm:
+   the legs scuttle in the vertex shader (alternating tetrapod gait), each spider with its own phase. */
+(() => {
+const B = BABYLON, cv = document.getElementById('c'), engine = new B.Engine(cv, true, { preserveDrawingBuffer: true }), scene = new B.Scene(engine);
+scene.clearColor = new B.Color4(.02, .02, .05, 1);
+const cam = new B.UniversalCamera('cam', new B.Vector3(0, 1.4, 0), scene); cam.fov = 1.0; cam.minZ = .05; cam.maxZ = 600; cam.inputs.clear();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), rnd = (a, b) => a + Math.random() * (b - a);
+const CAR = { x: 0, z: 0, vx: 0, speed: 26, steer: 0 }, T = { t: 0 };
+
+/* ---------- the spider: one mesh, legs tagged so the shader can walk them ---------- */
+function spiderGeo() {
+  const P = [], N = [], L = [], I = [];
+  const quad = (a, b, c, d, n, tag) => { const o = P.length / 3; for (const [q, t] of [a, b, c, d]) { P.push(q[0], q[1], q[2]); N.push(n[0], n[1], n[2]); L.push(tag[0], tag[1], t, tag[3]); } I.push(o, o + 1, o + 2, o, o + 2, o + 3); };
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]], nrm = (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const tube = (a, b, th, tag) => { const d = nrm(sub(b, a)); let u = nrm(cross(d, [0, 1, 0])); if (!isFinite(u[0]) || Math.hypot(...cross(d, [0, 1, 0])) < .01) u = [1, 0, 0]; const v = nrm(cross(u, d)), U = mul(u, th), V = mul(v, th);
+    const c = (p, su, sv) => add(add(p, mul(U, su)), mul(V, sv)), A = [c(a, -1, -1), c(a, 1, -1), c(a, 1, 1), c(a, -1, 1)], Bq = [c(b, -1, -1), c(b, 1, -1), c(b, 1, 1), c(b, -1, 1)];
+    for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4, n = nrm(add(mul(u, [-1, 1, 1, -1][k] + [-1, 1, 1, -1][k2]), mul(v, [-1, -1, 1, 1][k] + [-1, -1, 1, 1][k2]))); quad([A[k], 0], [A[k2], 0], [Bq[k2], 1], [Bq[k], 1], n, tag); } };
+  const blob = (c, r, tag, seg = 10) => { const o = P.length / 3; for (let i = 0; i <= seg; i++) { const th = Math.PI * i / seg; for (let j = 0; j <= seg; j++) { const ph = 2 * Math.PI * j / seg, n = [Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)]; P.push(c[0] + n[0] * r[0], c[1] + n[1] * r[1], c[2] + n[2] * r[2]); N.push(n[0], n[1], n[2]); L.push(-1, 0, 0, tag); } }
+    for (let i = 0; i < seg; i++) for (let j = 0; j < seg; j++) { const a = o + i * (seg + 1) + j, b = a + seg + 1; I.push(a, b, a + 1, b, b + 1, a + 1); } };
+  blob([0, .16, .26], [.21, .15, .3], 0);          /* abdomen */
+  blob([0, .15, -.06], [.15, .1, .16], 0);          /* thorax */
+  blob([0, .29, .2], [.05, .07, .05], 3, 6);          /* the antenna mast on its back: lit */
+  for (const ex of [-.05, -.017, .017, .05]) blob([ex, .19, -.21], [.022, .022, .022], 2, 6);          /* four red eyes */
+  for (const s of [-1, 1]) for (let i = 0; i < 4; i++) { const li = (s < 0 ? 0 : 4) + i, hip = [s * .1, .15, -.14 + i * .085], knee = [s * .36, .36, -.24 + i * .16], foot = [s * .62, 0, -.42 + i * .28];
+    tube(hip, knee, .018, [li, 0, 0, 1]); tube(knee, foot, .013, [li, 1, 0, 1]); }
+  const vd = new B.VertexData(); vd.positions = P; vd.normals = N; vd.indices = I; return { vd, L };
+}
+B.Effect.ShadersStore.spiderVertexShader = `precision highp float;
+attribute vec3 position; attribute vec3 normal; attribute vec4 leg; attribute float phase;
+#include<instancesDeclaration>
+uniform mat4 viewProjection; uniform float uAmp;
+varying vec3 vN; varying vec3 vW; varying vec4 vLeg;
+void main(){
+  #include<instancesVertex>
+  vec3 p = position; float ph = phase;
+  if (leg.w > .5 && leg.w < 1.5) { float s = leg.x < 3.5 ? 0. : 1., i = mod(leg.x, 4.), g = mod(i + s, 2.), q = ph + g * 3.14159 + i * .35;
+    float k = leg.y < .5 ? leg.z * .4 : .4 + leg.z * .6; p.z += sin(q) * .15 * k * uAmp; p.y += max(0., cos(q)) * .13 * k * uAmp; p.x += (s * 2. - 1.) * max(0., cos(q)) * .03 * k * uAmp; }
+  else { p.y += .014 * sin(ph * 2.) * uAmp; p.x += .01 * sin(ph) * uAmp; }
+  vec4 w = finalWorld * vec4(p, 1.); vW = w.xyz; vN = normalize(mat3(finalWorld) * normal); vLeg = leg; gl_Position = viewProjection * w; }`;
+B.Effect.ShadersStore.spiderFragmentShader = `precision highp float;
+varying vec3 vN; varying vec3 vW; varying vec4 vLeg; uniform vec3 uCam, uRim, uRim2; uniform float uT;
+void main(){ vec3 n = normalize(vN), v = normalize(uCam - vW); float fr = pow(1. - abs(dot(n, v)), 2.2), l = max(dot(n, normalize(vec3(.3, 1., -.4))), 0.);
+  vec3 c = vec3(.03, .035, .05) + vec3(.13, .14, .18) * l + mix(uRim, uRim2, .5 + .5 * sin(vW.x * 2. + vW.z * 1.3 + uT)) * fr * 1.5;
+  float spec = pow(max(dot(reflect(-v, n), normalize(vec3(.3, 1., -.4))), 0.), 24.); c += spec * .6;
+  if (vLeg.w > 2.5) c = uRim2 * (1.4 + .8 * sin(uT * 6. + vW.z));
+  else if (vLeg.w > 1.5) c = vec3(1., .16, .1) * (1.8 + .7 * sin(uT * 9. + vW.x * 7.));
+  else if (vLeg.w > .5) { c += uRim * .9 * smoothstep(.82, 1., vLeg.z) * step(.5, vLeg.y); c += uRim * .5 * (1. - smoothstep(0., .12, abs(vLeg.z - (1. - step(.5, vLeg.y))))); }
+  gl_FragColor = vec4(c, 1.); }`;
+const spMat = (nm) => { const m = new B.ShaderMaterial(nm, scene, 'spider', { attributes: ['position', 'normal', 'leg', 'phase'], uniforms: ['world', 'viewProjection', 'uAmp', 'uCam', 'uRim', 'uRim2', 'uT'] });
+  m.setVector3('uRim', new B.Vector3(.2, .95, 1)); m.setVector3('uRim2', new B.Vector3(1, .62, .12)); m.setFloat('uAmp', 1); m.backFaceCulling = false; return m; };
+function swarmMesh(nm, max) { const { vd, L } = spiderGeo(), m = new B.Mesh(nm, scene); vd.applyToMesh(m, true); m.setVerticesData('leg', L, false, 4);
+  m.material = spMat(nm + 'M'); m.alwaysSelectAsActiveMesh = true; m.isPickable = false; const mat = new Float32Array(16 * max), ph = new Float32Array(max);
+  m.thinInstanceSetBuffer('matrix', mat, 16, false); m.thinInstanceSetBuffer('phase', ph, 1, false); m.thinInstanceCount = 0; return { m, mat, ph, max }; }
+
+/* ---------- the road: a neon grid that scrolls under you ---------- */
+B.Effect.ShadersStore.roadVertexShader = `precision highp float; attribute vec3 position; uniform mat4 world, viewProjection; varying vec3 vW; void main(){ vec4 w = world * vec4(position, 1.); vW = w.xyz; gl_Position = viewProjection * w; }`;
+B.Effect.ShadersStore.roadFragmentShader = `precision highp float; varying vec3 vW; uniform vec3 uCam; uniform float uT, uFlash;
+void main(){ vec2 g = abs(fract(vW.xz / 4.) - .5); float d = length(vW.xz - uCam.xz), w = .02 + d * .0009, line = max(smoothstep(.5 - w, .5, g.x), smoothstep(.5 - w, .5, g.y));
+  float road = 1. - smoothstep(11., 12.5, abs(vW.x)), dash = (1. - smoothstep(.45, .5, abs(fract(vW.z / 6.) - .5) * 2.)) * step(.5, fract(vW.z / 6.)) * (1. - smoothstep(.08, .16, abs(vW.x))) * (1. - smoothstep(30., 120., length(vW.xz - uCam.xz)));
+  vec3 base = mix(vec3(.05, .02, .09), vec3(.02, .015, .04), road), lc = mix(vec3(.6, .2, 1.), vec3(.15, .85, 1.), .5 + .5 * sin(vW.z * .02 - uT * .6));
+  vec3 c = base + lc * line * (.9 - .5 * road) + vec3(1., .8, .3) * dash * road * .8 + vec3(.15, .9, 1.) * (1. - smoothstep(.0, .3, abs(abs(vW.x) - 12.))) * 1.2;
+  c = mix(c, vec3(.03, .02, .07), 1. - exp(-d * .009)); c += uFlash * vec3(.5, .55, .7) * (.6 + .4 * line); gl_FragColor = vec4(c, 1.); }`;
+const road = B.MeshBuilder.CreateGround('road', { width: 140, height: 700, subdivisions: 1 }, scene), roadM = new B.ShaderMaterial('roadM', scene, 'road', { attributes: ['position'], uniforms: ['world', 'viewProjection', 'uCam', 'uT', 'uFlash'] }); road.material = roadM;
+
+/* ---------- the cleaners ---------- */
+B.Effect.ShadersStore.soapVertexShader = `precision highp float; attribute vec3 position; attribute vec3 normal; uniform mat4 world, viewProjection; varying vec3 vN, vW; void main(){ vec4 w = world * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(world) * normal); gl_Position = viewProjection * w; }`;
+B.Effect.ShadersStore.soapFragmentShader = `precision highp float; varying vec3 vN, vW; uniform vec3 uCam; uniform float uT;
+float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+void main(){ vec3 n = normalize(vN), v = normalize(uCam - vW), Ld = normalize(vec3(.3, 1., -.5)); float l = max(dot(n, Ld), 0.), fr = pow(1. - abs(dot(n, v)), 2.);
+  vec3 c = vec3(.96, .93, .84) * (.45 + .6 * l);          /* ivory */
+  c += (.5 + .5 * cos(6.2832 * (fr * 1.6 + dot(vW, vec3(.05)) + uT * .15 + vec3(0., .33, .67)))) * fr * 1.1;          /* thin-film rainbow sheen */
+  c += pow(max(dot(reflect(-v, n), Ld), 0.), 40.) * 1.6; c += step(.993, h(floor(vW * 26.) + floor(uT * 9.))) * 2.2;          /* glints */
+  gl_FragColor = vec4(c, 1.); }`;
+function makeSoap() { const g = new B.TransformNode('soapG', scene), bar = B.MeshBuilder.CreateBox('soap', { width: 2.6, height: .9, depth: 1.6 }, scene);
+  const sm = new B.ShaderMaterial('soapM', scene, 'soap', { attributes: ['position', 'normal'], uniforms: ['world', 'viewProjection', 'uCam', 'uT'] }); bar.material = sm; bar.parent = g;
+  bar.dispose();
+  const pill = B.MeshBuilder.CreateSphere('soap', { diameterX: 2.8, diameterY: .95, diameterZ: 1.7, segments: 24 }, scene); pill.material = sm; pill.parent = g;          /* a rounded bar */
+  const ring = B.MeshBuilder.CreateTorus('soapRing', { diameter: 4.2, thickness: .06, tessellation: 64 }, scene), rm = new B.StandardMaterial('rm', scene); rm.emissiveColor = new B.Color3(.6, .95, 1); rm.disableLighting = true; ring.material = rm; ring.parent = g; ring.rotation.x = Math.PI / 2;
+  const bub = []; for (let k = 0; k < 10; k++) { const b = B.MeshBuilder.CreateSphere('bub', { diameter: rnd(.18, .45), segments: 10 }, scene); b.material = sm; b.parent = g; bub.push({ b, a: rnd(0, 6.28), r: rnd(1.4, 2.4), y: rnd(-.6, 1.4), s: rnd(.4, 1.2) }); }
+  return { g, sm, pill, ring, bub, kind: 'soap' }; }
+B.Effect.ShadersStore.cloudFragmentShader = `precision highp float; varying vec3 vN, vW; uniform vec3 uCam; uniform float uT, uFlash;
+void main(){ vec3 n = normalize(vN), v = normalize(uCam - vW); float fr = pow(1. - abs(dot(n, v)), 1.6), l = max(dot(n, vec3(0., 1., 0.)), 0.);
+  vec3 c = vec3(.07, .08, .13) * (.6 + .6 * l) + vec3(.25, .4, .9) * fr * .9 + vec3(.75, .8, 1.) * uFlash * (.5 + fr); gl_FragColor = vec4(c, 1.); }`;
+function makeCloud() { const g = new B.TransformNode('cloudG', scene), cm = new B.ShaderMaterial('cloudM', scene, { vertex: 'soap', fragment: 'cloud' }, { attributes: ['position', 'normal'], uniforms: ['world', 'viewProjection', 'uCam', 'uT', 'uFlash'] });
+  for (let k = 0; k < 11; k++) { const s = B.MeshBuilder.CreateSphere('puff', { diameter: rnd(3.5, 6.5), segments: 12 }, scene); s.material = cm; s.parent = g; s.position.set(rnd(-5, 5), rnd(-.6, 1.4), rnd(-3, 3)); }
+  const bolt = B.MeshBuilder.CreateTube('bolt', { path: [new B.Vector3(0, 0, 0), new B.Vector3(.8, -2, 0), new B.Vector3(-.4, -3.4, .3), new B.Vector3(.6, -5.6, 0)], radius: .07 }, scene), bm = new B.StandardMaterial('bm', scene); bm.emissiveColor = new B.Color3(.85, .9, 1); bm.disableLighting = true; bolt.material = bm; bolt.parent = g; bolt.isVisible = false;
+  const rain = B.MeshBuilder.CreateBox('rain', { width: .03, height: 1.3, depth: .03 }, scene), rmt = new B.StandardMaterial('rmt', scene); rmt.emissiveColor = new B.Color3(.5, .75, 1); rmt.disableLighting = true; rmt.alpha = .55; rain.material = rmt; rain.parent = g; rain.alwaysSelectAsActiveMesh = true;
+  const drops = []; for (let k = 0; k < 90; k++) drops.push({ x: rnd(-6, 6), y: rnd(-6.5, 0), z: rnd(-3, 3) }); const rbuf = new Float32Array(16 * drops.length); rain.thinInstanceSetBuffer('matrix', rbuf, 16, false);
+  return { g, cm, bolt, rain, rbuf, drops, kind: 'storm', flash: 0 }; }
+
+/* ---------- swarms ---------- */
+const ROAD = swarmMesh('roadSp', 400), GLASS = swarmMesh('glassSp', 260); GLASS.m.material.setFloat('uAmp', .8);
+const glassNode = new B.TransformNode('glass', scene); glassNode.parent = cam; GLASS.m.parent = glassNode;
+const GZ = .6, gHalf = () => { const hh = GZ * Math.tan(cam.fov / 2), asp = engine.getRenderWidth() / Math.max(1, engine.getRenderHeight()); return [hh * asp, hh]; };
+const RS = [], GS = [], M4 = new B.Matrix(), tmpM = new B.Matrix();
+function spawnWave() { const n = 34; for (let k = 0; k < n && RS.length < ROAD.max; k++) RS.push({ x: rnd(-13, 13), z: CAR.z + rnd(70, 150), sp: rnd(5, 9), ph: rnd(0, 6.28), s: rnd(.55, .8), h: 0, wob: rnd(0, 6.28) }); }
+function attach() { if (GS.length >= GLASS.max) return; const [hw, hh] = gHalf(), fill = GS.length / GLASS.max, near = GS.length && Math.random() < .7 ? GS[Math.floor(Math.random() * GS.length)] : null, a = near ? Math.atan2(near.ty / hh, near.tx / hw) + rnd(-.25, .25) : rnd(0, 6.28), r = clamp(1.02 - .95 * Math.pow(fill, .9) + rnd(-.05, .12), .05, 1.08);          /* (edge first, in clumps; the middle fills last) */
+  const tx = Math.cos(a) * hw * r, ty = Math.sin(a) * hh * r, sx = Math.cos(a) * hw * 1.25, sy = Math.sin(a) * hh * 1.25; GS.push({ x: sx, y: sy, tx, ty, ph: rnd(0, 6.28), s: rnd(.13, .2), h: Math.atan2(tx - sx, ty - sy), st: 'in', vx: 0, vy: 0, spin: 0, t: 0, idle: rnd(1, 4) }); }
+const WASH = { soap: -1, storm: -1 };
+function wash(kind) { if (kind === 'soap') { WASH.soap = 0; } else { WASH.storm = 0; flash(1); } }
+let FLASH = 0; const flash = (k) => { FLASH = Math.max(FLASH, k); };
+
+/* foam / rain / lightning on the glass */
+B.Effect.ShadersStore.glassVertexShader = `precision highp float; attribute vec3 position; attribute vec2 uv; uniform mat4 worldViewProjection; varying vec2 vUV; void main(){ vUV = uv; gl_Position = worldViewProjection * vec4(position, 1.); }`;
+B.Effect.ShadersStore.glassFragmentShader = `precision highp float; varying vec2 vUV; uniform float uT, uWave, uFoam, uRain, uFlash, uAsp;
+float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 c = vec3(0.);
+  if (uFoam > .01) { float band = exp(-pow((vUV.x - uWave) / .11, 2.)), trail = (1. - smoothstep(0., .4, uWave - vUV.x)) * step(vUV.x, uWave);
+    vec2 g = p * 22. + vec2(0., uT * .3); vec2 id = floor(g), f = fract(g) - .5 - (vec2(h(id + 3.1), h(id + 7.7)) - .5) * .5; float r = (.12 + .3 * h(id)) * step(.25, h(id + 1.3)), bub = smoothstep(r, r - .06, length(f)) - smoothstep(r - .08, r - .14, length(f)) * .6;
+    float foam = band * (.75 + .5 * bub) + trail * bub * .55; a = max(a, foam * uFoam); c = mix(vec3(.95, .97, 1.), mix(vec3(.55, .95, 1.), vec3(1., .88, .5), .5 + .5 * sin(length(f) * 12. + uT * 2.)), .35 * bub) * 1.1; }
+  if (uRain > .01) { float col = floor(p.x * 90.), sp = 2.2 + 2. * h(vec2(col, 3.)), y = fract(vUV.y * 1.6 + uT * sp + h(vec2(col, 7.))), streak = smoothstep(.0, .02, y) * (1. - smoothstep(.02, .32, y)) * step(.55, h(vec2(col, 1.)));
+    float ra = streak * .55 * uRain; c = mix(c, vec3(.7, .85, 1.), ra / max(a + ra, .001)); a = max(a, ra); }
+  if (uFlash > .01) { c = mix(c, vec3(.85, .9, 1.), uFlash); a = max(a, uFlash * .35); }
+  gl_FragColor = vec4(c, a); }`;
+const glassPl = B.MeshBuilder.CreatePlane('glassPl', { size: 1 }, scene), gm = new B.ShaderMaterial('gm', scene, 'glass', { attributes: ['position', 'uv'], uniforms: ['worldViewProjection', 'uT', 'uWave', 'uFoam', 'uRain', 'uFlash', 'uAsp'], needAlphaBlending: true });
+gm.backFaceCulling = false; glassPl.material = gm; glassPl.parent = cam; glassPl.position.z = GZ - .02; glassPl.renderingGroupId = 1; GLASS.m.renderingGroupId = 1;
+
+/* ---------- cleaners on the road ---------- */
+const CL = []; let nextCl = 3, nextWave = 0, clKind = 0;
+function spawnCleaner() { const o = clKind++ % 2 === 0 ? makeSoap() : makeCloud(); o.x = rnd(-7, 7); o.z = CAR.z + 170; o.done = false; CL.push(o); }
+
+/* ---------- input: keys, or touch the side you want to go ---------- */
+const K = { l: 0, r: 0 }, TCH = new Map();
+addEventListener('keydown', (e) => { if (/^(a|ArrowLeft)$/i.test(e.key)) K.l = 1; if (/^(d|ArrowRight)$/i.test(e.key)) K.r = 1; });
+addEventListener('keyup', (e) => { if (/^(a|ArrowLeft)$/i.test(e.key)) K.l = 0; if (/^(d|ArrowRight)$/i.test(e.key)) K.r = 0; });
+const tv = (x) => { const d = (x - innerWidth / 2) / innerWidth; return Math.abs(d) < .04 ? 0 : clamp(Math.sign(d) * (Math.abs(d) - .04) / .26, -1, 1); };
+cv.addEventListener('pointerdown', (e) => { TCH.set(e.pointerId, tv(e.clientX)); }); addEventListener('pointermove', (e) => { if (TCH.has(e.pointerId)) TCH.set(e.pointerId, tv(e.clientX)); });
+const up = (e) => TCH.delete(e.pointerId); addEventListener('pointerup', up); addEventListener('pointercancel', up);
+
+/* ---------- the loop ---------- */
+scene.onBeforeRenderObservable.add(() => {
+  const dt = Math.min(.05, engine.getDeltaTime() / 1000); T.t += dt; const t = T.t;
+  let st = K.r - K.l; for (const v of TCH.values()) st += v; st = clamp(st, -1, 1); CAR.steer += (st - CAR.steer) * Math.min(1, dt * 10);
+  CAR.vx = CAR.steer * 11; CAR.x = clamp(CAR.x + CAR.vx * dt, -10, 10); const zPrev = CAR.z; CAR.z += CAR.speed * dt;
+  cam.position.set(CAR.x, 1.4 + .03 * Math.sin(t * 9), CAR.z); cam.rotation.set(.04, CAR.steer * .12, -CAR.steer * .04);
+  road.position.set(CAR.x, 0, CAR.z + 300);
+  for (const m of [roadM]) { m.setVector3('uCam', cam.position); m.setFloat('uT', t); m.setFloat('uFlash', FLASH * .6); }
+  for (const S of [ROAD, GLASS]) { S.m.material.setVector3('uCam', cam.globalPosition); S.m.material.setFloat('uT', t); }
+  if (t > nextWave) { spawnWave(); nextWave = t + rnd(2.5, 4); }
+  if (t > nextCl) { spawnCleaner(); nextCl = t + rnd(7, 10); }
+
+  /* road spiders: run at the car's line, scuttling; the ones that meet the car climb onto the glass */
+  let n = 0;
+  for (let i = RS.length - 1; i >= 0; i--) { const s = RS[i], dx = CAR.x - s.x, dzc = s.z - CAR.z; const tx = dx * .9 + Math.sin(t * 2 + s.wob) * 2, tz = -1, l = Math.hypot(tx, tz) || 1;
+    s.x += tx / l * s.sp * dt * .9; s.z += tz / l * s.sp * dt; s.h = Math.atan2(tx / l, tz / l); s.ph += s.sp * dt * 2.4;
+    const rel = s.z - CAR.z; if (rel < 1.2 && rel > -1.5 && Math.abs(s.x - CAR.x) < 2.3) { RS.splice(i, 1); attach(); continue; }
+    if (rel < -6) { RS.splice(i, 1); continue; } }
+  for (const s of RS) { B.Matrix.ComposeToRef(new B.Vector3(s.s, s.s, s.s), B.Quaternion.RotationYawPitchRoll(s.h, 0, 0), new B.Vector3(s.x, 0, s.z), M4); M4.copyToArray(ROAD.mat, n * 16); ROAD.ph[n] = s.ph; n++; }
+  ROAD.m.thinInstanceCount = n; ROAD.m.thinInstanceBufferUpdated('matrix'); ROAD.m.thinInstanceBufferUpdated('phase');
+
+  /* cleaners: drive into the soap or under the storm */
+  for (let i = CL.length - 1; i >= 0; i--) { const o = CL[i]; o.g.position.set(o.x, o.kind === 'soap' ? 1.6 + .25 * Math.sin(t * 2.2) : 7.2, o.z);
+    if (o.kind === 'soap') { o.pill.rotation.y = t * 1.4; o.pill.rotation.z = .25 * Math.sin(t * 1.3); o.ring.rotation.z = t; o.ring.scaling.setAll(1 + .08 * Math.sin(t * 5)); o.sm.setVector3('uCam', cam.globalPosition); o.sm.setFloat('uT', t);
+      for (const b of o.bub) { b.a += dt * b.s; b.b.position.set(Math.cos(b.a) * b.r, b.y + .3 * Math.sin(t * 2 + b.a), Math.sin(b.a) * b.r); } }
+    else { o.cm.setVector3('uCam', cam.globalPosition); o.cm.setFloat('uT', t); o.flash = Math.max(0, o.flash - dt * 3); if (Math.random() < dt * .7) { o.flash = 1; o.bolt.isVisible = true; o.bolt.position.x = rnd(-3, 3); } if (o.flash < .4) o.bolt.isVisible = false; o.cm.setFloat('uFlash', o.flash);
+      o.drops.forEach((d, k) => { d.y -= dt * 18; if (d.y < -7.2) d.y = rnd(-1, 0); B.Matrix.TranslationToRef(d.x, d.y, d.z, tmpM); tmpM.copyToArray(o.rbuf, k * 16); }); o.rain.thinInstanceBufferUpdated('matrix'); }
+    if (!o.done && o.z - CAR.z < 2 && o.z - CAR.z > -3 && Math.abs(o.x - CAR.x) < (o.kind === 'soap' ? 2.6 : 6.5)) { o.done = true; wash(o.kind); if (o.kind === 'soap') o.g.setEnabled(false); }
+    if (o.z < CAR.z - 12) { o.g.dispose(false, true); CL.splice(i, 1); } }
+
+  /* glass spiders: crawl in from the edge to a spot, fidget, pile up; washes clear them */
+  const [hw, hh] = gHalf(); glassPl.scaling.set(hw * 2.4, hh * 2.4, 1); gm.setFloat('uAsp', hw / hh); gm.setFloat('uT', t);
+  if (WASH.soap >= 0) { WASH.soap += dt; const wx = -1.35 + WASH.soap * 3.2; for (const g of GS) if (g.st !== 'out' && g.x / hw < wx) { g.st = 'out'; g.vx = rnd(3.4, 4.4) * hw; g.vy = rnd(-.25, .35) * hh;          /* (they ride the front of the foam off the glass) */ g.spin = rnd(-9, 9); g.t = 0; }
+    gm.setFloat('uWave', .5 + wx / 2.4);          /* (glass plane is 2.4 half-widths across) */ gm.setFloat('uFoam', clamp(1.4 - WASH.soap * .6, 0, 1)); if (WASH.soap > 2.4) { WASH.soap = -1; gm.setFloat('uFoam', 0); } } else gm.setFloat('uFoam', 0);
+  if (WASH.storm >= 0) { WASH.storm += dt; for (const g of GS) if (g.st !== 'out' && Math.random() < dt * 2.6) { g.st = 'out'; g.vx = rnd(-.1, .1) * hw; g.vy = -rnd(.2, .5) * hh; g.spin = rnd(-4, 4); g.t = 0; g.fall = 1; }
+    if (Math.random() < dt * 1.2 && WASH.storm < 2.6) flash(rnd(.5, 1)); gm.setFloat('uRain', clamp(Math.min(WASH.storm * 2, 3.2 - WASH.storm), 0, 1)); if (WASH.storm > 3.2) { WASH.storm = -1; gm.setFloat('uRain', 0); } } else gm.setFloat('uRain', 0);
+  FLASH = Math.max(0, FLASH - dt * 4); gm.setFloat('uFlash', FLASH * .8);
+  let m = 0;
+  for (let i = GS.length - 1; i >= 0; i--) { const g = GS[i]; g.t += dt;
+    if (g.st === 'out') { if (g.fall) g.vy -= hh * 3.5 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.h += g.spin * dt; g.ph += dt * 20; if (Math.abs(g.x) > hw * 1.4 || g.y < -hh * 1.4 || g.y > hh * 1.4) { GS.splice(i, 1); } continue; }
+    const dx = g.tx - g.x, dy = g.ty - g.y, d = Math.hypot(dx, dy);
+    if (d > .004) { const v = Math.min(d, hh * .55 * dt); g.x += dx / d * v; g.y += dy / d * v; g.h = Math.atan2(dx, dy); g.ph += dt * 26; }
+    else { g.idle -= dt; g.ph += dt * 3; if (g.idle < 0) { g.idle = rnd(1.5, 5); g.tx += rnd(-.04, .04) * hw; g.ty += rnd(-.04, .04) * hh; } } }
+  for (const g of GS) { const s = g.s * hh; B.Matrix.ScalingToRef(s, s, s, M4); M4.multiplyToRef(B.Matrix.RotationY(g.h), M4); M4.multiplyToRef(B.Matrix.RotationX(-Math.PI / 2), M4); M4.multiplyToRef(B.Matrix.Translation(g.x, g.y, GZ), M4); M4.copyToArray(GLASS.mat, m * 16); GLASS.ph[m] = g.ph; m++; }
+  GLASS.m.thinInstanceCount = m; GLASS.m.thinInstanceBufferUpdated('matrix'); GLASS.m.thinInstanceBufferUpdated('phase');
+});
+engine.runRenderLoop(() => scene.render()); addEventListener('resize', () => engine.resize());
+window.__SP = { attach: (k) => { for (let i = 0; i < k; i++) attach(); }, wash, get glass() { return GS.length; }, get road() { return RS.length; }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } }, cleaner: (kind) => { const o = kind === 'storm' ? makeCloud() : makeSoap(); o.x = CAR.x; o.z = CAR.z + 22; o.done = false; CL.push(o); } };
+})();
+</script>
+</body></html>
