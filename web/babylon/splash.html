@@ -221,6 +221,7 @@ window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 
     for (let i = 1; i < live.length; i++) { const a = live[i - 1], b = live[i]; if (b.x < a.x + a.w + 24) { b.x = a.x + a.w + 24; b.v = Math.min(b.v, a.v); } }          /* (a fast one catches up, never overlaps) */
     requestAnimationFrame(run); }; requestAnimationFrame(run); })();</script>
 </div>
+<script src="plants.js"></script>
 <script type="module">
 import { PANTRY } from './molpantry.js';
 import { skyFragment, PSYLOOK_FS } from './psylook.js';
@@ -486,7 +487,7 @@ function draw(t, dt) {
   // the strain, big in front of the sky's sun
   const p = PANTRY[KEYS[si]], c = p.c.map((v) => Math.round(v * 255));
   const mxp = room.side ? room.x : cxm; MOL.x = mxp; MOL.y = my; MOL.r = room.r; MOL.fit = room.r; sideStrain(room);
-  drawMol(p, mxp + SL.off, my, Math.min(W, H) * (short ? .05 : W > H ? .045 : .062), SPIN.yaw, SPIN.pitch, c, 1, k);
+  if (!drawPlant(p, mxp + SL.off, my, room.r, t, c)) drawMol(p, mxp + SL.off, my, Math.min(W, H) * (short ? .05 : W > H ? .045 : .062), SPIN.yaw, SPIN.pitch, c, 1, k);
 }
 /* the strain: a glossy ball-and-stick model, turning on two axes in a soft glow; each atom lit like a boiled sweet (a bright highlight, a deep edge) */
 /* the gap the molecule may fill: portrait, from under the tagline to above the strain's notes; phone landscape (words at the sides), from under the
@@ -503,6 +504,18 @@ function molRoom(short) { let top, bot; const R = (id) => { const e = document.g
      TAP TO TUNE IN; its name and notes move under it, just above the button) */
   if (!short && W > H && bot - top < H * .26) { const tp = R('tap'), sh = (strainEl.getBoundingClientRect().height || 40), tpTop = tp && tp.height > 0 ? tp.top : H * .82; { const b2 = tpTop - sh - 20, r2 = Math.max(24, Math.min((b2 - top) / 2 * .95, H * .2, W * .2)); if (r2 > r) return { x: W / 2, y: (top + b2) / 2, r: r2, side: true }; } }
   return { y, r }; }
+/* THE PLANT (owner 2026-11-27: the plants read better than the molecules): the strain's plant, big and glowing in its own colour, breathing and swaying.
+   A drag on it still turns it, like a coin. Falls back to the molecule if the plant art is missing. */
+const PIMG = {};
+function plantImg(name) { if (PIMG[name] !== undefined) return PIMG[name]; const svg = window.AGPLANTS && AGPLANTS.svg(name); if (!svg) return (PIMG[name] = null);
+  const im = new Image(); im.decoding = 'async'; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg ', '<svg width="512" height="512" ')); PIMG[name] = im; return im; }
+function drawPlant(p, x0, y0, r, t, c) { const im = plantImg(p.plant); if (!im || !im.complete || !im.naturalWidth) return false;
+  const S = r * (W > H ? 1.38 : 1.55) * (1 + Math.sin(t * 1.6) * .035), turn = Math.cos(SPIN.yaw), sway = Math.sin(t * .9) * .07 + (SPIN.vy || 0) * .002;
+  mxc.save(); mxc.translate(x0, y0 + Math.sin(t * 1.1) * r * .04); mxc.rotate(sway); mxc.scale(Math.max(.08, Math.abs(turn)) * (turn < 0 ? -1 : 1), 1);
+  const glow = .55 + .25 * Math.sin(t * 2.2);
+  mxc.shadowColor = `rgba(${c},${glow.toFixed(2)})`; mxc.shadowBlur = r * .5; mxc.drawImage(im, -S / 2, -S / 2, S, S);
+  mxc.shadowColor = 'rgba(255,240,200,.35)'; mxc.shadowBlur = r * .12; mxc.drawImage(im, -S / 2, -S / 2, S, S);
+  mxc.restore(); return true; }
 function drawMol(p, x0, y0, sc, a, b, c, fade, k) { if (fade <= 0) return; { let mx = 0, my = 0, mz = 0, rr = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } mx /= p.atoms.length; my /= p.atoms.length; mz /= p.atoms.length; for (const at of p.atoms) rr = Math.max(rr, Math.hypot(at[1] - mx, at[2] - my, at[3] - mz)); sc = Math.min(sc, (MOL.fit || Math.min(W, H) * .3) / Math.max(1, rr + .6)); }          /* (the long ones are scaled down so every strain fits well inside the screen) */ const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
   let mx = 0, my = 0, mz = 0; for (const at of p.atoms) { mx += at[1]; my += at[2]; mz += at[3]; } const n = p.atoms.length; mx /= n; my /= n; mz /= n;
   const P = p.atoms.map((at) => { const x = at[1] - mx, y = at[2] - my, z = at[3] - mz; const x1 = x * ca + z * sa, z1 = -x * sa + z * ca; const y2 = y * cb - z1 * sb, z2 = y * sb + z1 * cb; const pz = 1 + z2 * .05; return { x: x0 + x1 * sc * pz, y: y0 + y2 * sc * pz, z: z2, e: at[0], m: !!at[4] }; });
@@ -602,7 +615,7 @@ const ui = document.getElementById('ui'); let drag = null;
    that way while the next strain slides in from the other side (left: the next one, right: the one before); a short swipe springs back.
    A drag that starts ON the molecule turns it in 3D instead. Only a tap on TAP TO TUNE IN starts (owner 2026-11-26: a missed touch anywhere else does nothing). */
 const MOL = { x: 0, y: 0, r: 60, fit: 0 }, SL = { off: 0, anim: null };
-function slideApply() { strainEl.style.transform = `translateX(${SL.off.toFixed(1)}px)`; strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
+function slideApply() { strainEl.style.marginLeft = SL.off.toFixed(1) + 'px'; strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
 function slideTo(target, ms, then) { const from = SL.off, t0 = performance.now(); SL.anim = (now) => { const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3); SL.off = from + (target - from) * e; slideApply(); if (u >= 1) { SL.anim = null; if (then) then(); } }; }
 function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 1; showStrain(); }
 function swipeTo(d) { slideTo(-d * W * .7, 170, () => { stepStrain(d); SL.off = d * W * .7; slideApply(); slideTo(0, 260); }); }
