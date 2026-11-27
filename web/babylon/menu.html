@@ -3,7 +3,7 @@
 (() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Afterglow</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Rye&family=Michroma&family=Chewy&family=Audiowide&family=Monoton&family=VT323&family=Cinzel+Decorative:wght@700&family=Rubik+Glitch&display=swap">
 <style>
 /* The main menu, neo-noir: Play (continue, the eight levels as lit cards over a still from each world, the journey) and Upgrades (gear tier II), links to the tutorial and the character editor.
    One screen, never scrolls: everything scales to fit, landscape (4 x 2) or portrait (2 x 4). Every text sits on a dark veil, so no colour ever melts into the picture.
@@ -74,8 +74,22 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 .card.upc .upst .art{z-index:auto!important;position:static!important;width:100%;height:100%;max-height:100%;object-fit:contain!important;object-position:50% 50%!important;filter:drop-shadow(0 6px 14px rgba(0,0,0,.6))}
 .card.upc .veil{display:none}.card.upc .txt{position:relative!important;inset:auto!important;flex:0 0 auto;background:linear-gradient(180deg,rgba(9,12,20,.6),#090c14);padding:8px 12px 12px}
 @media (orientation:landscape) and (max-height:540px){.card.upc .upst{padding:3% 6% 0}.card.upc .txt{padding:4px 10px 8px}.card.upc .txt p{font-size:12px!important;margin:0 0 .2em}}
+h1 a { color:inherit; text-decoration:none; } header { padding-right:calc(max(10px,var(--sa-right, env(safe-area-inset-right,0px))) + 54px)!important; }
+.sh { cursor:pointer; }
+.wn-desert { font-family:"Rye",serif!important; } .wn-alpine { font-family:"Michroma",sans-serif!important; font-size:.78em!important; } .wn-candy { font-family:"Chewy",cursive!important; } .wn-tunnel { font-family:"Audiowide",sans-serif!important; font-size:.9em!important; }
+.wn-synthwave { font-family:"Monoton",cursive!important; font-weight:400!important; font-size:.86em!important; } .wn-matrix { font-family:"VT323",monospace!important; font-size:1.15em!important; } .wn-egypt { font-family:"Cinzel Decorative",serif!important; font-size:.84em!important; } .wn-psychedelic { font-family:"Rubik Glitch",cursive!important; }
+#sdet .shp { position:relative; width:min(760px,100%); max-height:100%; background:#070a12; border:1px solid rgba(159,232,255,.5); border-radius:16px; padding:clamp(12px,2.4vmin,22px); color:#e3e8f2; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:1.2vmin 3vmin; box-sizing:border-box; overflow:hidden; }
+#sdet .shp h2 { grid-column:1/-1; margin:0; font:400 clamp(26px,5vmin,44px)/1 var(--tt); letter-spacing:.04em; color:#9fe8ff; }
+#sdet .shp h3 { margin:0 0 .3em; font:700 clamp(12px,1.3vmin + 5px,15px) var(--lb); letter-spacing:.16em; text-transform:uppercase; color:#ffd23a; }
+#sdet .shp p, #sdet .shp li { margin:0 0 .35em; font:600 clamp(12px,1.1vmin + 6px,15px)/1.3 system-ui,sans-serif; }
+#sdet .shp ul { margin:0; padding:0; list-style:none; }
+#sdet .shp .own { color:#7dff8a; } #sdet .shp .no { color:#8a93a6; }
+#sdet .shp .wl { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:.25em .7em; align-items:center; font:600 clamp(12px,1.1vmin + 6px,15px) system-ui,sans-serif; }
+#sdet .shp .wl b { font-weight:400; font-size:1.05em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#sdet .shp .wl span { letter-spacing:.15em; white-space:nowrap; } #sdet .shp .wl i { font-style:normal; opacity:.25; } #sdet .shp .wl i.on { opacity:1; }
+@media (orientation:portrait) { #sdet .shp { grid-template-columns:1fr; } }
 </style></head><body>
-<header><h1>AFTERGLOW</h1><span class="tag">Out of Alignment</span><span class="sh" id="shards" title="Shards: spend them on upgrades"></span><button id="lkBtn" type="button" aria-label="Lock screen" title="Lock screen" style="margin-left:auto;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(10,12,24,.55);color:rgba(242,239,230,.85);display:inline-grid;place-items:center;cursor:pointer;padding:0;flex:0 0 auto"><svg viewBox="0 0 18 22" width="13" height="16" aria-hidden="true"><path d="M4 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="1" y="10" width="16" height="12" rx="3" fill="currentColor"/></svg></button></header>
+<header><h1><a href="splash.html" title="Back to the title">AFTERGLOW</a></h1><span class="tag">Out of Alignment</span><span class="sh" id="shards" role="button" tabindex="0" title="Shards: what they are for, and your progress"></span><button id="lkBtn" type="button" aria-label="Lock screen" title="Lock screen" style="margin-left:auto;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(10,12,24,.55);color:rgba(242,239,230,.85);display:inline-grid;place-items:center;cursor:pointer;padding:0;flex:0 0 auto"><svg viewBox="0 0 18 22" width="13" height="16" aria-hidden="true"><path d="M4 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="1" y="10" width="16" height="12" rx="3" fill="currentColor"/></svg></button></header>
 <script src="lock.js"></script><script>/* the padlock: the lock screen on demand; tapping it also switches the idle lock back on if it was disabled */ document.getElementById('lkBtn').addEventListener('click', (e) => { e.stopPropagation(); if (window.AGLock) { AGLock.enable(); AGLock.show({}); } });</script>
 <nav><button id="tPlay" aria-pressed="true">Play</button><button id="tUp" aria-pressed="false">Upgrades</button><button id="tCx" aria-pressed="false">Strains</button><a class="btn" href="index.html?tutorial=1&nointake=1">Tutorial</a><a class="btn" href="dressup.html?next=menu.html">Character</a><a class="btn" href="lab.html" style="border-color:rgba(255,177,74,.6);color:#ffd9a8">&#9673; The Dial</a></nav>
 <main id="play">
@@ -129,7 +143,7 @@ function render() {
     const b = el('button', 'lv ' + st); b.appendChild(art('art/thumb_' + L.art + '.jpg')); b.appendChild(el('span', 'veil'));
     b.appendChild(el('span', 'num', String(i + 1).padStart(2, '0')));
     const chip = el('span', 'chip', !open ? '🔒 Locked' : i === nextI ? '▶ Play' : done ? best : 'Open'); if (done && open && i !== nextI) chip.classList.add('m-' + best); b.appendChild(chip);
-    const tx = el('span', 'txt'); tx.appendChild(el('b', null, L.name)); const sm = el('small', null, L.world + ' · '); const em = el('em', null, COMPC[L.comp][0]); em.style.color = COMPC[L.comp][1]; sm.appendChild(em); tx.appendChild(sm);
+    const tx = el('span', 'txt'); tx.appendChild(el('b', 'wn-' + L.art, L.name)); const sm = el('small', null, L.world + ' · '); const em = el('em', null, COMPC[L.comp][0]); em.style.color = COMPC[L.comp][1]; sm.appendChild(em); tx.appendChild(sm);
     if (!open) tx.appendChild(el('small', null, 'Clear ' + LEVELS[i - 1].name + ' to open'));
     else if (L.id !== 'routezero') { const qd = (((P.worlds || {})[L.id] || {}).quests) || {}, qs = el('span', 'qs'); QUESTS.forEach(([k, ic]) => qs.appendChild(el('i', qd[k] ? 'on' : null, ic))); tx.appendChild(qs); }
     b.appendChild(tx);
@@ -179,6 +193,24 @@ function strainOpen(M) { const d = document.getElementById('sdet'); d.textConten
   const t = el('div'); t.append(el('div', 'rar', 'Wild strain \u00B7 ' + M.eff), el('h2', null, M.name), el('div', 'sys', M.sys), el('p', null, M.does + '.'), el('p', 'acc', M.acc), el('p', 'wild', '\u201C' + M.wild + '\u201D')); bx.appendChild(t);
   const x = el('button', 'x', '\u00D7'); x.setAttribute('aria-label', 'Close'); bx.appendChild(x); d.appendChild(bx); d.hidden = false; spinAdd(cv, M, 0);
   const close = () => { d.hidden = true; d.textContent = ''; }; x.onclick = close; d.onclick = (e) => { if (e.target === d) close(); }; }
+/* SHARDS: what they buy, how to earn them, and where you stand in every world (owner 2026-11-27) */
+function shardsOpen() { const d = document.getElementById('sdet'); d.textContent = ''; const bx = el('div', 'shp'), have = shards(), earned = (P.icosa || 0) + questShards();
+  bx.appendChild(el('h2', null, '\u2726 ' + have + (have === 1 ? ' shard' : ' shards')));
+  const a = el('div'); a.appendChild(el('h3', null, 'What they buy'));
+  a.appendChild(el('p', null, 'Gear upgrades, ' + COST + ' shards each. Upgrades are kept for good.'));
+  const ul = el('ul'); GEARS.forEach((G) => { const own = (T[G.id] || 1) >= 2; ul.appendChild(el('li', own ? 'own' : 'no', (own ? '\u2713 ' : '\u25CB ') + G.name)); }); a.appendChild(ul);
+  const nextG = GEARS.find((G) => (T[G.id] || 1) < 2); a.appendChild(el('p', null, !nextG ? 'Every upgrade owned.' : have >= COST ? 'You can buy ' + nextG.name + ' now: open Upgrades.' : '\u2726 ' + have + ' of ' + COST + ' toward ' + nextG.name + '.'));
+  a.appendChild(el('h3', null, 'How to earn them')); a.appendChild(el('p', null, 'One for the prize crystal at the end of a level. One for each quest done in a world: \u2B22 molecules, \u2550 rail, \u26A1 relay, \u25CE rings.'));
+  a.appendChild(el('p', 'no', 'Earned ' + earned + ' \u00B7 spent ' + spent() + ' \u00B7 prizes ' + (P.icosa || 0)));
+  const b = el('div'); b.appendChild(el('h3', null, 'Your progress')); const wl = el('div', 'wl');
+  LEVELS.forEach((L, i) => { const w = (P.worlds || {})[L.id] || {}, q = w.quests || {}, open = unlocked(i); const n = el('b', 'wn-' + L.art, L.name); if (!open) n.style.opacity = '.4'; wl.appendChild(n);
+    const qs = el('span'); [['mols', '\u2B22'], ['rail', '\u2550'], ['relay', '\u26A1'], ['rings', '\u25CE']].forEach(([k, ic]) => qs.appendChild(el('i', q[k] ? 'on' : null, ic))); wl.appendChild(qs);
+    wl.appendChild(el('span', null, !open ? '\uD83D\uDD12' : (w.best && w.best !== 'NONE') ? w.best : '\u2014')); });
+  b.appendChild(wl); bx.append(a, b);
+  const x = el('button', 'x', '\u00D7'); x.setAttribute('aria-label', 'Close'); bx.appendChild(x); d.appendChild(bx); d.hidden = false;
+  const close = () => { d.hidden = true; d.textContent = ''; }; x.onclick = close; d.onclick = (e) => { if (e.target === d) close(); }; }
+{ const sh = document.getElementById('shards'); sh.onclick = shardsOpen; sh.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); shardsOpen(); } }; }
+addEventListener('keydown', (e) => { if (e.key === 'Escape') { const d = document.getElementById('sdet'); if (!d.hidden) { d.hidden = true; d.textContent = ''; } } });
 /* first launch: the character, then the tutorial */
 if (!ALL && !localStorage.getItem('dl_char')) location.replace('dressup.html?next=' + encodeURIComponent('index.html?tutorial=1&nointake=1'));
 render();

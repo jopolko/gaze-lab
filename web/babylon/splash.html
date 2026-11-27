@@ -475,7 +475,7 @@ function draw(t, dt) {
     for (let n = Math.ceil((z0 + 3) / 18); n * 18 < z0 + 260; n++) for (const side of [-1, 1]) { const zz = n * 18, h = ((n * 7919 + (side > 0 ? 13 : 0)) % 97) / 97, off = 9 + h * 31, X = roadC(zz) + side * off, dist = zz - z0;
       if (dist < 2) continue; const q = at(X, dist, h); if (q.px < -q.ht * 3 || q.px > W + q.ht * 3) continue; Object.assign(q, { dist, h, X, n }); near.push(q); }
     near.sort((a, b) => b.dist - a.dist);
-    const tree = (q, alpha, shift) => { const fade = (1 - Math.min(1, Math.max(0, (q.dist - 70) / 190))) * alpha; if (fade <= .01) return; const c = PAL[(Math.floor(q.h * 97) + shift) % PAL.length], w = q.ht * .42, sway = q.ht * .06 * Math.sin(t * 1.3 + q.n * 1.7);
+    const tree = (q, alpha, shift) => { const fade = (1 - Math.min(1, Math.max(0, (q.dist - 70) / 190))) * alpha; if (fade <= .01) return; const c = PAL[(((Math.floor(q.h * 97) + (shift | 0)) % PAL.length) + PAL.length) % PAL.length] || PAL[0], w = q.ht * .42, sway = q.ht * .06 * Math.sin(t * 1.3 + q.n * 1.7);
       cx.globalAlpha = fade; if (!shift) { cx.fillStyle = '#120c16'; cx.fillRect(q.px - w * .07, q.base - q.ht * .22, w * .14, q.ht * .22); }
       for (let i = 0; i < 3; i++) { const yb = q.base - q.ht * (.18 + i * .24), ww = w * (1 - i * .24), tip = sway * (i + 1) / 3; cx.beginPath(); cx.moveTo(q.px - ww + tip * .3, yb); cx.lineTo(q.px + ww + tip * .3, yb); cx.lineTo(q.px + tip, yb - q.ht * .42); cx.closePath();
         if (shift) { cx.fillStyle = `rgb(${c})`; } else { const gg = cx.createLinearGradient(q.px - ww, 0, q.px + ww, 0); gg.addColorStop(0, `rgba(${mix(c, [20, 12, 24], .35)},1)`); gg.addColorStop(1, `rgba(${mix(c, [20, 12, 24], .75)},1)`); cx.fillStyle = gg; } cx.fill(); } };
@@ -641,4 +641,4 @@ if (/[?&]layers\b/.test(location.search)) addEventListener('load', () => { const
   const ta = document.createElement('textarea'); ta.style.cssText = 'display:none;width:100%;height:110px;font:11px ui-monospace,Consolas,monospace;background:#050810;color:#cfe;border:1px solid #fff3;border-radius:6px';
   cp.addEventListener('pointerdown', (e) => e.stopPropagation()); cp.addEventListener('click', (e) => { e.stopPropagation(); const t = info(); ta.value = t; ta.style.display = 'block'; try { navigator.clipboard.writeText(t).then(() => { cp.textContent = 'COPIED'; setTimeout(() => (cp.textContent = 'COPY REPORT'), 1500); }, () => ta.select()); } catch (er) { ta.select(); } });
   box.append(cp, ta); document.body.appendChild(box); });</script>
-<script src="chrome.js"></script></body></html>
+<script src="gate.js"></script><script src="chrome.js"></script></body></html>
