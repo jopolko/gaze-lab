@@ -148,6 +148,7 @@ Older story documents (DOWNFALL_*) hold more world detail (biomes, gates, recove
 | **AFTERGLOW_RECORD.md** | this record | current |
 | **AFTERGLOW_MISSIONS.md** | cast, episode spine, 42 scenes and missions, systems needed | current |
 | **AFTERGLOW_PILLARS.md** | the one page everything is checked against: pillars, core loop, beat chart, story spine (2026-11-27) | current |
+| **AFTERGLOW_BESTIARY.md** | the Registry: ACCORD's leaked asset registry in the phone; scorpion line (Stinger, Tailgater, Burrower, Broodmother), feral Strays, patrol, service bots, MESH node blackouts, build order (2026-11-27) | draft, awaiting Josh |
 | **AFTERGLOW_OPEN_WORLD_PLAN.md** | the plan from runs to a full open-world game: zones, highways, missions by phone, full controls, milestones (2026-11-26) | current, the direction |
 | BUILD_LOG.md, SEASON_ONE.md | overnight Season One build notes | history |
 | RECONCILED_DESIGN.md, TRIP_GAME_DESIGN.md, PROGRESSION_PLAN.md | game design for the Babylon version | still valid where not overridden |

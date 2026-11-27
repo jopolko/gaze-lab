@@ -22,7 +22,12 @@ export function createSets(d) {
   const mat = (k, dif, em, alpha) => { if (MT[k]) return MT[k]; const m = new B.StandardMaterial('set_' + k, scene); m.diffuseColor = new B.Color3(dif[0], dif[1], dif[2]); m.emissiveColor = new B.Color3(em[0], em[1], em[2]); m.specularColor = new B.Color3(.7, .7, .7); m.backFaceCulling = false; if (alpha != null) m.alpha = alpha; return MT[k] = m; };
   const M = {
     chrome: () => mat('chrome', [.78, .82, .9], [.22, .25, .3]), gold: () => mat('gold', [1, .78, .3], [.55, .38, .08]), orange: () => mat('orange', [1, .45, .15], [.5, .18, .04]),
-    post: () => mat('post', [.62, .66, .74], [.16, .18, .22]), cyan: () => mat('cyan', [.3, .9, 1], [.2, .75, .9]), pad: () => mat('pad', [1, .55, .1], [1, .45, .05]),
+    post: () => mat('post', [.62, .66, .74], [.16, .18, .22]), cyan: () => mat('cyan', [.3, .9, 1], [.2, .75, .9]), pad: () => { if (MT.pad) return MT.pad;          /* (owner 2026-11-27: the pad was a flat slab of one colour; now lit chevrons that run forward, like a real boost strip) */
+      const t = new B.DynamicTexture('set_padT', { width: 128, height: 256 }, scene, true), c = t.getContext(), g = c.createLinearGradient(0, 0, 128, 0); g.addColorStop(0, '#1a0a02'); g.addColorStop(.5, '#3a1804'); g.addColorStop(1, '#1a0a02'); c.fillStyle = g; c.fillRect(0, 0, 128, 256);
+      for (let k = 0; k < 2; k++) { const y = 20 + k * 128; c.beginPath(); c.moveTo(10, y + 70); c.lineTo(64, y + 14); c.lineTo(118, y + 70); c.lineTo(118, y + 104); c.lineTo(64, y + 48); c.lineTo(10, y + 104); c.closePath(); const cg = c.createLinearGradient(0, y + 14, 0, y + 104); cg.addColorStop(0, '#fff6c0'); cg.addColorStop(.5, '#ffb020'); cg.addColorStop(1, '#ff5a00'); c.fillStyle = cg; c.fill(); }
+      c.strokeStyle = '#ffd060'; c.lineWidth = 6; c.strokeRect(3, -4, 122, 264); t.update(); t.wrapV = B.Texture.WRAP_ADDRESSMODE; t.vScale = 2;
+      const m = new B.StandardMaterial('set_pad', scene); m.diffuseTexture = t; m.emissiveTexture = t; m.disableLighting = true; m.backFaceCulling = false; m.fogEnabled = false;
+      scene.onBeforeRenderObservable.add(() => { t.vOffset = (t.vOffset - scene.getEngine().getDeltaTime() / 1000 * 1.6) % 1; }); return MT.pad = m; },
     spring: () => mat('spring', [.35, 1, .55], [.15, .7, .3]), ghost: () => mat('ghost', [.4, 1, .6], [.25, .9, .5], .16), wall: () => mat('wall', [1, .45, .2], [.7, .22, .05], .55),
     box: () => mat('box', [.85, .7, .25], [.35, .25, .05]), barrier: () => mat('barrier', [.3, .8, 1], [.3, .8, 1], .35),
     /* ART PASS phase 1 (2026-11-26): one look for all track furniture: a lit edge along every rail, lamps on lips and posts */
@@ -49,7 +54,7 @@ export function createSets(d) {
   function sign(S, txt, col, p, w) {
     const dt = new B.DynamicTexture('setSignT', { width: 512, height: 128 }, scene, true), c = dt.getContext();
     const draw = (have) => { c.clearRect(0, 0, 512, 128); c.fillStyle = 'rgba(8,12,20,.88)'; c.fillRect(0, 0, 512, 128); c.strokeStyle = have ? '#7dff8a' : col; c.lineWidth = 9; c.strokeRect(6, 6, 500, 116); c.fillStyle = have ? '#7dff8a' : col; let f = 60; c.font = 'bold ' + f + 'px Arial'; while (c.measureText(txt).width > 470 && f > 24) { f -= 4; c.font = 'bold ' + f + 'px Arial'; } c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText((have ? '✓ ' : '') + txt, 256, 66); dt.update(); };
-    draw(false);
+    draw(false); dt.wrapU = B.Texture.WRAP_ADDRESSMODE; dt.uScale = -1;          /* (owner 2026-11-27: the scene is right-handed, so a billboard shows its back: without this the gate signs read mirrored, as the dose signs once did) */
     const m = new B.StandardMaterial('setSignM', scene); m.diffuseTexture = dt; m.emissiveTexture = dt; m.disableLighting = true; m.backFaceCulling = false; m.fogEnabled = false;
     const pl = B.MeshBuilder.CreatePlane('setSign', { width: w || 11, height: (w || 11) / 4 }, scene); pl.material = m; pl.billboardMode = B.Mesh.BILLBOARDMODE_ALL; pl.position.set(p[0], p[1], p[2]); own(S, pl);
     S.extra.push(m, dt); return { pl, draw, have: null };
@@ -229,6 +234,7 @@ export function createSets(d) {
       while (sg && A.d >= sg.d1) { if (endSeg(A, sg)) return; sg = S.segs[A.i]; }
       if (!sg) return;
       const p = at(S, sg, A.d, A.off);
+      if (!A.e) A.e = [PH.x - p[0], PH.y - p[1], A.prev ? 0 : PH.z - p[2], 1]; if (A.e[3] > .002) { const k = A.e[3]; p[0] += A.e[0] * k; p[1] += A.e[1] * k; p[2] += A.e[2] * k; A.e[3] *= Math.exp(-7 * dt); }          /* (owner 2026-11-27, continuity: entering a set piece from the air snapped the car up to 7 m onto its path in one frame; it now eases on in about a third of a second) */
       if (A.prev && dt > 1e-4) { PH.vx = (p[0] - A.prev[0]) / dt; PH.vy = (p[1] - A.prev[1]) / dt; PH.vz = (p[2] - A.prev[2]) / dt; } else { PH.vx = 0; PH.vz = -A.v; PH.vy = 0; }
       const sp = Math.hypot(PH.vx, PH.vz); if (sp > A.v * 2.5) { PH.vx *= A.v / sp; PH.vz *= A.v / sp; }
       PH.x = p[0]; PH.y = p[1]; PH.z = p[2]; PH.heading = Math.atan2(PH.vx, -PH.vz) || 0; PH.grounded = true; PH.air_t = 0; PH.crest = false; PH.rail = null; PH.gh_prev = gnd(p[0], p[2]); PH.boost_t = Math.max(PH.boost_t || 0, .3);
