@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Downhill">
+<link rel="apple-touch-icon" href="icon192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon192.png">
+<title>Downhill</title>
+<!-- Google Analytics (the site's tag). It lives here, in the outer page: switching biome reloads only the iframe, so a visit is counted once. -->
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0;display:block;background:#000}</style>
+</head>
+<body>
+<!-- THE SHELL: the game runs in an iframe inside this page. Switching biome reloads only the iframe, so this page keeps (1) fullscreen and (2) the browser's permission to play sound,
+     both of which a normal page reload throws away. The game asks for fullscreen by message; the request is made here, from the same tap. -->
+<iframe id="g" allow="camera; microphone; autoplay; fullscreen; accelerometer; gyroscope; xr-spatial-tracking; clipboard-write" allowfullscreen></iframe>
+<script>
+(function () {
+  var q = location.search || '?play', f = document.getElementById('g');
+  /* THE CAMERA TRACKER LIVES HERE: made once, in this outer page, so a biome switch (which reloads only the iframe) does not stop the camera or reload the face model. The game borrows it (window.parent.__shellTrkP). &nosharedcam: the game makes its own, as before. */
+  (function () { var Qs = new URLSearchParams(location.search); if (!Qs.has('head') || Qs.has('nosharedcam')) return;
+    window.__shellTrkP = (async function () { var video = document.createElement('video'); video.playsInline = true; video.muted = true; video.autoplay = true; video.style.cssText = 'position:fixed;right:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none'; document.body.appendChild(video);
+      var m = await import('../stargaze/tracker.js'); var tr = new m.Tracker(video); tr.noBlend = !Qs.has('blend'); if (Qs.has('hires')) { tr.camW = 1280; tr.camH = 720; tr.fullRes = true; } else { tr.camW = 640; tr.camH = 480; tr.fullRes = false; } tr.useWorker = true; tr.inW = +Qs.get('inw') || 256; return { tr: tr, p: null, ready: false }; })();
+    window.__shellTrkP.catch(function () { }); })();
+  var TRIPQ = '&js=gv_trip.js&xfade=1&inshell=1', qs = function (query) { return (query || '?') + TRIPQ; };
+  f.src = 'gv.html' + qs(q);
+  /* BIOME HANDOVER: the game posts 'preload' (start loading the next biome in a hidden frame), the hidden frame posts 'ready' when it is waiting at its start line, the game posts 'next' (crossfade to it) */
+  var pre = null, preReady = false, swapping = false;
+  function mkFrame(url) { var n = document.createElement('iframe'); n.allow = f.allow; n.setAttribute('allowfullscreen', ''); n.style.cssText = 'opacity:0;pointer-events:none'; n.src = 'gv.html' + qs(new URL(url).search) + '&hold=1'; document.body.appendChild(n); return n; }
+  function swap(url) { if (swapping) return; swapping = true; var t0 = Date.now(), go2 = function () { if (!pre) { pre = mkFrame(url); } if (!preReady && Date.now() - t0 < 25000) return setTimeout(go2, 150); var old = f, nf = pre; nf.style.transition = 'opacity 1.8s ease-in-out'; nf.style.pointerEvents = ''; nf.offsetHeight; nf.style.opacity = 1; try { nf.contentWindow.postMessage({ gv: 'go' }, location.origin); nf.contentWindow.focus(); } catch (e) { } setTimeout(function () { try { old.remove(); } catch (e) { } f = nf; f.id = 'g'; pre = null; preReady = false; swapping = false; }, 2000); }; go2(); }
+  addEventListener('message', function (e) { if (e.origin !== location.origin) return; var d = e.data; if (!d || typeof d !== 'object') return; if (d.gv === 'preload' && !pre) { preReady = false; pre = mkFrame(d.url); } else if (d.gv === 'ready' && pre && e.source === pre.contentWindow) preReady = true; else if (d.gv === 'next') swap(d.url); });
+  function go() { if (/[?&]nofs\b/.test(location.search) || document.fullscreenElement || document.webkitFullscreenElement) return; var el = document.documentElement, r = el.requestFullscreen || el.webkitRequestFullscreen; if (r) { try { var p = r.call(el, { navigationUI: 'hide' }); if (p && p.catch) p.catch(function () { }); } catch (e) { } } }
+  addEventListener('message', function (e) { if (e.origin !== location.origin) return; if (e.data === 'gv-fs') go(); });
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach(function (ev) { addEventListener(ev, go, true); });
+  f.addEventListener('load', function () { try { f.contentWindow.focus(); } catch (e) { } });
+  addEventListener('focus', function () { try { f.contentWindow.focus(); } catch (e) { } });
+})();
+</script>
+</body>
+</html>

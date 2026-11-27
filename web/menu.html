@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Downhill demos</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; background: #0b0418; color: #fff; font: 600 20px/1.4 system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 28px 16px; box-sizing: border-box; }
+  h1 { margin: 0; font-size: 34px; color: #ffe27a; letter-spacing: .04em; }
+  .cards { display: flex; flex-wrap: wrap; gap: 22px; justify-content: center; max-width: 1200px; }
+  a.card { display: block; width: min(360px, 92vw); box-sizing: border-box; padding: 22px 24px; border-radius: 26px; border: 3px solid #fff; color: #fff; text-decoration: none; background: linear-gradient(160deg, #3a1480, #14052c); }
+  a.card:hover, a.card:focus { background: linear-gradient(160deg, #6a2cff, #2a0a5c); }
+  .t { font: 900 28px/1.15 system-ui, sans-serif; margin-bottom: 8px; }
+  .tag { display: inline-block; font-size: 13px; font-weight: 800; letter-spacing: .08em; padding: 2px 10px; border-radius: 12px; margin-bottom: 10px; background: #ff2d95; }
+  .tag.b { background: #2d95ff; } .tag.g { background: #2dbf6a; }
+  p { margin: 6px 0; font-size: 16px; font-weight: 500; opacity: .88; }
+  .note { max-width: 760px; text-align: center; font-size: 15px; font-weight: 500; opacity: .7; }
+</style></head><body>
+<h1>DOWNHILL — ENGINE DEMOS</h1>
+<div class="cards">
+  <a class="card" href="/downhill-three/vr.html"><span class="tag">THREE.JS</span><div class="t">Downhill VR</div><p>The full game: effects, trip worlds, ramps, VR with head steering, options and the performance readout.</p><p>Press ENTER VR on the next page.</p></a>
+  <a class="card" href="/godot/?level=downhill&nofs"><span class="tag g">GODOT 4.7 · VR</span><div class="t">Godot: Downhill VR</div><p>The original Godot game with headset support. Press the ENTER VR button at the bottom of the screen: the run starts, turning your head steers, a nod tucks or brakes, a trigger recentres.</p><p>First load is about 40 MB.</p></a>
+  <a class="card" href="/babylon/"><span class="tag b">BABYLON.JS</span><div class="t">Babylon.js tech demo</div><p>The same course geometry (terrain, rocks, rings, rails) on Babylon, drawn with a few hundred instanced draws. VR with head steering.</p><p>No effects or game rules: it compares what the engine costs.</p></a>
+</div>
+<div class="note">All three load from this computer over your network. The two VR pages log their frame rates here, so the numbers can be compared.</div>
+<script>/* every card opens a fresh copy: a new link each time the menu loads, so a refreshed menu always launches the newest build */ for (const a of document.querySelectorAll('a.card')) { const u = new URL(a.getAttribute('href'), location.href); u.searchParams.set('v', Date.now()); a.href = u.pathname + u.search; }</script>
+</body></html>

@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Downhill VR</title>
+<script>
+/* one menu only: this goes straight to the game, whose ENTER VR page also has the world, trip length and view choices */
+var q = new URLSearchParams(location.search), t = 'alpine';
+try { t = localStorage.getItem('gv_theme') || t; } catch (e) { }
+var p = new URLSearchParams({ js: 'gv_trip.js', noshell: '', play: '', notap: '', nofs: '', vr: '', theme: q.get('theme') || t, trip: q.get('trip') || '35', seed: '1' });
+if (q.get('view')) p.set('view', q.get('view'));
+location.replace('gv.html?' + p.toString().replace(/=(&|$)/g, '$1'));
+</script></head><body style="background:#000"></body></html>

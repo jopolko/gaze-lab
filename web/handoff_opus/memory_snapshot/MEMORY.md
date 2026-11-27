@@ -1,0 +1,54 @@
+- [Face-control game demos (DELETED)](project_face_control_games.md) — user deleted the Godot demos/EyeLab 2026-11-11 as unplayable; don't assume they exist
+- [ANOMALY game](project_anomaly.md) — web creature-taming slice in projects/anomaly; read its NOTES.md
+- [jobagent rename pending](project_jobagent_rename_pending.md) — finish lookout->jobagent rename only when user has free credits
+- [Trippy eye-tracked experience](project_trippy_eye_experience.md) — user's chosen direction, fresh start (Godot Ocular Trance deleted); ANOMALY parked
+- [gaze-lab layout & public repo plan](project_gaze_lab_layout.md) — folder projects/gaze-lab; VPS /gaze-lab/{godot,godot-dev,eyelab}; repo pre-push checklist
+- [jobagent server is Python 3.10](reference_jobagent_server_python310.md) — py_compile on the VPS before restarting; nested f-string quotes crashed prod once
+- [Downhill state 2026-11-13](project_gaze_lab_state.md) — systems built, test/deploy commands, open problems, last commit 7eef287
+- [Verify scripted patches](feedback_verify_patches.md) — run patches in the foreground, confirm they landed before claiming deployed
+- [Gaze-lab design values](user_gaze_lab_design.md) — phone-first, agency over assist, privacy, visual target, party play
+- [Post test links](feedback_post_links.md) — put the local/LAN URLs in replies; user closes tab to free the cam
+- [Gaze auto-tune system](project_gaze_autotune.md) — silent doctor, health logging in all apps, dev flags, local servers; state 2026-11-13
+- [Tracking revert 2026-11-14](project_gaze_tracking_revert.md) — branch tracking-works = 7eef287 + Kalman (median 1); later work in git stash; bisect notes
+- [gaze-lab perf harness](reference_gaze_lab_perf_harness.md) — node tools/perf_run.mjs for stall timing; why gates/loot froze (shader lifetime, variants)
+- [STARGAZE three.js demo](project_stargaze.md) — eye-tracked phone flight in gaze-lab/web/stargaze; serve.py ports 8070 / 8470 (LAN https); untested on a real phone as of 2026-11-15
+- [Phone tracking findings 2026-11-15](project_gaze_phone_tracking_findings.md) — STARGAZE flew on its follow-the-dot fit, not the raw reading; Downhill calib step + telemetry to check first
+- [No auto-steer, visible choices](feedback_no_auto_steer.md) — Downhill: board never turns by itself, choices are real objects far apart; change the world, not just overlays
+- [Short, sequential replies](feedback_short_sequential_replies.md) — user loses the thread in long replies; one step at a time, one open-items list
+- [Downhill vision](project_downhill_vision.md) — relaxing, easy, Sonic-like momentum chains; Alpine only demo; adaptive difficulty idea
+- [Left/middle/right control](project_gaze_lmr_control.md) — chosen phone control 2026-11-16; detector in Downhill + EyeLab, check eyelab_lmr / eyecheck logs before tuning
+- [Psychedelic look loved](project_psychedelic_look.md) — recoloured-world theme at TRIPPY 100% is the favourite; variants as themes, overlay rejected
+- [Journey mode vision](project_journey_mode_vision.md) — endless biome-cycling run, trip waves, morphing music, sky/flight levels (2026-11-17)
+- [Downhill state 2026-11-17](project_downhill_state_20261117.md) — systems, URLs, deploy, debug flags, hard lessons (trail placement, audio volume cost), open items
+- [Downhill user preferences](feedback_downhill_preferences.md) — fix bugs first, no-scroll menus, punchy visuals, real music only, soft sfx, design intent
+- [Downhill music licences](reference_downhill_music_licences.md) — stems + funk tracks (all NC, two ND), credits, artist-notification to-do
+- [Emergent effects, fixed path](feedback_emergent_effects.md) — effects live in surfaces (moire dots on terrain/sky), never overlays; ground squares fixed; compile-check before deploy
+- [Psychedelic world FROZEN + session modes](project_psychedelic_frozen_and_modes.md) — leave it exactly as is; wants quick / THC come-up / infinite dosing arc + chill-out modes
+- [Duplicate class_name copies break web deploy](reference_godot_class_dupes_break_web.md) — put .gdignore in snapshot folders; verify the pck has RunRig
+- [Never scroll menus](feedback_never_scroll_menus.md) — hard rule; fit by scaling/trimming, START always reachable, screenshot at 924x412
+- [three.js spike works](project_three_spike.md) — web/spike 59.9 fps on Intel laptop vs Godot ~30; build minimal game forward there
+- [Psych vs flagship](project_psych_vs_flagship.md) — psych wide level = dev bed, strictly tripping; flagship = all biomes; branch psych-wide-level, backups in gaze-lab-backups
+- [Downhill game spec](project_downhill_game_spec.md) — GAME_SPEC.md structure + decisions (reset layers, one molecule per site, magnet/wings/saw)
+- [Autonomy preference](feedback_autonomy.md) — user wants me to proceed without asking and follow best practices
+- [Dev vs support: blame rule](feedback_no_blame_user_hardware.md) — in dev work failures on their machine are our bug; in IT support check user side early; say which machine data is from
+- [Whole vision, gentle stakes](feedback_whole_vision_gentle_stakes.md) — judge every decision against the full vision; no band-aids; penalties are a stumble, not a hard stop
+- [Wide level layout](project_level_layout_wide.md) — owner wants the wide open course (long_s7 style), not the narrow winding trail; regenerate world courses wide
+- [Downhill state 2026-11-20](project_downhill_state_20261120.md) — deployed links, T14 freeze causes and fixes, steering values, bank/buff design, next steps (in-game tuning overlay + auto-optimize), uncommitted files
+- [Steering tuning locked 2026-11-20](project_steering_locked_20261120.md) — accepted defaults live in gv.js (commit 1af910f); retune only with measured reason
+- [Downhill shell + main state 2026-11-21](project_downhill_shell_state_20261121.md) — main runs in shell.html iframe; .bak rollbacks; untested items
+- [Campaign + finish](project_campaign_finish.md) — epic chained campaign planned (not started); finish arch on dev only
+- [Prod open to changes](feedback_prod_open.md) — 2026-11-21: modify main directly, no asking; backup first
+- [Downfall story bible v2](project_downfall_story.md) — AI 'Rail' dystopia, WREN made the Pieces, creature/rig/boss per biome; doc in web/docs
+- [Downfall master plan v1](project_downfall_master_plan.md) — full campaign, Fall Line, Predicted You, redaction layer, viral engine; doc web/docs/DOWNFALL_MASTER_PLAN.md
+- [Downfall complete game v1](project_downfall_complete_game.md) — full content catalogue: 7 biomes + Vault + 12 Gates (Realms.gd) + Season 2 'The Thaw' (beach etc.), staff from Roster.gd, gear/gadgets from Loot/weapons, Zone.gd surfaces; doc web/docs/DOWNFALL_COMPLETE_GAME.md
+- [Downfall tone: neon-noir not Borderlands](feedback_downfall_tone_neon_noir.md) — keep Borderlands only for the driving + humour + atmosphere; cyberpunk/Blade Runner look; trippy faction names; old silly names cut (2026-11-21)
+- [Downfall recovered books (the Index)](project_downfall_recovered_books.md) — literary pocket-worlds as gates in neon-noir frame; Interzone liked; Asimov/Russell/Burroughs etc.
+- [Overlay layout check](feedback_overlay_layout_check.md) — run web/tools/layout_check.mjs (5 sizes, reduced motion) + view screenshots before deploying any text overlay; cold open jumbled under reduced motion
+- [Keep it simple / no marmot / no factions](feedback_keep_it_simple_story.md) — owner overwhelmed 2026-11-21; plain words, one decision at a time, story is optional
+- [Smash Derby prototype](project_smash_derby.md) — derby.html/derby.js separate page (2026-11-21): demolition derby bowl, head/touch/keys steering, AI rivals; owner asked for it as the "angry trippy" half; calm drives = existing downhill game
+- [Check master plan pillars](feedback_check_masterplan_nonnegotiables.md) — trip arc + molecules/senses are core; I dropped both in The Last Copy, re-check before every new slice
+- [Crossing attempt deleted](project_downfall_crossing_deleted.md) — 2026-11-22: three.js crossing game + 3D models removed; extend original Downfall, VR packaging planned
+- [Never contact people](feedback_no_contact.md) — only Josh decides outreach; report findings to him, never offer to email users (2026-11-22)
+- [No progress stats line](feedback_no_progress_stats.md) — rejected as too showy 2026-11-23; no counts/funnel in emails or Dashboard
+- [Never change user settings](feedback_user_settings.md) — real users' prefs/caps/alerts change only on Josh's say; report options instead (2026-11-23)
+- [Babylon reconciled 2026-11-24](project_babylon_reconciled_20261124.md) — RECONCILED_DESIGN.md, RUSH meter, tutorial, smoke.mjs; ready for Opus/Fable audit

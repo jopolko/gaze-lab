@@ -1,0 +1,253 @@
+<title>Route Zero Storyboard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=Inter:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a film storyboard. Style bible and story rules first, then one frame per beat in driving order. Single dark look by choice (a screening room). */
+:root {
+  --bg: #0c0e13; --panel: #141922; --panel2: #1b2230; --line: #2a3447; --fg: #e9e4da; --dim: #9aa4b5;
+  --sand: #e9b36a; --sea: #38e8ff; --ink: #06080c; --sign: #f4f1e8; --signfg: #14181f; --warn: #ffb347;
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif; --body: 'Inter', system-ui, sans-serif; --mono: 'IBM Plex Mono', ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 15px/1.55 var(--body); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; }
+.wrap { max-width: 1060px; margin: 0 auto; }
+h1 { font: 700 clamp(40px, 8vw, 72px)/0.95 var(--display); letter-spacing: .02em; text-transform: uppercase; margin: 0 0 6px; text-wrap: balance; }
+h2 { font: 700 26px/1.1 var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 44px 0 14px; color: var(--sand); }
+h3 { font: 700 20px/1.15 var(--display); letter-spacing: .05em; text-transform: uppercase; margin: 0; }
+p { margin: 0 0 10px; max-width: 68ch; }
+.lede { color: var(--dim); font-size: 17px; max-width: 62ch; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; min-width: 0; }
+.box h3 { margin-bottom: 8px; color: var(--fg); }
+.box ul { margin: 0; padding-left: 18px; } .box li { margin: 3px 0; }
+.sw { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.sw span { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--mono); }
+.sw i { width: 18px; height: 18px; border-radius: 3px; border: 1px solid #fff3; display: inline-block; }
+pre.prompt { white-space: pre-wrap; word-break: break-word; background: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; font: 400 12.5px/1.5 var(--mono); color: #cfd8e6; margin: 8px 0 0; }
+button.copy { background: var(--panel2); color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 5px 10px; font: 500 12px var(--mono); cursor: pointer; margin-top: 8px; }
+button.copy:hover, button.copy:focus-visible { border-color: var(--sea); outline: none; }
+/* timeline strip */
+.strip { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px 10px; }
+.strip svg { display: block; min-width: 900px; width: 100%; height: auto; }
+/* frames */
+.frame { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 18px; overflow: hidden; }
+.shot { background: #000; position: relative; }
+.shot svg { display: block; width: 100%; height: auto; }
+.num { position: absolute; left: 8px; top: 8px; font: 700 13px var(--mono); background: #000b; color: var(--fg); padding: 2px 7px; border-radius: 3px; letter-spacing: .06em; }
+.kind { position: absolute; right: 8px; top: 8px; font: 700 11px var(--mono); letter-spacing: .1em; padding: 2px 7px; border-radius: 3px; color: #000; }
+.k-cine { background: var(--sand); } .k-drive { background: #8fd0a6; } .k-sign { background: var(--sign); } .k-pick { background: var(--sea); } .k-set { background: var(--warn); }
+.info { padding: 14px 16px; min-width: 0; }
+.info h3 { margin-bottom: 4px; }
+.when { font: 500 12.5px var(--mono); color: var(--sand); margin-bottom: 8px; }
+.row { display: grid; grid-template-columns: 86px minmax(0, 1fr); gap: 8px; margin: 5px 0; align-items: baseline; }
+.row b { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.onscreen { font-family: var(--mono); font-size: 13px; background: var(--ink); border-left: 3px solid var(--sand); padding: 6px 10px; border-radius: 0 4px 4px 0; }
+details { margin-top: 8px; } summary { cursor: pointer; font: 500 12px var(--mono); color: var(--sea); letter-spacing: .06em; }
+.note { color: var(--warn); font-size: 13px; }
+@media (max-width: 760px) { .frame { grid-template-columns: 1fr; } .row { grid-template-columns: 74px minmax(0, 1fr); } }
+@media (prefers-reduced-motion: no-preference) { button.copy { transition: border-color .15s; } }
+</style>
+
+<div class="wrap">
+  <div class="mono" style="color:var(--dim);letter-spacing:.14em">DOWNFALL / ROUTE ZERO / STORYBOARD v1</div>
+  <h1>Route Zero</h1>
+  <p class="lede">Black screen to end card, as a film in seventeen frames. Every frame has its timing, its exact on-screen words, its sound, the feeling it should leave, and an art prompt ready to paste into Claude or Gemini. The signs have frames of their own. The game's cue sheet will be built from this page.</p>
+  <p class="note">Positions below are the <b>proposed</b> cut, in metres from the start at about 50 m/s. They are not all in the game yet: the live level is shorter and its messages are tighter together. Change any number you like and I'll re-time the game to match.</p>
+
+  <h2>The rules of the telling</h2>
+  <div class="grid2">
+    <div class="box"><h3>Three voices, three looks</h3>
+      <ul>
+        <li><b>The Murmur</b> is the system. It talks only on black or in the quiet, cheerful and menacing, never a hint, never a rule.</li>
+        <li><b>The Signs</b> are the world. White boards on rusted posts. Dry jokes. Seen as scenery first, repeated on the card for those who missed it.</li>
+        <li><b>The Hint</b> is the game, and it is rare: four words, shown once, ever.</li>
+      </ul></div>
+    <div class="box"><h3>Pacing law</h3>
+      <ul>
+        <li>One thing speaks at a time. After it fades, 2.5 s of nothing.</li>
+        <li>Before every message, the road is clear for as long as it is on screen. Nothing hits you while you read.</li>
+        <li>After every message, give the eye a picture to rest on before the next one: at least 8 s of driving.</li>
+        <li>Words are cut until they hurt. If a frame needs more than seven words, it needs a picture instead.</li>
+      </ul></div>
+    <div class="box"><h3>Story, handled</h3>
+      <ul>
+        <li>You are a courier on the last road no system is watching. You never speak.</li>
+        <li>The world explains itself through its signs, not through you.</li>
+        <li>The Murmur learns your name and your intent in frame 2. That is the whole inciting incident.</li>
+        <li>Each level is a short story with one image to remember: here, the lamp in the dark.</li>
+      </ul></div>
+  </div>
+
+  <h2>Style bible for the art</h2>
+  <div class="grid2">
+    <div class="box"><h3>Look</h3>
+      <p>Stylised, graphic, slightly low-poly, like a high-end indie game's key art. Dusk desert, long shadows, flat colour planes with soft light. Wide cinematic frames, 16:9. The player's view is the driver's seat: a hood edge, no face.</p>
+      <div class="sw">
+        <span><i style="background:#e9803a"></i>dusk orange</span><span><i style="background:#2a1e3a"></i>shadow plum</span><span><i style="background:#38e8ff"></i>SEE cyan</span><span><i style="background:#1b3a5c"></i>tunnel blue</span><span><i style="background:#f4f1e8"></i>sign white</span><span><i style="background:#ffd23a"></i>gold (prizes only)</span>
+      </div>
+      <p style="margin-top:10px">No pink. Gold only for things worth wanting. No text inside the images: the game puts the words on.</p></div>
+    <div class="box"><h3>Master prompt prefix</h3>
+      <p>Paste this before every frame prompt so the set matches.</p>
+      <pre class="prompt" id="prefix">Stylised cinematic game key art, 16:9, flat colour planes with soft volumetric light, slightly low-poly shapes, dusk desert highway, long shadows, palette of burnt orange, shadow plum, electric cyan and deep tunnel blue, first-person view from a driver's seat with only the hood edge visible, no people's faces, no text, no logos, no watermark, clean readable composition, strong focal point.</pre>
+      <button class="copy" data-t="prefix">Copy prefix</button></div>
+    <div class="box"><h3>Keeping a set consistent</h3>
+      <ul>
+        <li>Generate frame 3 first. Use it as the reference image for every other frame (upload it, say "same world, same palette").</li>
+        <li>Keep the camera low and the horizon in the lower third, except where a frame says otherwise.</li>
+        <li>Signs: one board shape, one rusted post, one type of paint chip. Describe them identically each time.</li>
+        <li>If a generator draws text, regenerate; we add the words in the game or the book.</li>
+      </ul></div>
+  </div>
+
+  <h2>The run on one line</h2>
+  <div class="strip" aria-label="Timeline of the proposed cut"><svg id="tl" viewBox="0 0 1000 150" role="img" aria-label="Messages and quiet stretches along the road"></svg></div>
+  <p class="mono" style="color:var(--dim);margin-top:8px">Sand blocks: a message holds. Dark gaps: the 2.5 s of nothing. Green: the road is open to breathe in. Cyan: pickups. The tunnel is the long dark band.</p>
+
+  <h2>The frames</h2>
+  <div id="frames"></div>
+
+  <h2>Becoming a graphic novel</h2>
+  <div class="grid2">
+    <div class="box"><h3>How these frames map to pages</h3>
+      <ul>
+        <li>Frames 1–4: page one. Black, the Murmur, the lights, the title. A wide splash panel on the lights.</li>
+        <li>Frames 5–9: page two. The crystal, the first sign as a full-width insert.</li>
+        <li>Frames 10–14: pages three and four. The tunnel as a run of narrow tall panels, the lamp as a full-page reveal.</li>
+        <li>Frames 15–17: page five. The bonus road in four lane panels, the prize, the card.</li>
+      </ul></div>
+    <div class="box"><h3>What you would still need</h3>
+      <ul>
+        <li>A character for the courier (the game never shows one). I would draft options with prompts, you pick.</li>
+        <li>The Murmur's visual form: I suggest a notification card in the world and never a face.</li>
+        <li>Speech and caption text: these frames already hold it. I would format it into a lettering script.</li>
+        <li>Real art from an image tool or an illustrator. I can write the briefs and lay out the pages; I cannot paint the final images myself.</li>
+      </ul></div>
+  </div>
+</div>
+
+<script>
+/* ---- the frames: data first, then a small renderer ---- */
+const F = [
+ { n:1, kind:'cine', title:'Black', at:'0.0 to 3.0 s', pos:'start (the car is already rolling, road clear)', hold:'3.0 s', text:'', snd:'Engine idle. Tyres on sand. Nothing else.', feel:'A held breath. You are somewhere before you are shown anything.', cam:'Pure black. No HUD at all.', sc:{black:1},
+   art:'Pure black frame, a faint warm dashboard glow at the very bottom edge, almost nothing.' },
+ { n:2, kind:'cine', title:'The Murmur', at:'3.0 to 9.5 s', pos:'still black', hold:'6.5 s, then 1.5 s fade', text:'MURMUR · now\n“[Name], we noticed you’ve been thinking about leaving. We told a few people. They were thrilled for you.”', snd:'One soft chime, then a low heartbeat under the voice-less text. The engine drops away.', feel:'Cold amusement. Someone is watching and finds you adorable.', cam:'Card centred high on black. Label in violet, not pink.', sc:{black:1, card:'MURMUR · now'},
+   art:'A single glowing notification card floating in total darkness, soft violet edge light, tiny reflections on glass, nothing else in the frame.' },
+ { n:3, kind:'cine', title:'Lights Up', at:'9.5 to 12.5 s', pos:'about 400 m', hold:'3 s ramp, no words', text:'', snd:'A low synth pad enters. The engine comes back up with the light.', feel:'Relief and awe, together. The world is bigger than you expected.', cam:'Exposure ramps from black to full over 3 s. Horizon in the lower third, wide road, long shadows.', sc:{road:1, sun:1},
+   art:'A wide empty desert highway at dusk stretching to a low orange sun, long shadows across cracked asphalt, distant mesas, hood edge at the bottom of frame, first-person, a sense of enormous quiet.' },
+ { n:4, kind:'cine', title:'Title', at:'12.5 to 15.5 s', pos:'about 550 m', hold:'3 s', text:'ROUTE ZERO\nThe last road nobody is watching. (Mostly.)', snd:'The pad holds. One distant, wrong-sounding bell.', feel:'A wry smile. The joke is also the promise.', cam:'Card at the top. The road keeps moving behind it.', sc:{road:1, sun:1, card:'ROUTE ZERO'},
+   art:'Same dusk desert highway, slightly closer, a faint heat shimmer on the horizon and a single distant security drone silhouette far off in the sky, tiny and ignorable.' },
+ { n:5, kind:'drive', title:'Breathe', at:'15.5 to 24 s', pos:'600 to 950 m', hold:'8.5 s of nothing', text:'', snd:'Beat comes in, soft and steady. A trail of orbs and one boost pad to feel speed.', feel:'Joy of motion. Nothing to read, nothing to fear.', cam:'No cards. Objective pill reads “Drive on.” only in this gap.', sc:{road:1, sun:1, pad:1},
+   art:'The highway at speed, motion-blurred roadside posts, a glowing amber boost pad on the asphalt ahead and a string of small glowing orbs curving down the lane, joyful and fast.' },
+ { n:6, kind:'drive', title:'Something Blue', at:'24 to 30 s', pos:'950 m (crystal at 1250 m)', hold:'5 s', text:'HINT\nTake the blue crystal.', snd:'A faint ringing tone from far ahead, rising as you near.', feel:'Curiosity. It looks like it wants to be found.', cam:'Crystal glows on the road far ahead, a tall pale beam above it.', sc:{road:1, sun:1, crystal:1, card:'HINT'},
+   art:'A single tall glowing cyan crystal standing on the centre line of the desert highway far ahead, a thin pale beam of light rising from it into the dusk sky, nothing else on the road.' },
+ { n:7, kind:'pick', title:'SEE', at:'about 30 s', pos:'1250 m', hold:'4 s', text:'SEE\nHidden things show while the ring lasts.', snd:'A glass chord, then a held shimmer. The meter bar jumps.', feel:'A door in your head opening. Reward and promise in one.', cam:'Cyan flash, a ring starts draining in the corner. The world gets a faint blue edge.', sc:{road:1, flash:1, ring:1, card:'SEE'},
+   art:'The moment of collecting a crystal: a burst of cyan light and shards filling the lower centre of the frame, the desert highway behind, a thin circular timer ring glowing in the bottom corner.' },
+ { n:8, kind:'sign', title:'Sign One: The World Speaks', at:'insert, about 38 s', pos:'sign at 1800 m', hold:'passes by in 2 s', text:'TUNNEL AHEAD.\nLighting provided by your optimism.', snd:'Wind shifts. A creak of metal as it goes by.', feel:'Gallows humour. The road has a sense of humour and none of it is kind.', cam:'Camera glances at it. It is a prop first and a message second.', sc:{road:1, sign:['TUNNEL AHEAD.','Lighting provided','by your optimism.']},
+   art:'A rusted white roadside sign board on a bent steel post by a desert highway at dusk, three lines of stencil-style lettering area left blank, peeling paint, bullet-dent, long shadow across the road. Leave the board face empty for the game to letter.' },
+ { n:9, kind:'sign', title:'Sign One: The Card', at:'38 to 45 s', pos:'trigger at 1650 m, road clear 450 m', hold:'6.5 s', text:'ROAD SIGN\nTUNNEL AHEAD\nGrab the blue crystal', snd:'The beat ducks. Nothing else.', feel:'Clarity. Now you know what to do.', cam:'White card, green label, top centre. Score and gear strip step aside.', sc:{road:1, card:'ROAD SIGN'},
+   art:'(No art needed: this is the on-screen card over the same highway plate as frame 8.)' },
+ { n:10, kind:'drive', title:'The Mouth', at:'45 to 56 s', pos:'1900 to 2200 m', hold:'11 s, a calm, wide straight', text:'', snd:'A cold draught in the sound. The beat thins.', feel:'Dread, but a polite dread. You can still turn back and will not.', cam:'The tunnel arch grows on the horizon, a second crystal glowing at its lip.', sc:{tunnel:1, crystal:1, road:1},
+   art:'A huge dark tunnel mouth cut into a mesa at the end of a desert highway, a tall pale cyan crystal glowing at its entrance, the dusk sky behind, ominous but inviting.' },
+ { n:11, kind:'sign', title:'Sign Two: The World Speaks', at:'insert, about 55 s', pos:'sign at 2150 m', hold:'passes by in 2 s', text:'ONLY THOSE WHO SEE\nMAY LIGHT THE WAY.', snd:'The draught grows. The sign swings once on its post.', feel:'The joke turns into a rule.', cam:'A stern board by the tunnel mouth. Closer, colder than sign one.', sc:{tunnel:1, sign:['ONLY THOSE WHO SEE','MAY LIGHT','THE WAY.']},
+   art:'A stern rusted white sign board beside a tunnel entrance, the board face left blank for lettering, a single cyan crystal glow reflecting on its dented surface, deep blue tunnel darkness behind.' },
+ { n:12, kind:'sign', title:'Sign Two: The Card', at:'55 to 62 s', pos:'trigger at 2100 m', hold:'6.5 s', text:'ROAD SIGN\nDARK INSIDE\nSEE lights the way', snd:'The beat drops out as you enter the dark.', feel:'The moment you commit.', cam:'Same white card. The road gets dim as the card fades.', sc:{tunnel:1, card:'ROAD SIGN'},
+   art:'(No art needed: on-screen card over a dim tunnel mouth, the same plate as frame 11 darker.)' },
+ { n:13, kind:'set', title:'Inside', at:'62 to 80 s', pos:'2200 to 2650 m', hold:'about 9 s of dim quiet, no words', text:'', snd:'Engine echo. The SEE ring ticks quietly. Drips. A distant, slow hum from the lamp.', feel:'Tension with beauty: a dim blue world you can still read.', cam:'Dim blue exposure, road markings still visible, mountains faintly drawn on the dark.', sc:{inside:1, ring:1},
+   art:'Inside a vast dark desert tunnel at night, a road with pale lane markings fading to blue black, faint cyan light from the driver’s side, long perspective, cold air, a sense of scale and silence.' },
+ { n:14, kind:'set', title:'The Lamp', at:'about 80 s', pos:'2450 m', hold:'6 s, then the light floods', text:'ROUTE ZERO\nDone. Keep driving.', snd:'A warm major chord. The beat returns with the daylight.', feel:'The image to remember. A small light in a huge dark, and you found it.', cam:'A single warm lamp on a ledge to the right glows only while SEE lasts. Take it and the whole tunnel lights.', sc:{inside:1, lamp:1, ring:1},
+   art:'A single warm yellow lamp on a rocky ledge inside a dark blue tunnel, its light pooling on the road and rock wall, a thin cyan glow around the edge of the frame, intimate and quiet, the one warm thing in the image.' },
+ { n:15, kind:'set', title:'The Bonus Road', at:'about 90 s', pos:'2730 m', hold:'5 s per lane card, spaced 400 m', text:'PRIZE\nROCKET LANE: made for you.\n(other lanes: a padlock and a name)', snd:'A bright brass note on your lane. A dull click on the others.', feel:'Possibility. Some of these prizes are yours and some are not, and you can see which at a glance.', cam:'Your gear’s lane has a gold beam and green sign. The others are grey ghosts with a padlock.', sc:{road:1, lanes:1},
+   art:'A wide dusk highway split into several lanes ahead, one lane glowing with a gold light beam and a green sign, the other lanes ghost-grey with small padlock glyphs hovering above them, a sense of choice and invitation.' },
+ { n:16, kind:'pick', title:'The Prize', at:'about 100 s', pos:'3000 to 3085 m', hold:'free', text:'(points pop; no card)', snd:'Gold chimes. Crowd cheer. The meter bar glows.', feel:'Payoff. The biggest hit of the level, with nothing in the way of it.', cam:'Gold drones or crates or the chest, a RUSH if the bar fills.', sc:{road:1, gold:1},
+   art:'Three glowing gold shapes bursting into confetti sparks over a dusk highway, bright and triumphant, warm flare, rays of light, joyful chaos in the centre.' },
+ { n:17, kind:'cine', title:'End Card', at:'about 105 s', pos:'3135 m', hold:'until the player chooses', text:'ROUTE ZERO COMPLETE\nYour lanes · locked lanes · try another gear', snd:'The music relaxes into a long final chord.', feel:'Satisfaction and one small itch: what would the other gear have shown me?', cam:'A single card; buttons for Keep driving and one per other gear.', sc:{black:1, card:'COMPLETE'},
+   art:'A calm wide shot of the highway disappearing into a dusk horizon with four different glowing lane lights on the road, quiet, final, a feeling of the next road being just out of sight.' }
+];
+
+/* ---- tiny scene sketcher: 16:9 plates from a few parts ---- */
+function plate(s) {
+  const W = 640, H = 360, o = [];
+  const px = (x) => (x / 100) * W;
+  if (s.black) { o.push('<rect width="640" height="360" fill="#020305"/>'); }
+  else if (s.inside) {
+    o.push('<defs><linearGradient id="gi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0a1426"/><stop offset="1" stop-color="#16294a"/></linearGradient></defs><rect width="640" height="360" fill="url(#gi)"/>');
+    o.push('<ellipse cx="320" cy="200" rx="120" ry="70" fill="#0d1a30"/><ellipse cx="320" cy="200" rx="60" ry="34" fill="#070d19"/>');
+    o.push('<polygon points="270,200 370,200 640,360 0,360" fill="#1a2a47"/>');
+    [0.1,0.25,0.45,0.7].forEach((t,i)=>{ const y=200+t*160, w=6+t*40; o.push('<rect x="'+(320-w/2)+'" y="'+y+'" width="'+w+'" height="'+(3+t*9)+'" fill="#7fa6d6" opacity=".55"/>'); });
+  } else {
+    const dusk = s.tunnel ? ['#2a1e3a','#e07a3a'] : ['#2a1e3a','#e9803a'];
+    o.push('<defs><linearGradient id="gs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+dusk[0]+'"/><stop offset="1" stop-color="'+dusk[1]+'"/></linearGradient></defs><rect width="640" height="230" fill="url(#gs)"/>');
+    o.push('<rect y="230" width="640" height="130" fill="#6b3d2a"/>');
+    o.push('<polygon points="0,230 90,196 170,230" fill="#4a2b3a"/><polygon points="420,230 520,190 640,230" fill="#4a2b3a"/>');
+    if (s.sun) o.push('<circle cx="320" cy="222" r="34" fill="#ffc98a" opacity=".9"/>');
+    o.push('<polygon points="300,230 340,230 600,360 40,360" fill="#2b2430"/>');
+    o.push('<polygon points="319,232 321,232 330,360 310,360" fill="#d9c9a0" opacity=".7"/>');
+    if (s.tunnel) o.push('<path d="M280 232 Q320 150 360 232 Z" fill="#050912"/><rect x="274" y="228" width="92" height="6" fill="#3a2a3a"/>');
+    if (s.pad) o.push('<polygon points="296,300 344,300 362,330 278,330" fill="#ffb347" opacity=".9"/><circle cx="250" cy="280" r="5" fill="#ffd23a"/><circle cx="270" cy="262" r="4" fill="#ffd23a"/><circle cx="388" cy="276" r="5" fill="#ffd23a"/>');
+    if (s.lanes) { [[205,"#7d8591",0],[270,"#7d8591",0],[345,"#ffd23a",1],[410,"#7d8591",0]].forEach(([x,c,g])=>{ o.push('<rect x="'+(x-3)+'" y="'+(g?120:170)+'" width="'+(g?6:3)+'" height="'+(g?150:100)+'" fill="'+c+'" opacity="'+(g?.85:.4)+'"/>'); if(!g) o.push('<rect x="'+(x-8)+'" y="150" width="16" height="12" rx="2" fill="none" stroke="#b9c0cc" stroke-width="2"/>'); }); }
+    if (s.gold) { [[260,150],[330,120],[400,160]].forEach(([x,y])=>o.push('<polygon points="'+x+','+(y-16)+' '+(x+16)+','+y+' '+x+','+(y+16)+' '+(x-16)+','+y+'" fill="#ffd23a"/>')); }
+    if (s.crystal) o.push('<polygon points="320,160 334,200 320,236 306,200" fill="#38e8ff"/><rect x="318" y="40" width="4" height="124" fill="#38e8ff" opacity=".35"/>');
+    if (s.sign) { const L = s.sign; o.push('<rect x="150" y="230" width="8" height="110" fill="#5b3a2a"/><rect x="60" y="120" width="190" height="110" rx="4" fill="#f4f1e8" stroke="#2a2018" stroke-width="3"/>'); L.forEach((t,i)=>o.push('<text x="155" y="'+(158+i*30)+'" text-anchor="middle" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="'+(L.length>2?20:22)+'" fill="#14181f">'+t.replace(/&/g,'&amp;')+'</text>')); }
+    if (s.flash) o.push('<circle cx="320" cy="250" r="150" fill="#38e8ff" opacity=".25"/><circle cx="320" cy="250" r="70" fill="#a8f6ff" opacity=".5"/>');
+  }
+  if (s.lamp) o.push('<circle cx="500" cy="170" r="70" fill="#ffd23a" opacity=".18"/><circle cx="500" cy="170" r="9" fill="#ffe27a"/><rect x="470" y="180" width="60" height="10" fill="#2a3550"/>');
+  if (s.ring) o.push('<circle cx="52" cy="308" r="22" fill="#0b0e14" stroke="#38e8ff" stroke-opacity=".3" stroke-width="5"/><path d="M52 286 A22 22 0 1 1 30 308" fill="none" stroke="#38e8ff" stroke-width="5" stroke-linecap="round"/>');
+  if (s.card) o.push('<rect x="170" y="22" width="300" height="52" rx="6" fill="'+(s.card.startsWith('ROAD')?'#f4f1e8':'#12182a')+'" stroke="'+(s.card.startsWith('ROAD')?'#1b7f3b':'#7a5cff')+'" stroke-width="3"/><text x="320" y="52" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" font-weight="500" fill="'+(s.card.startsWith('ROAD')?'#14181f':'#e9e4da')+'">'+s.card+'</text>');
+  if (!s.black || s.card) o.push('<polygon points="0,360 70,318 570,318 640,360" fill="#0a0c10" opacity=".92"/>');
+  return '<svg viewBox="0 0 640 360" role="img" aria-label="Rough sketch of frame">' + o.join('') + '</svg>';
+}
+
+const KIND = { cine:['CINEMATIC','k-cine'], drive:['DRIVE','k-drive'], sign:['SIGN','k-sign'], pick:['PICKUP','k-pick'], set:['SET PIECE','k-set'] };
+const root = document.getElementById('frames');
+F.forEach((f) => {
+  const k = KIND[f.kind], prompt = f.art.startsWith('(No art') ? '' : f.art;
+  const d = document.createElement('article'); d.className = 'frame'; d.id = 'f' + f.n;
+  d.innerHTML = '<div class="shot">' + plate(f.sc) + '<span class="num">' + String(f.n).padStart(2, '0') + '</span><span class="kind ' + k[1] + '">' + k[0] + '</span></div>' +
+    '<div class="info"><h3>' + f.title + '</h3><div class="when">' + f.at + ' · ' + f.pos + '</div>' +
+    '<div class="row"><b>Hold</b><span>' + f.hold + '</span></div>' +
+    (f.text ? '<div class="row"><b>On screen</b><span class="onscreen">' + f.text.replace(/\n/g, '<br>') + '</span></div>' : '<div class="row"><b>On screen</b><span style="color:var(--dim)">Nothing. That is the point.</span></div>') +
+    '<div class="row"><b>Sound</b><span>' + f.snd + '</span></div>' +
+    '<div class="row"><b>Feeling</b><span>' + f.feel + '</span></div>' +
+    '<div class="row"><b>Camera</b><span>' + f.cam + '</span></div>' +
+    (prompt ? '<details><summary>ART PROMPT</summary><pre class="prompt" id="p' + f.n + '">' + prompt + '</pre><button class="copy" data-t="p' + f.n + '" data-prefix="1">Copy with master prefix</button></details>' : '<div class="row"><b>Art</b><span style="color:var(--dim)">' + f.art.replace(/[()]/g, '') + '</span></div>') +
+    '</div>';
+  root.appendChild(d);
+});
+
+/* ---- copy buttons ---- */
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button.copy'); if (!b) return;
+  const el = document.getElementById(b.dataset.t), txt = (b.dataset.prefix ? document.getElementById('prefix').textContent + '\n\nFrame: ' : '') + el.textContent;
+  const done = () => { const o = b.textContent; b.textContent = 'Copied'; setTimeout(() => { b.textContent = o; }, 1400); };
+  const sel = () => { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'Selected: press copy'; };
+  try { navigator.clipboard.writeText(txt).then(done, sel); } catch (err) { sel(); }
+});
+
+/* ---- the run on one line (metres, proposed) ---- */
+(function () {
+  const svg = document.getElementById('tl'), M = 3200, X = (m) => 20 + (m / M) * 960, a = [];
+  a.push('<rect x="20" y="64" width="960" height="26" fill="#1b2230"/>');
+  const band = (m0, m1, c, y, h, lab, op) => a.push('<rect x="' + X(m0) + '" y="' + y + '" width="' + (X(m1) - X(m0)) + '" height="' + h + '" fill="' + c + '" opacity="' + (op || 1) + '"/>' + (lab ? '<text x="' + (X(m0) + 3) + '" y="' + (y - 5) + '" font-family="IBM Plex Mono, monospace" font-size="10" fill="#e9e4da">' + lab + '</text>' : ''));
+  band(0, 150, '#000', 64, 26, '', 1);
+  band(150, 475, '#e9b36a', 28, 26, '2 MURMUR');
+  band(475, 600, '#8fd0a6', 64, 26, '3 lights', .9);
+  band(600, 775, '#e9b36a', 28, 26, '4 TITLE');
+  band(775, 950, '#8fd0a6', 64, 26, '5 breathe', .9);
+  band(950, 1225, '#e9b36a', 28, 26, '6 HINT');
+  band(1225, 1350, '#38e8ff', 64, 26, '7 SEE');
+  band(1350, 1650, '#8fd0a6', 64, 26, '', .9);
+  band(1650, 2000, '#f4f1e8', 28, 26, '9 SIGN CARD');
+  band(1800, 1830, '#f4f1e8', 98, 14, '8 sign');
+  band(1830, 2200, '#8fd0a6', 64, 26, '10 mouth', .9);
+  band(2100, 2425, '#f4f1e8', 28, 26, '12 SIGN CARD');
+  band(2150, 2180, '#f4f1e8', 98, 14, '11 sign');
+  band(2200, 2650, '#16294a', 64, 26, '13 TUNNEL');
+  band(2450, 2480, '#ffd23a', 98, 14, '14 lamp');
+  band(2650, 3150, '#e9803a', 64, 26, '15-16 BONUS ROAD', .85);
+  band(3135, 3200, '#e9e4da', 28, 26, '17', 1);
+  for (let m = 0; m <= 3200; m += 400) a.push('<line x1="' + X(m) + '" y1="118" x2="' + X(m) + '" y2="126" stroke="#9aa4b5"/><text x="' + X(m) + '" y="140" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#9aa4b5">' + m + ' m</text>');
+  svg.innerHTML = a.join('');
+})();
+</script>

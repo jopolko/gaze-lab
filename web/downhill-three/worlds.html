@@ -32,7 +32,7 @@
   <p class="sub">Tap a world to ride it. Each one is its own place: sky, ground, road, trees, horizon and weather.</p>
   <div class="opts">
     <label><input type="checkbox" id="head"> Steer with my head (camera)</label>
-    <label><input type="checkbox" id="noshare" checked> Don't send telemetry</label>
+    <label><input type="checkbox" id="noshare"> Share anonymous steering numbers (opt-in)</label>
   </div>
 
   <h2>Worlds (winding trail, 3.2 km)</h2>
@@ -93,7 +93,7 @@
   ];
   const head = document.getElementById('head'), noshare = document.getElementById('noshare');
   try { head.checked = matchMedia('(pointer: coarse)').matches; } catch (e) { }
-  function href(w) { return 'gv.html?play' + (head.checked ? '&head' : '') + (noshare.checked ? '&noshare' : '') + '&course=' + w.id + (w.row ? '&row=' + w.row : ''); }
+  function href(w) { return 'gv.html?play' + (head.checked ? '&head' : '') + (noshare.checked ? '&share' : '') + '&course=' + w.id + (w.row ? '&row=' + w.row : ''); }
   function build(list, el) {
     el.innerHTML = '';
     for (const w of list) {
