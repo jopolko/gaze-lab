@@ -18,6 +18,7 @@ try {
   ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id && wait.has(d.id)) { wait.get(d.id)(d); wait.delete(d.id); } else if (d.method === 'Runtime.exceptionThrown') errors.push(d.params.exceptionDetails.exception?.description || d.params.exceptionDetails.text); else if (d.method === 'Runtime.consoleAPICalled' && (d.params.type === 'error' || d.params.type === 'warning')) errors.push(d.params.type + ': ' + d.params.args.map((a) => a.value || a.description).join(' ')); };
   await send('Runtime.enable'); await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: +(process.env.VW || 924), height: +(process.env.VH || 412), deviceScaleFactor: 1, mobile: false });
+  if (process.env.THROTTLE) { const [down, lat] = process.env.THROTTLE.split(',').map(Number); await send('Network.enable'); await send('Network.setCacheDisabled', { cacheDisabled: true }); await send('Network.emulateNetworkConditions', { offline: false, latency: lat || 80, downloadThroughput: down * 1024 / 8, uploadThroughput: 1e6 }); }          // THROTTLE=kbps,latency: a slow connection, cache off
   await send('Page.navigate', { url });
   let ok = false; for (let i = 0; i < 90; i++) { await sleep(1000); try { if (await ev(process.env.READY || '!!(window.__G && window.__G.PH && window.__G.LV)')) { ok = true; break; } } catch { } }
   if (!ok) console.log('did not load'); else { await sleep(2500);

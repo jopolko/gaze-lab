@@ -189,8 +189,8 @@
   const LVN = { desert: 'ROUTE ZERO', alpine: 'THE SAFE PEAKS', candy: 'SUGARFALL', tunnel: 'THE UNDERTOW', synthwave: 'NEON ACCORD', matrix: 'COLD RACK', egypt: 'TOMB OF THE OLD SERVERS', psychedelic: 'THE OPEN CHANNEL' };
   const lvName = Q.has('tutorial') ? 'TRAINING' : (LVN[lvl] || lvl.toUpperCase()), lvEp = Q.has('story') ? 'EPISODE 1' : '';
   el.innerHTML = '<div class="k">AFTERGLOW</div><div class="lv">' + lvName + '</div>' + (lvEp ? '<div class="ep">' + lvEp + '</div>' : '') + '<canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div>';
-  const mount = () => { (document.head || document.documentElement).appendChild(css); document.body.appendChild(el); };
-  if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
+  const mount = () => { (document.head || document.documentElement).appendChild(css); (document.body || document.documentElement).appendChild(el); };
+  mount(); if (!document.body) document.addEventListener('DOMContentLoaded', () => { if (el.parentNode !== document.body) document.body.appendChild(el); });          /* (owner 2026-11-27: up from the first moment, before the big engine files download) */
   const cv = el.querySelector('canvas'), cx = cv.getContext('2d'), stEl = el.querySelector('.st span'), pcEl = el.querySelector('.pc');
 
   const L = { v: 0, target: .04, done: false, t0: performance.now(), lastLine: 0 };
@@ -219,7 +219,7 @@
     if (!el.isConnected && L.done) return;
     const t = (now - L.t0) / 1000;
     // the meter eases toward its target, and creeps on its own (never stalls, never passes the target by much)
-    if (!L.done) { const el = now - L.t0; if (M.est > 0) L.target = Math.max(L.target, Math.min(.97, el / M.est)); else L.target = Math.min(.97, L.target + .0004); }          /* (with an estimate the bar moves with the clock; without one it creeps) */
+    if (!L.done) { const el = now - L.t0; L.target = Math.min(Math.max(L.target, M.raw) + .00015, Math.max(L.target, Math.min(.97, M.raw + .06)));          /* (creeps only a little past the last real step, so it never runs ahead of the work) */ }          /* (with an estimate the bar moves with the clock; without one it creeps) */
     L.v += (L.target - L.v) * Math.min(1, (L.done ? .16 : .12));
     if (now - L.lastLine > (L.done ? 1e9 : hold)) { L.lastLine = now; if (t > .5) setLine(); }
     const dpr = Math.min(2, devicePixelRatio || 1), w = cv.clientWidth, h = cv.clientHeight;
@@ -252,8 +252,14 @@
   requestAnimationFrame(frame);
   // too long: say so plainly, under the jokes
   setTimeout(() => { if (!L.done && el.isConnected) { const n = document.createElement('div'); n.className = 'pc'; n.textContent = 'Still loading. A slow connection can take a minute.'; el.appendChild(n); } }, 40000);
-  window.__LDR = { el, to(v) { if (L.done || !(v > M.raw)) return; M.raw = v; const el = performance.now() - L.t0, f = timeAt(v); M.pts.push([v, el]); if (f > .03) M.est = el / f; L.target = Math.max(L.target, Math.min(.97, f)); },
+  window.__LDR = { el, to(v) { if (L.done || !(v > M.raw)) return; M.raw = v; M.pts.push([v, performance.now() - L.t0]); L.target = Math.max(L.target, Math.min(.97, v)); },          /* (owner 2026-11-27: plain progress, no learned timing curve: it raced to 97% and waited there on slow connections) */
     done() { if (L.done) return; L.done = true; L.target = 1; stEl.textContent = 'Locked on.';
       try { const T = performance.now() - L.t0; if (T > 300 && M.pts.length) { const c = [[0, 0]]; for (const [v, t] of M.pts) { const f = t / T, g = LC ? .5 * f + .5 * timeAt(v) : f; if (v > c[c.length - 1][0] && v < 1) c.push([+v.toFixed(3), +Math.max(c[c.length - 1][1], Math.min(1, g)).toFixed(3)]); } c.push([1, 1]); localStorage.setItem('dl_ldrcurve', JSON.stringify({ c, T: Math.round(LC ? .5 * T + .5 * LC.T : T) })); } } catch (e) { } },          /* (learn this load's timing for the next one; half-weight with the last, so one slow load doesn't skew it) */
     lines: LINES };
+  /* REAL PROGRESS (owner 2026-11-27): the bar also follows the bytes actually arriving. Downloading is about 70% of the wait; the expected total is
+     what this page downloaded last time on this device (5 MB the first time). The milestones from the page still push it on; whichever is further wins. */
+  try { const KEY = 'dl_ldrbytes_' + location.pathname.split('/').pop(), exp = (() => { try { return +localStorage.getItem(KEY) || 5.2e6; } catch (e) { return 5.2e6; } })();
+    let got = 0; const add = (list) => { for (const e of list) got += e.transferSize || e.encodedBodySize || 0; if (!L.done) window.__LDR.to(Math.min(.7, .7 * got / exp)); };
+    add(performance.getEntriesByType('resource')); const po = new PerformanceObserver((l) => add(l.getEntries())); po.observe({ type: 'resource', buffered: false });
+    const d0 = window.__LDR.done; window.__LDR.done = function () { try { if (got > 5e5) localStorage.setItem(KEY, String(Math.round(got))); } catch (e) { } try { po.disconnect(); } catch (e) { } return d0.apply(this, arguments); }; } catch (e) { }
 })();
