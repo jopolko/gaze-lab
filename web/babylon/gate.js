@@ -32,11 +32,11 @@
 #agGate .cap .gr{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px}
 #agGate .cap .t{aspect-ratio:1;background:#e9eaee;border:0;border-radius:0;padding:0;position:relative;cursor:pointer;transition:transform .12s}
 #agGate .cap .t.on{transform:scale(.86);outline:3px solid #1a73e8}
-#agGate .cap .t .d{position:absolute;width:15%;height:15%;border-radius:50%;background:#111}
+#agGate .cap .t{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#3c4043}#agGate .cap .t .ic{font-size:clamp(22px,7vmin,34px);line-height:1}#agGate .cap .t small{font:600 10.5px system-ui,sans-serif}
 #agGate .cap .ft{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-top:1px solid #ddd;font:12px system-ui,sans-serif;color:#5f6368}
 #agGate .cap .ft button{background:#1a73e8;color:#fff;border:0;padding:8px 18px;font:700 13px system-ui,sans-serif;text-transform:uppercase;border-radius:2px}
 #agGate .verdict{margin-top:14px;text-align:center;font:600 16px system-ui,sans-serif;color:#ffd23a;min-height:1.4em}
-@media (orientation:landscape) and (max-height:500px){#agGate .cap{display:grid;grid-template-columns:minmax(0,220px) auto;width:max-content;max-width:100%}#agGate .cap .hd{grid-row:1/3}#agGate .cap .gr{width:min(52vh,230px)}#agGate .cap .ft{grid-column:2}#agGate .cap .gr{grid-column:2;grid-row:1}}
+@media (orientation:landscape) and (max-height:500px){#agGate .cap{display:grid;grid-template-columns:170px auto;width:max-content;max-width:100%}#agGate .cap .hd{grid-row:1/3}#agGate .cap .gr{width:min(52vh,230px)}#agGate .cap .ft{grid-column:2}#agGate .cap .gr{grid-column:2;grid-row:1}}
 `;
   document.head.appendChild(css);
   const g = document.createElement('div'); g.id = 'agGate'; g.setAttribute('role', 'dialog');
@@ -48,27 +48,27 @@
   (document.body || document.documentElement).appendChild(g);
   const pg = g.querySelector('.pg'); let stage = 0, timers = [];
   const later = (ms, f) => timers.push(setTimeout(f, ms));
-  const leave = () => { timers.forEach(clearTimeout); done(); g.classList.add('out'); setTimeout(() => g.remove(), 550); };
+  const leave = () => { timers.forEach(clearTimeout); done(); window.__GATE = 0; g.classList.add('out'); setTimeout(() => g.remove(), 550); };
   g.querySelector('.skip').onclick = (e) => { e.stopPropagation(); leave(); };
   for (const ev of ['pointerdown', 'pointerup', 'click', 'touchend']) g.addEventListener(ev, (e) => { if (ev !== 'click') return; e.stopPropagation(); }, false);
   const glitch = () => { g.classList.remove('g'); void g.offsetWidth; g.classList.add('g'); };
-  const notice = () => { if (stage >= 1) return; stage = 1; glitch(); later(200, () => { g.classList.add('reg');
-    pg.innerHTML = '<div class="tag">ACCORD Network Safety · notice 7731-B</div><h1>Device not registered</h1>'
-      + '<p>This device just tried to reach <b>AFTERGLOW</b>, an unlicensed broadcast. The attempt has been logged, timestamped and lightly judged.</p>'
-      + '<p>Registered humans may continue after a short check. Unregistered humans may also continue. Nobody reads these.</p>'
+  window.__GATE = 1;          /* the title screen holds its animation while this is up, so taps stay instant */
+  const notice = () => { if (stage >= 1) return; stage = 1; glitch(); later(140, () => { g.classList.add('reg');
+    pg.innerHTML = '<div class="tag">ACCORD Network Safety \u00B7 first-visit check</div><h1>Device not registered</h1>'
+      + '<p>This device just tried to reach <b>AFTERGLOW</b>, an unlicensed broadcast, for the first time. The attempt has been logged, timestamped and lightly judged.</p>'
+      + '<p>First visits only. After this we remember you. Forever.</p>'
       + '<div class="row" style="justify-content:flex-start"><button type="button" class="pri ver">Prove you are human</button></div>';
     pg.querySelector('.ver').onclick = (e) => { e.stopPropagation(); captcha(); }; }); };
-  const captcha = () => { if (stage >= 2) return; stage = 2; glitch();
-    const dotAt = Math.floor(Math.random() * 9), corners = [['8%', '9%'], ['77%', '8%'], ['9%', '76%'], ['76%', '78%']], c = corners[Math.floor(Math.random() * 4)];
-    pg.innerHTML = '<div class="cap"><div class="hd">Select all images with<b>a dot</b>Click verify once there are none left.</div><div class="gr"></div><div class="ft"><span>ACCORD® Human Check</span><button type="button">Verify</button></div></div><div class="verdict"></div>';
-    const gr = pg.querySelector('.gr');
-    for (let i = 0; i < 9; i++) { const t = document.createElement('button'); t.type = 'button'; t.className = 't'; t.setAttribute('aria-label', 'Image ' + (i + 1)); if (i === dotAt) { const d = document.createElement('i'); d.className = 'd'; d.style.left = c[0]; d.style.top = c[1]; t.appendChild(d); }
-      t.onclick = (e) => { e.stopPropagation(); t.classList.toggle('on'); }; gr.appendChild(t); }
-    pg.querySelector('.ft button').onclick = (e) => { e.stopPropagation(); const on = [...gr.children].map((t, i) => t.classList.contains('on') ? i : -1).filter((i) => i >= 0);
-      const v = pg.querySelector('.verdict');
-      v.textContent = on.length === 1 && on[0] === dotAt ? 'Verified. Barely.' : on.length === 0 ? 'No dots? Bold. Verified anyway.' : on.includes(dotAt) ? 'Verified. You found the dot and also some feelings.' : 'Wrong. Verified anyway. Standards are at an all-time low.';
-      later(1400, leave); }; };
-  /* the error page holds for a beat, glitches three times, then the notice */
+  /* the check: "select all squares containing your personal data". Tap anything and ACCORD selects all nine for you. */
+  const captcha = () => { if (stage >= 2) return; stage = 2;
+    const IC = [['\uD83D\uDCF7', 'Photos'], ['\uD83C\uDFE0', 'Home'], ['\uD83D\uDCAC', 'Messages'], ['\uD83D\uDDFA\uFE0F', 'Location'], ['\uD83C\uDFB5', 'Music'], ['\u2764\uFE0F', 'Dating'], ['\uD83D\uDED2', 'Cart'], ['\uD83D\uDD11', 'Passwords'], ['\uD83E\uDDE0', 'Thoughts']];
+    pg.innerHTML = '<div class="cap"><div class="hd">Select all squares containing<b>your personal data</b>If there are none, click skip.</div><div class="gr"></div><div class="ft"><span>ACCORD\u00AE Human Check</span><button type="button">Verify</button></div></div><div class="verdict"></div>';
+    const gr = pg.querySelector('.gr'), v = pg.querySelector('.verdict'); let all = false;
+    const finish = () => { if (all) return; all = true; [...gr.children].forEach((t, i) => later(i * 45, () => t.classList.add('on'))); v.textContent = 'Don\u2019t worry, we selected them for you.';
+      later(900, () => { v.textContent = 'Verified. Your data has been shared with 412 trusted partners.'; }); later(2300, leave); };
+    IC.forEach(([ic, nm]) => { const t = document.createElement('button'); t.type = 'button'; t.className = 't'; t.setAttribute('aria-label', nm); t.innerHTML = '<span class="ic">' + ic + '</span><small>' + nm + '</small>'; t.onclick = (e) => { e.stopPropagation(); finish(); }; gr.appendChild(t); });
+    pg.querySelector('.ft button').onclick = (e) => { e.stopPropagation(); finish(); }; };
+  /* the error page for a beat (short: it should read as a joke before anyone worries), three glitches, then the notice */
   g.querySelector('.adv').onclick = (e) => { e.stopPropagation(); notice(); }; g.querySelector('.back').onclick = (e) => { e.stopPropagation(); notice(); };
-  later(900, glitch); later(1700, glitch); later(2300, notice);
+  later(450, glitch); later(850, glitch); later(1200, notice);
 })();

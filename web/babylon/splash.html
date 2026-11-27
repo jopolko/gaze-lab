@@ -183,7 +183,7 @@ window.DAILY.then((D) => { if (!D) return; const L = D.launch || []; let line = 
   <div class="grow"></div>
   <div id="strain"></div>
   <div id="tap" style="cursor:pointer">TAP TO TUNE IN</div>
-  <div id="hint"><a id="tgBtn" href="guide.html?back=splash.html" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()">&#9670; Trip Guide</a><span class="hp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="4" height="7" rx="1.5" fill="currentColor"/><rect x="17" y="13" width="4" height="7" rx="1.5" fill="currentColor"/></svg>Best with headphones</span><span class="rot"><svg class="ph" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/></svg>Turn your phone sideways</span></div>
+  <div id="hint"><a id="tgBtn" href="guide.html?back=splash.html" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation()">&#9670; Brochure</a><span class="hp"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="4" height="7" rx="1.5" fill="currentColor"/><rect x="17" y="13" width="4" height="7" rx="1.5" fill="currentColor"/></svg>Best with headphones</span><span class="rot"><svg class="ph" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="18" r="1" fill="currentColor"/></svg>Turn your phone sideways</span></div>
   <div id="ticker" aria-hidden="true"><div></div></div><script>/* THE TRAIL: what the authorities know. Where you were last seen and where they expect you next (so a returning player can read where they are),
    a heat level from how far you've got (0 new, 1 Route Zero done, 2 two to four worlds, 3 five or more), and how long you've been gone. */
 window.__PROG = (() => { const ORD = ['routezero', 'alpine', 'candy', 'tunnel', 'synthwave', 'matrix', 'egypt', 'psychedelic'], NM = { routezero: 'Route Zero', desert: 'Route Zero', alpine: 'The Safe Peaks', candy: 'Sugarfall', tunnel: 'The Undertow', synthwave: 'Neon Accord', matrix: 'Cold Rack', egypt: 'Tomb of the Old Servers', psychedelic: 'The Open Channel' };
@@ -589,7 +589,7 @@ const SPIN = { yaw: 0, pitch: .5, vy: 0, held: 0 };
 function spinStep(dt, t) { if (SPIN.held > 0) { SPIN.held -= dt; SPIN.yaw += SPIN.vy * dt; SPIN.vy *= Math.exp(-dt * 2.2); return; }
   SPIN.yaw += dt * .9; SPIN.pitch += (.5 + Math.sin(t * .45) * .55 - SPIN.pitch) * Math.min(1, dt * .8); }
 let errs = 0;
-function frame(now) { requestAnimationFrame(frame); const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now; spinStep(dt, t); if (SL.anim) SL.anim(now);          /* (next frame booked first: one bad frame never stops it) */
+function frame(now) { requestAnimationFrame(frame); if (window.__GATE) return; const t = (now - t0) / 1000, dt = Math.min(.1, (now - last) / 1000); last = now; spinStep(dt, t); if (SL.anim) SL.anim(now);          /* (next frame booked first: one bad frame never stops it) */
   sT += dt; if (sT > 6.5 && !drag && !SL.anim) { sT = 0; swipeTo(1); }          /* (the next strain slides in by itself too) */
   try { draw(t, dt); dial(t); } catch (e) { if (errs++ < 3) console.error('splash', e); } }
 addEventListener('resize', () => { size(); });
