@@ -276,6 +276,10 @@ void main() {
       c = mix(c, rr, uFx.y); }
     if (uTune.w > .001) { vec3 sd = normalize(vec3(.12, .28, -1.)); float a = acos(clamp(dot(normalize(vS), sd), -1., 1.)), m = 1. - smoothstep(0., .9, a), l = dot(c, vec3(.3, .5, .2));
       c = mix(c, uTune.rgb * (.2 + 1.6 * l) + uTune.rgb * m * .45, uTune.w * (.6 + .3 * m)); }          /* the spectrum: the whole sky and its sun in that light */
+    { float cal = 1. - smoothstep(.0, .55, uInt.z); if (cal > .001) {          /* (owner 2026-11-27: low on the dial, a calm sunset; the stripes rise out of it as you turn it up) */
+        vec3 n = normalize(vS); float h = clamp(n.y * 1.6, 0., 1.); vec3 sd = normalize(vec3(.12, .28, -1.)); float sa = acos(clamp(dot(n, sd), -1., 1.));
+        vec3 calm = (mix(vec3(1.25, .62, .3), vec3(.42, .2, .62), pow(h, .55)) + vec3(1.2, .85, .4) * (1. - smoothstep(.0, .6, sa)) * .9) * 1.55;
+        c = mix(c, calm, cal * .92); } }
     gl_FragColor = vec4(paint(c), 1.);
     return; }
   float tt = uDrive.z / max(-vP.y, 1e-4), zw = uDrive.x + tt, X = (vP.x - .12) * tt + uDrive.y, aa = tt * uDrive.w * 1.3 + .015;
