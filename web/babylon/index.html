@@ -936,17 +936,21 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   function step(dt) {
     PH.zPrev = PH.z; PH.xPrev = PH.x; PH.hurt = Math.max(PH.hurt - dt, 0); PH.boost_t = Math.max(PH.boost_t - dt, 0); const prog = Math.min(Math.max(-PH.z, 0) / 3500, 1);
     const hs = headCond(headSteer, dt); let sIn = clamp(K.r - K.l + hs + padSteer + touchSteer, -1, 1); gazeOrbStep(dt, sIn);
+    /* CLEAN INPUT (owner 2026-11-26: a friend found it hard to steer; measured: a right press drifted the wrong way for 0.4 s). Keys, the joystick and a gamepad are
+       exact, so they get tight steering: the lane-hold assist only nudges (it never cancels the player), and the wheels reach full lock in about 0.2 s.
+       Head steering keeps its smoothing and its help. */
+    const clean = Math.abs(K.r - K.l) + Math.abs(touchSteer) + Math.abs(padSteer) > .04;
     // lane hold: the smallest shift that clears the trees and rocks coming up, and a nudge toward one is cancelled
     if (PH.grounded) { const spd = Math.max(Math.hypot(PH.vx, PH.vz), 20), look = Math.min(90, spd * 1.15), cx = Math.floor(PH.x / 8), cz = Math.floor(PH.z / 8), reach = Math.ceil(look / 8) + 1; let push = 0, block = 0;
       for (let ci = -2; ci <= 2; ci++) for (let cj = -reach; cj <= 1; cj++) { const a = OG.get((cx + ci) + ',' + (cz + cj)); if (!a) continue;
         for (const o of a) { const dzz = PH.z - o.z; if (dzz < -1 || dzz > look) continue; const tt = Math.max(dzz, 0) / spd, xp = PH.x + PH.vx * tt * .8, clr = o.r + C.SLED_R + 2.2, d = xp - o.x; if (Math.abs(d) >= clr) continue;
           const side = Math.sign(d) || Math.sign(PH.x - o.x) || (o.x > 0 ? -1 : 1), urg = Math.max(.25, 1 - dzz / look), need = Math.min(1, (clr - Math.abs(d)) / 3); push += side * need * urg * 1.4; if (Math.sign(sIn) === -side && Math.abs(sIn) > .05) block = Math.max(block, urg); } }
-      if (push) sIn = clamp(sIn * (1 - .85 * block) + clamp(push, -1.1, 1.1), -1, 1); }
+      if (push) sIn = clean ? clamp(sIn + clamp(push, -1.1, 1.1) * .25, -1, 1) : clamp(sIn * (1 - .85 * block) + clamp(push, -1.1, 1.1), -1, 1); }
     { const ex = Math.abs(PH.x), WHz = WHAt(PH.z), edge = sstep(WHz - 16, WHz - 4, ex); sIn = clamp(sIn - Math.sign(PH.x) * edge * .9, -1, 1); }          // the banked walls turn you back
     if (PH.vlock !== null && PH.grounded) sIn = clamp(sIn + clamp((PH.vlock - PH.x) / 12, -1, 1) * .35 * (1 - sstep(.08, .35, Math.abs(headSteer + K.r - K.l))), -1, 1);
-    let steer = sIn; if (Math.abs(sIn) < .3) steer = clamp(steer - .1 * clamp(PH.vx / (10 * SPK), -1, 1), -1, 1);
+    let steer = sIn; if (Math.abs(sIn) < .3 && !clean) steer = clamp(steer - .1 * clamp(PH.vx / (10 * SPK), -1, 1), -1, 1);
     const spd01 = clamp((Math.hypot(PH.vx, PH.vz) / SPK - 14) / 40, 0, 1);
-    if (PH.grounded) { const maxRate = 2.6 - 1.1 * spd01; /* the wheels cannot be flung: full lock takes about .4 s slow and .7 s fast */ PH.st = PH.st === undefined ? steer : PH.st + clamp(steer - PH.st, -maxRate * dt, maxRate * dt); steer = PH.st; } else PH.st = PH.steer;
+    if (PH.grounded) { const maxRate = clean ? 6 - 1.6 * spd01 : 2.6 - 1.1 * spd01; /* the wheels cannot be flung: full lock takes about .4 s slow and .7 s fast */ PH.st = PH.st === undefined ? steer : PH.st + clamp(steer - PH.st, -maxRate * dt, maxRate * dt); steer = PH.st; } else PH.st = PH.steer;
     const wFast = 7 * STK, dSt = Math.abs(steer - PH.steer), kSt = clamp((dSt - .05) / .3, 0, 1); let w = 9 + (wFast - 9) * kSt;
     if (PH.grounded) w = w * (1 - .15 * spd01) + (1 - sstep(.06, .22, Math.abs(steer))) * 7 * spd01;          /* tyres held straight by the movement and the weight: the faster you go, the more firmly the straight-ahead holds, and the softer a turning wheel eases */          // the adaptive spring: head jitter meets a soft spring, a deliberate turn a stiff one
     { const ns = Math.max(1, Math.ceil(w * dt / .25)), h = dt / ns; for (let q = 0; q < ns; q++) { const acc = w * w * (steer - PH.steer) - 2 * w * PH.sv; PH.sv += acc * h; PH.steer = clamp(PH.steer + PH.sv * h, -1, 1); } } steer = PH.steer;
