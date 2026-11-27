@@ -545,7 +545,7 @@ const PIMG = {};
 function plantImg(name) { if (PIMG[name] !== undefined) return PIMG[name]; const svg = window.AGPLANTS && AGPLANTS.svg(name); if (!svg) return (PIMG[name] = null);
   const im = new Image(); im.decoding = 'async'; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg.replace('<svg ', '<svg width="512" height="512" ')); PIMG[name] = im; return im; }
 const PSHEET = {};
-function plantSheet(name) { if (PSHEET[name] !== undefined) return PSHEET[name]; const im = new Image(); im.decoding = 'async'; im.src = 'art/plants/' + name.replace(/ /g, '-') + '-1.webp?v=1'; return (PSHEET[name] = im); }
+function plantSheet(name) { if (PSHEET[name] !== undefined) return PSHEET[name]; const im = new Image(); im.decoding = 'async'; im.src = 'art/plants/' + name.replace(/ /g, '-') + '-1.webp?v=2'; return (PSHEET[name] = im); }
 /* the 3D plant (owner 2026-11-27): a turntable rendered from plants3d.js, rocking gently either side so the face stays in view, glowing in the strain's colour */
 /* THE PLANT AS A HOLOGRAM (owner 2026-11-27): projected from a small emitter, additive light so it needs no backdrop (the same treatment works on the road in game).
    Baked once per plant and colour (tint, scan lines, a cyan/red fringe); per frame only a light cone, the sprite, one scan band and a rare glitch. No blur. */
@@ -672,7 +672,7 @@ const ui = document.getElementById('ui'); let drag = null;
    that way while the next strain slides in from the other side (left: the next one, right: the one before); a short swipe springs back.
    A drag that starts ON the molecule turns it in 3D instead. Only a tap on TAP TO TUNE IN starts (owner 2026-11-26: a missed touch anywhere else does nothing). */
 const MOL = { x: 0, y: 0, r: 60, fit: 0 }, SL = { off: 0, anim: null };
-function slideApply() { strainEl.style.translate = SL.off.toFixed(1) + 'px 0';          /* (its own offset: margins and transforms stay free for the centring) */ strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
+function slideApply() { const o = SL.off; strainEl.style.translate = Math.abs(o) < .5 ? '' : (strainEl.classList.contains('side') ? 'calc(-50% + ' + o.toFixed(1) + 'px) 0' : o.toFixed(1) + 'px 0');          /* (adds to the centring offset, never replaces it; cleared at rest) */          /* (its own offset: margins and transforms stay free for the centring) */ strainEl.style.opacity = String(Math.max(0, 1 - Math.abs(SL.off) / (W * .6))); }
 function slideTo(target, ms, then) { const from = SL.off, t0 = performance.now(); SL.anim = (now) => { const u = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - u, 3); SL.off = from + (target - from) * e; slideApply(); if (u >= 1) { SL.anim = null; if (then) then(); } }; }
 function stepStrain(d) { si = (si + d + KEYS.length) % KEYS.length; sT = 1; showStrain(); }
 function swipeTo(d) { slideTo(-d * W * .7, 170, () => { stepStrain(d); SL.off = d * W * .7; slideApply(); slideTo(0, 260); }); }

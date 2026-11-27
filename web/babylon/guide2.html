@@ -291,7 +291,7 @@ function links(o) { const L = []; const e = o.e;
   return L; }
 const lkHtml = (L) => L.length ? '<span class="lk">' + L.map(([c, t]) => '<i class="' + c + '">' + esc(t) + '</i>').join('') + '</span>' : '';
 const row = (th, b, span, soon, cls, o) => '<button type="button" class="it' + (cls ? ' ' + cls : '') + '" data-k="' + reg(o) + '">' + th + '<div><b>' + esc(b) + (soon ? SOON : '') + '</b>' + (span ? '<span>' + esc(span) + '</span>' : '') + (o.e && o.e.threat ? '<small>Threat ' + pips(o.e.threat) + '</small>' : '') + lkHtml(links(o).filter((x) => x[1] !== 'OPENING SOON')) + '</div><i class="go">\u203A</i></button>';
-const PLANTPIC = (plant) => 'art/plants/' + plant.replace(/ /g, '-') + '-1.webp';
+const PLANTPIC = (plant) => 'art/plants/' + plant.replace(/ /g, '-') + '-1.webp?v=2';
 const thPlant = (plant) => '<div class="th" style="background:#120b04 url(\'' + PLANTPIC(plant) + '\') no-repeat;background-size:cover;background-position:center"></div>';
 const thCrop = (src, x, y, z) => '<div class="th" style="background:#120b04 url(\'' + src + '\') no-repeat;background-size:' + (z || 300) + '% auto;background-position:' + x + '% ' + y + '%"></div>';
 /* locals and hazards: a crop of their destination's story set, aimed at the part that shows them */
