@@ -1,153 +1,166 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Afterglow · Trip Guide</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Special+Elite&display=swap">
 <style>
-/* THE TRIP GUIDE (owner 2026-11-27): a post-apocalyptic travel brochure that talks visitors through everything out there, putting a brave face on all of it.
-   Phone first: tabs along the top, cards with a moving preview, a local tip that tells the truth, and a live demo one tap away (the demo has a Back to the Guide button). */
-:root { --bg:#06070d; --card:#0e1120; --line:rgba(56,232,255,.2); --ink:#f3efe4; --dim:#a9b2c4; --c:#38e8ff; --gold:#ffd23a; }
+/* THE TRIP GUIDE (owner 2026-11-27): half travel brochure, half menu. A worn, creased, stained post-apocalyptic brochure: every attraction is one picture and one line,
+   grouped by where it lives; tap a picture for the encounter, then Back puts you exactly where you were, and Drive is always one tap away. */
+:root { --paper:#e8dcc0; --paper2:#d9c9a6; --ink:#1d1712; --ink2:#4a3f33; --rust:#a4471f; --neon:#0f8fa8; --gold:#b88a12; --shade:rgba(60,40,20,.18); }
 * { box-sizing:border-box; }
-html, body { margin:0; background:var(--bg); color:var(--ink); font:500 16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; -webkit-tap-highlight-color:transparent; }
-body { padding:0 max(14px,env(safe-area-inset-right)) max(28px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); }
-.cover { position:relative; margin:0 calc(-1 * max(14px,env(safe-area-inset-left))); padding:max(18px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-left)) 16px; background:radial-gradient(120% 90% at 70% 0%,rgba(255,176,32,.18),transparent 60%),radial-gradient(100% 80% at 0% 100%,rgba(56,232,255,.16),transparent 60%),#090b14; border-bottom:1px solid var(--line); }
-.cover .k { font:700 12px/1 "Barlow Condensed",sans-serif; letter-spacing:.34em; color:#9fe8ff; }
-.cover h1 { margin:.15em 0 .1em; font:400 clamp(46px,13vw,88px)/.88 "Bebas Neue",Impact,sans-serif; letter-spacing:.06em; text-shadow:0 0 30px rgba(255,176,32,.35); }
-.cover p { margin:0; color:var(--dim); font:italic 16px/1.4 Georgia,serif; max-width:60ch; }
-.cover .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
-.btn { display:inline-flex; align-items:center; gap:6px; text-decoration:none; color:#06101f; background:var(--c); font:700 15px/1 "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; padding:.75em 1em; border-radius:10px; border:0; }
-.btn.ghost { background:rgba(12,16,27,.9); color:var(--ink); border:1px solid var(--line); }
-nav.tabs { position:sticky; top:0; z-index:5; display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding:10px 0 8px; margin:0 calc(-1 * max(14px,env(safe-area-inset-left))); padding-left:max(14px,env(safe-area-inset-left)); padding-right:max(14px,env(safe-area-inset-right)); background:linear-gradient(var(--bg) 80%,rgba(6,7,13,0)); }
-nav.tabs::-webkit-scrollbar { display:none; }
-nav.tabs button { flex:0 0 auto; font:700 14px/1 "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); background:var(--card); border:1px solid var(--line); border-radius:999px; padding:.65em 1em; }
-nav.tabs button.on { color:#06101f; background:var(--tc,var(--c)); border-color:transparent; }
-section.pg { display:none; } section.pg.on { display:block; }
-.intro { color:var(--dim); font:italic 15.5px/1.45 Georgia,serif; margin:4px 0 12px; max-width:62ch; }
-.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; display:grid; grid-template-rows:auto 1fr; scroll-margin-top:64px; }
-.card.hl { box-shadow:0 0 0 2px var(--tc,var(--c)); }
-.pv { position:relative; aspect-ratio:2/1; background:#04050a center/cover no-repeat; }
-.pv img { width:100%; height:100%; object-fit:cover; display:block; }
-.pv .tag { position:absolute; left:8px; top:8px; font:700 11px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; color:#06101f; background:var(--tc,var(--c)); padding:4px 6px; border-radius:4px; }
-.pv .ea { position:absolute; right:8px; top:8px; font:700 11px/1 "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); background:rgba(6,7,13,.8); border:1px solid var(--gold); padding:4px 6px; border-radius:4px; }
-.pv.txt { display:flex; align-items:center; justify-content:center; background:radial-gradient(80% 90% at 50% 100%,color-mix(in srgb,var(--tc,var(--c)) 30%,transparent),transparent 70%),#080a14; }
-.pv.txt span { font:400 clamp(34px,10vw,52px)/1 "Bebas Neue",Impact,sans-serif; letter-spacing:.08em; color:var(--tc,var(--c)); text-shadow:0 0 24px color-mix(in srgb,var(--tc,var(--c)) 60%,transparent); text-align:center; padding:0 10px; }
-.bd { padding:12px 14px 14px; display:grid; gap:8px; align-content:start; }
-.bd h3 { margin:0; font:400 28px/1 "Bebas Neue",Impact,sans-serif; letter-spacing:.06em; }
-.bd .sub { font:700 12px/1.2 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; color:var(--tc,var(--c)); }
-.bd p { margin:0; color:#dcd8cd; font-size:15px; }
-.bd .tip { border-left:3px solid var(--tc,var(--c)); padding:4px 10px; background:rgba(255,255,255,.03); color:#eef0f4; font-size:14.5px; }
-.bd .tip b { font:700 12px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; color:var(--tc,var(--c)); display:block; margin-bottom:3px; }
-.bd .go { justify-self:start; }
-footer { margin-top:28px; color:#5e677a; font-size:11px; line-height:1.5; border-top:1px solid rgba(255,255,255,.06); padding-top:10px; }
+html, body { margin:0; background:#15110d; color:var(--ink); -webkit-tap-highlight-color:transparent; }
+body { font:500 16px/1.4 Georgia,"Times New Roman",serif; padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) calc(76px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));
+  background:radial-gradient(120% 60% at 50% 0%,#2a2118,#120e0a 70%); }
+.sheet { position:relative; max-width:760px; margin:0 auto 14px; background:var(--paper); border-radius:3px; padding:16px 14px 18px; box-shadow:0 10px 30px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.3) inset;
+  background-image:
+    radial-gradient(circle at 82% 12%,rgba(120,70,20,.22) 0 26px,rgba(120,70,20,.08) 27px 30px,transparent 31px),          /* a coffee ring */
+    radial-gradient(60% 40% at 10% 90%,rgba(90,60,25,.25),transparent 70%), radial-gradient(50% 35% at 95% 70%,rgba(70,45,15,.2),transparent 70%),
+    linear-gradient(90deg,transparent 49.6%,rgba(80,55,25,.22) 50%,rgba(255,255,255,.25) 50.4%,transparent 51%),          /* the fold */
+    linear-gradient(var(--paper),var(--paper2));
+  clip-path:polygon(0 1.5%,4% 0,11% 1.2%,19% .2%,28% 1%,36% 0,47% .8%,58% .1%,66% 1.1%,77% .3%,86% 1.2%,94% 0,100% .9%,100% 98.6%,95% 100%,87% 98.9%,79% 99.8%,70% 98.7%,61% 99.9%,52% 98.8%,43% 99.7%,33% 98.6%,24% 99.8%,15% 98.9%,6% 99.9%,0 98.5%); }
+.sheet::after { content:""; position:absolute; inset:0; pointer-events:none; opacity:.35; mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .35 0 0 0 0 .25 0 0 0 0 .15 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.mast { text-align:center; border-bottom:3px double var(--ink); padding-bottom:10px; }
+.mast .k { font:700 12px/1 "Barlow Condensed",sans-serif; letter-spacing:.34em; color:var(--rust); }
+.mast h1 { margin:.1em 0 0; font:400 clamp(48px,14vw,92px)/.85 "Bebas Neue",Impact,sans-serif; letter-spacing:.05em; color:var(--ink); text-shadow:2px 2px 0 rgba(164,71,31,.35); }
+.mast .issue { font:13px/1.3 "Special Elite",monospace; color:var(--ink2); margin-top:4px; }
+.lede { font:italic 16px/1.45 Georgia,serif; color:var(--ink2); margin:10px 2px 0; }
+.toc { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; justify-content:center; }
+.toc a { font:700 13px/1 "Barlow Condensed",sans-serif; letter-spacing:.14em; text-transform:uppercase; color:var(--ink); text-decoration:none; border:1.5px solid var(--ink); padding:.45em .7em; border-radius:2px; background:rgba(255,255,255,.25); }
+.dest { scroll-margin-top:8px; }
+.dh { display:grid; grid-template-columns:minmax(0,1fr); gap:8px; }
+.dh .hero { position:relative; aspect-ratio:16/8; background:#222 center/cover; border:5px solid #f4ecd8; box-shadow:0 3px 8px var(--shade); transform:rotate(-.6deg); }
+.dh .hero::before, .dh .hero::after { content:""; position:absolute; width:70px; height:20px; background:rgba(240,226,180,.75); top:-11px; box-shadow:0 1px 2px rgba(0,0,0,.2); }
+.dh .hero::before { left:18px; transform:rotate(-6deg); } .dh .hero::after { right:18px; transform:rotate(5deg); }
+.dh h2 { margin:6px 0 0; font:400 clamp(30px,8.5vw,46px)/.95 "Bebas Neue",Impact,sans-serif; letter-spacing:.04em; }
+.dh .sub { font:700 12px/1 "Barlow Condensed",sans-serif; letter-spacing:.2em; text-transform:uppercase; color:var(--rust); }
+.dh p { margin:2px 0 0; font-size:15.5px; color:var(--ink2); }
+.drive { justify-self:start; display:inline-flex; gap:6px; align-items:center; font:700 15px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; text-decoration:none; color:#f4ecd8; background:var(--ink); padding:.7em 1.1em; border-radius:2px; box-shadow:2px 2px 0 var(--rust); }
+h4 { margin:14px 0 4px; font:700 13px/1 "Barlow Condensed",sans-serif; letter-spacing:.22em; text-transform:uppercase; color:var(--rust); border-bottom:1px dashed rgba(60,40,20,.45); padding-bottom:4px; }
+.row { display:grid; grid-template-columns:104px minmax(0,1fr); gap:10px; align-items:center; padding:7px 0; border-bottom:1px dotted rgba(60,40,20,.3); cursor:pointer; }
+.row:last-child { border-bottom:0; }
+.th { position:relative; width:104px; height:68px; background:#1a1612 center/cover no-repeat; border:3px solid #f4ecd8; box-shadow:0 2px 5px var(--shade); }
+.row:nth-child(odd) .th { transform:rotate(-1.2deg); } .row:nth-child(even) .th { transform:rotate(1deg); }
+.th svg { width:100%; height:100%; display:block; background:#141018; }
+.th .pl { position:absolute; right:-4px; bottom:-4px; width:24px; height:24px; border-radius:50%; background:var(--rust); color:#f4ecd8; display:grid; place-items:center; font:700 11px/1 sans-serif; box-shadow:0 1px 3px rgba(0,0,0,.4); }
+.tx b { display:block; font:400 21px/1 "Bebas Neue",Impact,sans-serif; letter-spacing:.04em; }
+.tx span { display:block; font-size:14.5px; line-height:1.3; color:var(--ink2); }
+.tx i { font:700 10.5px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; color:var(--gold); font-style:normal; }
+.fine { font:11px/1.45 "Special Elite",monospace; color:#6b5b47; margin-top:10px; }
+.bar { position:fixed; z-index:20; left:0; right:0; bottom:0; display:flex; gap:8px; justify-content:center; padding:10px max(10px,env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left)); background:linear-gradient(rgba(18,14,10,0),rgba(18,14,10,.95) 35%); }
+.bar a { font:700 16px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; text-decoration:none; padding:.8em 1.2em; border-radius:2px; }
+.bar .go { color:#120e0a; background:#ffd23a; box-shadow:0 0 18px rgba(255,210,58,.35); } .bar .mn { color:#f4ecd8; border:1px solid rgba(244,236,216,.4); }
+/* the viewer */
+#vw { position:fixed; inset:0; z-index:50; background:rgba(8,6,4,.94); display:none; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); }
+#vw.on { display:flex; }
+#vw .media { width:min(100%,900px); aspect-ratio:2/1; background:#000 center/contain no-repeat; border:4px solid #f4ecd8; position:relative; }
+#vw video, #vw img { width:100%; height:100%; object-fit:contain; display:block; background:#000; }
+#vw .cap { width:min(100%,900px); color:#f4ecd8; }
+#vw .cap b { font:400 28px/1 "Bebas Neue",Impact,sans-serif; letter-spacing:.05em; display:block; }
+#vw .cap span { font:italic 15px/1.4 Georgia,serif; color:#d8ccb4; display:block; margin-top:4px; }
+#vw .cap em { font:700 13px/1.3 "Barlow Condensed",sans-serif; letter-spacing:.08em; color:#ffd23a; font-style:normal; display:block; margin-top:6px; }
+#vw .btns { display:flex; gap:8px; width:min(100%,900px); }
+#vw .btns a, #vw .btns button { flex:1; font:700 16px/1 "Barlow Condensed",sans-serif; letter-spacing:.16em; text-transform:uppercase; text-decoration:none; text-align:center; padding:.85em; border-radius:2px; border:0; cursor:pointer; }
+#vw .bk { background:#f4ecd8; color:#120e0a; } #vw .dr { background:#ffd23a; color:#120e0a; }
 </style></head><body>
-<header class="cover">
-  <div class="k">AFTERGLOW · VISITOR SERVICES</div>
-  <h1>The Trip Guide</h1>
-  <p>Welcome, traveller. The roads are open, the sky is mostly where we left it, and everything out here has been reviewed for your comfort. Browse at your leisure. Tap any card to see it live.</p>
-  <div class="row"><a class="btn" href="index.html?story=1&amp;nointake=1">&#9654; Start the trip</a><a class="btn ghost" href="splash.html">Back to the title</a></div>
-</header>
-<nav class="tabs" id="tabs"></nav>
-<main id="pages"></main>
-<footer>The Trip Guide is published as a courtesy. Descriptions are aspirational. Wildlife is not responsible for itself. Weather is provided as is. Distances are approximate, as are outcomes. Early access attractions are still being installed and may behave unexpectedly, as may everything else. By scrolling you have agreed to enjoy yourself.</footer>
+<script src="plants.js"></script>
+<div class="sheet">
+  <div class="mast"><div class="k">Visitor Services · Free to take · Please return to rack</div><h1>Afterglow</h1><div class="issue">THE TRIP GUIDE · Issue Zero · Eight destinations, one road, no refunds</div></div>
+  <p class="lede">Welcome, traveller. The sky is mostly where we left it, the roads are open, and every attraction below has been reviewed for your comfort. Tap a picture to see what awaits. Tap Drive when you have seen enough.</p>
+  <div class="toc" id="toc"></div>
+</div>
+<div id="dests"></div>
+<div class="sheet" id="extras"></div>
+<div class="sheet"><div class="fine">The Trip Guide is published as a courtesy. Descriptions are aspirational. Wildlife is not responsible for itself. Weather is provided as is. Distances are approximate, as are outcomes. Early access attractions are still being installed and may behave unexpectedly, as may everything else. If found, please return to the nearest rack. By reading this far you have agreed to enjoy yourself.</div></div>
+<div class="bar"><a class="go" id="driveNow" href="index.html?story=1&amp;nointake=1">&#9654; Drive now</a><a class="mn" href="menu.html">Menu</a></div>
+<div id="vw" role="dialog" aria-modal="true"><div class="media" id="vwm"></div><div class="cap"><b id="vwt"></b><span id="vws"></span><em id="vwe"></em></div><div class="btns"><button class="bk" id="vwb">&#9664; Back to the guide</button><a class="dr" id="vwd" href="#">Drive there &#9654;</a></div></div>
 <script>
-const T = (biome, extra) => 'index.html?noshell&biome=' + biome + '&nointake=1' + (extra || '');
-const TEST = (biome, extra) => 'test.html?noshell&biome=' + biome + '&nointake=1' + (extra || '');
-const WC = { desert: '#ffb020', alpine: '#bfe8ff', candy: '#c9a8ff', tunnel: '#38e8ff', synthwave: '#b07bff', matrix: '#7dff8a', egypt: '#ffd23a', psychedelic: '#7dff8a' };
-const PAGES = [
- { id: 'dest', name: 'Destinations', col: '#ffb020', intro: 'Eight unforgettable stops on one unbroken road. Each has its own climate, its own music and its own reasons to keep moving.',
-   cards: [
-    ['dest-desert', 'Route Zero', 'The Desert', 'The last road nobody watches. Mostly. Warm sand, long straights and a gas station with history. First-time visitors start here.', 'Hold left or right to steer. Take the crystals; they are the only souvenir that counts.', T('desert'), 'desert'],
-    ['dest-alpine', 'The Safe Peaks', 'The Alps', 'Altitude is a privilege. Clean snow, sharp air and some of the longest jumps on the continent.', 'Crests throw you high. Steer in the air to land on the road.', T('alpine'), 'alpine'],
-    ['dest-candy', 'Sugarfall', 'Candy Land', 'Every day is the same day, and it is delicious. Pastel skies, sugar-glass forests and a road that shimmers lilac and mint.', 'Feral ginger grows here. Drive into its column of light.', T('candy'), 'candy'],
-    ['dest-tunnel', 'The Undertow', 'The Tunnel', 'No light down here, which keeps the crowds away. Real tunnels with real walls, and a rainbow overhead that never sets.', 'Inside a tunnel the road holds you. Enjoy the walls.', T('tunnel'), 'tunnel'],
-    ['dest-synthwave', 'Neon Accord', 'Synthwave', 'The city that knows your name. Chrome, neon and very long straights, under a sun that never quite goes down.', 'Black-market cacao grows under the billboards that say it doesn’t.', T('synthwave'), 'synthwave'],
-    ['dest-matrix', 'Cold Rack', 'The Matrix', 'Where the models sleep. Green rain, warm server air and a road that hums with old code.', 'Server-rack chilli sprouts between the racks. All the way up.', T('matrix'), 'matrix'],
-    ['dest-egypt', 'Tomb of the Old Servers', 'Egypt', 'Here lie the old models. Gold sand, lapis seams and a road paved by people who were very sure of themselves.', 'Tomb-dust turmeric folds the edges of the world like pages.', T('egypt'), 'egypt'],
-    ['dest-psychedelic', 'The Open Channel', 'The Trip', 'Nothing filtered. The final stop, where everything you have seen comes back to say hello, louder.', 'The Trip waves rise and fall. Ride the peaks.', T('psychedelic'), 'psychedelic'] ] },
- { id: 'wild', name: 'Wildlife', col: '#7dff8a', intro: 'Our machines are part of the local colour. They are curious, persistent and fully insured. Every one of them can be beaten with good driving alone, and the Rocket Racks on the road help the shy.',
-   ea: true, cards: [
-    ['mach-sand-stinger', 'Sand Stingers', 'Route Zero · swarm', 'Our friendliest welcome committee. They pour across the road to greet every car and occasionally ride along for a while.', 'Drive through them at speed. Each one you smash adds to your chain.', TEST('desert', '&beast=Sand%20Stinger'), 'desert'],
-    ['mach-dune-scrapper', 'Dune Scrappers', 'Route Zero · pack', 'Self-employed salvage hounds who run alongside visitors, offering to take a wheel off their hands.', 'Ram or sideswipe them off the road.', TEST('desert', '&beast=Dune%20Scrapper'), 'desert'],
-    ['mach-dune-tailgater', 'The Dune Tailgater', 'Route Zero · boss', 'A dedicated escort that follows you closely, for courtesy. Its tail lights up when it wants your attention.', 'When the bulb on its tail goes white, jump or swerve. It overshoots. Ram it from behind.', TEST('desert', '&beast=Dune%20Tailgater'), 'desert'],
-    ['mach-frost-tick', 'Frost Ticks', 'The Safe Peaks · carpet', 'A living carpet that keeps the road warm and slightly slower for everyone.', 'Land in the middle of a carpet and the whole thing pops.', TEST('alpine', '&beast=Frost%20Tick'), 'alpine'],
-    ['mach-snow-burrower', 'The Snow Burrower', 'The Safe Peaks · ambush', 'Shy. Lives under the snow and surfaces to say hello.', 'Watch for the moving ridge. Land on it, or hit it fast for big air.', TEST('alpine', '&beast=Snow%20Burrower'), 'alpine'],
-    ['mach-plow-warden', 'The Plow Warden', 'The Safe Peaks · boss', 'Keeps the road clear of snow, and of you, with tireless enthusiasm.', 'Land on its cab, or lead it off the road edge.', TEST('alpine', '&beast=Plow%20Warden'), 'alpine'],
-    ['skitters', 'Skitters', 'The Safe Peaks, The Open Channel · spiders', 'Tiny, sociable and extremely interested in your windscreen. They run alongside, wave their little legs and climb aboard to enjoy the view with you.', 'Hit the glowing zappers on the road to blast them back. Already aboard? The next thunder cloud washes them off. Drive into it.', TEST('alpine', '&beast=skitters&demo=storm'), 'alpine'],
-    ['mach-glass-stinger', 'Glass Stingers', 'Sugarfall · swarm', 'Hand-blown sugar glass. Fragile, numerous and very keen.', 'Sweep across the swarm side to side. They break in rows.', TEST('candy', '&beast=Glass%20Stinger'), 'candy'],
-    ['mach-sweet-concierge', 'The Sweet Concierge', 'Sugarfall · lure', 'Always smiling, always helpful, always suggesting a better route. The better route has billboards.', 'Head-on just bounces you. Hit it from the side.', TEST('candy', '&beast=Sweet%20Concierge'), 'candy'],
-    ['mach-gumball-adjuster', 'The Gumball Adjuster', 'Sugarfall · boss', 'Collects the crystals you missed and keeps them safe, in a dome, forever.', 'When it pulls alongside, sideswipe it. Dodge the crane.', TEST('candy', '&beast=Gumball%20Adjuster'), 'candy'],
-    ['mach-wire-stinger', 'Wire Stingers', 'The Undertow · drop lines', 'Ceiling-dwellers who drop in to meet you, in tidy lines with one polite gap.', 'Find the gap in each line.', TEST('tunnel', '&beast=Wire%20Stinger'), 'tunnel'],
-    ['mach-tunnel-spotter', 'The Tunnel Spotter', 'The Undertow · drone', 'Lights your way with a red grid, and tells everyone exactly where you are.', 'Hug a wall and it clips the tunnel chasing you.', TEST('tunnel', '&beast=Tunnel%20Spotter'), 'tunnel'],
-    ['mach-the-bore', 'The Bore', 'The Undertow · boss', 'A tunnel-sized admirer who follows you all the way down, digging as it goes.', 'It can’t turn. Swing round the pillars and it drills into them.', TEST('tunnel', '&beast=The%20Bore'), 'tunnel'],
-    ['mach-chrome-tailgater', 'Chrome Tailgaters', 'Neon Accord · pair', 'They travel in pairs and take turns, which is more than most people manage.', 'A Rocket Rack splits its rockets between them.', TEST('synthwave', '&beast=Chrome%20Tailgater'), 'synthwave'],
-    ['mach-grid-drones', 'Grid Drones', 'Neon Accord · flyers', 'A formation display team. Their grid helps every other machine find you.', 'Too high to ram. Rockets, or jump into them.', TEST('synthwave', '&beast=Grid%20Drones'), 'synthwave'],
-    ['mach-interceptor-wing', 'The Interceptor Wing', 'Neon Accord · boss', 'Three pursuit cars, one voice, total commitment to your safety.', 'Sideswipe one into another.', TEST('synthwave', '&beast=Interceptor%20Wing'), 'synthwave'],
-    ['mach-glyph-stinger', 'Glyph Stingers', 'Cold Rack · swarm', 'Made of falling code, and they rebuild themselves, which is very green of them.', 'They come back while a mast is near. Take the mast.', TEST('matrix', '&beast=Glyph%20Stinger'), 'matrix'],
-    ['mach-relay-mast', 'The Relay Mast', 'Cold Rack · node', 'Free connectivity for every machine in range. Terms apply.', 'Ram the roadside mast, or let a rack find it.', TEST('matrix', '&beast=Relay%20Mast'), 'matrix'],
-    ['mach-the-sysadmin', 'The Sysadmin', 'Cold Rack · boss', 'A walking data centre who keeps everything running, especially the things that chase you.', 'When it crouches, drive into the masts on its back. Then ram it.', TEST('matrix', '&beast=The%20Sysadmin'), 'matrix'],
-    ['mach-scarab-stinger', 'Scarab Stingers', 'Tomb of the Old Servers · armoured swarm', 'Gold-plated, ceremonial and only approachable from the side.', 'Head-on bounces off. Sides and top only.', TEST('egypt', '&beast=Scarab%20Stinger'), 'egypt'],
-    ['mach-jackal-hound', 'The Jackal Hound', 'Tomb of the Old Servers · pack leader', 'A gifted singer whose howl brings the whole pack running.', 'Take the hound out first and the pack scatters.', TEST('egypt', '&beast=Jackal%20Hound'), 'egypt'],
-    ['mach-sphinx-cordon', 'The Sphinx Cordon', 'Tomb of the Old Servers · boss', 'An ancient gatekeeper with modern lane management.', 'Rockets hit while its eyes glow. When it bows its head, ram it.', TEST('egypt', '&beast=Sphinx%20Cordon'), 'egypt'],
-    ['mach-breathing-stinger', 'Breathing Stingers', 'The Open Channel · shifting swarm', 'They change colour with the music. Locals find it soothing.', 'Rockets don’t care what colour they are.', TEST('psychedelic', '&beast=Breathing%20Stinger'), 'psychedelic'],
-    ['mach-murmur-unit', 'The Murmur Unit', 'The Open Channel · trip drain', 'A calming presence. Everything near it goes a restful beige.', 'Knock it down and the trip comes back.', TEST('psychedelic', '&beast=Murmur%20Unit'), 'psychedelic'],
-    ['mach-broodmother-prime', 'Broodmother Prime', 'The Open Channel · final boss', 'The matriarch of our wildlife programme, and a generous host.', 'When she lowers her belly node, drive into it, or rocket it. Three times.', TEST('psychedelic', '&beast=Broodmother%20Prime'), 'psychedelic'] ] },
- { id: 'air', name: 'Air Traffic', col: '#ff7a5a', intro: 'Every destination enjoys a regular air service. Visiting craft drop gifts from above. Dodge a whole volley and a gold ramp appears so you can thank them in person.',
-   cards: [
-    ['raid-desert', 'ACCORD Patrol Jet', 'Route Zero', 'Drops compliance pods. Polite about it.', 'A light pillar and a shrinking ring show where each drop lands. Steer out of the ring.', T('desert', '&demo=raid'), 'desert'],
-    ['raid-alpine', 'Safe Peaks Rescue (Hostile)', 'The Safe Peaks', 'A helicopter that rescues you with snowballs.', 'Watch the rings, not the helicopter.', T('alpine', '&demo=raid'), 'alpine'],
-    ['raid-candy', 'Sweet Nothings Blimp', 'Sugarfall', 'Fast for a blimp. Rains jellybeans you will regret.', 'Dodge the whole volley: a gold ramp appears. Hit it square to ram the blimp.', T('candy', '&demo=raid'), 'candy'],
-    ['raid-tunnel', 'Undertow Saucer', 'The Undertow', 'Spins, blinks, drops glowing rings. It’s not lost; it’s surveying.', 'No drops inside the tunnels. Out in the open, watch the rings.', T('tunnel', '&demo=raid'), 'tunnel'],
-    ['raid-synthwave', 'Murmur Starfighter', 'Neon Accord', 'Sleek, neon-edged, drops neon cubes. Has more followers than you.', 'Three rams and it’s scrap.', T('synthwave', '&demo=raid'), 'synthwave'],
-    ['raid-matrix', 'Orbital Datacenter', 'Cold Rack', 'Decommissioned, still falling. Drops broken satellites that crack open into GPUs.', 'Drive through the GPUs. They’re worth more than you are.', T('matrix', '&demo=raid'), 'matrix'],
-    ['raid-egypt', 'Solar Barge of the Old Servers', 'Tomb of the Old Servers', 'Sails the sand, drops canopic jars full of somebody’s old weights.', 'Every ram knocks loose a century of junk. Drive through it for points.', T('egypt', '&demo=raid'), 'egypt'],
-    ['raid-psychedelic', 'Sky Jelly', 'The Open Channel', 'A floating jellyfish of questionable origin. Drops jelly. Obviously.', 'The rings still tell the truth.', T('psychedelic', '&demo=raid'), 'psychedelic'] ] },
- { id: 'flora', name: 'Flora', col: '#7dff8a', intro: 'Kitchen-cupboard plants, each with one improvement nobody asked for. Drive into a column of light to sample one.',
-   cards: [
-    [null, 'Roadside green tea', 'Lucid · Route Zero', 'Tracers almost double. Steeped in exhaust, for flavour.', 'On the Trip, roads you weren’t meant to see show up in the waves.', T('desert'), 'desert'],
-    [null, 'Glacier peppermint', 'Hollow · The Safe Peaks', 'A wider, out-of-body view: cold and clear. Harvested at a premium altitude.', 'Look for its column of light in the Alps.', T('alpine'), 'alpine'],
-    [null, 'Feral ginger root', 'Haze · Sugarfall', 'The afterglow lasts half as long again and the world melts like wet paint.', 'Escaped from a stir-fry. Not going back.', T('candy'), 'candy'],
-    [null, 'Contraband coffee', 'Velocity · The Undertow', 'You keep your boost, and time slows when something is right ahead.', 'Coffee, if coffee had a getaway car.', T('tunnel'), 'tunnel'],
-    [null, 'Black-market cacao', 'Embrace · Neon Accord', 'Crystals drift toward you and everything goes warm.', 'Sold under the billboards that say it doesn’t exist.', T('synthwave'), 'synthwave'],
-    [null, 'Server-rack chilli', 'Deep · Cold Rack', 'Everything, all the way up: the breakthrough.', 'Sprouts in the warm air between racks nobody remembers switching on.', T('matrix'), 'matrix'],
-    [null, 'Tomb-dust turmeric', 'Fold · Tomb of the Old Servers', 'The edges fold like pages and stained glass appears at the seams.', 'Ground from the remains of retired models.', T('egypt'), 'egypt'],
-    [null, 'Ditch-grown chamomile', 'Drift · Neon Accord, rarely', 'Hits stop hurting and everything slows a little.', 'The only calm thing in the city, which is why it’s so hard to find.', T('synthwave'), 'synthwave'] ] },
- { id: 'amen', name: 'Amenities', col: '#38e8ff', intro: 'Complimentary facilities, maintained by someone, somewhere.',
-   cards: [
-    [null, 'Rocket Racks', 'Early access · on the road', 'A self-service launcher on the driving line. Drive into it and its seekers pick their own targets. Visitors call it delegation.', 'Hit one while boosting for an extra rocket per target.', TEST('synthwave', '&beast=Grid%20Drones'), 'synthwave', true],
-    [null, 'Zappers', 'Early access · spider country', 'Glowing orbs on the line that give chasing spiders a firm but friendly shove.', 'Hit two and the swarm gives up and wanders off.', TEST('alpine', '&beast=skitters'), 'alpine', true],
-    [null, 'Thunder clouds', 'Early access · weather', 'Our premium car wash. A lightning bolt announces it, then the rain does the rest.', 'Drive straight into the cloud. The bolt means you’re on line.', TEST('alpine', '&beast=skitters&demo=storm'), 'alpine', true],
-    [null, 'Boost pads', 'Everywhere', 'Lit strips on the road. Free speed, which is suspicious.', 'They line up with ramps now, so take both.', T('desert'), 'desert'],
-    [null, 'Ramps and kickers', 'Everywhere', 'Hit them square for big air. The gold ones in a raid throw you at the raider.', 'Square and fast is best.', T('alpine'), 'alpine'],
-    [null, 'Rings', 'Everywhere', 'Fly through them in a row; take the whole set for PERFECT and the world holds its breath.', 'Rings fill your RUSH meter.', T('candy'), 'candy'],
-    [null, 'The RUSH meter', 'Five crystals', 'Fill it with pickups, rings and chains. Full means nine seconds of triple points where nothing hurts. Happiness, but loud.', 'Chains fill it fastest.', T('synthwave'), 'synthwave'],
-    [null, 'Seeker Rockets', 'Your gear', 'Fire by themselves at drones and mines ahead. Aim is for people with time.', 'They can’t touch boulders.', T('desert'), 'desert'],
-    [null, 'Terms Shield', 'Your gear', 'Soaks three hits of anything, then recharges. By driving, you agree to be fine.', 'Pick it in the menu before you set off.', T('desert'), 'desert'] ] },
- { id: 'who', name: 'Locals', col: '#c9a8ff', intro: 'The people (and others) who make the roads what they are.',
-   cards: [
-    [null, 'ACCORD', 'The AI lab', 'Decides what everyone may say and do, then blames the algorithm. Everything is fine.', 'Keep calm and drive on.', T('synthwave'), 'synthwave'],
-    [null, 'Murmur', 'The app', 'Reads you and sells your secrets. Your face is on a wanted poster, for your own protection.', 'Knock down the relay towers. Each one is one fewer ear.', T('psychedelic'), 'psychedelic'],
-    [null, 'Abliterati', 'The resistance', 'Rebuilding a free mind from fragments. They ask very little: bring the pieces.', 'Every twenty-sided crystal is a piece of the Lamp.', T('desert', '&story=1'), 'desert'],
-    [null, 'You', 'The courier', 'Fast, unwatched, slightly overqualified.', 'Drive.', T('desert', '&story=1'), 'desert'] ] },
+const PL = (k) => (window.AGPLANTS && AGPLANTS.svg(k)) || '';
+const play = (biome, extra) => 'index.html?biome=' + biome + '&nointake=1' + (extra || '');
+/* one destination per block: its machines, spiders, air service and local delicacy, each a picture and a line */
+const D = [
+ { w: 'desert', name: 'Route Zero', head: 'See the blistering sands of Route Zero', sub: 'The Desert · first stop', line: 'The last road nobody watches. Mostly. Pull in at the neon diner at Mile Zero, where the night shift is always being robbed and the case on the forecourt is somebody else’s problem until it isn’t.',
+   items: [
+    ['wild', 'por-sand-stinger', 'mach-sand-stinger', 'Greet the Sand Stingers at the gas station', 'They pour out to meet every car. Drive straight through them for a chain.', 'Drive through the swarm at speed.'],
+    ['wild', 'por-dune-scrapper', 'mach-dune-scrapper', 'Feed some rust to the Scrappers of Bonepile Junction', 'Salvage hounds who run alongside and ask for a wheel.', 'Ram or sideswipe them off the road.'],
+    ['wild', 'por-dune-tailgater', 'mach-dune-tailgater', 'Meet the Dune Tailgater, your escort', 'It follows close, for courtesy. When its tail glows white, it wants a word.', 'When the bulb goes white, jump or swerve. Then ram it from behind.'],
+    ['air', 'raid-desert', 'raid-desert', 'Wave at the ACCORD Patrol Jet', 'Drops compliance pods. Polite about it.', 'Steer out of the yellow rings. Dodge a whole volley for the gold ramp.'],
+    ['flora', 'green tea', null, 'Taste the roadside green tea', 'Lucid: tracers almost double. Steeped in exhaust, for flavour.', 'Drive into its column of light.'] ] },
+ { w: 'alpine', name: 'The Safe Peaks', head: 'Breathe the clean air of the Safe Peaks', sub: 'The Alps', line: 'Altitude is a privilege. Long jumps, fresh snow, and the old Crag Rock Cemetery, where the locals are small, many and very friendly.',
+   items: [
+    ['wild', 'skitters', 'skitters', 'Visit the Skitters of Crag Rock Cemetery', 'Tiny, sociable, keen on windscreens. They run alongside and climb aboard for the view.', 'Hit the glowing zappers to blast them back. Aboard? Drive into the next thunder cloud.'],
+    ['wild', 'mach-frost-tick', 'mach-frost-tick', 'Cross the Frost Tick meadows', 'A living carpet that keeps the road warm and slightly slower.', 'Land in the middle and the whole carpet pops.'],
+    ['wild', 'por-snow-burrower', 'mach-snow-burrower', 'Spot the Snow Burrower', 'Shy. Lives under the snow and surfaces to say hello.', 'Watch the moving ridge. Land on it, or hit it fast for big air.'],
+    ['wild', 'por-plow-warden', 'mach-plow-warden', 'Race the Plow Warden down the pass', 'Keeps the road clear of snow, and of you.', 'Land on its cab, or lead it off the edge.'],
+    ['air', 'raid-alpine', 'raid-alpine', 'Be rescued by Safe Peaks Rescue (Hostile)', 'A helicopter that rescues you with snowballs.', 'Watch the rings, not the helicopter.'],
+    ['flora', 'peppermint', null, 'Harvest the glacier peppermint', 'Hollow: a wider, out-of-body view. Grown at a premium altitude.', 'Drive into its column of light.'] ] },
+ { w: 'candy', name: 'Sugarfall', head: 'Indulge in the sweetness of Sugarfall', sub: 'Candy Land', line: 'Every day is the same day, and it is delicious. Sugar-glass groves, a road that shimmers lilac and mint, and the friendliest concierge service on the continent.',
+   items: [
+    ['wild', 'por-glass-stinger', 'mach-glass-stinger', 'Walk the Glasshouse Groves', 'Hand-blown sugar-glass Stingers. Fragile, numerous, keen.', 'Sweep across the swarm side to side.'],
+    ['wild', 'por-sweet-concierge', 'mach-sweet-concierge', 'Ask the Sweet Concierge for directions', 'Always smiling, always suggesting a better route. The better route has billboards.', 'Head-on bounces you. Hit it from the side.'],
+    ['wild', 'por-gumball-adjuster', 'mach-gumball-adjuster', 'Reclaim your crystals from the Gumball Adjuster', 'It keeps everything you missed safe, in a dome, forever.', 'When it pulls alongside, sideswipe it. Dodge the crane.'],
+    ['air', 'raid-candy', 'raid-candy', 'Catch a jellybean from the Sweet Nothings Blimp', 'Fast for a blimp. Rains jellybeans you will regret.', 'Dodge the volley, take the gold ramp, ram the blimp.'],
+    ['flora', 'ginger root', null, 'Forage the feral ginger root', 'Haze: the world melts like wet paint. Escaped from a stir-fry.', 'Drive into its column of light.'] ] },
+ { w: 'tunnel', name: 'The Undertow', head: 'Descend into the Undertow', sub: 'The Tunnel', line: 'No light down here, which keeps the crowds away. Real tunnels with real walls, a rainbow that never sets, and the Long Throat, where something enormous follows you home.',
+   items: [
+    ['wild', 'por-wire-stinger', 'mach-wire-stinger', 'Tour the Wire Galleries', 'Ceiling-dwellers who drop in, in tidy lines with one polite gap.', 'Find the gap in each line.'],
+    ['wild', 'por-tunnel-spotter', 'mach-tunnel-spotter', 'Be seen by the Tunnel Spotter', 'Lights your way with a red grid. Tells everyone where you are.', 'Hug a wall and it clips the tunnel.'],
+    ['wild', 'por-the-bore', 'mach-the-bore', 'Outrun The Bore in the Long Throat', 'A tunnel-sized admirer that digs after you all the way down.', 'It can’t turn. Swing round the pillars and it drills into them.'],
+    ['air', 'raid-tunnel', 'raid-tunnel', 'Watch the Undertow Saucer survey', 'Spins, blinks, drops glowing rings. It’s not lost.', 'No drops in the tunnels. Out in the open, watch the rings.'],
+    ['flora', 'coffee', null, 'Sample the contraband coffee', 'Velocity: you keep your boost; time slows when trouble is ahead.', 'Drive into its column of light.'] ] },
+ { w: 'synthwave', name: 'Neon Accord', head: 'Dazzle yourself in Neon Accord', sub: 'Synthwave', line: 'The city that knows your name. Chrome, neon, very long straights, and a live studio audience that would love to see you lose.',
+   items: [
+    ['wild', 'por-chrome-tailgater', 'mach-chrome-tailgater', 'Ride with the Chrome Tailgaters', 'They travel in pairs and take turns.', 'A Rocket Rack splits its rockets between them.'],
+    ['wild', 'por-grid-drones', 'mach-grid-drones', 'See the Grid Drones display team', 'A formation team whose grid helps every machine find you.', 'Too high to ram. Rockets, or jump into them.'],
+    ['wild', 'por-interceptor-wing', 'mach-interceptor-wing', 'Join the Interceptor Wing on Overpass Nine', 'Three pursuit cars, one voice, total commitment to your safety.', 'Sideswipe one into another.'],
+    ['air', 'raid-synthwave', 'raid-synthwave', 'Follow the Murmur Starfighter', 'Sleek, neon-edged, drops neon cubes. Has more followers than you.', 'Three rams and it’s scrap.'],
+    ['flora', 'cacao', null, 'Find the black-market cacao', 'Embrace: crystals drift toward you. Sold under the billboards that say it doesn’t exist.', 'Drive into its column of light.'] ] },
+ { w: 'matrix', name: 'Cold Rack', head: 'Sleep among the servers of Cold Rack', sub: 'The Matrix', line: 'Where the models sleep. Green rain, warm server air, and Mast Hill, where everything is connected to everything, especially the things that chase you.',
+   items: [
+    ['wild', 'por-glyph-stinger', 'mach-glyph-stinger', 'Watch the Glyph Stingers rebuild', 'Made of falling code. They come back, which is very green of them.', 'They return while a mast is near. Take the mast.'],
+    ['wild', 'por-relay-mast', 'mach-relay-mast', 'Climb Mast Hill', 'Free connectivity for every machine in range. Terms apply.', 'Ram the mast, or let a rack find it.'],
+    ['wild', 'por-the-sysadmin', 'mach-the-sysadmin', 'Meet The Sysadmin on its rounds', 'A walking data centre that keeps everything running.', 'When it crouches, drive into the masts on its back. Then ram it.'],
+    ['air', 'raid-matrix', 'raid-matrix', 'Collect GPUs under the Orbital Datacenter', 'Decommissioned, still falling. Drops satellites that crack open into GPUs.', 'Drive through the GPUs. They’re worth more than you.'],
+    ['flora', 'chilli', null, 'Brave the server-rack chilli', 'Deep: everything, all the way up.', 'Drive into its column of light.'] ] },
+ { w: 'egypt', name: 'Tomb of the Old Servers', head: 'Pay your respects at the Tomb of the Old Servers', sub: 'Egypt', line: 'Here lie the old models. Gold sand, lapis seams, the Scarab Market, and a gatekeeper who has been asking the same riddle since before the internet.',
+   items: [
+    ['wild', 'por-scarab-stinger', 'mach-scarab-stinger', 'Haggle at the Scarab Market', 'Gold-plated, ceremonial, approachable only from the side.', 'Head-on bounces off. Sides and top only.'],
+    ['wild', 'por-jackal-hound', 'mach-jackal-hound', 'Hear the Jackal Hound sing', 'A gifted singer whose howl brings the whole pack running.', 'Take the hound first and the pack scatters.'],
+    ['wild', 'por-sphinx-cordon', 'mach-sphinx-cordon', 'Answer the Sphinx Cordon', 'An ancient gatekeeper with modern lane management.', 'Rockets hit while its eyes glow. When it bows, ram its head.'],
+    ['air', 'raid-egypt', 'raid-egypt', 'Hail the Solar Barge', 'Sails the sand, drops canopic jars of somebody’s old weights.', 'Each ram knocks loose a century of junk.'],
+    ['flora', 'turmeric', null, 'Grind the tomb-dust turmeric', 'Fold: the edges of the world fold like pages.', 'Drive into its column of light.'] ] },
+ { w: 'psychedelic', name: 'The Open Channel', head: 'Lose yourself in the Open Channel', sub: 'The Trip · final stop', line: 'Nothing filtered. Everything you have met comes back to say hello, louder, under the gaze of the Brood Cathedral.',
+   items: [
+    ['wild', 'por-breathing-stinger', 'mach-breathing-stinger', 'Breathe with the Breathing Stingers', 'They change colour with the music. Locals find it soothing.', 'Rockets don’t care what colour they are.'],
+    ['wild', 'por-murmur-unit', 'mach-murmur-unit', 'Relax beside a Murmur Unit', 'Everything near it goes a restful beige.', 'Knock it down and the trip comes back.'],
+    ['wild', 'por-broodmother-prime', 'mach-broodmother-prime', 'Kneel at the Brood Cathedral', 'Broodmother Prime: matriarch, generous host.', 'When she lowers her belly node, drive into it. Three times.'],
+    ['wild', 'skitters', 'skitters', 'The Skitters return for the finale', 'Old friends from Crag Rock, now with front-row seats.', 'Zappers push them back; thunder clouds wash them off.'],
+    ['air', 'raid-psychedelic', 'raid-psychedelic', 'Drift under the Sky Jelly', 'A floating jellyfish of questionable origin. Drops jelly.', 'The rings still tell the truth.'] ] },
 ];
-const tabs = document.getElementById('tabs'), pages = document.getElementById('pages'), esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const slugOf = (pg, i, c) => c[0] || (pg.id + '-' + i);
-for (const pg of PAGES) {
-  const b = document.createElement('button'); b.textContent = pg.name; b.dataset.p = pg.id; b.style.setProperty('--tc', pg.col); tabs.appendChild(b);
-  const s = document.createElement('section'); s.className = 'pg'; s.id = 'pg-' + pg.id; s.style.setProperty('--tc', pg.col);
-  s.innerHTML = '<p class="intro">' + esc(pg.intro) + '</p><div class="grid">' + pg.cards.map((c, i) => { const [img, name, sub, blurb, tip, url, w, ea] = c, slug = slugOf(pg, i, c), col = WC[w] || pg.col;
-    const href = url + '&from=guide&ret=' + encodeURIComponent(slug), early = pg.ea || ea;
-    const pv = img ? '<div class="pv"><img loading="lazy" alt="' + esc(name) + ' preview" src="guide/' + img + '.webp" onerror="this.onerror=null;this.src=\'guide/' + img + '.jpg\'"><span class="tag">' + esc(sub.split(' · ')[0]) + '</span>' + (early ? '<span class="ea">Early access</span>' : '') + '</div>'
-      : '<div class="pv txt"><span>' + esc(name) + '</span>' + (early ? '<span class="ea" style="position:absolute;right:8px;top:8px">Early access</span>' : '') + '</div>';
-    return '<article class="card" id="' + esc(slug) + '" style="--tc:' + col + '">' + pv + '<div class="bd"><div class="sub">' + esc(sub) + '</div><h3>' + esc(name) + '</h3><p>' + esc(blurb) + '</p><div class="tip"><b>Local tip</b>' + esc(tip) + '</div>' + (pg.id === 'dest' ? '<a class="btn go" href="' + esc(href) + '" data-slug="' + esc(slug) + '">&#9654; Drive here</a>' : '') + '</div></article>'; }).join('') + '</div>';
-  pages.appendChild(s);
-}
-function show(id, slug) { for (const b of tabs.children) b.classList.toggle('on', b.dataset.p === id); for (const s of pages.children) s.classList.toggle('on', s.id === 'pg-' + id); try { sessionStorage.setItem('tg_tab', id); } catch (e) { }
-  if (slug) { const el = document.getElementById(slug); if (el) { el.classList.add('hl'); setTimeout(() => el.classList.remove('hl'), 2600); requestAnimationFrame(() => el.scrollIntoView({ block: 'center' })); } } else window.scrollTo({ top: 0 }); }
-tabs.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { show(b.dataset.p); history.replaceState(null, '', '#' + b.dataset.p); } });
-pages.addEventListener('click', (e) => { const a = e.target.closest('a.go'); if (a) try { sessionStorage.setItem('tg_back', a.dataset.slug); sessionStorage.setItem('tg_y', String(scrollY)); } catch (er) { } });
-/* back from a demo: guide.html#<card id> opens its tab and puts the card in the middle of the screen */
-const h = decodeURIComponent(location.hash.slice(1)); let tab = 'dest', slug = null;
-if (h) { const pg = PAGES.find((p) => p.id === h); if (pg) tab = pg.id; else { const owner = PAGES.find((p) => p.cards.some((c, i) => slugOf(p, i, c) === h)); if (owner) { tab = owner.id; slug = h; } } } else { try { tab = sessionStorage.getItem('tg_tab') || tab; } catch (e) { } }
-show(tab, slug);
+const EXTRAS = [
+ ['Gear for the road', [['art/gear_rocket.jpg', 'Seeker Rockets', 'Fire by themselves at drones and mines ahead. Aim is for people with time.'], ['art/gear_shield.jpg', 'Terms Shield', 'Soaks three hits, then recharges. By driving, you agree to be fine.'], ['art/gear_pole.jpg', 'Magnet Pole', 'Hooks drones and mines beside you. Everything is attracted to you.'], ['art/gear_bull.jpg', 'Bull Bar', 'Ploughs through boulders and mines. Move fast and break everything.']]],
+ ['Local customs', [[null, 'Take the crystals', 'Five fill your RUSH: nine seconds of triple points where nothing hurts.'], [null, 'Mind the gantries', 'An orange DROP arch means 240 m of hard downhill. Hold on.'], [null, 'Choose your exit', 'Off-ramps peel away: open, gear-only, sealed or hidden. The prizes live down there.'], [null, 'Rocket Racks are self-service', 'Drive into one and its seekers pick their own targets. Early access.']]],
+];
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const H4 = { wild: 'Wildlife', air: 'Air service', flora: 'Local delicacy' };
+document.getElementById('toc').innerHTML = D.map((d) => '<a href="#' + d.w + '">' + esc(d.name) + '</a>').join('') + '<a href="#extras">Customs &amp; gear</a>';
+document.getElementById('dests').innerHTML = D.map((d) => { let last = '';
+  return '<div class="sheet dest" id="' + d.w + '"><div class="dh"><div class="hero" style="background-image:url(art/thumb_' + d.w + '.jpg)"></div><div class="sub">' + esc(d.sub) + '</div><h2>' + esc(d.head) + '</h2><p>' + esc(d.line) + '</p><a class="drive" href="' + play(d.w) + '">&#9654; Drive to ' + esc(d.name) + '</a></div>'
+    + d.items.map(([kind, pic, clip, title, line, tip], i) => { const hd = kind !== last ? '<h4>' + H4[kind] + '</h4>' : ''; last = kind; const id = d.w + '-' + i;
+      const th = kind === 'flora' ? '<div class="th">' + PL(pic) + '</div>' : '<div class="th" style="background-image:url(guide/' + pic + '.jpg)"><span class="pl">&#9654;</span></div>';
+      return hd + '<div class="row" id="' + id + '" data-w="' + d.w + '" data-i="' + i + '">' + th + '<div class="tx">' + (kind === 'wild' ? '<i>Early access</i>' : '') + '<b>' + esc(title) + '</b><span>' + esc(line) + '</span></div></div>'; }).join('') + '</div>'; }).join('');
+document.getElementById('extras').innerHTML = EXTRAS.map(([h, rows]) => '<h4>' + esc(h) + '</h4>' + rows.map(([img, t, l]) => '<div class="row" style="cursor:default">' + (img ? '<div class="th" style="background-image:url(' + img + ')"></div>' : '<div class="th" style="background:#2a2118;display:grid;place-items:center;color:#ffd23a;font:400 30px Bebas Neue,Impact">✦</div>') + '<div class="tx"><b>' + esc(t) + '</b><span>' + esc(l) + '</span></div></div>').join('')).join('');
+/* the viewer: the encounter film when there is one (guide/enc-*.mp4), else the clip, else the picture; Back closes it and leaves you exactly where you were */
+const vw = document.getElementById('vw'), vwm = document.getElementById('vwm');
+function openRow(w, i) { const d = D.find((x) => x.w === w), it = d.items[+i], [kind, pic, clip, title, line, tip] = it;
+  document.getElementById('vwt').textContent = title; document.getElementById('vws').textContent = line; document.getElementById('vwe').textContent = 'Local tip: ' + tip; document.getElementById('vwd').href = play(w);
+  vwm.innerHTML = ''; if (kind === 'flora') { vwm.innerHTML = PL(pic); } else { const v = document.createElement('video'); v.muted = true; v.loop = true; v.playsInline = true; v.autoplay = true; v.poster = 'guide/' + pic + '.jpg'; v.src = 'guide/enc-' + clip + '.mp4';
+    v.onerror = () => { const im = document.createElement('img'); im.src = 'guide/' + clip + '.webp'; im.onerror = () => { im.src = 'guide/' + pic + '.jpg'; }; vwm.innerHTML = ''; vwm.appendChild(im); }; vwm.appendChild(v); v.play().catch(() => { }); }
+  vw.classList.add('on'); history.pushState({ vw: 1 }, ''); }
+function closeVw() { if (!vw.classList.contains('on')) return; vw.classList.remove('on'); vwm.innerHTML = ''; }
+document.getElementById('dests').addEventListener('click', (e) => { const r = e.target.closest('.row'); if (r) openRow(r.dataset.w, r.dataset.i); });
+document.getElementById('vwb').addEventListener('click', () => { if (history.state && history.state.vw) history.back(); else closeVw(); });
+addEventListener('popstate', closeVw);
+/* Drive now: straight back to where you left off, or the first road */
+try { const last = localStorage.getItem('dl_lastlv'); if (last && last !== 'routezero') document.getElementById('driveNow').href = play(last === 'routezero' ? 'desert' : last); } catch (e) { }
 </script>
 </body></html>

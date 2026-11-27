@@ -18,8 +18,8 @@ export function createBeasts(d) {
     synthwave: { a: [.69, .48, 1], b: [.22, .91, 1], shell: [.12, .1, .22] }, matrix: { a: [.49, 1, .54], b: [.78, 1, .82], shell: [.03, .12, .06] },
     egypt: { a: [1, .82, .23], b: [.29, .66, 1], shell: [.18, .14, .05] }, psychedelic: { a: [.49, 1, .54], b: [1, .69, .13], shell: [.1, .05, .18] } };
   const P = PAL[d.world] || PAL.desert, MATS = {};
-  const shellM = (k, col) => { const key = 'sh' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene); m.diffuseColor = C3(col || P.shell, 1.6); m.specularColor = new B.Color3(.9, .9, 1); m.specularPower = 48; m.emissiveColor = C3(col || P.shell, .9);
-    const f = new B.FresnelParameters(); f.leftColor = C3(P.a, .9); f.rightColor = C3(col || P.shell, .4); f.power = 2.2; m.emissiveFresnelParameters = f; return MATS[key] = m; };
+  const shellM = (k, col) => { const key = 'sh' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene), c = col || P.shell; m.disableLighting = true;          /* (owner 2026-11-27: the scene has no lights, so lit materials came out as black silhouettes; the shells glow from within, with a neon rim in the world's colours) */
+    const f = new B.FresnelParameters(); f.leftColor = new B.Color3(Math.min(1, P.a[0] * 1.1 + .15), Math.min(1, P.a[1] * 1.1 + .15), Math.min(1, P.a[2] * 1.1 + .15)); f.rightColor = new B.Color3(c[0] * 2.4 + .1, c[1] * 2.4 + .1, c[2] * 2.4 + .14); f.power = 1.6; f.bias = .08; m.emissiveFresnelParameters = f; m.emissiveColor = new B.Color3(1, 1, 1); return MATS[key] = m; };
   const glowM = (k, col, a) => { const key = 'gl' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene); m.emissiveColor = C3(col); m.disableLighting = true; if (a != null) m.alpha = a; return MATS[key] = m; };
   const own = (k, col) => { const m = new B.StandardMaterial('bst_own' + k, scene); m.emissiveColor = C3(col); m.disableLighting = true; return m; };          /* (a beast's own glow: it can flash and fade alone) */
 
@@ -302,5 +302,11 @@ export function createBeasts(d) {
       if (w.z > PH.z + 25) { for (const s of w.segs) s.m.dispose(); WALLS.splice(i, 1); } }
   }
   const mastNear = (b) => LIVE.some((o) => o.mode === 'mast' && !o.dead && Math.abs(o.z - b.z) < 160);
-  return { step, LIVE, LOG, RACKS, ROSTER, DIR, spawn: (k) => { const s = ROS.find((r) => r.k === k || r.name === k) || REG[0]; ENC[s.k](s); return s.name; }, rack: (z) => rackAt(PH.z - (z || 60)), fire: () => fire(salvo(), false) };
+  // PORTRAIT STUDIO (owner 2026-11-27, the Trip Guide): set any machine on the road in front of the camera, three-quarters on, warning lights lit, for a menacing still
+  function pose(name, turn = .45, dist = null) { const spec = ALLSPEC.find((r) => r.name.toLowerCase() === String(name).toLowerCase()); if (!spec) return null; const cam = (d.cam && d.cam()) || scene.activeCamera, cp = cam.globalPosition, f = cam.getDirection(new B.Vector3(0, 0, -1));
+    const R = new B.TransformNode('pose', scene), g = BUILD[spec.model](R, spec.v), sc = g.scale || 1; R.scaling.setAll(sc); const FR = { brood: 62, sphinx: 36, mast: 30, sysadmin: 30, bore: 26 }, k = dist ?? FR[spec.model] ?? (g.len * sc < 4 ? 4.4 : (g.len + g.h) * sc * .5 + 3), x = cp.x + f.x * k, z = cp.z + f.z * k;          /* (framing by size: small ones close, giants far enough to fit) */
+    R.position.set(x, ground(x, z) + (spec.model === 'spotter' ? 1.3 : g.hover ? 2.2 : 0), z); R.rotation.y = Math.atan2(-(cp.x - x), -(cp.z - z)) + turn;
+    if (g.tip && g.tip.material) g.tip.material.emissiveColor.set(1, 1, 1); if (g.lr) { g.lr.material.emissiveColor.set(1, .2, .25); g.lb.material.emissiveColor.set(.3, .6, 1); }
+    if (g.legs) for (const L of g.legs) L.L.rotation.x = Math.sin(L.i * 1.4 + (L.s > 0 ? Math.PI : 0)) * .25; return R; }
+  return { pose, step, LIVE, LOG, RACKS, ROSTER, DIR, spawn: (k) => { const s = ROS.find((r) => r.k === k || r.name === k) || REG[0]; ENC[s.k](s); return s.name; }, rack: (z) => rackAt(PH.z - (z || 60)), fire: () => fire(salvo(), false) };
 }
