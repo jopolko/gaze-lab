@@ -3186,7 +3186,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     const mk = B.MeshBuilder.CreateDisc('raidmark', { radius: 6.5, tessellation: 36 }, scene); mk.material = RAID.mats.mark || (RAID.mats.mark = (() => { const m = new B.StandardMaterial('raidmarkM', scene); m.disableLighting = true; m.emissiveColor = new B.Color3(1, .35, .25); m.alpha = .5; m.backFaceCulling = false; return m; })()); mk.rotation.x = Math.PI / 2; mk.position.set(tx, R.to.y + .2, tz); mk.isPickable = false; R.mark = mk;
     try { SFX.bell && SFX.bell(); } catch (e) { } }
   function raidAfter(R, dt) { const rt = R.rt, p = R.root.position;
-    if (R.hp < (R.hp0 || 3) && Math.random() < (R.hp > 1 ? .25 : .6)) try { FXB.E.pillEat([p.x + (Math.random() - .5) * 2, p.y + 1, p.z], [.3, .3, .33]); } catch (e) { }          /* smoke: thin, then thick */
+    if (R.hp < (R.hp0 || 3)) { R.smk = (R.smk || 0) - dt; if (R.smk <= 0) { R.smk = R.hp > 1 ? .33 : .12; try { FXB.E.pillEat([p.x + (Math.random() - .5) * 2, p.y + 1, p.z], [.3, .3, .33]); } catch (e) { } } }          /* smoke: thin, then thick (owner 2026-11-26: it was a burst on up to 60% of frames, ~36 a second, and stalled phones; now 3 a second, 8 when nearly down) */
     if (R.spinT > 0) { R.spinT = Math.max(0, R.spinT - dt); R.root.rotation.y += dt * 14 * R.spinT; }
     if (R.phase !== 'down') { if (R.hp <= 1) { R.root.rotation.z += Math.sin(rt * 6.5) * .35; R.root.rotation.x += Math.sin(rt * 4.1) * .12; if (Math.random() < .02) R.lurch = 1; } if (R.lurch) { R.lurch = Math.max(0, R.lurch - dt * 2); p.y -= 2.5 * Math.sin(R.lurch * Math.PI); } return; }
     // careening down: a spiralling dive onto the marked spot ahead of you
