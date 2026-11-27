@@ -512,11 +512,28 @@ function plantImg(name) { if (PIMG[name] !== undefined) return PIMG[name]; const
 const PSHEET = {};
 function plantSheet(name) { if (PSHEET[name] !== undefined) return PSHEET[name]; const im = new Image(); im.decoding = 'async'; im.src = 'art/plants/' + name.replace(/ /g, '-') + '.webp?v=1'; return (PSHEET[name] = im); }
 /* the 3D plant (owner 2026-11-27): a turntable rendered from plants3d.js, rocking gently either side so the face stays in view, glowing in the strain's colour */
-/* (owner 2026-11-27: the plant is the target, not another moving thing; no glow) held still in a 3/4 view, drawn straight from the pre-rendered model */
-function drawPlant(p, x0, y0, r, t, c) { const sh = plantSheet(p.plant), ok = sh.complete && sh.naturalWidth, im = ok ? null : plantImg(p.plant); if (!ok && (!im || !im.complete || !im.naturalWidth)) return false;
-  const S = r * (W > H ? 1.3 : 1.7);
-  if (ok) { const fs = sh.naturalWidth / 8, F = 1; mxc.drawImage(sh, (F % 8) * fs, Math.floor(F / 8) * fs, fs, fs, x0 - S / 2, y0 - S / 2, S, S); } else mxc.drawImage(im, x0 - S / 2, y0 - S / 2, S, S);
-  placeArrows(x0, y0, S); return true; }
+/* THE PLANT AS A HOLOGRAM (owner 2026-11-27): projected from a small emitter, additive light so it needs no backdrop (the same treatment works on the road in game).
+   Baked once per plant and colour (tint, scan lines, a cyan/red fringe); per frame only a light cone, the sprite, one scan band and a rare glitch. No blur. */
+const HOLO = {};
+function holoBake(p, c) { const key = p.plant + c.join(','); if (HOLO[key]) return HOLO[key]; const sh = plantSheet(p.plant); if (!sh.complete || !sh.naturalWidth) return null;
+  const fs = sh.naturalWidth / 8, F = 1, sx = (F % 8) * fs, sy = Math.floor(F / 8) * fs, N = 256, cv2 = document.createElement('canvas'); cv2.width = cv2.height = N; const g = cv2.getContext('2d');
+  g.drawImage(sh, sx, sy, fs, fs, 0, 0, N, N);
+  g.globalCompositeOperation = 'source-atop'; g.fillStyle = `rgba(${c},.28)`; g.fillRect(0, 0, N, N);
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = 'rgba(0,0,0,.4)'; for (let y = 0; y < N; y += 3) g.fillRect(0, y, N, 1);
+  const out = document.createElement('canvas'); out.width = out.height = N; const o = out.getContext('2d'); o.globalAlpha = .3; o.drawImage(cv2, -3, 0); o.drawImage(cv2, 3, 0); o.globalAlpha = 1; o.drawImage(cv2, 0, 0);
+  return (HOLO[key] = out); }
+function drawPlant(p, x0, y0, r, t, c) { const hb = holoBake(p, c); if (!hb) { const im = plantImg(p.plant); if (!im || !im.complete || !im.naturalWidth) return false; const S0 = r * 1.5; mxc.drawImage(im, x0 - S0 / 2, y0 - S0 / 2, S0, S0); placeArrows(x0, y0, S0); return true; }
+  const S = r * (W > H ? 1.3 : 1.6), top = y0 - S / 2, base = y0 + S * .5, ew = S * .55;
+  mxc.save(); mxc.globalCompositeOperation = 'lighter';
+  /* the emitter: a flat ring on the ground and a cone of light up to the plant */
+  const cg = mxc.createLinearGradient(0, base, 0, top); cg.addColorStop(0, `rgba(${c},.32)`); cg.addColorStop(1, `rgba(${c},0)`); mxc.fillStyle = cg;
+  mxc.beginPath(); mxc.moveTo(x0 - ew * .35, base); mxc.lineTo(x0 + ew * .35, base); mxc.lineTo(x0 + S * .48, top); mxc.lineTo(x0 - S * .48, top); mxc.closePath(); mxc.fill();
+  mxc.strokeStyle = `rgba(${c},.9)`; mxc.lineWidth = Math.max(2, S * .012); mxc.beginPath(); mxc.ellipse(x0, base, ew * .5, ew * .12, 0, 0, 7); mxc.stroke(); mxc.lineWidth = 1; mxc.strokeStyle = 'rgba(255,255,255,.6)'; mxc.beginPath(); mxc.ellipse(x0, base, ew * .32, ew * .07, 0, 0, 7); mxc.stroke();
+  /* the projection, a rare flicker, one scan band rolling up through it, and now and then a torn slice */
+  const flick = (Math.sin(t * 23) > .985) ? .45 : 1, bob = Math.sin(t * 1.3) * S * .015; mxc.globalCompositeOperation = 'source-over'; mxc.globalAlpha = .93 * flick; mxc.drawImage(hb, x0 - S / 2, top + bob, S, S); mxc.globalAlpha = 1; mxc.globalCompositeOperation = 'lighter';
+  const by = top + S - ((t * .35) % 1) * S * 1.2; mxc.save(); mxc.beginPath(); mxc.rect(x0 - S / 2, by, S, S * .06); mxc.clip(); mxc.globalAlpha = .45; mxc.drawImage(hb, x0 - S / 2, top + bob, S, S); mxc.restore();
+  if ((t % 5) < .12) { const sy = top + S * (.3 + .4 * ((t * 7) % 1)), sh2 = S * .08; mxc.drawImage(hb, 0, (sy - top - bob) / S * hb.height, hb.width, sh2 / S * hb.height, x0 - S / 2 + S * .05, sy, S, sh2); }
+  mxc.restore(); placeArrows(x0, y0, S); return true; }
 /* the arrows either side of the plant: tap for the next or the previous strain (a swipe anywhere still works too) */
 const ARW = (() => { const mk = (d) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'parw'; b.setAttribute('aria-label', d > 0 ? 'Next strain' : 'Previous strain'); b.innerHTML = d > 0 ? '&#8250;' : '&#8249;';
     for (const ev of ['pointerdown', 'pointerup', 'pointermove']) b.addEventListener(ev, (e) => e.stopPropagation()); b.addEventListener('click', (e) => { e.stopPropagation(); swipeTo(d); }); document.body.appendChild(b); return b; };
