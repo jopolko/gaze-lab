@@ -2,6 +2,15 @@
 
 *2026-11-26. Owner's direction: the course layout, the lane count and "racing, not open world" were all shaped around eye and head tracking as the main control. That is no longer the main control. Build it out into a full game: open-world zones, the missions and places from the bible, full controls (VR head tracking, touch with buttons, gamepad, mouse and keyboard). The touchstone is a "Grand Theft Mars": a living world with places, people and jobs, in Afterglow's neon-noir dystopia.*
 
+## 0. Direction (owner, 2026-11-27): an arcade trip, not an RPG
+
+It is a trippy 3D arcade driving game first. The story is a light thread: a reason to keep going, never homework. The target player is a VR fan with a wired headset who wants about **8 more hours** of reasons to keep driving.
+
+- **Open world = an arcade playground**, not a life sim. Zones are places to drive fast and find things. Events start by driving through a marker: no menus, no walking, no shops to manage.
+- **Cut from the GTA idea:** on-foot play, wanted-level chases as a system, money management and dialogue choices. Heat stays only as a feel (more raiders when you've been loud), with no meter to manage.
+- **Story = short phone texts and calls between events** (a few lines each), with skip as always. The trip (dose, onset, waves, afterglow) is the real arc of every session.
+- **Hours come from:** events per zone (time trials, drift chains, molecule hunts, raids, chases, jumps), stars or medals to beat, hidden collectibles (Lamp pieces, strains), unlocks (cars, paints, music), and the trip modes.
+
 ## 1. What we keep (everything)
 
 - **The runs.** The downhill roads, set pieces, raids, strains, molecules, lenses, exits and the trip become the game's **highways and missions**: the long Dead Air drives between places, and the jobs you take. They are already good at that and stay as they are.
@@ -43,8 +52,8 @@
 3. **Camera modes.** First person (as now) and a chase camera, switchable. Zones probably default to chase so you can see the car on open ground.
 4. **The burner phone** (above). Phase 1: pause = phone, apps replace the menus, Camera = inspect and share. Phase 2: calls and texts that deliver missions, a notification banner during play.
 5. **Mission system.** A mission is data: who gives it, where it starts, the goal (reach, collect, chase, survive, escape), the run or zone it uses, the payout, the dialogue. Markers in the world, a simple objective line on the phone and as a toast in play (clean screen: nothing permanent).
-6. **Heat.** ACCORD's attention, shown in the world (searchlights, drones, raider frequency) and on Murmur. Raised by public chaos; cooled by Dead Air, tunnels and paint shops (already planned).
-7. **Money, the garage and saves.** Shards and credits from missions; upgrades and repaints in the garage (the character editor, reached from the phone); progress saved per outpost.
+6. **Heat (feel only).** More searchlights, drones and raiders after a loud event; it fades on its own. No meter.
+7. **Medals, unlocks and saves.** Each event has bronze/silver/gold; medals unlock cars, paints, tracks and zones. Progress saves automatically.
 8. **Life in the zones.** Traffic, Static locals, ACCORD patrols and raiders roaming (the raider craft and scorpions exist), the diner's local hours (built), ambient radio.
 
 ## 5. Milestones (each one playable)
@@ -65,6 +74,6 @@
 ## 7. Decisions for the owner (one at a time, when we reach them)
 
 1. Zones in first person or chase camera by default?
-2. Can you leave the car in a zone (on foot), or are you always driving? (Recommendation: always driving, for now.)
-3. Money: one currency (credits) or two (credits + shards)?
-4. Are the existing levels kept as a separate "Arcade" mode too, for quick runs?
+2. ~~On foot?~~ Decided 2026-11-27: always driving.
+3. ~~Money?~~ Decided 2026-11-27: medals and unlocks, no money.
+4. Are the existing levels kept as a separate quick-run mode too?
