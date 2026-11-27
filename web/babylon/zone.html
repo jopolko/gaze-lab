@@ -22,6 +22,21 @@
   #phone .msg { font-size: 13px; color: #c9c0ea; background: rgba(255, 255, 255, .05); border-radius: 12px; padding: 9px 11px; }
   #phone button { padding: 11px 0; border-radius: 14px; border: 1px solid rgba(127, 255, 240, .35); background: rgba(127, 255, 240, .08); color: #dffcf8; font: 700 13px system-ui, sans-serif; letter-spacing: .08em; }
   #phone button.pri { background: #7ffff0; color: #120a1e; border-color: #7ffff0; }
+  #phone .dev { gap: 12px; }
+  .ph-top { display: flex; justify-content: space-between; font: 700 11px system-ui, sans-serif; letter-spacing: .14em; color: #8f86b8; }
+  .ph-view { display: flex; flex-direction: column; gap: 10px; min-height: 0; } .ph-view[hidden] { display: none; }
+  .apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .apps button { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 10px 0 8px !important; font: 600 10.5px system-ui, sans-serif !important; letter-spacing: .04em !important; position: relative; }
+  .apps i { font-style: normal; font-size: 20px; color: #ffd88a; }
+  .apps em { position: absolute; top: 6px; right: 10px; width: 9px; height: 9px; border-radius: 50%; background: #ffb040; display: none; }
+  .apps em.on { display: block; }
+  .ph-head { display: flex; align-items: center; gap: 10px; } .ph-head button { width: 38px; padding: 6px 0 !important; font-size: 18px !important; } .ph-head b { letter-spacing: .14em; font-size: 13px; color: #7ffff0; }
+  #phBody { overflow: hidden; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #d6cff5; }
+  #phBody .row { display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, .05); border-radius: 12px; padding: 9px 11px; gap: 8px; }
+  #phBody .row small { color: #8f86b8; display: block; font-size: 11px; }
+  #phBody .md { font-size: 20px; } #phBody canvas { width: min(100%, 52vh, 270px); aspect-ratio: 1; margin: 0 auto; border-radius: 14px; background: #1a1030; display: block; }
+  #phBody .bub { background: rgba(127, 255, 240, .08); border-radius: 14px 14px 14px 4px; padding: 9px 11px; } #phBody .bub b { color: #7ffff0; font-size: 11px; letter-spacing: .1em; display: block; }
+  @media (max-height: 520px) { #phone .dev { width: min(92vw, 560px); padding: 14px 16px; } .apps { grid-template-columns: repeat(6, 1fr); } }
   #fade { position: fixed; inset: 0; background: #120a1e; z-index: 50; opacity: 1; pointer-events: none; transition: opacity .8s; }
   #fade.off { opacity: 0; }
   #pauseB { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 25; width: 44px; height: 44px; border-radius: 14px; border: 1px solid rgba(127, 255, 240, .4); background: rgba(16, 10, 30, .45); color: #7ffff0; font: 700 15px system-ui; }
@@ -30,8 +45,13 @@
 <body>
 <canvas id="c"></canvas>
 <div id="toast"></div>
-<div id="phone"><div class="dev"><h2>BURNER</h2><div class="msg" id="phMsg">No new messages.</div>
-  <button class="pri" data-p="resume">BACK TO THE ROAD</button><button data-p="cam">SWITCH CAMERA</button><button data-p="runs">QUICK RUN: ROUTE ZERO</button><button data-p="title">TITLE SCREEN</button></div></div>
+<div id="phone"><div class="dev"><div class="ph-top"><span id="phClock">--:--</span><span>BURNER</span><span id="phBat">▮▮▮</span></div>
+  <div id="phHome" class="ph-view"><div class="apps">
+    <button data-a="msgs"><i>✉</i>Messages<em id="phDot"></em></button><button data-a="map"><i>◎</i>Map</button><button data-a="medals"><i>★</i>Medals</button>
+    <button data-a="radio"><i>♫</i>Radio</button><button data-a="view"><i>▣</i>View</button><button data-a="help"><i>?</i>Controls</button></div>
+    <button class="pri" data-p="resume">BACK TO THE ROAD</button><button data-p="title">TITLE SCREEN</button></div>
+  <div id="phApp" class="ph-view" hidden><div class="ph-head"><button data-p="home">‹</button><b id="phTitle"></b></div><div id="phBody"></div></div>
+</div></div>
 <button id="pauseB" aria-label="Phone">&#9646;&#9646;</button>
 <div id="fade"></div>
 <script src="https://cdn.jsdelivr.net/npm/babylonjs@7.0.0/babylon.js"></script>
@@ -157,6 +177,7 @@ const car = new B.TransformNode('car', scene);
 { const mB = solid('carBody', [.22, .14, .34]), mT = solid('carTrim', [0, 0, 0], [.4, 2.2, 2.1]), mL = solid('carLamp', [0, 0, 0], [2.6, 2, 1.2]), mR = solid('carTail', [0, 0, 0], [2.6, .7, .12]), mW = solid('carWheel', [.06, .05, .08]);
   const p = (b) => { b.parent = car; b.isPickable = false; return b; };
   p(box('cBody', 2.1, .7, 4.4, 0, .75, 0, mB)); p(box('cCab', 1.7, .55, 2, 0, 1.35, .35, mB)); p(box('cTrimL', .06, .08, 4.4, -1.07, .62, 0, mT)); p(box('cTrimR', .06, .08, 4.4, 1.07, .62, 0, mT));
+  p(box('cDashGlow', 1.9, .04, .05, 0, 1.11, -2.15, mT));          /* the hood's neon lip, the one thing in front of you in first person */
   p(box('cLamp', 1.7, .14, .06, 0, .85, -2.21, mL)); p(box('cTail', 1.8, .12, .06, 0, .9, 2.21, mR));
   for (const [x, z] of [[-1.05, -1.45], [1.05, -1.45], [-1.05, 1.45], [1.05, 1.45]]) { const w = B.MeshBuilder.CreateCylinder('cWheel', { height: .35, diameter: .82, tessellation: 14 }, scene); w.rotation.z = Math.PI / 2; w.position.set(x, .41, z); w.material = mW; p(w); } }
 
@@ -193,24 +214,25 @@ function drive(dt, I) {
     if (P.gvyPrev - gvy > 30 * dt * 2.2 && P.gvyPrev > 3 && Math.abs(P.speed || 0) > 12) { P.grounded = false; P.vy = P.gvyPrev; P.air = 0; } else { P.y = gh; } P.gvyPrev = gvy; }
   if (!P.grounded) { P.vy -= 30 * dt; P.y += P.vy * dt; P.air += dt; if (P.y <= gh) { const hard = -P.vy; P.y = gh; P.grounded = true; P.vy = 0; if (P.air > .35) { land(hard); } P.air = 0; P.gvyPrev = 0; } }
   /* the body leans with the ground (and with the turn) */
-  const e2 = 2, gp = Math.atan2(Hg(P.x - nfx * e2, P.z - nfz * e2) - Hg(P.x + nfx * e2, P.z + nfz * e2), 2 * e2), gr = Math.atan2(Hg(P.x + nrx * e2, P.z + nrz * e2) - Hg(P.x - nrx * e2, P.z - nrz * e2), 2 * e2);
-  P.pitch = lerp(P.pitch, P.grounded ? gp : clamp(-P.vy * .02, -.4, .4), Math.min(1, dt * 8)); P.roll = lerp(P.roll, (P.grounded ? -gr : 0) - I.steer * clamp(vf / 60, 0, 1) * .06, Math.min(1, dt * 8));
-  car.position.set(P.x, P.y, P.z); car.rotation.set(P.pitch, P.h, P.roll); car.rotationQuaternion = null;
+  const e2 = 2, gp = Math.atan2(Hg(P.x + nfx * e2, P.z + nfz * e2) - Hg(P.x - nfx * e2, P.z - nfz * e2), 2 * e2), gr = Math.atan2(Hg(P.x + nrx * e2, P.z + nrz * e2) - Hg(P.x - nrx * e2, P.z - nrz * e2), 2 * e2);
+  P.pitch = lerp(P.pitch, P.grounded ? gp : clamp(P.vy * .02, -.4, .4), Math.min(1, dt * 8)); P.roll = lerp(P.roll, (P.grounded ? -gr : 0) - I.steer * clamp(vf / 60, 0, 1) * .06, Math.min(1, dt * 8));
+  car.position.set(P.x, P.y, P.z); car.rotation.set(P.pitch, -P.h, P.roll);          /* (the model's nose is -z; heading turns it the way the car actually travels) */ car.rotationQuaternion = null;
   P.speed = vf; P.boosting = boosting;
 }
 function land(hard) { U.beat = 1; shake = Math.min(.8, hard / 40); if (P.air > .9) toast('<b>LANDED</b>' + (P.air > 1.6 ? 'Big air.' : 'Clean.'), 1400); P.vx *= 1.04; P.vz *= 1.04; }
 
 /* ---------- camera: chase by default, first person on CAM ---------- */
 const cam = new B.FreeCamera('zcam', new B.Vector3(P.x, P.y + 4, P.z + 10), scene); cam.minZ = .2; cam.maxZ = 6000; cam.fov = 1.05; scene.activeCamera = cam; cam.inputs.clear();
-let camMode = Q.has('fp') ? 'first' : 'chase', shake = 0; const CP = new B.Vector3(P.x, P.y + 4, P.z + 10);
+let camMode = Q.has('chase') ? 'chase' : 'first', shake = 0;          /* (owner 2026-11-27: first person by default, like the runs; the chase view is on CAM) */ const CP = new B.Vector3(P.x, P.y + 4, P.z + 10);
 function camStep(dt, I) {
-  const lx = I.lookX, ly = I.lookY, sp = Math.abs(P.speed || 0);
-  if (camMode === 'chase') { const back = 8.5 + sp * .03, up = 3.2 + sp * .012, a = P.h + lx, fx = Math.sin(a), fz = -Math.cos(a);
+  const lx = I.lookX, ly = I.lookY, sp = Math.abs(P.speed || 0), a = P.h - lx, fx = Math.sin(a), fz = -Math.cos(a);
+  if (camMode === 'chase') { const back = 8.5 + sp * .03, up = 3.2 + sp * .012;
     const want = new B.Vector3(P.x - fx * back, P.y + up - ly * 4, P.z - fz * back); const g = Hg(want.x, want.z); if (want.y < g + 1.2) want.y = g + 1.2;
     B.Vector3.LerpToRef(CP, want, Math.min(1, dt * 7), CP); cam.position.copyFrom(CP); cam.setTarget(new B.Vector3(P.x + fx * 6, P.y + 1.4 - ly * 6, P.z + fz * 6));
     for (const m of car.getChildMeshes()) m.isVisible = true; }
-  else { const a = P.h + lx, fx = Math.sin(a), fz = -Math.cos(a); cam.position.set(P.x + Math.sin(P.h) * -.2, P.y + 1.55, P.z - Math.cos(P.h) * -.2); cam.setTarget(new B.Vector3(cam.position.x + fx * 20, cam.position.y - ly * 20 + Math.sin(P.pitch) * 20 * 0, cam.position.z + fz * 20));
-    for (const m of car.getChildMeshes()) m.isVisible = false; }
+  else { cam.position.set(P.x - Math.sin(P.h) * .35, P.y + 1.62 + Math.sin(P.pitch) * .3, P.z + Math.cos(P.h) * .35); CP.copyFrom(cam.position);
+    cam.setTarget(new B.Vector3(cam.position.x + fx * 20, cam.position.y + (Math.tan(P.pitch) - ly) * 20 - 1.2, cam.position.z + fz * 20));
+    for (const m of car.getChildMeshes()) m.isVisible = !/^(cCab|cTail|cWheel)/.test(m.name); }          /* the hood, its neon trim and the dash stay in view */
   if (shake > 0) { cam.position.x += (Math.random() - .5) * shake * .4; cam.position.y += (Math.random() - .5) * shake * .4; shake *= Math.exp(-dt * 6); }
   cam.fov = lerp(cam.fov, 1.0 + clamp(sp / 90, 0, 1) * .32 + (P.boosting ? .08 : 0), Math.min(1, dt * 3));          /* speed widens the view */
 }
@@ -220,9 +242,91 @@ const toastEl = document.getElementById('toast'); let toastT = 0;
 function toast(html, ms, actions) { toastEl.innerHTML = html + (actions ? '<div class="act">' + actions.map((a, i) => '<button data-t="' + i + '"' + (i === 0 ? ' class="pri"' : '') + '>' + a[0] + '</button>').join('') + '</div>' : ''); toastEl.classList.add('on'); toastT = ms ? performance.now() + ms : Infinity; toastEl.__acts = actions || null; }
 toastEl.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b && toastEl.__acts) { const f = toastEl.__acts[+b.dataset.t][1]; toastEl.classList.remove('on'); toastEl.__acts = null; f(); } });
 const phoneEl = document.getElementById('phone'); let PAUSED = false;
-function phone(on) { PAUSED = on; phoneEl.classList.toggle('on', on); }
-phoneEl.addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; const k = b.dataset.p; if (k === 'resume') phone(false); if (k === 'cam') { camMode = camMode === 'chase' ? 'first' : 'chase'; phone(false); } if (k === 'runs') goRun(); if (k === 'title') location.href = 'app.html'; });
+const MSGS = [];          /* the burner's messages, newest last */
+function msg(from, text) { MSGS.push({ from, text }); document.getElementById('phDot').classList.add('on'); }
+function phone(on) { PAUSED = on; phoneEl.classList.toggle('on', on); if (on) { phHome(); const d = new Date(); document.getElementById('phClock').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); } }
+const phBody = () => document.getElementById('phBody');
+function phHome() { document.getElementById('phHome').hidden = false; document.getElementById('phApp').hidden = true; }
+function phOpen(title, html) { document.getElementById('phHome').hidden = true; document.getElementById('phApp').hidden = false; document.getElementById('phTitle').textContent = title; phBody().innerHTML = html; }
+const APPS = {
+  msgs() { document.getElementById('phDot').classList.remove('on'); phOpen('MESSAGES', MSGS.length ? MSGS.slice(-4).map((m) => '<div class="bub"><b>' + m.from + '</b>' + m.text + '</div>').join('') : '<div class="row">Nothing yet. Drive.</div>'); },
+  map() { phOpen('MAP', '<canvas id="phMap" width="300" height="300"></canvas>'); drawMap(document.getElementById('phMap')); },
+  medals() { const B0 = medalsGet(); phOpen('MEDALS', EVENTS.map((e) => { const b = B0[e.id]; return '<div class="row"><span>' + e.name + '<small>' + e.goal + '</small></span><span class="md">' + (b && b.m != null ? MEDAL_ICON[b.m] : '·') + '</span><span><small>best</small>' + (b ? fmtScore(e, b.best) : '–') + '</span></div>'; }).join('')); },
+  radio() { phOpen('RADIO', TRACKS.map((t, i) => '<button data-r="' + i + '"' + (i === RADIO.i ? ' class="pri"' : '') + '>' + t[1] + '</button>').join('') + '<button data-r="-1"' + (RADIO.i < 0 ? ' class="pri"' : '') + '>OFF</button>'); },
+  view() { camMode = camMode === 'chase' ? 'first' : 'chase'; phOpen('VIEW', '<div class="row">' + (camMode === 'first' ? 'First person, from the driver’s seat.' : 'Chase: the car in front of you.') + '</div><button data-a="view">SWITCH</button>'); },
+  help() { phOpen('CONTROLS', '<div class="row"><span>Phone<small>Left thumb: joystick (up gas, down brake). Right: JUMP, BOOST, GEAR. Drag the right half to look.</small></span></div>'
+    + '<div class="row"><span>Keys<small>WASD / arrows · Space jump · Shift boost · E answer / gear · C view · Esc phone · hold right mouse to look</small></span></div>'
+    + '<div class="row"><span>Pad<small>RT gas · LT brake · stick steer · A jump · B boost · X answer / gear · Y view · Start phone</small></span></div>'); },
+};
+phoneEl.addEventListener('click', (e) => { const b = e.target.closest('[data-p],[data-a],[data-r]'); if (!b) return;
+  if (b.dataset.a) return APPS[b.dataset.a]();
+  if (b.dataset.r != null) { radioSet(+b.dataset.r); return APPS.radio(); }
+  const k = b.dataset.p; if (k === 'resume') phone(false); if (k === 'home') phHome(); if (k === 'title') location.href = 'app.html'; });
 document.getElementById('pauseB').addEventListener('click', () => phone(!PAUSED));
+
+/* the map: the bowl from above, the road, the diner, the events, where the job wants you, and you */
+let MAPIMG = null;
+function drawMap(cv) { const c = cv.getContext('2d'), W = cv.width, sc = W / (HALF * 2), mx = (x) => (x + HALF) * sc, mz = (z) => (z + HALF) * sc;
+  if (!MAPIMG) { MAPIMG = c.createImageData(W, W); for (let py = 0; py < W; py++) for (let px = 0; px < W; px++) { const x = px / sc - HALF, z = py / sc - HALF, h = Hg(x, z), t = clamp(h / 60, 0, 1), k = (py * W + px) * 4;
+      MAPIMG.data[k] = 70 + 130 * (1 - t); MAPIMG.data[k + 1] = 38 + 48 * (1 - t); MAPIMG.data[k + 2] = 80 + 60 * t; MAPIMG.data[k + 3] = 255; } }
+  c.putImageData(MAPIMG, 0, 0);
+  c.beginPath(); for (let z = -HALF; z <= HALF; z += 10) { const X = mx(roadX(z)), Z = mz(z); z === -HALF ? c.moveTo(X, Z) : c.lineTo(X, Z); }
+  c.strokeStyle = '#1a1030'; c.lineWidth = 4; c.stroke(); c.strokeStyle = '#ffd88a'; c.lineWidth = 1; c.stroke();
+  const dot = (x, z, col, r, label) => { c.fillStyle = col; c.beginPath(); c.arc(mx(x), mz(z), r, 0, 7); c.fill(); if (label) { c.font = '700 10px system-ui'; c.fillStyle = '#fff'; const tw = c.measureText(label).width, lx = mx(x) + r + 3 + tw > W ? mx(x) - r - 3 - tw : mx(x) + r + 3; c.fillText(label, lx, mz(z) + 3); } };
+  dot(DINER.x + 14, DINER.z, '#7ffff0', 5, 'DINER');
+  for (const e of EVENTS) dot(e.start.x, e.start.z, '#ffb040', 5, e.name);
+  if (beam.isEnabled()) dot(M.bx, M.bz, '#ffffff', 6, 'JOB');
+  for (const G of GATES) dot(roadX(G.z), G.z, '#c08bff', 4, G.id === 'south' ? 'ROUTE ZERO' : 'CLOSED');
+  c.save(); c.translate(mx(P.x), mz(P.z)); c.rotate(-P.h); c.fillStyle = '#7ffff0'; c.beginPath(); c.moveTo(0, -9); c.lineTo(5, 5); c.lineTo(-5, 5); c.closePath(); c.fill(); c.restore(); }
+
+/* ---------- events: drive through an amber arch to start one; medals are saved on this device ---------- */
+const MEDAL_ICON = ['🥇', '🥈', '🥉'], MEDAL_NAME = ['GOLD', 'SILVER', 'BRONZE'];
+const medalsGet = () => { try { return JSON.parse(localStorage.getItem('ag_medals') || '{}'); } catch (e) { return {}; } };
+const fmtScore = (e, v) => e.kind === 'trial' ? v.toFixed(1) + ' s' : e.kind === 'air' ? v.toFixed(1) + ' s air' : v + ' / ' + e.n;
+const EVENTS = [
+  { id: 'sprint', name: 'MESA SPRINT', kind: 'trial', goal: 'Five rings round the bowl, back to the arch.', start: { x: roadX(-140), z: -140 }, cps: [[260, -330], [470, 120], [150, 470], [-330, 300], [-360, -300], [roadX(-140), -140]], medals: [62, 78, 100] },
+  { id: 'air', name: 'BIG AIR', kind: 'air', goal: 'Most time in the air in 60 s. The ramps help.', start: { x: roadX(-230) - 20, z: -230 }, dur: 60, medals: [7, 4.5, 2.5] },
+  { id: 'mols', name: 'MOLECULE RUN', kind: 'mols', goal: 'Twelve molecules out on the sand in 75 s.', start: { x: roadX(160) - 24, z: 160 }, dur: 75, n: 12, medals: [12, 9, 6] },
+];
+const EV = { on: null, t: 0, i: 0, score: 0, cool: 0, things: [] };
+const mArch = solid('evArch', [0, 0, 0], [2.6, 1.6, .3]), mRing = solid('evRing', [0, 0, 0], [.4, 2.4, 2.2]), mMol = solid('evMol', [0, 0, 0], [2.2, 1.4, 2.6]);
+for (const e of EVENTS) { const g = Hg(e.start.x, e.start.z), a = B.MeshBuilder.CreateTorus('evStart', { diameter: 13, thickness: .7, tessellation: 40 }, scene); a.material = mArch; a.rotation.x = Math.PI / 2; a.position.set(e.start.x, g + 6.2, e.start.z); a.isPickable = false;
+  const tx = new B.DynamicTexture('evTx', { width: 512, height: 128 }, scene), cx = tx.getContext(); cx.fillStyle = 'rgba(20,10,36,.85)'; cx.fillRect(0, 0, 512, 128); cx.font = '800 64px system-ui, sans-serif'; cx.textAlign = 'center'; cx.fillStyle = '#ffd88a'; cx.fillText(e.name, 256, 84); tx.update();
+  const lm = new B.StandardMaterial('evL', scene); lm.diffuseTexture = tx; lm.emissiveTexture = tx; lm.disableLighting = true; lm.backFaceCulling = false;
+  const pl = B.MeshBuilder.CreatePlane('evLabel', { width: 9, height: 2.25 }, scene); pl.material = lm; pl.position.set(e.start.x, g + 14.5, e.start.z); pl.billboardMode = B.Mesh.BILLBOARDMODE_Y; pl.isPickable = false; e.arch = a; }
+function evClear() { for (const m of EV.things) m.dispose(); EV.things = []; }
+function evStart(e) { EV.on = e; EV.t = -3; EV.i = 0; EV.score = 0; evClear(); U.beat = 1;
+  if (e.kind === 'trial') e.cps.forEach(([x, z], k) => { const r = B.MeshBuilder.CreateTorus('evCp', { diameter: 16, thickness: .8, tessellation: 40 }, scene); r.material = mRing; r.rotation.x = Math.PI / 2; r.position.set(x, Hg(x, z) + 7.5, z); r.isPickable = false; r.setEnabled(k === 0); EV.things.push(r); });
+  if (e.kind === 'mols') { const seed = Math.floor(Math.random() * 1000); for (let k = 0; k < e.n; k++) { const a = hash(k, seed) * 6.283, d = 60 + hash(k + 50, seed) * 230, x = clamp(e.start.x + Math.cos(a) * d, -620, 620), z = clamp(e.start.z + Math.sin(a) * d, -620, 620);
+    const m = B.MeshBuilder.CreateIcoSphere('evMol', { radius: 1.3, subdivisions: 1 }, scene); m.material = mMol; m.position.set(x, Hg(x, z) + 1.8, z); m.isPickable = false; m.__live = true; EV.things.push(m); } }
+  toast('<b>' + e.name + '</b>' + e.goal + '<br>3…2…1…', 2900); }
+function evEnd(score) { const e = EV.on; EV.on = null; EV.cool = 4; evClear(); const better = e.kind === 'trial' ? (a, b) => a < b : (a, b) => a > b;
+  let m = -1; e.medals.forEach((lim, k) => { if (m < 0 && (e.kind === 'trial' ? score <= lim : score >= lim)) m = k; });
+  const all = medalsGet(), prev = all[e.id] || {}; const rec = prev.best == null || better(score, prev.best);
+  all[e.id] = { best: rec ? score : prev.best, m: m >= 0 && (prev.m == null || m < prev.m) ? m : prev.m };
+  try { localStorage.setItem('ag_medals', JSON.stringify(all)); } catch (x) { }
+  U.beat = 1; shake = .4;
+  toast('<b>' + e.name + (m >= 0 ? ' · ' + MEDAL_NAME[m] : '') + '</b>' + (m >= 0 ? MEDAL_ICON[m] + ' ' : 'No medal. ') + fmtScore(e, score) + (rec ? ' · new best' : '') + (m > 0 ? '<br><small>' + MEDAL_NAME[m - 1].toLowerCase() + ': ' + fmtScore(e, e.medals[m - 1]) + '</small>' : m < 0 ? '<br><small>bronze: ' + fmtScore(e, e.medals[2]) + '</small>' : ''), 4500);
+  if (m === 0) msg('MARO', 'Saw your ' + e.name.toLowerCase() + '. Gold. Somebody out here can drive.'); }
+function eventsStep(dt) {
+  if (EV.cool > 0) EV.cool -= dt;
+  for (const e of EVENTS) { e.arch.rotation.y += dt * .5; e.arch.scaling.setAll(1 + .06 * U.beat); }
+  if (!EV.on) { if (EV.cool <= 0 && M.st !== 'leaving') for (const e of EVENTS) if (Math.hypot(P.x - e.start.x, P.z - e.start.z) < 7 && Math.abs(P.speed) > 3) { evStart(e); break; } return; }
+  const e = EV.on; EV.t += dt; if (EV.t < 0) return;
+  if (e.kind === 'trial') { const r = EV.things[EV.i], [x, z] = e.cps[EV.i]; r.rotation.y += dt;
+    if (Math.hypot(P.x - x, P.z - z) < 10) { r.setEnabled(false); EV.i++; U.beat = 1; if (EV.i >= e.cps.length) return evEnd(+EV.t.toFixed(1)); EV.things[EV.i].setEnabled(true); toast('<b>RING ' + EV.i + ' / ' + (e.cps.length - 1) + '</b>' + EV.t.toFixed(1) + ' s', 1300); }
+    else if (EV.t > e.medals[2] * 1.6) { toast('<b>' + e.name + '</b>Out of time.', 2200); EV.on = null; EV.cool = 3; evClear(); } return; }
+  if (e.kind === 'air') { if (!P.grounded) EV.score += dt; if (EV.t >= e.dur) return evEnd(+EV.score.toFixed(1)); if (EV.t - dt < e.dur - 10 && EV.t >= e.dur - 10) toast('<b>10 SECONDS</b>' + EV.score.toFixed(1) + ' s in the air', 1500); return; }
+  if (e.kind === 'mols') { for (const m of EV.things) { if (!m.__live) continue; m.rotation.y += dt * 2; m.position.y = Hg(m.position.x, m.position.z) + 1.8 + Math.sin(U.time * 3 + m.position.x) * .4; m.scaling.setAll(1 + .3 * U.beat);
+      if (Math.hypot(P.x - m.position.x, P.z - m.position.z) < 4.2 && Math.abs(P.y + 1 - m.position.y) < 4) { m.__live = false; m.setEnabled(false); EV.score++; U.beat = 1; toast('<b>MOLECULE ' + EV.score + ' / ' + e.n + '</b>', 900); if (EV.score >= e.n) return evEnd(EV.score); } }
+    if (EV.t >= e.dur) return evEnd(EV.score); if (EV.t - dt < e.dur - 10 && EV.t >= e.dur - 10) toast('<b>10 SECONDS</b>' + EV.score + ' / ' + e.n, 1500); }
+}
+
+/* ---------- the radio: real tracks, techno only ---------- */
+const TRACKS = [['electric_exodus.ogg', 'ELECTRIC EXODUS'], ['bouncer.ogg', 'BOUNCER'], ['dnb_minute.ogg', 'DNB MINUTE'], ['moodless_refrain.mp3', 'MOODLESS REFRAIN']];
+const RADIO = { i: 0, el: null };
+function radioSet(i) { RADIO.i = i; try { localStorage.setItem('ag_radio', String(i)); } catch (e) { } if (!RADIO.el) return; if (i < 0) { RADIO.el.pause(); return; } RADIO.el.src = '../music/' + TRACKS[i][0]; RADIO.el.play().catch(() => { }); if (AC) beatT0 = AC.currentTime; }
+try { const r = +(localStorage.getItem('ag_radio') ?? 0); if (r >= -1 && r < TRACKS.length) RADIO.i = r; } catch (e) { }
 
 /* ---------- the job: Maro calls, pick up at the pumps, leave by the south gate onto Route Zero ---------- */
 const M = { st: 'idle', t0: 0 };
@@ -231,10 +335,10 @@ const beam = B.MeshBuilder.CreateCylinder('beam', { height: 160, diameterTop: 7,
 function beamAt(x, z) { beam.position.set(x, Hg(x, z) + 80, z); beam.setEnabled(true); M.bx = x; M.bz = z; }
 const PICKUP = { x: DINER.x - 8, z: DINER.z + 14 }, SGATE = GATES[0];
 function missionStep(dt) {
-  if (M.st === 'idle' && U.time > 6) { M.st = 'ringing'; document.getElementById('phMsg').innerHTML = '<b>MARO</b><br>Package at the pumps. Then Route Zero, south gate, the long way round.';
+  if (M.st === 'idle' && U.time > 6) { M.st = 'ringing'; msg('MARO', 'Package at the pumps. Then Route Zero, south gate, the long way round.');
     toast('<b>MARO · BURNER</b>Package at the pumps. Then Route Zero, south gate. The long way.', 0, [['TAKE IT', () => accept()], ['LATER', () => { M.st = 'later'; M.t0 = U.time; }]]); }
   if (M.st === 'later' && U.time - M.t0 > 40) M.st = 'idle';
-  if (M.st === 'pickup' && Math.hypot(P.x - M.bx, P.z - M.bz) < 9) { M.st = 'gate'; beamAt(roadX(SGATE.z), SGATE.z); U.beat = 1; toast('<b>PACKAGE ABOARD</b>South gate. Don’t stop.', 2600); document.getElementById('phMsg').innerHTML = '<b>MARO</b><br>Got it? Good. South gate, onto Route Zero.'; }
+  if (M.st === 'pickup' && Math.hypot(P.x - M.bx, P.z - M.bz) < 9) { M.st = 'gate'; beamAt(roadX(SGATE.z), SGATE.z); U.beat = 1; toast('<b>PACKAGE ABOARD</b>South gate. Don’t stop.', 2600); msg('MARO', 'Got it? Good. South gate, onto Route Zero.'); }
   if (M.st === 'gate' && P.z > SGATE.z - 4 && Math.abs(P.x - roadX(SGATE.z)) < 11) { M.st = 'leaving'; goRun(); }
   if (beam.isEnabled()) { beam.rotation.y += dt * .6; beamMat.alpha = .4 + .25 * U.beat; }
 }
@@ -242,11 +346,11 @@ function accept() { M.st = 'pickup'; beamAt(PICKUP.x, PICKUP.z); toast('<b>JOB</
 function goRun() { M.st = 'leaving'; document.getElementById('fade').classList.remove('off'); try { localStorage.setItem('ag_zone', JSON.stringify({ zone: 'milezero', job: 'route-zero', at: Date.now() })); } catch (e) { }
   setTimeout(() => { location.href = 'index.html?biome=desert&nointake=1&go=1&from=zone'; }, 900); }
 window.__ZGO = goRun;
-if (Q.has('back')) setTimeout(() => toast('<b>MARO · BURNER</b>Delivered. Money’s nothing, the road’s the thing. Drive.', 4200), 1200);
+if (Q.has('back')) setTimeout(() => { msg('MARO', 'Delivered. Money’s nothing, the road’s the thing. Drive.'); }, 1100), setTimeout(() => toast('<b>MARO · BURNER</b>Delivered. Money’s nothing, the road’s the thing. Drive.', 4200), 1200);
 
 /* ---------- music: a real track, and the beat drives the surfaces ---------- */
 let AC = null, beatT0 = 0; const BPM = 120;
-function startMusic() { if (AC || Q.has('nomusic')) return; try { AC = new (window.AudioContext || window.webkitAudioContext)(); const a = new Audio('../music/electric_exodus.ogg'); a.loop = true; a.crossOrigin = 'anonymous'; const src = AC.createMediaElementSource(a), g = AC.createGain(); g.gain.value = .7; src.connect(g).connect(AC.destination); a.play().catch(() => { }); beatT0 = AC.currentTime; } catch (e) { } }
+function startMusic() { if (AC || Q.has('nomusic')) return; try { AC = new (window.AudioContext || window.webkitAudioContext)(); const a = new Audio(); a.loop = true; a.crossOrigin = 'anonymous'; RADIO.el = a; const src = AC.createMediaElementSource(a), g = AC.createGain(); g.gain.value = .7; src.connect(g).connect(AC.destination); radioSet(RADIO.i); } catch (e) { } }
 addEventListener('pointerdown', startMusic, { once: true }); addEventListener('keydown', startMusic, { once: true });
 
 /* ---------- the loop ---------- */
@@ -258,7 +362,7 @@ engine.runRenderLoop(() => {
   if (I.camP && !PAUSED) camMode = camMode === 'chase' ? 'first' : 'chase';
   if (toastEl.__acts && I.gearP && !PAUSED && M.st === 'ringing') { toastEl.classList.remove('on'); toastEl.__acts = null; accept(); }          /* pad/keys can answer the phone */
   if (toastT && now > toastT) { toastEl.classList.remove('on'); toastT = 0; }
-  if (!PAUSED) { drive(dt, I); missionStep(dt); }
+  if (!PAUSED) { drive(dt, I); missionStep(dt); eventsStep(dt); }
   camStep(dt, PAUSED ? { lookX: 0, lookY: 0 } : I);
   const bp = AC ? ((AC.currentTime - beatT0) * BPM / 60) % 1 : (U.time * BPM / 60) % 1; U.beat = Math.max(U.beat * Math.exp(-dt * 5), Math.pow(1 - bp, 6));
   U.trip = clamp(.35 + .4 * sstep(0, 1, (P.boosting ? 1 : 0)) + .25 * Math.sin(U.time * .05) ** 2, 0, 1);
@@ -268,7 +372,7 @@ engine.runRenderLoop(() => {
 });
 addEventListener('resize', () => engine.resize());
 setTimeout(() => document.getElementById('fade').classList.add('off'), 200);
-window.__Z = { P, H: Hg, M, C, car, scene, roadX, DINER, GATES, input: AGINPUT, setCam: (m) => { camMode = m; } };
+window.__Z = { P, H: Hg, M, C, car, scene, roadX, DINER, GATES, EVENTS, EV, input: AGINPUT, phone, APPS, setCam: (m) => { camMode = m; } };
 </script>
 </body>
 </html>
