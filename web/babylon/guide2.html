@@ -101,13 +101,73 @@ body { background:#0b0d12; }
 .wren { margin:0 16px 14px; padding:10px 12px; border-left:3px solid #2affd5; background:#0b0d12; color:#bfe9ff; font:13px/1.45 ui-monospace,Consolas,monospace; border-radius:2px; }
 .wren small { display:block; color:#2affd5; letter-spacing:.16em; font-weight:700; margin-bottom:3px; }
 .wren.fixed { animation:none; }
+
+/* THE DISPLAY (owner 2026-11-27): your phone is the tablet. An old amber-phosphor screen: DOS lettering, a scan bar rolling down, the odd tear,
+   colour only in the pictures; the things you act on (what you get, how to beat it) in inverse, black on amber. One Nixie readout for screen integrity. */
+:root { --amb:#ffb12e; --amb2:#c98418; --amb3:#5a3a0c; --crt:#0b0703; --glow:0 0 6px rgba(255,170,40,.55); }
+html, body { background:#050302 !important; }
+body { font:20px/1.25 "VT323", ui-monospace, Consolas, monospace !important; color:var(--amb); text-shadow:var(--glow); }
+#bezel { display:none; }
+.wrap { position:relative; }
+.mast, .mast small, .mast p, .toc a { color:var(--amb) !important; font-family:"VT323", monospace !important; text-shadow:var(--glow); }
+.mast small { font-size:15px !important; letter-spacing:.14em !important; }
+.mast h1 { font:400 clamp(52px,15vw,96px)/.9 "VT323", monospace !important; letter-spacing:.08em; text-shadow:0 0 14px rgba(255,170,40,.8); }
+.mast p { font-size:19px !important; font-style:normal !important; }
+.toc a { border-color:var(--amb3) !important; font-size:17px !important; letter-spacing:.06em !important; background:#120b04; }
+.dest { background:var(--crt) !important; border:1px solid var(--amb3); box-shadow:0 0 18px rgba(255,150,30,.12) !important; border-radius:2px !important; }
+.dest::after { display:none; }
+.hero::before { content:""; position:absolute; inset:0; z-index:1; pointer-events:none; background:repeating-linear-gradient(0deg, rgba(0,0,0,.18) 0 1px, transparent 1px 3px); }
+.hero .cap { z-index:2; } .hero .cap small { color:var(--amb) !important; font:18px "VT323", monospace !important; letter-spacing:.14em !important; }
+.hero .cap h2 { color:#ffd27a !important; text-shadow:0 0 10px rgba(255,170,40,.8), 0 2px 6px #000 !important; }
+.hero .cap p { font:20px "VT323", monospace !important; color:var(--amb) !important; }
+.feat { border-bottom:1px dashed var(--amb3) !important; } .feat h3 { font:400 26px/1 "VT323", monospace !important; color:#ffd27a !important; letter-spacing:.06em; } .feat p { font-size:19px; }
+.stamp { color:var(--crt) !important; background:var(--amb); border:0 !important; transform:none !important; font:16px "VT323", monospace !important; letter-spacing:.08em !important; text-shadow:none; padding:0 5px !important; opacity:1 !important; }
+.sec h4 { font:18px "VT323", monospace !important; letter-spacing:.14em !important; color:var(--amb2) !important; border-color:var(--amb3) !important; }
+button.it:hover, button.it:focus-visible { background:#1c1106 !important; }
+.it b { font:21px/1.1 "VT323", monospace !important; color:#ffd27a; } .it span { font:18px/1.15 "VT323", monospace !important; color:var(--amb) !important; }
+.it small { font:15px "VT323", monospace !important; color:var(--amb2) !important; letter-spacing:.08em !important; }
+.it .go { color:var(--amb2) !important; font-family:"VT323", monospace !important; }
+.th { box-shadow:0 0 0 1px var(--amb2), 0 0 8px rgba(255,150,30,.3) !important; border-radius:3px !important; background-color:#120b04 !important; color:var(--amb) !important; }
+.haz .th { background:var(--amb) !important; color:var(--crt) !important; text-shadow:none; }
+.pp u { background:var(--amb3) !important; border-radius:0 !important; } .pp u.on { background:var(--amb) !important; }
+.drive { background:var(--amb) !important; color:var(--crt) !important; font:20px "VT323", monospace !important; letter-spacing:.08em !important; text-shadow:none; border-radius:0 !important; }
+.bar { background:linear-gradient(transparent,#050302ee 35%) !important; } .bar a { font:19px "VT323", monospace !important; letter-spacing:.06em !important; border-color:var(--amb3) !important; background:#0b0703 !important; color:var(--amb) !important; border-radius:0 !important; }
+.bar a.go { background:var(--amb) !important; color:var(--crt) !important; }
+.lk { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; } .lk i { font:15px/1.2 "VT323", monospace; font-style:normal; letter-spacing:.06em; background:var(--amb); color:var(--crt); padding:0 5px; text-shadow:none; }
+.lk i.st { background:#2affd5; } .lk i.qu { background:var(--amb); } .lk i.bo { background:#ff6a4a; }
+#sheet { background:rgba(3,2,1,.86) !important; } #sheet .sc { background:var(--crt) !important; border:1px solid var(--amb2); border-radius:2px !important; box-shadow:0 0 30px rgba(255,150,30,.2) !important; color:var(--amb); }
+#sheet .sx { background:var(--amb) !important; color:var(--crt) !important; font:19px "VT323", monospace !important; border-radius:0 !important; box-shadow:0 -12px 0 12px var(--crt) !important; text-shadow:none; }
+#sheet .ph small { color:var(--amb2) !important; font:16px "VT323", monospace !important; } #sheet .ph h3 { font:400 clamp(34px,9vw,50px)/.95 "VT323", monospace !important; color:#ffd27a; } #sheet .ph p { font:20px/1.2 "VT323", monospace !important; color:var(--amb) !important; font-style:normal !important; }
+#sheet .pi { box-shadow:0 0 0 1px var(--amb2), 0 0 14px rgba(255,150,30,.3) !important; transform:none !important; border-radius:2px !important; }
+#sheet dt { font:16px "VT323", monospace !important; color:var(--amb2) !important; letter-spacing:.14em !important; } #sheet dd { font:20px/1.2 "VT323", monospace !important; color:var(--amb); }
+#sheet dt.hot { color:var(--amb) !important; } #sheet dd.hot { background:var(--amb); color:var(--crt) !important; text-shadow:none; padding:4px 7px; font-weight:400 !important; }
+#sheet dl.lore { border-color:var(--amb3) !important; } #sheet blockquote { background:#140c04 !important; border-color:var(--amb) !important; font:20px/1.2 "VT323", monospace !important; font-style:normal !important; }
+.mt { font:16px "VT323", monospace !important; letter-spacing:.08em !important; } .mt b { background:repeating-linear-gradient(90deg, var(--amb3) 0 6px, transparent 6px 8px) !important; box-shadow:none !important; border-radius:0 !important; }
+.mt b i { background:repeating-linear-gradient(90deg, var(--amb) 0 6px, transparent 6px 8px) !important; } .mt em { color:var(--amb2) !important; }
+.kb span { font:16px "VT323", monospace !important; color:var(--amb2) !important; } .kb i { background:var(--amb) !important; color:var(--crt) !important; font:17px "VT323", monospace !important; border-radius:0 !important; text-shadow:none; }
+.dmg { font-family:"VT323", monospace !important; font-size:18px !important; background:repeating-linear-gradient(-45deg,#140c04 0 10px,#1e1206 10px 20px) !important; color:var(--amb2) !important; }
+.wren { font:19px/1.2 "VT323", monospace !important; background:#04100d !important; }
+#osbar { background:#050302ee !important; color:var(--amb2) !important; font:16px "VT323", monospace !important; } #osbar b { color:var(--amb) !important; }
+/* the rolling scan bar and the tear */
+#roll { position:fixed; left:0; right:0; top:0; height:22vh; pointer-events:none; z-index:37; background:linear-gradient(to bottom, transparent, rgba(255,180,60,.045) 70%, rgba(255,200,90,.09) 96%, transparent); animation:roll 7.5s linear infinite; }
+@keyframes roll { from { transform:translateY(-25vh); } to { transform:translateY(105vh); } }
+#scan { background:repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px) !important; mix-blend-mode:normal !important; }
+#vig { position:fixed; inset:0; pointer-events:none; z-index:36; background:radial-gradient(ellipse at center, transparent 62%, rgba(0,0,0,.55) 100%); }
+body.tearing .wrap { animation:tear2 .16s steps(2) 1; }
+@keyframes tear2 { 0% { transform:translateX(0); clip-path:none; } 50% { transform:translateX(calc(4px + var(--dmg) * 8px)); filter:brightness(1.3); } 100% { transform:none; } }
+#crack svg path:nth-child(2) { stroke:#ffd9a0; }
+/* NIXIE: screen integrity in three glass tubes */
+.nx { display:inline-flex; gap:2px; } .nx b { display:inline-grid; place-items:center; width:17px; height:24px; border-radius:7px 7px 3px 3px; background:radial-gradient(ellipse at 50% 35%, #2a1408, #0a0503 70%); box-shadow:inset 0 0 0 1px #4a2a14, inset 0 -3px 5px rgba(255,120,30,.15);
+  font:700 19px/1 "Courier New", monospace; color:#ffa040; text-shadow:0 0 4px #ff6a00, 0 0 9px #ff4a00 !important; position:relative; }
+.nx b::after { content:""; position:absolute; inset:2px; border-radius:6px 6px 2px 2px; background:repeating-linear-gradient(90deg, rgba(255,140,60,.08) 0 1px, transparent 1px 3px), repeating-linear-gradient(0deg, rgba(255,140,60,.08) 0 1px, transparent 1px 3px); }
+.nx em { font:16px "VT323", monospace; color:var(--amb2); margin-left:2px; font-style:normal; align-self:center; }
 </style></head><body>
-<div id="bezel"></div><div id="scan"></div><div id="dead"></div>
+<div id="bezel"></div><div id="scan"></div><div id="roll"></div><div id="vig"></div><div id="dead"></div>
 <div id="crack"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><g fill="none" stroke-linecap="round">
 <path d="M86 9 L78 17 L71 15 L60 24 L52 22 M78 17 L80 30 L74 41 L77 55 M71 15 L66 6 L58 2 M80 30 L92 36 L99 34 M74 41 L63 46 L55 61 L58 77 M77 55 L88 66 L97 81 M63 46 L48 44 L36 50" stroke="#000" stroke-opacity=".55" stroke-width=".55"/>
 <path d="M86 9 L78 17 L71 15 L60 24 L52 22 M78 17 L80 30 L74 41 L77 55 M71 15 L66 6 L58 2 M80 30 L92 36 L99 34 M74 41 L63 46 L55 61 L58 77 M77 55 L88 66 L97 81 M63 46 L48 44 L36 50" stroke="#fff" stroke-opacity=".55" stroke-width=".18"/>
 <circle cx="86" cy="9" r="2.2" stroke="#fff" stroke-opacity=".35" stroke-width=".2"/></g></svg></div>
-<div id="osbar"><span><b>ACCORD</b> OS <span><b>ACCORD</b> Tourism OS 4.1 &middot; NO SERVICE</span>middot; NO SIGNAL</span><span id="integ">SCREEN <i><u id="integU"></u></i> <span id="integN"></span></span><span class="bat">4%</span></div>
+<div id="osbar"><span><b>ACCORD</b> OS &middot; NO SIGNAL</span><span id="integ">SCREEN <span id="integN"></span><u id="integU" hidden></u></span><span class="bat">4%</span></div>
 <div class="wrap">
 <header class="mast"><small>Visitor Services · Free to take · Please return to rack</small><h1><a href="splash.html">Afterglow</a></h1><p>The Brochure, Issue One. Eight destinations, one road, no refunds. Every attraction below has been reviewed for your comfort by people who will never visit.</p></header>
 <nav class="toc" id="toc"></nav>
@@ -205,7 +265,18 @@ const PL = (k) => (window.AGPLANTS && AGPLANTS.svg(k)) || '';
 const REG = {}; let RID = 0;
 const reg = (o) => { const id = 'k' + (RID++); REG[id] = o; return id; };
 const pips = (n) => '<i class="pp">' + [1, 2, 3, 4, 5].map((i) => '<u' + (i <= n ? ' class="on"' : '') + '></u>').join('') + '</i>';
-const row = (th, b, span, soon, cls, o) => '<button type="button" class="it' + (cls ? ' ' + cls : '') + '" data-k="' + reg(o) + '">' + th + '<div><b>' + esc(b) + (soon ? SOON : '') + '</b>' + (span ? '<span>' + esc(span) + '</span>' : '') + (o.e && o.e.threat ? '<small>Threat ' + pips(o.e.threat) + '</small>' : '') + '</div><i class="go">\u203A</i></button>';
+const QTAG = [[/molecule/i, 'QUEST \u00B7 +1 SHARD'], [/rail/i, 'QUEST \u00B7 +1 SHARD'], [/relay/i, 'QUEST \u00B7 +1 SHARD \u00B7 WREN'], [/ring set/i, 'QUEST \u00B7 +1 SHARD'], [/hidden exit/i, 'QUEST \u00B7 +1 SHARD'], [/gold grade/i, 'QUEST \u00B7 +1 SHARD'], [/no hits/i, 'QUEST \u00B7 +1 SHARD'], [/lens exit/i, 'QUEST \u00B7 +1 SHARD'], [/whole of Route Zero/i, 'STORY \u00B7 EPISODE 1'], [/RUSH/, 'SCORING']];
+const inFeat = (o) => { const f = (o.w.feat[0] + ' ' + o.w.feat[1]).toLowerCase(); return o.t.toLowerCase().replace(/[^a-z& ]/g, ' ').split(/\s+/).filter((x) => x.length > 3 && !['with', 'from', 'crag', 'rock', 'cemetery'].includes(x)).some((x) => f.includes(x.replace(/s$/, ''))); };
+function links(o) { const L = []; const e = o.e;
+  if (o.kind !== 'do' && inFeat(o)) L.push(['st', 'STORY: ' + o.w.feat[0]]);
+  if (o.kind === 'do') { const q = QTAG.find(([re]) => re.test(o.t)); if (q) L.push([/STORY/.test(q[1]) ? 'st' : 'qu', q[1]]); }
+  if (e && e.kind === 'raider') L.push(['qu', 'RAID \u00B7 GOLD RAMP']);
+  if (e && /boss/i.test(e.cls || '')) L.push(['bo', 'BOSS \u00B7 REPAIRS FIELD NOTES']);
+  if (e && e.kind === 'flora') L.push(['qu', 'STRAIN \u00B7 ' + (e.cls.split('\u00B7')[1] || '').trim().toUpperCase() + ' \u00B7 MENU \u25B8 STRAINS']);
+  if (o.soon) L.push(['st', 'OPENING SOON']);
+  return L; }
+const lkHtml = (L) => L.length ? '<span class="lk">' + L.map(([c, t]) => '<i class="' + c + '">' + esc(t) + '</i>').join('') + '</span>' : '';
+const row = (th, b, span, soon, cls, o) => '<button type="button" class="it' + (cls ? ' ' + cls : '') + '" data-k="' + reg(o) + '">' + th + '<div><b>' + esc(b) + (soon ? SOON : '') + '</b>' + (span ? '<span>' + esc(span) + '</span>' : '') + (o.e && o.e.threat ? '<small>Threat ' + pips(o.e.threat) + '</small>' : '') + lkHtml(links(o).filter((x) => x[1] !== 'OPENING SOON')) + '</div><i class="go">\u203A</i></button>';
 const thImg = (src) => '<div class="th" style="background-image:url(\'' + src + '\')"></div>', thTx = (t) => '<div class="th">' + t + '</div>';
 const sec = (h, inner) => inner ? '<div class="sec"><h4>' + h + '</h4>' + inner + '</div>' : '';
 const CX = window.AGCODEX || { E: {}, X: {}, K: {} };
@@ -222,8 +293,9 @@ document.getElementById('dests').innerHTML = D.map((d) => {
     + '<div class="feat"><h3>Featured: ' + esc(d.feat[0]) + (d.feat[2] ? SOON : '') + '</h3><p>' + esc(d.feat[1]) + '</p><div><a class="drive" href="index.html?' + (d.w === 'desert' ? 'story=1' : 'biome=' + d.w) + '&amp;nointake=1">\u25B6 Drive ' + esc(d.name) + '</a></div></div>'
     + '<div class="cols"><div>' + sec('Things to do', dos) + sec('Wildlife you may meet', wild) + '</div><div>' + sec('Overhead', air) + sec('Local flora', fl) + sec('When in ' + d.name + ', beware', haz) + (cleared(d.w) ? sec('Locals', loc) : (loc ? '<div class="sec"><h4>Locals</h4>' + SECTOR(d.w, 'Local records') + '</div>' : '')) + '</div></div>' + (wrenOk(d.w) ? '<div class="wren"><small>RECOVERED \u00B7 WREN</small>' + esc(WREN[d.w]) + '\u2014</div>' : '<div class="wren" style="border-color:#ff5a7a;color:#6d7690"><small style="color:#ff5a7a">ENCRYPTED TRANSMISSION</small>Repair: ' + (d.w === 'desert' ? 'clear Route Zero' : 'bring down the relay in ' + esc(d.name)) + '.</div>') + '</section>'; }).join('');
 { let n = 0, ok = 0; for (const d of D) { n += 2; ok += (cleared(d.w) ? 1 : 0) + (wrenOk(d.w) ? 1 : 0); } const f = n ? ok / n : 0;
-  document.documentElement.style.setProperty('--dmg', (1 - f).toFixed(2)); document.getElementById('integU').style.width = Math.round(f * 100) + '%'; document.getElementById('integN').textContent = Math.round(f * 100) + '%';
+  document.documentElement.style.setProperty('--dmg', (1 - f).toFixed(2)); document.getElementById('integU').style.width = Math.round(f * 100) + '%'; { const n = String(Math.round(f * 100)).padStart(3, ' '); document.getElementById('integN').innerHTML = '<span class="nx">' + [...n].map((c) => '<b>' + (c === ' ' ? '' : c) + '</b>').join('') + '<em>%</em></span>'; }
   for (const h of document.querySelectorAll('.hero')) h.classList.toggle('tear', f < 1); }
+{ const tear = () => { document.body.classList.add('tearing'); setTimeout(() => document.body.classList.remove('tearing'), 170); const d = +getComputedStyle(document.documentElement).getPropertyValue('--dmg') || 0; setTimeout(tear, 4000 + Math.random() * 9000 * (1.2 - d)); }; setTimeout(tear, 2500); }
 /* THE PROFILE PAGE: picture, meters, how it hurts you, how to beat it, then the reading */
 const sheet = document.getElementById('sheet'), sbody = sheet.querySelector('.sb');
 const bar = (lab, n, max, note) => '<div class="mt"><span>' + lab + '</span><b><i style="width:' + Math.round(100 * Math.max(0, Math.min(max, n)) / max) + '%"></i></b><em>' + note + '</em></div>';
@@ -243,6 +315,8 @@ function openSheet(id) { const o = REG[id]; if (!o) return; const e = o.e, x = C
   } else {
     h += '<dl>' + (o.tip ? '<dt class="hot">Tip</dt><dd class="hot">' + esc(o.tip) + '</dd>' : '') + (x.story ? '<dt>Who they are</dt><dd>' + esc(x.story) + '</dd>' : '') + (x.fact ? '<dt>Little-known fact</dt><dd>' + esc(x.fact) + '</dd>' : '') + (o.soon ? '<dt>Status</dt><dd>Not in the game yet. Opening soon.</dd>' : '') + '</dl>';
   }
+  { const L = links(o), WHY = { 'STORY': 'Part of the featured story here.', 'QUEST': 'One of this destination\u2019s quests. Each pays one shard; shards buy gear upgrades in the Menu.', 'RAID': 'Dodge a whole volley and a gold ramp appears: ramp up and ram it.', 'BOSS': 'Clearing this destination repairs the field notes on this tablet.', 'STRAIN': 'Taking it logs the strain in the Menu\u2019s Strains codex.', 'SCORING': 'Feeds your RUSH meter and your grade.', 'OPENING': 'Not in the game yet.' };
+    if (L.length) h += '<dl class="lore"><dt>Connected to</dt>' + L.map(([c, t]) => '<dd><span class="lk"><i class="' + c + '">' + esc(t) + '</i></span> ' + esc(WHY[t.split(/[ :]/)[0]] || '') + (t.includes('WREN') ? ' Bringing it down also decrypts the WREN transmission here.' : '') + '</dd>').join('') + '</dl>'; }
   sbody.innerHTML = h; sheet.hidden = false; sheet.scrollTop = 0; document.body.classList.add('lock'); try { history.pushState({ sh: 1 }, ''); } catch (er) { } }
 function closeSheet(fromPop) { if (sheet.hidden) return; sheet.hidden = true; document.body.classList.remove('lock'); if (!fromPop) try { history.back(); } catch (er) { } }
 document.getElementById('dests').addEventListener('click', (e) => { const b = e.target.closest('.it[data-k]'); if (b) openSheet(b.dataset.k); });
