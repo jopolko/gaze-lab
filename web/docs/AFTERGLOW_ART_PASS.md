@@ -49,6 +49,14 @@ Verdicts: **UP** = upgrade to the kit · **KEEP** = already at the bar or not wo
 
 Each phase: build → screenshot every changed object at play distance in two worlds → fps check on the probe (no worse than before) → deploy → note here.
 
+## Progress
+
+- 2026-11-26 **Character editor** (driver, every look item, the car and its parts) to the kit — dressup.html, commit da7af6b.
+- 2026-11-26 **Phase 1 started**: gold hoops (inner ring + top lamp, same instance buffer), kicker decks (chevrons, lit lip, gold posts + lamps), set-piece rails (lit edge), posts (lamps), set kicker lips (lamps), springs (glowing cap) — commit 784bb73. Not yet: exit gate frames.
+- 2026-11-26 **Phase 2**: all seven remaining raider craft rebuilt to the jet's family (gunmetal, ACCORD red visor/eyes/danger lights, amber trim; magenta removed from fighter and saucer): heli, blimp, barge, saucer, fighter, datacenter, jelly. Tunnel dimmers: gunmetal, red eyes, amber rim. Scorpions: pincers + amber stinger.
+- 2026-11-26 **Phase 3**: lenses get a tinted shell, bright core and ground halo; Maro's case is a dark hard case with gold seams, latches, handle.
+- 2026-11-26 **Phase 4**: ACCORD billboards carry a "LIVE · SWARMCAST" corner. Rule from the owner: **nothing overhead while raiders are around**: drop gantries are now two pillars (no bar), raiders fly above roadside signs (9.5 m / 12 m) and inside the billboards, and leave before tunnels and before the finish. Exit signs stay roadside (no overhead gantry).
+
 ## 4. Practicality notes
 
 - One shared helper (`kit`) builds the common parts (lit frame, blinking light, accent stripe, beam) so every object is built the same way and stays consistent.
