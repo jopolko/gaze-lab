@@ -54,7 +54,7 @@ import { PANTRY } from './molpantry.js';
 import { createIntro } from './intro.js?v=20261127c';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js?v=20261127c';
 import { createSpiders } from './spiders.js?v=20261127j';
-import { createBeasts } from './beasts.js?v=20261127d';
+import { createBeasts } from './beasts.js?v=20261127g';
 import { planRoad, planPlay, findTunnel, seedOf } from './director.js';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
 import { createPsyFx } from '../downhill-three/psyfx.js';
@@ -1633,7 +1633,11 @@ void main() {
   }
   const J = (o) => JSON.stringify(o, null, 1);
   function copyText(t) { try { navigator.clipboard.writeText(t).catch(() => { const a = document.createElement('textarea'); a.value = t; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); } catch (e) { } a.remove(); }); } catch (e) { } }
-  function refreshDiag() { const o = diag(); try { o.jumps = (window.__jumps || []).slice(-12); } catch (e) { } return o; }          /* (every copied diagnostic carries the last position jumps, real or scripted) */
+  function refreshDiag() { const o = diag(); try { o.jumps = (window.__jumps || []).slice(-12); } catch (e) { }
+    try { const cs = getComputedStyle(document.documentElement), top = window.top, fe = top.document.fullscreenElement || top.document.webkitFullscreenElement, fr = window.frameElement ? window.frameElement.getBoundingClientRect() : null;          /* (the black band: where the screen, the frame and the camera hole sit) */
+      o.screenFit = { inner: [innerWidth, innerHeight], topInner: [top.innerWidth, top.innerHeight], screen: [screen.width, screen.height], avail: [screen.availWidth, screen.availHeight], vv: window.visualViewport ? [Math.round(visualViewport.width), Math.round(visualViewport.height), Math.round(visualViewport.offsetTop)] : null,
+        frame: fr ? [Math.round(fr.top), Math.round(fr.height)] : null, canvas: (() => { const r = canvas.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; })(), fullscreen: fe ? (fe.id || fe.tagName) : null, sa: ['top', 'right', 'bottom', 'left'].map((k) => cs.getPropertyValue('--sa-' + k).trim() || '?'), orient: (screen.orientation || {}).type }; } catch (e) { o.screenFit = String(e); }
+    return o; }          /* (every copied diagnostic carries the last position jumps, real or scripted) */
   window.__setPause = (v) => setPause(v); window.__isPaused = () => PAUSED;
   function setPause(v) { PAUSED = v; if (!v) try { window.__inspMode && window.__inspMode(false); } catch (e) { } if (!v) try { window.__dgHide && window.__dgHide(); } catch (e) { } try { AW.onPause(v); } catch (e) { } try { const bt = window.__bt; if (bt) { if (v) bt.pause(); else { const pr = bt.play && bt.play(); if (pr && pr.catch) pr.catch(() => { }); } } } catch (e) { } pz.style.display = v ? 'flex' : 'none'; try { PMENU.set(v); } catch (e) { } pzb.setAttribute('aria-label', v ? 'Resume' : 'Pause'); if (gmOn) try { GM.setPaused(v); } catch (e) { } try { if (window.ME) ME.pause(v); } catch (e) { } try { if (OPEN.playing && !OPEN.done) { if (v) OPEN.a.pause(); else { const p = OPEN.a.play(); if (p && p.catch) p.catch(() => { }); } } } catch (e) { } if (v) refreshDiag(); }
 
@@ -2402,7 +2406,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     raidRam: () => { const R = RAID.cur; if (!R || !['arm', 'attack'].includes(R.phase) || PH.ram) return false; const c = R.root.position; if (PH.z - c.z < 10 || PH.z - c.z > 160) return false; rampLaunch(R, 'clean'); return true; } });
   /* SKITTERS (owner 2026-11-27): robot spiders swarm the road and pile up on the windscreen; a storm cloud on the line washes them off, announced by a huge
      lightning bolt (a new shape every strike) and a thunder boom. Every world has its own colours; later worlds send bigger, faster swarms. Not in the story or the tutorial. */
-  const TESTFEAT = /test\.html$/.test(location.pathname) || Q.has('testfeat');          /* (owner 2026-11-27: the machines and the spiders run only on the test copy until they ship) */
+  const TESTFEAT = !Q.has('nofeat');          /* (owner 2026-11-27: machines and spiders live for everyone; ?nofeat turns them off) */          /* (owner 2026-11-27: the machines and the spiders run only on the test copy until they ship) */
   const SKITPAL = { desert: { rim: [1, .69, .13], rim2: [.18, .84, .78], bolts: [[.75, .85, 1], [1, .8, .3], [.3, .95, 1]] }, alpine: { rim: [.75, .91, 1], rim2: [.29, .66, 1], bolts: [[.8, .9, 1], [.4, .7, 1], [.7, .6, 1]] },
     candy: { rim: [.79, .66, 1], rim2: [.49, 1, .85], bolts: [[.8, .65, 1], [.5, 1, .85], [1, .9, .6]] }, tunnel: { rim: [.22, .91, 1], rim2: [.62, .48, 1], bolts: [[.3, .95, 1], [.62, .48, 1], [.85, .9, 1]] },
     synthwave: { rim: [.69, .48, 1], rim2: [.22, .91, 1], bolts: [[.69, .48, 1], [.22, .91, 1], [1, .85, .4]] }, matrix: { rim: [.49, 1, .54], rim2: [.78, 1, .82], bolts: [[.49, 1, .54], [.8, 1, .85], [.3, .9, 1]] },
@@ -2416,7 +2420,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
      for reviewing it (the links page lists one per machine); &beast=skitters keeps only the spiders. &nobeasts turns them off. */
   const BEASTQ = Q.get('beast'), BST = (!TESTFEAT || Q.has('story') || Q.has('tutorial') || Q.has('splash') || Q.has('shot') || Q.has('nobeasts') || (BEASTQ && /^skitters?$/i.test(BEASTQ))) ? null : (() => { try { return createBeasts({ B, scene, PH, th, trailX, END, world: WORLD0, tier: LVIDX, only: BEASTQ,
     inTunZ: (z, p) => inTunZ(z, p), tunnel: () => { const W = window.__TUNW; return !!(W && PH.z < W.z0 && PH.z > W.z1); }, cam: () => (scene.activeCameras && scene.activeCameras.length ? scene.activeCameras[0] : scene.activeCamera),
-    fx: (k, p) => { try { (FXB.E[k] || FXB.E.orb)(p); } catch (e) { } }, shake: (v) => { shake = Math.max(shake, v); }, chain: () => chainHit(), score: (n) => { PH.score += n; }, sfx: (k) => { try { SFX[k] && SFX[k](); } catch (e) { } },
+    fx: (k, p) => { try { (FXB.E[k] || FXB.E.orb)(p); } catch (e) { } }, shake: (v) => { shake = Math.max(shake, v); }, chain: () => chainHit(), score: (n) => { PH.score += n; }, sfx: (k) => { try { SFX[k] && SFX[k](); } catch (e) { } }, actx: () => { try { return acx(); } catch (e) { return null; } },
     look: (k) => { try { if (k === 'boss') tlook(rndOf(LOOKLINGER), 1, 0, 3, .85); else if (k === 'kill' && Math.random() < .35) tlook(rndOf(LOOKLINGER), 2, 0, 1.2, .6, 'snap'); else if (k === 'node' || k === 'howl') tlook(rndOf(LOOKLINGER), 1, 0, 1.6, .8, 'snap'); } catch (e) { } U.beat = 1; },
     emp: () => { try { tlook(rndOf(LOOKLINGER), 2, 0, .7, .5, 'snap'); } catch (e) { } }, drain: (dt) => { U.trip = Math.max(0, U.trip - dt * .25); } }); } catch (e) { console.error('beasts', e); return null; } })();
   window.__BST = BST;

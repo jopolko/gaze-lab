@@ -123,10 +123,23 @@ export function createBeasts(d) {
   // ---------------------------------------------------------------- beasts
   const LIVE = [], RACKS = [], ROCKETS = [], CARPETS = [], WALLS = [], PILLARS = [], LOG = { kills: {}, seen: {} };
   let uid = 0;
+  const BQ = [];          /* the build queue: big groups are made a few per frame */
   function make(spec, x, z, extra) { const R = new B.TransformNode('beast', scene), g = BUILD[spec.model](R, spec.v); const sc = (g.scale || 1) * (spec.boss ? 1 : 1) * (extra && extra.scale || 1); R.scaling.setAll(sc);
     const b = Object.assign({ id: ++uid, spec, R, g, x, z, y: ground(x, z), u: 0, vz: 0, vx: 0, hp: spec.hp + (spec.boss ? Math.floor(T / 3) : 0), t: 0, state: 'go', cool: rnd(1, 3), blind: 0, hitT: 0, ph: rnd(0, 6.28), sc, r: g.r * sc, h: g.h * sc, len: g.len * sc }, extra || {});
     b.max = b.hp; LIVE.push(b); LOG.seen[spec.name] = (LOG.seen[spec.name] || 0) + 1; return b; }
-  function kill(b, how) { if (b.dead) return; b.dead = true; const p = [b.x, b.y + b.h * .5, b.z]; try { d.fx(b.spec.boss ? 'blast' : 'orb', p); if (b.spec.boss) { d.fx('blast', [b.x - 3, b.y + b.h * .3, b.z]); d.fx('cheer', p); } } catch (e) { }
+  /* THE BOOMS (owner 2026-11-27): every species has its own deep harmonic boom: a root note from its name, its own blend of partials, a soft thump under it;
+     each one a little different (detune, partial mix, length). Bosses an octave down. Kept soft. */
+  const ROOTS = [55, 61.74, 65.41, 73.42, 82.41, 87.31, 98, 110];
+  let lastBoom = 0;
+  function boom(b) { const ctx = d.actx && d.actx(); if (!ctx) return; if (!b.spec.boss && ctx.currentTime - lastBoom < .14) return; lastBoom = ctx.currentTime; try {          /* (a swarm popping at once makes one rolling run of booms, not a pile-up) */ const nm = b.spec.name; let h = 0; for (const ch of nm) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+      const t0 = ctx.currentTime + .01, root = ROOTS[h % ROOTS.length] * (b.spec.boss ? .5 : 1) * (1 + (Math.random() - .5) * .06), len = (b.spec.boss ? 2.6 : 1.3) * (.85 + Math.random() * .3);
+      const out = ctx.createGain(); out.gain.value = b.spec.boss ? .22 : .12; const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900 + (h % 5) * 220; out.connect(lp); lp.connect(ctx.destination);
+      const P = [[1, 1], [2, .45 + ((h >> 3) % 4) * .1], [3.01, .25], [4.2 + ((h >> 5) % 3) * .4, .12], [.5, b.spec.boss ? .6 : .2]];
+      for (const [m, a] of P) { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(root * m * 1.08, t0); o.frequency.exponentialRampToValueAtTime(root * m, t0 + .25);
+        const amp = a * (.8 + Math.random() * .4); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(amp, t0 + .012); g.gain.exponentialRampToValueAtTime(.0008, t0 + len * (1.1 - m * .12)); o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + len + .1); }
+      const nb = ctx.createBuffer(1, Math.round(ctx.sampleRate * .25), ctx.sampleRate), ch = nb.getChannelData(0); for (let i = 0; i < ch.length; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / ch.length, 3);
+      const ns = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain(); ns.buffer = nb; nf.type = 'lowpass'; nf.frequency.value = 220; ng.gain.value = .5; ns.connect(nf); nf.connect(ng); ng.connect(out); ns.start(t0); } catch (e) { } }
+  function kill(b, how) { if (b.dead) return; b.dead = true; if (!b.spec.swarmQuiet) boom(b); const p = [b.x, b.y + b.h * .5, b.z]; try { d.fx(b.spec.boss ? 'blast' : 'orb', p); if (b.spec.boss) { d.fx('blast', [b.x - 3, b.y + b.h * .3, b.z]); d.fx('cheer', p); } } catch (e) { }
     try { d.score(b.spec.boss ? 2500 : 150 * b.max); d.chain(); d.look(b.spec.boss ? 'boss' : 'kill'); d.shake(b.spec.boss ? .6 : .2); d.sfx(b.spec.boss ? 'kaboom' : 'boom'); } catch (e) { }
     LOG.kills[b.spec.name] = (LOG.kills[b.spec.name] || 0) + 1; try { const k = 'ag_registry', o = JSON.parse(localStorage.getItem(k) || '{}'); o[b.spec.name] = (o[b.spec.name] || 0) + 1; localStorage.setItem(k, JSON.stringify(o)); } catch (e) { }
     if (b.onDie) b.onDie(how); b.fall = 0; }
@@ -136,15 +149,18 @@ export function createBeasts(d) {
   function method(b) { if (!PH.grounded && PH.vy < 1 && PH.y > b.y + b.h * .45) return 'STOMP'; if (Math.abs(PH.vx) > 4.5 && Math.sign(PH.vx) === Math.sign(b.x - PH.x) && Math.abs(b.x - PH.x) > b.r * .35) return 'SIDESWIPE'; return 'RAM'; }
   const touching = (b, pad = 1.1) => Math.abs(PH.x - b.x) < b.r + pad && Math.abs(PH.z - b.z) < b.len * .5 + 1.6 && PH.y < b.y + b.h + 2.2 && PH.y > b.y - 2;
   // what a machine does to you: always a stumble, never a stop
-  const shove = (dir, k) => { PH.vx += dir * k; try { d.shake(.25); } catch (e) { } };
-  const drag = (k) => { PH.vx *= k; PH.vz *= k; };
+  /* DAMAGE PLAN (owner 2026-11-27): a machine never stops you; how hard it shoves or slows you grows gently with the campaign (Route Zero 0.7x .. the Open Channel 1.05x),
+     bosses a touch harder, and every species keeps its own kind of hit (shove, drag, EMP, ride-along). Relaxing first: nothing ever passes about 1.1x. */
+  const DMG = Math.min(1.1, .7 + .05 * T);
+  const shove0 = (dir, k) => { PH.vx += dir * k * DMG; try { d.shake(.25 * DMG); } catch (e) { } }; const shove = shove0;
+  const drag = (k) => { const kk = 1 - (1 - k) * DMG; PH.vx *= kk; PH.vz *= kk; };
   const bounce = (b) => { drag(.82); shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
   const emp = () => { PH.boost_t = 0; drag(.86); try { d.emp(); d.shake(.35); d.sfx('zap'); } catch (e) { } };
 
   // ---------------------------------------------------------------- encounter builders (what spawns for each kind)
   const ahead = (m) => PH.z - m, lineX = (z, u) => d.trailX(z) + u;
   const ENC = {
-    swarm(s) { const n = Math.round((s.big ? 14 : 9) + T * 1.6), z0 = ahead(rnd(110, 150)); for (let k = 0; k < n; k++) { const z = z0 - rnd(0, 40), b = make(s, lineX(z, rnd(-13, 13)), z); b.mode = 'swarm'; b.sp = rnd(7, 11) + T * .5; } },
+    swarm(s) { const n = Math.round((s.big ? 14 : 9) + T * 1.6), z0 = ahead(rnd(110, 150)); for (let k = 0; k < n; k++) BQ.push(() => { const z = z0 - rnd(0, 40), b = make(s, lineX(z, rnd(-13, 13)), z); b.mode = 'swarm'; b.sp = rnd(7, 11) + T * .5; }); },          /* (built a few per frame: a whole swarm in one frame stalled it) */
     drop(s) { const z = ahead(rnd(90, 120)), gap = rnd(-6, 6), n = 6 + Math.floor(T / 2); for (let k = 0; k < n; k++) { const u = -12 + k * 24 / (n - 1); if (Math.abs(u - gap) < 3.2) continue; const b = make(s, lineX(z, u), z); b.mode = 'drop'; b.yOff = 14; b.vy = 0; } },
     pack(s) { const n = 3 + Math.min(2, Math.floor(T / 3)); for (let k = 0; k < n; k++) { const b = make(s, PH.x, PH.z + 30 + k * 4); b.mode = 'pack'; b.slot = (k % 2 ? 1 : -1) * (4 + Math.floor(k / 2) * 2.5); b.rel = -2 - k * 2; }
       if (s.leader) { const L = make(s, PH.x, PH.z + 40, { scale: 1.35 }); L.mode = 'leader'; L.hp = L.max = s.hp; L.lead = true; } },
@@ -278,7 +294,7 @@ export function createBeasts(d) {
   function nodeBreak(b) { b.node--; hurt(b, 'NODE', 3); for (const o of LIVE) if (o.minion && !o.dead) o.blind = 4; try { d.look('node'); } catch (e) { } }
 
   // ---------------------------------------------------------------- frame
-  function step(dt, live) { DT = dt; if (!live) return; director();
+  function step(dt, live) { DT = dt; if (!live) return; if (BQ.length) BQ.shift()(); director();
     for (const r of RACKS) { r.g.halo.rotation.y += dt * 2; r.g.halo.scaling.setAll(1 + .08 * Math.sin(performance.now() / 160)); if (!r.used && Math.abs(PH.z - r.z) < 2.4 && Math.abs(PH.x - r.x) < r.g.r + .8 && !PH.set) { r.used = true; fire(salvo(), PH.boost_t > 0); r.R.setEnabled(false); } }
     for (let i = RACKS.length - 1; i >= 0; i--) if (RACKS[i].z > PH.z + 30) { RACKS[i].R.dispose(false, true); RACKS.splice(i, 1); }
     for (let i = ROCKETS.length - 1; i >= 0; i--) { const k = ROCKETS[i]; k.t += dt; let tx, ty, tz; if (k.tg && !k.tg.dead) { tx = k.tg.x; ty = k.tg.y + (k.tg.yOff || 0) + k.tg.h * .55; tz = k.tg.z; } else { k.tg = LIVE.find((b) => !b.dead && !b.under && PH.z - b.z < 170 && b.z < PH.z) || null; tx = k.x + k.vx * .1; ty = k.y; tz = k.z + k.vz * .1; }
@@ -308,5 +324,8 @@ export function createBeasts(d) {
     R.position.set(x, ground(x, z) + (spec.model === 'spotter' ? 1.3 : g.hover ? 2.2 : 0), z); R.rotation.y = Math.atan2(-(cp.x - x), -(cp.z - z)) + turn;
     if (g.tip && g.tip.material) g.tip.material.emissiveColor.set(1, 1, 1); if (g.lr) { g.lr.material.emissiveColor.set(1, .2, .25); g.lb.material.emissiveColor.set(.3, .6, 1); }
     if (g.legs) for (const L of g.legs) L.L.rotation.x = Math.sin(L.i * 1.4 + (L.s > 0 ? Math.PI : 0)) * .25; return R; }
+  /* WARM-UP (owner 2026-11-27): build this world's machines and a rack once while the level loads and compile their materials, so the first one on the road
+     never stalls a frame; then throw the copies away (the materials stay cached). */
+  { try { for (const spec of ROS.concat([{ model: 'rack' }])) { const R = new B.TransformNode('warm', scene); BUILD[spec.model](R, spec.v); for (const m of R.getChildMeshes()) { if (m.material && m.material.forceCompilation) m.material.forceCompilation(m); } R.dispose(false, false); } } catch (e) { console.warn('beasts warm-up', e); } }
   return { pose, step, LIVE, LOG, RACKS, ROSTER, DIR, spawn: (k) => { const s = ROS.find((r) => r.k === k || r.name === k) || REG[0]; ENC[s.k](s); return s.name; }, rack: (z) => rackAt(PH.z - (z || 60)), fire: () => fire(salvo(), false) };
 }
