@@ -987,7 +987,10 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
     railStep(dt, sIn); toysStep(dt, sIn); KITL.step(dt); deckStep(dt); finStep(dt);
     try { SETS.step(dt, sIn); } catch (e) { }
     try { if (inTunZ(PH.z, 6)) { if (PH.rail) { PH.rail.done = true; PH.rail = null; } if (toys.state.lk) { toys.state.lk = null; toys.state.tube.active = false; } PH.ram = null; PH.latch = null; if (PH.set) try { SETS.abort(); } catch (e) { }          /* (the ground lock: wheels on the road, every frame, inside a tunnel) */
-      const g = th(PH.x, PH.z); if (Number.isFinite(g)) { PH.y = g; PH.vy = 0; PH.grounded = true; PH.crest = false; PH.air_t = 0; PH.gh_prev = g; } } } catch (e) { }
+      /* (owner 2026-11-26: you could ride up the cave's sloped wall and out through the roof, because the lock followed the hillside's height. Now: the tunnel floor is the
+         road's height at the centre, never the hill above; and the walls stop you 4 m short of the curve (the tunnel is a half-ellipse, 18 m each side, 15 m high)) */
+      const tx = trailX(PH.z), dx = PH.x - tx, LIM = 14; if (Math.abs(dx) > LIM) { PH.x = tx + Math.sign(dx) * LIM; const out = Math.sign(dx); if (PH.vx * out > 0) PH.vx *= -.15; }
+      const gc = th(tx, PH.z), gx = th(PH.x, PH.z), g = Number.isFinite(gc) ? (Number.isFinite(gx) ? Math.min(gx, gc + .4) : gc) : gx; if (Number.isFinite(g)) { PH.y = g; PH.vy = 0; PH.grounded = true; PH.crest = false; PH.air_t = 0; PH.gh_prev = g; } } } catch (e) { }
     // obstacles, pads, pickups
     if (!toys.active() && !PH.rail && !PH.set) obstacleStepB(PH.xPrev, PH.zPrev);
     for (const p of PADS) if (!p.used && !p.lk && Math.abs(PH.z - p.z) < 5 && Math.abs(PH.x - p.x) < 4) { p.used = true; if (p.hideSelf) p.hideSelf(); AW.onPadHit(); try { dopAdd('pad'); } catch (e) { } try { PSY.events.onPad(false); } catch (e) { } try { FXB.E.pad([PH.x, PH.y, PH.z]); } catch (e) { } PH.vx += Math.sin(PH.heading) * 14 * SPK * PSY.perks().padK; PH.vz -= Math.cos(PH.heading) * 14 * SPK * PSY.perks().padK; PH.boost_t = 2.4; PH.vxa = Math.max(PH.vxa, 1.4); chainHit(); big('BOOST'); }
