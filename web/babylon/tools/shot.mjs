@@ -1,5 +1,5 @@
 // SHOT: open any page headless (muted) at a given size and pixel ratio, with localStorage preset, wait, save a PNG.
-//   node tools/shot.mjs "<url>" out.png      env: VW, VH, DPR (default 1), WAIT ms (default 9000), LS='{"dl_freq":"820"}'
+//   node tools/shot.mjs "<url>" out.png      env: VW, VH, DPR (default 1), WAIT ms (default 9000), LS='{"dl_freq":"820"}', EVAL='js before capture'
 import { spawn } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,7 +19,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: +(process.env.VW || 1280), height: +(process.env.VH || 720), deviceScaleFactor: +(process.env.DPR || 1), mobile: false });
   const ls = process.env.LS ? JSON.parse(process.env.LS) : {};
   await send('Page.addScriptToEvaluateOnNewDocument', { source: `try { const o = ${JSON.stringify(ls)}; for (const k in o) localStorage.setItem(k, o[k]); } catch (e) { }` });
-  await send('Page.navigate', { url }); await sleep(+(process.env.WAIT || 9000));
+  await send('Page.navigate', { url }); await sleep(+(process.env.WAIT || 9000)); if (process.env.EVAL) { await send('Runtime.evaluate', { expression: process.env.EVAL }); await sleep(+(process.env.EVALWAIT || 40)); }          // EVAL='js': run just before the capture (e.g. trigger a glitch frame)
   const png = (await send('Page.captureScreenshot', { format: 'png' })).result.data; writeFileSync(out, Buffer.from(png, 'base64')); console.log('saved', out);
 } catch (e) { console.log('SHOT FAILED', String(e).slice(0, 300)); }
 finally { try { ws && ws.close(); } catch { } chrome.kill(); }
