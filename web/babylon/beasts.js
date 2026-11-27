@@ -154,7 +154,7 @@ export function createBeasts(d) {
   const DMG = Math.min(1.1, .7 + .05 * T);
   const shove0 = (dir, k) => { PH.vx += dir * k * DMG; try { d.shake(.25 * DMG); } catch (e) { } }; const shove = shove0;
   const drag = (k) => { const kk = 1 - (1 - k) * DMG; PH.vx *= kk; PH.vz *= kk; };
-  const bounce = (b) => { drag(.82); shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
+  const bounce = (b) => { PH.__bumpAt = performance.now(); b.bumpT = 1.2; b.x -= (Math.sign(PH.x - b.x) || 1) * 3; if (b.slot) b.slot *= 1.6; drag(.82); shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
   const emp = () => { PH.boost_t = 0; drag(.86); try { d.emp(); d.shake(.35); d.sfx('zap'); } catch (e) { } };
 
   // ---------------------------------------------------------------- encounter builders (what spawns for each kind)
@@ -226,7 +226,7 @@ export function createBeasts(d) {
   const hold = (b, rel, k = 1.6) => { const tgt = PH.z + rel; b.vz = PH.vz + clamp((tgt - b.z) * k, -24, 24); b.z += b.vz * DT; };
   const steerU = (b, u, k = 2) => { const cu = b.x - d.trailX(b.z); b.x += (u - cu) * Math.min(1, k * DT); };
   let DT = 0;
-  function behave(b, dt) { const m = b.mode, rel = b.z - PH.z, dx = PH.x - b.x, live = b.blind <= 0;
+  function behave(b, dt) { if (b.bumpT > 0) { b.bumpT -= dt; if (b.bumpT <= 0 && b.slot) b.slot /= 1.6; } const m = b.mode, rel = b.z - PH.z, dx = PH.x - b.x, live = b.blind <= 0;
     switch (m) {
       case 'swarm': { if (b.latched) { b.x = PH.x + b.lx; b.z = PH.z + b.lz; b.y = PH.y + .6; if (PH.boost_t > 0 || Math.random() < dt * .08) { b.latched = false; PH.latch_n = Math.max(0, (PH.latch_n || 1) - 1); kill(b, 'BOOST'); } else drag(1 - .012 * dt * 60 * .25); return; }
         const sp = live ? b.sp : b.sp * .2, tx = dx * .6 + Math.sin(b.t * 3 + b.ph) * 2.5, l = Math.hypot(tx, 1); b.x += tx / l * sp * dt; b.z += 1 / l * sp * dt;
@@ -275,7 +275,7 @@ export function createBeasts(d) {
   }
 
   // ---------------------------------------------------------------- contact: what the car did to it, or it did to the car
-  function contact(b) { if (b.dead || b.under || b.latched) return; if (PH.set || PH.rail) return; const yo = b.yOff || 0; const by = b.y + yo;
+  function contact(b) { if (b.dead || b.under || b.latched) return; if (PH.set || PH.rail) return; if ((b.bumpT || 0) > 0) return; if (performance.now() - (PH.__bumpAt || 0) < 800) return;          /* (owner 2026-11-27: a machine bumps you once, then backs off: a pack riding alongside used to bump every frame and pin the car) */ const yo = b.yOff || 0; const by = b.y + yo;
     const near = Math.abs(PH.x - b.x) < b.r + 1.1 && Math.abs(PH.z - b.z) < b.len * .5 + 1.6 && PH.y < by + b.h + 2.4 && PH.y > by - 2.2; if (!near) return;
     const how = method({ ...b, y: by }), kills = b.spec.kill, m = b.mode;
     if (m === 'swarm' || m === 'drop') { if (b.spec.armour && how === 'RAM') { bounce(b); b.z -= 6; return; } if (b.spec.shift) { const want = ['RAM', 'SIDESWIPE', 'STOMP'][Math.floor(((b.t + b.ph) % 3))]; if (how !== want && how !== 'RAM') { } }
