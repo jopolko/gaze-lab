@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><script>/* THE SHELL: opened on its own, this page reloads inside app.html (fullscreen survives page changes). &noshell skips it. */
+<html lang="en"><head><meta charset="utf-8"><script>if (/[?&]depth/.test(location.search)) document.documentElement.classList.add('depth');</script><script>/* THE SHELL: opened on its own, this page reloads inside app.html (fullscreen survives page changes). &noshell skips it. */
 (() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Afterglow</title>
@@ -95,6 +95,23 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 @media (orientation:landscape) and (max-height:500px) { #hint { flex-direction:row !important; flex-wrap:wrap; justify-content:flex-end; max-width:34vw !important; gap:.3em .9em !important; } }          /* (owner 2026-11-27: the links sit in a row so they never reach the ticker) */
 #strain { max-width:min(92vw,640px) !important; }
 @media (orientation:landscape) and (max-height:500px) { #strain { max-width:44vw !important; } #hint { width:max-content; } }
+
+/* DEPTH (owner 2026-11-27, trial: ?depth): three layers. The start button is the hero: raised, glossy, lit from inside, squishes when pressed.
+   Brochure / credits / headphones are frosted glass a layer down; the caption and tagline float above the sky on their own light. */
+html.depth #tap { margin-right:0; letter-spacing:.3em; padding:.75em 1.6em .75em 1.9em; color:#04121c; text-shadow:0 1px 0 rgba(255,255,255,.55);
+  background:radial-gradient(120% 140% at 50% -20%, #f2feff 0%, #8ff4ff 30%, #2ad8f2 62%, #0f8fb4 100%); border:0; border-radius:999px;
+  box-shadow:inset 0 2px 0 rgba(255,255,255,.85), inset 0 -6px 12px rgba(0,40,70,.45), 0 6px 0 #0a5c78, 0 12px 24px rgba(0,0,0,.55), 0 0 34px rgba(56,232,255,.55);
+  transition:transform .12s cubic-bezier(.3,1.6,.5,1), box-shadow .12s; }
+html.depth #tap.on { animation:dpulse 2.6s ease-in-out infinite; }
+html.depth #tap:active, html.depth #tap.press { transform:translateY(5px) scale(.97); box-shadow:inset 0 2px 0 rgba(255,255,255,.7), inset 0 -3px 8px rgba(0,40,70,.4), 0 1px 0 #0a5c78, 0 4px 10px rgba(0,0,0,.5), 0 0 22px rgba(56,232,255,.4); }
+@keyframes dpulse { 50% { box-shadow:inset 0 2px 0 rgba(255,255,255,.85), inset 0 -6px 12px rgba(0,40,70,.45), 0 6px 0 #0a5c78, 0 12px 24px rgba(0,0,0,.55), 0 0 60px rgba(56,232,255,.85); } }
+html.depth #tgBtn { background:linear-gradient(#ffe27a, #ffc21a); box-shadow:inset 0 1px 0 rgba(255,255,255,.7), 0 3px 0 #a87a00, 0 6px 14px rgba(0,0,0,.45); }
+html.depth #hint > a:not(#tgBtn), html.depth #hint .hp { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:.4em .9em; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); box-shadow:0 4px 12px rgba(0,0,0,.35); }
+html.depth #hint { gap:.6em .7em !important; }
+html.depth #strain { box-shadow:0 0 0 1px rgba(255,255,255,.14), 0 10px 26px rgba(0,0,0,.55) !important; backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
+html.depth #tag, html.depth #dial .nums { text-shadow:0 0 10px rgba(0,0,0,.9), 0 2px 4px rgba(0,0,0,.8); }
+
+@media not all and (orientation:landscape) and (max-height:500px) { .mk { align-items:center !important; } #sun { align-self:center; margin-left:auto !important; margin-right:auto !important; } .mk { display:flex !important; width:100%; } .gw { display:block !important; width:auto; align-self:stretch; } #mark { margin-left:auto !important; margin-right:auto !important; } }          /* (owner 2026-11-27: the sun centred over the wordmark at every width) */
 </style></head>
 <body>
 <script>window.__PRIVMS = 0; if (/[?&]firstvisit\b/.test(location.search)) try { for (const k of ['dl_lockfirst', 'dl_firstlock']) localStorage.removeItem(k); } catch (e) { }          /* (?firstvisit: see the first-visit gag again) */</script>
@@ -694,7 +711,7 @@ if (/[?&]layers\b/.test(location.search)) addEventListener('load', () => { const
   const ta = document.createElement('textarea'); ta.style.cssText = 'display:none;width:100%;height:110px;font:11px ui-monospace,Consolas,monospace;background:#050810;color:#cfe;border:1px solid #fff3;border-radius:6px';
   cp.addEventListener('pointerdown', (e) => e.stopPropagation()); cp.addEventListener('click', (e) => { e.stopPropagation(); const t = info(); ta.value = t; ta.style.display = 'block'; try { navigator.clipboard.writeText(t).then(() => { cp.textContent = 'COPIED'; setTimeout(() => (cp.textContent = 'COPY REPORT'), 1500); }, () => ta.select()); } catch (er) { ta.select(); } });
   box.append(cp, ta); document.body.appendChild(box); });</script>
-<script src="gate.js"></script><script src="prefetch.js"></script><script>/* (owner 2026-11-27) while you look at this page, the level you are about to play downloads quietly in the background */
+<script>(() => { const t = document.getElementById('tap'); if (t) { t.addEventListener('pointerdown', () => t.classList.add('press')); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) t.addEventListener(ev, () => t.classList.remove('press')); } })();</script><script src="gate.js"></script><script src="prefetch.js"></script><script>/* (owner 2026-11-27) while you look at this page, the level you are about to play downloads quietly in the background */
 setTimeout(() => { try { const P = JSON.parse(localStorage.getItem('dl_prog') || '{}').worlds || {}, done = (id) => { const w = P[id]; return !!(w && w.best && w.best !== 'NONE'); };
   const ORD = [['routezero', 'story'], ['candy', 'candy'], ['alpine', 'alpine'], ['egypt', 'egypt'], ['synthwave', 'synthwave'], ['tunnel', 'tunnel'], ['matrix', 'matrix'], ['psychedelic', 'psychedelic']];
   const nx = ORD.find(([id]) => !done(id)) || ORD[0]; window.AGPrefetch && AGPrefetch.level(nx[1]); } catch (e) { } }, 3500);</script>
