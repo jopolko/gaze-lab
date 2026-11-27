@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>AFTERGLOW — Mile Zero</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #120a1e; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { width: 100%; height: 100%; display: block; outline: none; }
+  #toast { position: fixed; left: 50%; top: calc(16px + env(safe-area-inset-top, 0px)); transform: translate(-50%, calc(-100% - 60px)); transition: transform .45s cubic-bezier(.2, 1.4, .4, 1); z-index: 30; pointer-events: auto;
+    min-width: min(86vw, 340px); max-width: 92vw; box-sizing: border-box; padding: 12px 14px; border-radius: 18px; background: rgba(16, 10, 30, .86); border: 1px solid rgba(120, 255, 240, .35); box-shadow: 0 8px 30px rgba(0, 0, 0, .45), 0 0 18px rgba(120, 255, 240, .18);
+    color: #eae4ff; font: 500 14px/1.35 system-ui, sans-serif; }
+  #toast.on { transform: translate(-50%, 0); }
+  #toast b { color: #7ffff0; letter-spacing: .05em; font-size: 12px; display: block; margin-bottom: 3px; }
+  #toast .act { margin-top: 9px; display: flex; gap: 8px; }
+  #toast button { flex: 1; padding: 9px 0; border-radius: 12px; border: 1px solid rgba(255, 200, 90, .6); background: rgba(255, 200, 90, .16); color: #ffd88a; font: 700 13px system-ui, sans-serif; letter-spacing: .05em; }
+  #toast button.pri { background: rgba(255, 200, 90, .85); color: #1a0f24; }
+  #phone { position: fixed; inset: 0; z-index: 40; display: none; align-items: center; justify-content: center; background: rgba(8, 4, 16, .55); }
+  #phone.on { display: flex; }
+  #phone .dev { width: min(78vw, 300px); max-height: 86vh; border-radius: 30px; padding: 22px 18px 18px; box-sizing: border-box; background: linear-gradient(160deg, #1d1236, #0e0a1c); border: 2px solid #3b2a5e; box-shadow: 0 0 30px rgba(127, 255, 240, .15); color: #eae4ff; font: 500 14px/1.3 system-ui, sans-serif; display: flex; flex-direction: column; gap: 10px; }
+  #phone h2 { margin: 0 0 4px; font: 800 13px system-ui, sans-serif; letter-spacing: .2em; color: #7ffff0; text-align: center; }
+  #phone .msg { font-size: 13px; color: #c9c0ea; background: rgba(255, 255, 255, .05); border-radius: 12px; padding: 9px 11px; }
+  #phone button { padding: 11px 0; border-radius: 14px; border: 1px solid rgba(127, 255, 240, .35); background: rgba(127, 255, 240, .08); color: #dffcf8; font: 700 13px system-ui, sans-serif; letter-spacing: .08em; }
+  #phone button.pri { background: #7ffff0; color: #120a1e; border-color: #7ffff0; }
+  #fade { position: fixed; inset: 0; background: #120a1e; z-index: 50; opacity: 1; pointer-events: none; transition: opacity .8s; }
+  #fade.off { opacity: 0; }
+  #pauseB { position: fixed; left: calc(14px + env(safe-area-inset-left, 0px)); top: calc(14px + env(safe-area-inset-top, 0px)); z-index: 25; width: 44px; height: 44px; border-radius: 14px; border: 1px solid rgba(127, 255, 240, .4); background: rgba(16, 10, 30, .45); color: #7ffff0; font: 700 15px system-ui; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="toast"></div>
+<div id="phone"><div class="dev"><h2>BURNER</h2><div class="msg" id="phMsg">No new messages.</div>
+  <button class="pri" data-p="resume">BACK TO THE ROAD</button><button data-p="cam">SWITCH CAMERA</button><button data-p="runs">QUICK RUN: ROUTE ZERO</button><button data-p="title">TITLE SCREEN</button></div></div>
+<button id="pauseB" aria-label="Phone">&#9646;&#9646;</button>
+<div id="fade"></div>
+<script src="https://cdn.jsdelivr.net/npm/babylonjs@7.0.0/babylon.js"></script>
+<script src="input.js?v=1"></script>
+<script>
+/* MILE ZERO — the first open zone (open-world milestone 1, 2026-11-27; plan in web/docs/AFTERGLOW_OPEN_WORLD_PLAN.md).
+   A free-roam desert bowl around the diner on Route Zero: drive anywhere, take the job on the burner, pick up at the pumps,
+   leave by the south gate onto Route Zero (the existing desert run). Grey-box stage: the feel first, then the art.
+   Debug hooks: window.__Z (car, H, mission), ?warp=x,z, ?nomusic, ?fp (first person). */
+const Q = new URLSearchParams(location.search);
+const B = BABYLON, canvas = document.getElementById('c');
+const engine = new B.Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false, antialias: true });
+engine.setHardwareScalingLevel(1 / Math.min(2, devicePixelRatio || 1));
+const scene = new B.Scene(engine); scene.clearColor = new B.Color4(.07, .04, .12, 1);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v)), lerp = (a, b, t) => a + (b - a) * t, sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/* ---------- the land ---------- */
+const HALF = 800;
+const roadX = (z) => 40 * Math.sin(z / 300) + 15 * Math.sin(z / 97);
+const roadH = (z) => 3 * Math.sin(z * .004) + 1.5 * Math.sin(z * .011);
+const hash = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+const vnoise = (x, y) => { const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi, u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return lerp(lerp(hash(xi, yi), hash(xi + 1, yi), u), lerp(hash(xi, yi + 1), hash(xi + 1, yi + 1), u), v); };
+const fbm = (x, y) => vnoise(x, y) * .55 + vnoise(x * 2.1, y * 2.1) * .28 + vnoise(x * 4.3, y * 4.3) * .17;
+const DINER = { x: roadX(0) + 46, z: 0 };
+const RAMPS = [{ x: roadX(-260) - 34, z: -260, a: .35 }, { x: roadX(220) + 40, z: 220, a: -.4 }, { x: 260, z: -420, a: 1.2 }, { x: -300, z: 380, a: 2.4 }];
+function H0(x, z) {
+  let h = 7 * Math.sin(x * .013 + z * .007) * Math.sin(z * .011 - x * .004) + 14 * fbm(x * .006 + 11, z * .006 - 3);          /* dunes */
+  h += 38 * sstep(.6, .68, fbm(x * .0035 + 40, z * .0035 + 7));          /* mesas with flat tops */
+  const r = Math.max(Math.abs(x), Math.abs(z)) / HALF, gate = Math.abs(z) > HALF * .7 ? 1 - sstep(16, 46, Math.abs(x - roadX(z))) : 0;
+  h += 170 * sstep(.8, 1, r) * (1 - gate);          /* the bowl's rim keeps you in, except where the road leaves */
+  for (const R of RAMPS) { const dx = x - R.x, dz = z - R.z, c = Math.cos(R.a), s = Math.sin(R.a), u = dx * c - dz * s, w = dx * s + dz * c;          /* kicker ramps: a slope up, then a drop */
+    if (Math.abs(w) < 7 && u > -22 && u < 2) h += (u + 22) / 24 * 7.5 * sstep(7, 4, Math.abs(w)); }
+  return h;
+}
+function H(x, z) {
+  let h = H0(x, z);
+  const d = Math.abs(x - roadX(z)); h = lerp(h, roadH(z), 1 - sstep(9, 28, d));          /* the road is graded flat */
+  const dd = Math.hypot(x - DINER.x, z - DINER.z); h = lerp(h, roadH(0), 1 - sstep(40, 70, dd));          /* the diner's lot */
+  return h;
+}
+const GN = 300, GS = (HALF * 2 + 100) / GN, G0 = -(HALF + 50), HG = new Float32Array((GN + 1) * (GN + 1));
+for (let j = 0; j <= GN; j++) for (let i = 0; i <= GN; i++) HG[j * (GN + 1) + i] = H(G0 + i * GS, G0 + j * GS);
+/* the car rides on exactly the surface it sees: the same grid, interpolated the way the triangles are */
+function Hg(x, z) { const fx = clamp((x - G0) / GS, 0, GN - 1e-4), fz = clamp((z - G0) / GS, 0, GN - 1e-4), i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j, k = j * (GN + 1) + i;
+  const a = HG[k], b = HG[k + 1], c = HG[k + GN + 1], d = HG[k + GN + 2]; return u + v < 1 ? a + (b - a) * u + (c - a) * v : d + (c - d) * (1 - u) + (b - d) * (1 - v); }
+{ const pos = [], idx = [], uv = []; for (let j = 0; j <= GN; j++) for (let i = 0; i <= GN; i++) { pos.push(G0 + i * GS, HG[j * (GN + 1) + i], G0 + j * GS); uv.push(i / GN, j / GN); }
+  for (let j = 0; j < GN; j++) for (let i = 0; i < GN; i++) { const a = j * (GN + 1) + i, b = a + 1, c = a + GN + 1, d = c + 1; idx.push(a, b, c, b, d, c); }
+  const nrm = []; B.VertexData.ComputeNormals(pos, idx, nrm); const vd = new B.VertexData(); vd.positions = pos; vd.indices = idx; vd.normals = nrm; vd.uvs = uv;
+  var ground = new B.Mesh('zground', scene); vd.applyToMesh(ground); ground.isPickable = true; ground.__cat = 'ground'; }
+
+/* ---------- surfaces that trip (the effects live in the world, never on the screen) ---------- */
+const U = { time: 0, beat: 0, trip: .35, car: new B.Vector3() };
+B.Effect.ShadersStore.zgVertexShader = `precision highp float; attribute vec3 position; attribute vec3 normal; uniform mat4 world, viewProjection; varying vec3 vW; varying vec3 vN;
+  void main(){ vec4 w = world * vec4(position, 1.); vW = w.xyz; vN = normal; gl_Position = viewProjection * w; }`;
+B.Effect.ShadersStore.zgFragmentShader = `precision highp float; varying vec3 vW; varying vec3 vN; uniform float uTime, uBeat, uTrip; uniform vec3 uCar, uCam;
+  vec3 hsv(float h, float s, float v){ vec3 p = abs(fract(h + vec3(0., 2./3., 1./3.)) * 6. - 3.); return v * mix(vec3(1.), clamp(p - 1., 0., 1.), s); }
+  float roadX(float z){ return 40. * sin(z / 300.) + 15. * sin(z / 97.); }
+  void main(){
+    float slope = 1. - clamp(vN.y, 0., 1.), d = abs(vW.x - roadX(vW.z)), far = length(vW - uCam);
+    vec3 sand = mix(vec3(.86, .52, .34), vec3(.62, .30, .42), .5 + .5 * sin(vW.x * .021 + vW.z * .017));
+    vec3 rock = mix(vec3(.42, .2, .38), vec3(.25, .14, .36), clamp(vW.y / 120., 0., 1.));
+    vec3 c = mix(sand, rock, smoothstep(.18, .45, slope));
+    float ring = sin(length(vW.xz - uCar.xz) * .09 - uTime * 2.6);          /* a ripple spreads out from the car with the music */
+    float hue = fract(uTime * .025 + vW.x * .0016 - vW.z * .0011 + ring * .06 * uTrip);
+    vec2 g = vW.xz * .32; vec2 f = fract(g) - .5; float rr = .16 + .12 * uBeat + .1 * uTrip * (.5 + .5 * ring);          /* dots on the sand, swelling on the beat */
+    float dots = 1. - smoothstep(rr - .04, rr, length(f));
+    c = mix(c, hsv(hue, .75, 1.), dots * (.35 + .45 * uTrip) * smoothstep(900., 120., far));
+    c = mix(c, c * hsv(hue + .3, .5, 1.3), .25 * uTrip * (.5 + .5 * ring));
+    if (d < 7.5) { vec3 asph = vec3(.17, .12, .25) + .05 * hsv(hue + .5, 1., 1.); float ln = step(d, .3) * step(.5, fract(vW.z / 12.)), ed = step(6.6, d) * step(d, 7.);
+      c = mix(c, asph, smoothstep(7.5, 6.8, d)); c = mix(c, hsv(hue + .1, .6, 1.6), ln + ed); }
+    vec3 hor = mix(vec3(1., .66, .52), vec3(.55, .3, .75), .5 + .5 * sin(uTime * .05));
+    c = mix(c, hor, smoothstep(250., 1400., far));
+    gl_FragColor = vec4(max(c, vec3(.07, .05, .1)), 1.); }`;
+const gMat = new B.ShaderMaterial('zgMat', scene, { vertex: 'zg', fragment: 'zg' }, { attributes: ['position', 'normal'], uniforms: ['world', 'viewProjection', 'uTime', 'uBeat', 'uTrip', 'uCar', 'uCam'] });
+ground.material = gMat;
+
+B.Effect.ShadersStore.zsVertexShader = `precision highp float; attribute vec3 position; uniform mat4 worldViewProjection; varying vec3 vP; void main(){ vP = position; gl_Position = worldViewProjection * vec4(position, 1.); }`;
+B.Effect.ShadersStore.zsFragmentShader = `precision highp float; varying vec3 vP; uniform float uTime, uBeat, uTrip;
+  vec3 hsv(float h, float s, float v){ vec3 p = abs(fract(h + vec3(0., 2./3., 1./3.)) * 6. - 3.); return v * mix(vec3(1.), clamp(p - 1., 0., 1.), s); }
+  void main(){ vec3 d = normalize(vP); float y = d.y, a = atan(d.z, d.x);
+    vec3 c = mix(vec3(1., .66, .52), vec3(.36, .18, .62), smoothstep(-.02, .45, y)); c = mix(c, vec3(.1, .05, .24), smoothstep(.4, 1., y));
+    float bands = sin(a * 7. + y * 18. - uTime * .35) * sin(a * 3. - y * 9. + uTime * .2);          /* slow swirling bands, brighter on the beat */
+    c += hsv(fract(uTime * .02 + y * .6 + bands * .1), .7, 1.) * (.08 + .2 * uTrip + .12 * uBeat) * smoothstep(.0, .3, y) * (.5 + .5 * bands);
+    vec3 sun = normalize(vec3(.3, .18, -1.)); float s = max(dot(d, sun), 0.); c += vec3(1., .78, .5) * (pow(s, 600.) * 3. + pow(s, 12.) * .35);
+    gl_FragColor = vec4(max(c, vec3(.08, .05, .14)), 1.); }`;
+const sky = B.MeshBuilder.CreateSphere('zsky', { diameter: 5000, segments: 96, sideOrientation: B.Mesh.BACKSIDE }, scene); sky.isPickable = false; sky.infiniteDistance = true;
+const sMat = new B.ShaderMaterial('zsMat', scene, { vertex: 'zs', fragment: 'zs' }, { attributes: ['position'], uniforms: ['worldViewProjection', 'uTime', 'uBeat', 'uTrip'] }); sMat.backFaceCulling = false; sky.material = sMat;
+{ const hl = new B.HemisphericLight('zhemi', new B.Vector3(.2, 1, -.3), scene); hl.diffuse = new B.Color3(1, .82, .74); hl.groundColor = new B.Color3(.36, .2, .5); hl.intensity = 1.15; }
+const glow = new B.GlowLayer('zglow', scene, { mainTextureRatio: .5 }); glow.intensity = .8;
+
+/* ---------- grey-box set dressing: the diner, the pumps, the gates (art pass comes after the feel) ---------- */
+const solid = (name, rgb, em) => { const m = new B.StandardMaterial(name, scene); m.diffuseColor = new B.Color3(...rgb); m.specularColor = new B.Color3(.05, .05, .05); if (em) m.emissiveColor = new B.Color3(...em); return m; };
+const box = (name, w, h, d, x, y, z, mat, ry) => { const b = B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene); b.position.set(x, y, z); b.rotation.y = ry || 0; b.material = mat; b.__cat = 'other'; return b; };
+const COLL = [];          /* solid things the car bumps off: {x, z, r} */
+{ const g0 = roadH(0), mW = solid('dnWall', [.32, .2, .42]), mRoof = solid('dnRoof', [.2, .12, .3]), mNeonC = solid('dnNeonC', [0, 0, 0], [.4, 2.2, 2.1]), mNeonA = solid('dnNeonA', [0, 0, 0], [2.4, 1.5, .4]), mWin = solid('dnWin', [.1, .06, .1], [1.6, 1.1, .5]);
+  const X = DINER.x + 14, Z = DINER.z;
+  box('diner', 12, 5, 26, X, g0 + 2.5, Z, mW); box('dinerRoof', 13, .6, 27, X, g0 + 5.2, Z, mRoof); box('dinerStrip', .2, .25, 27, X - 6.6, g0 + 4.7, Z, mNeonC);
+  for (let i = 0; i < 4; i++) box('dinerWin', .1, 1.9, 3.4, X - 6.05, g0 + 2.3, Z - 8 + i * 5.3, mWin);
+  COLL.push({ x: X, z: Z - 9, r: 7 }, { x: X, z: Z, r: 7 }, { x: X, z: Z + 9, r: 7 });
+  /* the sign on a pole: MILE ZERO */
+  const dt = new B.DynamicTexture('signTx', { width: 512, height: 160 }, scene); const cx = dt.getContext(); cx.fillStyle = '#1a0f24'; cx.fillRect(0, 0, 512, 160); cx.font = '800 88px system-ui, sans-serif'; cx.textAlign = 'center'; cx.fillStyle = '#ffd88a'; cx.fillText('MILE ZERO', 256, 92); cx.font = '700 30px system-ui, sans-serif'; cx.fillStyle = '#7ffff0'; cx.fillText('OPEN 24 HRS · GAS', 256, 140); dt.update();
+  const sm = new B.StandardMaterial('signM', scene); sm.diffuseTexture = dt; sm.emissiveTexture = dt; sm.disableLighting = true;
+  const sp = B.MeshBuilder.CreatePlane('sign', { width: 10, height: 3.1, sideOrientation: B.Mesh.DOUBLESIDE }, scene); sp.material = sm; sp.position.set(DINER.x - 14, g0 + 11, Z - 16); sp.rotation.y = Math.PI / 2; sp.__cat = 'other';
+  box('signPole', .5, 9.5, .5, DINER.x - 14, g0 + 4.75, Z - 16, mRoof); COLL.push({ x: DINER.x - 14, z: Z - 16, r: 1 });
+  /* pumps under a canopy with a neon edge */
+  box('canopy', 16, .7, 10, DINER.x - 8, g0 + 6, Z + 14, mRoof); box('canopyEdge', 16.4, .25, 10.4, DINER.x - 8, g0 + 5.55, Z + 14, mNeonA);
+  for (const dx of [-13, -3]) { box('pump', 1.2, 2.2, .9, DINER.x + dx, g0 + 1.1, Z + 14, mW); box('pumpLit', 1.25, .5, .95, DINER.x + dx, g0 + 1.9, Z + 14, mNeonC); COLL.push({ x: DINER.x + dx, z: Z + 14, r: 1.1 }); }
+  for (const cz of [Z + 9.5, Z + 18.5]) for (const cxp of [DINER.x - 15.5, DINER.x - .5]) { box('canopyPost', .4, 6, .4, cxp, g0 + 3, cz, mRoof); COLL.push({ x: cxp, z: cz, r: .5 }); }
+}
+/* saguaros and rocks scattered off the road */
+{ const mC = solid('cactus', [.18, .42, .3], [.02, .12, .1]); let n = 0;
+  for (let k = 0; k < 900 && n < 140; k++) { const x = (hash(k, 3) - .5) * 1400, z = (hash(k, 9) - .5) * 1400; if (Math.abs(x - roadX(z)) < 22 || Math.hypot(x - DINER.x, z - DINER.z) < 75) continue; const h = H(x, z); if (h > 30) continue;
+    const t = 4 + hash(k, 5) * 5, c = B.MeshBuilder.CreateCylinder('cac', { height: t, diameter: .9, tessellation: 8 }, scene); c.material = mC; c.position.set(x, h + t / 2, z); c.__cat = 'veg'; c.freezeWorldMatrix();
+    if (hash(k, 7) > .4) { const arm = B.MeshBuilder.CreateCylinder('cacA', { height: t * .4, diameter: .6, tessellation: 6 }, scene); arm.material = mC; arm.position.set(x + .9, h + t * .62, z); arm.freezeWorldMatrix(); arm.__cat = 'veg'; }
+    COLL.push({ x, z, r: .8 }); n++; } }
+/* the gates: Route Zero leaves the bowl to the south (the run) and the north (closed for now) */
+const GATES = [{ id: 'south', z: HALF - 30 }, { id: 'north', z: -HALF + 30 }];
+{ const mG = solid('gate', [.1, .06, .16], [.2, .9, .85]); for (const G of GATES) { const gx = roadX(G.z), gh = roadH(G.z); for (const s of [-1, 1]) { box('gatePost', 1, 12, 1, gx + s * 10, gh + 6, G.z, mG); COLL.push({ x: gx + s * 10, z: G.z, r: .9 }); } box('gateBar', 21, 1, 1, gx, gh + 12, G.z, mG); } }
+
+/* ---------- the car (grey box) ---------- */
+const car = new B.TransformNode('car', scene);
+{ const mB = solid('carBody', [.22, .14, .34]), mT = solid('carTrim', [0, 0, 0], [.4, 2.2, 2.1]), mL = solid('carLamp', [0, 0, 0], [2.6, 2, 1.2]), mR = solid('carTail', [0, 0, 0], [2.6, .7, .12]), mW = solid('carWheel', [.06, .05, .08]);
+  const p = (b) => { b.parent = car; b.isPickable = false; return b; };
+  p(box('cBody', 2.1, .7, 4.4, 0, .75, 0, mB)); p(box('cCab', 1.7, .55, 2, 0, 1.35, .35, mB)); p(box('cTrimL', .06, .08, 4.4, -1.07, .62, 0, mT)); p(box('cTrimR', .06, .08, 4.4, 1.07, .62, 0, mT));
+  p(box('cLamp', 1.7, .14, .06, 0, .85, -2.21, mL)); p(box('cTail', 1.8, .12, .06, 0, .9, 2.21, mR));
+  for (const [x, z] of [[-1.05, -1.45], [1.05, -1.45], [-1.05, 1.45], [1.05, 1.45]]) { const w = B.MeshBuilder.CreateCylinder('cWheel', { height: .35, diameter: .82, tessellation: 14 }, scene); w.rotation.z = Math.PI / 2; w.position.set(x, .41, z); w.material = mW; p(w); } }
+
+/* ---------- driving: an engine, not a sled (throttle, brakes, reverse, grip, drift, air) ---------- */
+const C = { acc: 32, vmax: 62, boostAcc: 44, boostMax: 88, brake: 42, revAcc: 14, revMax: 14, roll: .35, drag: .00006, grav: 26, grip: 7.5, driftGrip: 2.2, jumpV: 12, yawLow: 2.5, yawHigh: 1.15 };
+const P = { x: DINER.x - 30, z: 30, y: 0, h: Math.PI, vx: 0, vz: 0, vy: 0, grounded: true, air: 0, boost: 1, pitch: 0, roll: 0, gearT: 0, gvyPrev: 0, speed: 0 };
+if (Q.get('warp')) { const [wx, wz] = Q.get('warp').split(',').map(Number); P.x = wx; P.z = wz; }
+P.y = Hg(P.x, P.z);
+function drive(dt, I) {
+  const fx = Math.sin(P.h), fz = -Math.cos(P.h), rx = Math.cos(P.h), rz = Math.sin(P.h);
+  let vf = P.vx * fx + P.vz * fz, vl = P.vx * rx + P.vz * rz;
+  const boosting = I.boost && P.boost > .02 && I.throttle > -.2; P.boost = clamp(P.boost + (boosting ? -dt / 3.2 : dt / 7), 0, 1);
+  if (P.grounded) {
+    const thr = boosting ? Math.max(I.throttle, 1) : I.throttle, vmax = boosting ? C.boostMax : C.vmax;
+    if (thr > 0) vf += thr * (boosting ? C.boostAcc : C.acc) * Math.max(0, 1 - vf / vmax) * dt;
+    else if (thr < 0) { if (vf > .5) vf = Math.max(0, vf + thr * C.brake * dt); else vf = Math.max(-C.revMax, vf + thr * C.revAcc * dt); }
+    else vf -= Math.sign(vf) * Math.min(Math.abs(vf), C.roll * dt * 9);
+    vf -= vf * Math.abs(vf) * C.drag * dt * 60;
+    const e = 1.5, sl = (Hg(P.x + fx * e, P.z + fz * e) - Hg(P.x - fx * e, P.z - fz * e)) / (2 * e); vf -= sl * C.grav * dt;          /* hills pull you back or roll you on */
+    const drift = I.jump && false; const grip = (boosting && Math.abs(I.steer) > .6 ? C.driftGrip : C.grip); vl *= Math.exp(-grip * dt);
+    const spd = Math.abs(vf), yaw = lerp(C.yawLow, C.yawHigh, clamp(spd / 70, 0, 1)) * clamp(spd / 5, .28, 1);          /* turns tight when slow, wide when fast; a crawl still turns */
+    P.h -= I.steer * yaw * dt * (vf < -.3 ? -1 : 1);
+    if (I.jumpP) { P.vy = C.jumpV; P.grounded = false; }
+  } else { P.h -= I.steer * .9 * dt; vl *= Math.exp(-.4 * dt); }
+  const nfx = Math.sin(P.h), nfz = -Math.cos(P.h), nrx = Math.cos(P.h), nrz = Math.sin(P.h);
+  P.vx = nfx * vf + nrx * vl; P.vz = nfz * vf + nrz * vl;
+  const nx = P.x + P.vx * dt, nz = P.z + P.vz * dt;
+  /* bumps: solid things push you out along the contact, and you lose the speed going into them */
+  let bx = nx, bz = nz;
+  for (const o of COLL) { const dx = bx - o.x, dz = bz - o.z, rr = o.r + 1.3, d = Math.hypot(dx, dz); if (d < rr && d > 1e-4) { const ux = dx / d, uz = dz / d; bx = o.x + ux * rr; bz = o.z + uz * rr; const vn = P.vx * ux + P.vz * uz; if (vn < 0) { P.vx -= vn * ux * 1.3; P.vz -= vn * uz * 1.3; P.hitT = .3; } } }
+  P.x = clamp(bx, -HALF + 5, HALF - 5); P.z = clamp(bz, -HALF + 5, HALF - 5);
+  const gh = Hg(P.x, P.z);
+  if (P.grounded) { const gvy = clamp((gh - P.y) / Math.max(dt, 1e-3), -80, 80);          /* off a crest at speed you fly: when the ground falls away faster than gravity could follow, you keep the upward speed you had */
+    if (P.gvyPrev - gvy > 30 * dt * 2.2 && P.gvyPrev > 3 && Math.abs(P.speed || 0) > 12) { P.grounded = false; P.vy = P.gvyPrev; P.air = 0; } else { P.y = gh; } P.gvyPrev = gvy; }
+  if (!P.grounded) { P.vy -= 30 * dt; P.y += P.vy * dt; P.air += dt; if (P.y <= gh) { const hard = -P.vy; P.y = gh; P.grounded = true; P.vy = 0; if (P.air > .35) { land(hard); } P.air = 0; P.gvyPrev = 0; } }
+  /* the body leans with the ground (and with the turn) */
+  const e2 = 2, gp = Math.atan2(Hg(P.x - nfx * e2, P.z - nfz * e2) - Hg(P.x + nfx * e2, P.z + nfz * e2), 2 * e2), gr = Math.atan2(Hg(P.x + nrx * e2, P.z + nrz * e2) - Hg(P.x - nrx * e2, P.z - nrz * e2), 2 * e2);
+  P.pitch = lerp(P.pitch, P.grounded ? gp : clamp(-P.vy * .02, -.4, .4), Math.min(1, dt * 8)); P.roll = lerp(P.roll, (P.grounded ? -gr : 0) - I.steer * clamp(vf / 60, 0, 1) * .06, Math.min(1, dt * 8));
+  car.position.set(P.x, P.y, P.z); car.rotation.set(P.pitch, P.h, P.roll); car.rotationQuaternion = null;
+  P.speed = vf; P.boosting = boosting;
+}
+function land(hard) { U.beat = 1; shake = Math.min(.8, hard / 40); if (P.air > .9) toast('<b>LANDED</b>' + (P.air > 1.6 ? 'Big air.' : 'Clean.'), 1400); P.vx *= 1.04; P.vz *= 1.04; }
+
+/* ---------- camera: chase by default, first person on CAM ---------- */
+const cam = new B.FreeCamera('zcam', new B.Vector3(P.x, P.y + 4, P.z + 10), scene); cam.minZ = .2; cam.maxZ = 6000; cam.fov = 1.05; scene.activeCamera = cam; cam.inputs.clear();
+let camMode = Q.has('fp') ? 'first' : 'chase', shake = 0; const CP = new B.Vector3(P.x, P.y + 4, P.z + 10);
+function camStep(dt, I) {
+  const lx = I.lookX, ly = I.lookY, sp = Math.abs(P.speed || 0);
+  if (camMode === 'chase') { const back = 8.5 + sp * .03, up = 3.2 + sp * .012, a = P.h + lx, fx = Math.sin(a), fz = -Math.cos(a);
+    const want = new B.Vector3(P.x - fx * back, P.y + up - ly * 4, P.z - fz * back); const g = Hg(want.x, want.z); if (want.y < g + 1.2) want.y = g + 1.2;
+    B.Vector3.LerpToRef(CP, want, Math.min(1, dt * 7), CP); cam.position.copyFrom(CP); cam.setTarget(new B.Vector3(P.x + fx * 6, P.y + 1.4 - ly * 6, P.z + fz * 6));
+    for (const m of car.getChildMeshes()) m.isVisible = true; }
+  else { const a = P.h + lx, fx = Math.sin(a), fz = -Math.cos(a); cam.position.set(P.x + Math.sin(P.h) * -.2, P.y + 1.55, P.z - Math.cos(P.h) * -.2); cam.setTarget(new B.Vector3(cam.position.x + fx * 20, cam.position.y - ly * 20 + Math.sin(P.pitch) * 20 * 0, cam.position.z + fz * 20));
+    for (const m of car.getChildMeshes()) m.isVisible = false; }
+  if (shake > 0) { cam.position.x += (Math.random() - .5) * shake * .4; cam.position.y += (Math.random() - .5) * shake * .4; shake *= Math.exp(-dt * 6); }
+  cam.fov = lerp(cam.fov, 1.0 + clamp(sp / 90, 0, 1) * .32 + (P.boosting ? .08 : 0), Math.min(1, dt * 3));          /* speed widens the view */
+}
+
+/* ---------- the burner phone: toasts in play, the phone itself when paused ---------- */
+const toastEl = document.getElementById('toast'); let toastT = 0;
+function toast(html, ms, actions) { toastEl.innerHTML = html + (actions ? '<div class="act">' + actions.map((a, i) => '<button data-t="' + i + '"' + (i === 0 ? ' class="pri"' : '') + '>' + a[0] + '</button>').join('') + '</div>' : ''); toastEl.classList.add('on'); toastT = ms ? performance.now() + ms : Infinity; toastEl.__acts = actions || null; }
+toastEl.addEventListener('click', (e) => { const b = e.target.closest('[data-t]'); if (b && toastEl.__acts) { const f = toastEl.__acts[+b.dataset.t][1]; toastEl.classList.remove('on'); toastEl.__acts = null; f(); } });
+const phoneEl = document.getElementById('phone'); let PAUSED = false;
+function phone(on) { PAUSED = on; phoneEl.classList.toggle('on', on); }
+phoneEl.addEventListener('click', (e) => { const b = e.target.closest('[data-p]'); if (!b) return; const k = b.dataset.p; if (k === 'resume') phone(false); if (k === 'cam') { camMode = camMode === 'chase' ? 'first' : 'chase'; phone(false); } if (k === 'runs') goRun(); if (k === 'title') location.href = 'app.html'; });
+document.getElementById('pauseB').addEventListener('click', () => phone(!PAUSED));
+
+/* ---------- the job: Maro calls, pick up at the pumps, leave by the south gate onto Route Zero ---------- */
+const M = { st: 'idle', t0: 0 };
+const beamMat = new B.StandardMaterial('beamM', scene); beamMat.emissiveColor = new B.Color3(.5, 2.4, 2.2); beamMat.disableLighting = true; beamMat.alpha = .55;
+const beam = B.MeshBuilder.CreateCylinder('beam', { height: 160, diameterTop: 7, diameterBottom: 5, tessellation: 24, cap: B.Mesh.NO_CAP }, scene); beam.material = beamMat; beam.isPickable = false; beam.setEnabled(false);
+function beamAt(x, z) { beam.position.set(x, Hg(x, z) + 80, z); beam.setEnabled(true); M.bx = x; M.bz = z; }
+const PICKUP = { x: DINER.x - 8, z: DINER.z + 14 }, SGATE = GATES[0];
+function missionStep(dt) {
+  if (M.st === 'idle' && U.time > 6) { M.st = 'ringing'; document.getElementById('phMsg').innerHTML = '<b>MARO</b><br>Package at the pumps. Then Route Zero, south gate, the long way round.';
+    toast('<b>MARO · BURNER</b>Package at the pumps. Then Route Zero, south gate. The long way.', 0, [['TAKE IT', () => accept()], ['LATER', () => { M.st = 'later'; M.t0 = U.time; }]]); }
+  if (M.st === 'later' && U.time - M.t0 > 40) M.st = 'idle';
+  if (M.st === 'pickup' && Math.hypot(P.x - M.bx, P.z - M.bz) < 9) { M.st = 'gate'; beamAt(roadX(SGATE.z), SGATE.z); U.beat = 1; toast('<b>PACKAGE ABOARD</b>South gate. Don’t stop.', 2600); document.getElementById('phMsg').innerHTML = '<b>MARO</b><br>Got it? Good. South gate, onto Route Zero.'; }
+  if (M.st === 'gate' && P.z > SGATE.z - 4 && Math.abs(P.x - roadX(SGATE.z)) < 11) { M.st = 'leaving'; goRun(); }
+  if (beam.isEnabled()) { beam.rotation.y += dt * .6; beamMat.alpha = .4 + .25 * U.beat; }
+}
+function accept() { M.st = 'pickup'; beamAt(PICKUP.x, PICKUP.z); toast('<b>JOB</b>Pick up at the pumps.', 2400); }
+function goRun() { M.st = 'leaving'; document.getElementById('fade').classList.remove('off'); try { localStorage.setItem('ag_zone', JSON.stringify({ zone: 'milezero', job: 'route-zero', at: Date.now() })); } catch (e) { }
+  setTimeout(() => { location.href = 'index.html?biome=desert&nointake=1&go=1&from=zone'; }, 900); }
+window.__ZGO = goRun;
+if (Q.has('back')) setTimeout(() => toast('<b>MARO · BURNER</b>Delivered. Money’s nothing, the road’s the thing. Drive.', 4200), 1200);
+
+/* ---------- music: a real track, and the beat drives the surfaces ---------- */
+let AC = null, beatT0 = 0; const BPM = 120;
+function startMusic() { if (AC || Q.has('nomusic')) return; try { AC = new (window.AudioContext || window.webkitAudioContext)(); const a = new Audio('../music/electric_exodus.ogg'); a.loop = true; a.crossOrigin = 'anonymous'; const src = AC.createMediaElementSource(a), g = AC.createGain(); g.gain.value = .7; src.connect(g).connect(AC.destination); a.play().catch(() => { }); beatT0 = AC.currentTime; } catch (e) { } }
+addEventListener('pointerdown', startMusic, { once: true }); addEventListener('keydown', startMusic, { once: true });
+
+/* ---------- the loop ---------- */
+let last = performance.now();
+engine.runRenderLoop(() => {
+  const now = performance.now(), dt = Math.min(.05, (now - last) / 1000); last = now; U.time += dt;
+  const I = AGINPUT.poll();
+  if (I.phoneP) phone(!PAUSED);
+  if (I.camP && !PAUSED) camMode = camMode === 'chase' ? 'first' : 'chase';
+  if (toastEl.__acts && I.gearP && !PAUSED && M.st === 'ringing') { toastEl.classList.remove('on'); toastEl.__acts = null; accept(); }          /* pad/keys can answer the phone */
+  if (toastT && now > toastT) { toastEl.classList.remove('on'); toastT = 0; }
+  if (!PAUSED) { drive(dt, I); missionStep(dt); }
+  camStep(dt, PAUSED ? { lookX: 0, lookY: 0 } : I);
+  const bp = AC ? ((AC.currentTime - beatT0) * BPM / 60) % 1 : (U.time * BPM / 60) % 1; U.beat = Math.max(U.beat * Math.exp(-dt * 5), Math.pow(1 - bp, 6));
+  U.trip = clamp(.35 + .4 * sstep(0, 1, (P.boosting ? 1 : 0)) + .25 * Math.sin(U.time * .05) ** 2, 0, 1);
+  for (const m of [gMat]) { m.setFloat('uTime', U.time); m.setFloat('uBeat', U.beat); m.setFloat('uTrip', U.trip); m.setVector3('uCar', car.position); m.setVector3('uCam', cam.position); }
+  sMat.setFloat('uTime', U.time); sMat.setFloat('uBeat', U.beat); sMat.setFloat('uTrip', U.trip);
+  scene.render();
+});
+addEventListener('resize', () => engine.resize());
+setTimeout(() => document.getElementById('fade').classList.add('off'), 200);
+window.__Z = { P, H: Hg, M, C, car, scene, roadX, DINER, GATES, input: AGINPUT, setCam: (m) => { camMode = m; } };
+</script>
+</body>
+</html>

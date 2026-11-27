@@ -2449,6 +2449,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     e.querySelector('.rOk').onclick = (ev) => { ev.stopPropagation(); close(); }; const nx = e.querySelector('.rNx'); if (nx) nx.onclick = (ev) => { ev.stopPropagation(); o.next.go(); };
     e.onclick = (ev) => { if (!ev.target.closest('button')) close(); }; setTimeout(close, ms); return e; }
   function lvEnd() {
+    if (Q.get('from') === 'zone') setTimeout(() => { location.href = 'zone.html?back=1'; }, 6500);          /* (open world, 2026-11-27: a run taken as a job from Mile Zero drives you back there after the results) */
     if (solGrade() === 'GOLD') questSet('gold'); if (!(window.__crashes || []).length) questSet('clean');
     const res = progSave(WORLD0), g = res.g, nm = (typeof JNAME !== 'undefined' && JNAME[WORLD0]) ? JNAME[WORLD0][0] : WORLD0.toUpperCase(), pct = SOL.max ? Math.min(1, SOL.faces / SOL.max) : 0;
     const Qd = (() => { try { return ((JSON.parse(localStorage.getItem('dl_prog') || '{}').worlds || {})[WORLD0] || {}).quests || {}; } catch (e) { return {}; } })();

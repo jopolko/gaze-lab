@@ -19,7 +19,7 @@ try {
   await send('Runtime.enable'); await send('Page.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: +(process.env.VW || 924), height: +(process.env.VH || 412), deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url });
-  let ok = false; for (let i = 0; i < 90; i++) { await sleep(1000); try { if (await ev('!!(window.__G && window.__G.PH && window.__G.LV)')) { ok = true; break; } } catch { } }
+  let ok = false; for (let i = 0; i < 90; i++) { await sleep(1000); try { if (await ev(process.env.READY || '!!(window.__G && window.__G.PH && window.__G.LV)')) { ok = true; break; } } catch { } }
   if (!ok) console.log('did not load'); else { await sleep(2500);
     // the probe may return {shots:[...]} steps: each a JS snippet run before a screenshot saved to $SHOTDIR/probe_<i>.png
     const out = await ev('(async()=>{' + readFileSync(file, 'utf8') + '})()'); console.log(out);
