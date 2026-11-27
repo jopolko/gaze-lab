@@ -83,7 +83,7 @@ h4 { margin:14px 0 4px; font:700 13px/1 "Barlow Condensed",sans-serif; letter-sp
 <div id="dests"></div>
 <div class="sheet" id="extras"></div>
 <div class="sheet"><div class="fine">The Trip Guide is published as a courtesy. Descriptions are aspirational. Wildlife is not responsible for itself. Weather is provided as is. Distances are approximate, as are outcomes. Early access attractions are still being installed and may behave unexpectedly, as may everything else. If found, please return to the nearest rack. By reading this far you have agreed to enjoy yourself.</div></div>
-<div class="bar"><a class="go" id="driveNow" href="index.html?story=1&amp;nointake=1">&#9654; Drive</a><a class="mn" href="splash.html">&#8962; Title</a><a class="mn" href="#" id="toTop">&#9650; Top</a></div>
+<div class="bar"><a class="go" id="driveNow" href="index.html?story=1&amp;nointake=1">&#9654; Drive</a><a class="mn" href="splash.html" id="tgClose">&#10005; Close</a><a class="mn" href="#" id="toTop">&#9650; Top</a></div>
 <div id="vw" role="dialog" aria-modal="true"><div class="media" id="vwm"></div><div class="cap"><b id="vwt"></b><span id="vws"></span><em id="vwe"></em></div><div class="btns"><button class="bk" id="vwb">&#9664; Back to the guide</button><a class="dr" id="vwd" href="#">Drive there &#9654;</a></div></div>
 <script>
 const PL = (k) => (window.AGPLANTS && AGPLANTS.svg(k)) || '';
@@ -174,8 +174,14 @@ function closeVw() { if (!vw.classList.contains('on')) return; vw.classList.remo
 document.getElementById('dests').addEventListener('click', (e) => { const r = e.target.closest('.row'); if (r) openRow(r.dataset.w, r.dataset.i); });
 document.getElementById('vwb').addEventListener('click', () => { if (history.state && history.state.vw) history.back(); else closeVw(); });
 addEventListener('popstate', closeVw);
+/* Close goes back to wherever you came from: over the game it just closes (you are exactly where you were); from the title it goes back to the title */
+{ const Q = new URLSearchParams(location.search), inFrame = window.top !== window || Q.has('inframe'), back = Q.get('back'), c = document.getElementById('tgClose');
+  c.addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
+  if (inFrame) for (const a of document.querySelectorAll('a.drive, #driveNow, #vwd, .mast a')) a.target = '_top'; }
 document.getElementById('toTop').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); });
 /* Drive now: straight back to where you left off, or the first road */
 try { const last = localStorage.getItem('dl_lastlv'); if (last && last !== 'routezero') document.getElementById('driveNow').href = play(last === 'routezero' ? 'desert' : last); } catch (e) { }
 </script>
-</body></html>
+<button id="lkBtn" type="button" aria-label="Lock screen" title="Lock screen" style="border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(10,12,24,.7);color:#f2efe6"><svg viewBox="0 0 18 22" width="15" height="18"><path d="M4 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="2"/><rect x="1" y="10" width="16" height="12" rx="3" fill="currentColor"/></svg></button>
+<script src="lock.js"></script><script>document.getElementById('lkBtn').addEventListener('click', (e) => { e.stopPropagation(); if (window.top !== window) { try { window.parent.postMessage({ tg: 'close', resume: 1 }, '*'); } catch (er) { } return; } if (window.AGLock) { AGLock.enable(); AGLock.show({}); } });</script>
+<script src="chrome.js"></script></body></html>
