@@ -37,7 +37,7 @@ canvas { position:fixed; inset:0; width:100%; height:100%; display:block; }
 #title h1 { margin:0; font:400 clamp(54px,15vmin + 10px,168px)/.86 "Bebas Neue","Impact","Arial Narrow",sans-serif; letter-spacing:.04em; color:#fff;
   text-shadow:calc(-1 * var(--ab,3px)) 0 0 rgba(56,232,255,.75),var(--ab,3px) 0 0 rgba(255,177,74,.75),0 0 40px rgba(56,232,255,.35); }
 #title h1 span { display:block; font-size:.42em; letter-spacing:.62em; margin-right:-.62em; color:var(--dim); text-shadow:none; }
-.mk { display:inline-flex; flex-direction:column; align-items:center; } #sun { display:block; width:min(84vw,560px); height:auto; } #mark { display:block; margin:0 auto; width:min(78vw,522px); height:auto; }          /* (the sun and the word are two pictures: only the word glitches) */          /* the Afterglow wordmark (art/afterglow_mark.png) */
+.mk { display:inline-flex; flex-direction:column; align-items:center; } #sun { display:block; width:min(84vw,560px,48vh); height:auto; }          /* (owner 2026-11-26: on short windows the title scales with the height, so the molecule keeps its room under it) */ #mark { display:block; margin:0 auto; width:min(78vw,522px,46vh); height:auto; }          /* (the sun and the word are two pictures: only the word glitches) */          /* the Afterglow wordmark (art/afterglow_mark.png) */
 #title h1 { opacity:1; }
 #title.open h1 { animation:none; }          /* THE TITLE GLITCH: once the bar has wiped off, the word comes up solid and stays whole; coloured copies tear across it in three bursts, then it holds */
 @keyframes agFade { from { opacity:.3; } to { opacity:1; } }

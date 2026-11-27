@@ -39,6 +39,7 @@
 <a id="back" href="/">menu</a>
 <script type="importmap">{"imports":{"three":"../stargaze/vendor/three/three.module.min.js"}}</script>
 <script>addEventListener('load', () => setTimeout(() => { if (!new URLSearchParams(location.search).has('fps')) { const e = document.getElementById('status'); if (e) e.style.display = 'none'; } }, 8000));</script>
+<script src="plants.js"></script>
 <script type="module">
 // DOWNHILL on Babylon.js. The course is the SAME Godot level dump as the three.js game (terrain, rocks, trees, ramps, rails, pads, pickups) and the board rides it with a port of the "type 1" handling:
 // slope pull, drag, the adaptive steering spring, grip, momentum chains, ramp swirls and the lip blast, boost pads, floaty air time, lane-hold nudges away from trees. Everything psychedelic lives in the SURFACES (moire, breathing,
@@ -49,7 +50,7 @@ import { createGvMusic } from '../downhill-three/gvmusic.js';
 import { startLoop, preloadLoop } from '../downhill-three/looper.js?v=20261126b';
 import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
-import { createIntro } from './intro.js?v=20261126n';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
+import { createIntro } from './intro.js?v=20261126o';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js';
 import { planRoad, planPlay, findTunnel, seedOf } from './director.js';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
@@ -3794,7 +3795,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     if (OPEN.playing && !OPEN.done && OPEN.a && OPEN.a.currentTime < 48) return false;          /* the opening's own titles come first */
     INTRO.seen.add(key); try { localStorage.setItem('dl_intros', JSON.stringify([...INTRO.seen])); } catch (e) { }
     if (!INTRO.el) { const css = document.createElement('style'); css.textContent = '#inCard{position:fixed;left:max(5vw,20px);top:max(20vh,118px);max-width:min(90vw,760px);z-index:57;pointer-events:none;color:#f2efe6;opacity:0;transform:translateX(-30px) skewX(-8deg);transition:opacity .2s,transform .3s cubic-bezier(.2,.9,.3,1.3)}#inCard.on{opacity:1;transform:none}#inCard .slab{background:rgba(3,5,10,.82);border-left:5px solid var(--ic,#38e8ff);padding:.45em .9em .55em;box-shadow:0 0 34px rgba(0,0,0,.4)}#inCard b{display:block;font:700 clamp(26px,6.5vmin + 6px,72px)/.95 "Barlow Condensed",Impact,"Arial Narrow",sans-serif;letter-spacing:.12em;text-shadow:0 0 18px var(--ic,#38e8ff)}#inCard span{display:block;margin-top:.25em;font:italic 500 clamp(13px,2.6vmin + 4px,20px) Georgia,serif;color:#d9d3c7}'; document.head.appendChild(css); INTRO.el = document.createElement('div'); INTRO.el.id = 'inCard'; document.body.appendChild(INTRO.el); }
-    const el = INTRO.el; el.style.setProperty('--ic', col || '#38e8ff'); el.innerHTML = '<div class="slab"><b></b><span></span></div>'; el.querySelector('b').textContent = name; el.querySelector('span').textContent = line;
+    const el = INTRO.el; el.style.setProperty('--ic', col || '#38e8ff'); const plSvg = (key.startsWith('strain.') && window.AGPLANTS && PANTRY[key.slice(7)]) ? AGPLANTS.svg(PANTRY[key.slice(7)].plant) : ''; el.innerHTML = '<div class="slab">' + (plSvg ? '<i class="pl" style="float:left;width:clamp(48px,9vmin,84px);height:clamp(48px,9vmin,84px);margin:0 .5em 0 -.1em">' + plSvg + '</i>' : '') + '<b></b><span></span></div>';          /* (strain cards show the plant it came from) */ el.querySelector('b').textContent = name; el.querySelector('span').textContent = line;
     requestAnimationFrame(() => el.classList.add('on')); BEATFX.glass = 1; window.__cardSlow = performance.now() + 450; INTRO.busy = performance.now() + 3400; try { ST.voiceEnd = Math.max(ST.voiceEnd || 0, ST.t + 3.6); } catch (e) { }          /* and the story waits for it */ try { SFX.mol(2); } catch (e) { }
     setTimeout(() => el.classList.remove('on'), 3000); return true; }
   /* each frame: the first drone close ahead; the first strain's light column on the way in (the trip level's doses, or this world's columns) */
