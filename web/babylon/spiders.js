@@ -4,11 +4,8 @@
 //   createSpiders(d).step(dt, now) every frame. d: { B, scene, PH, th, trailX, inTunZ, tier (0..7), pal: { rim, rim2, bolts: [[r,g,b]...] }, audio(), onStrike(), onWash(n), live() }
 // One draw call per swarm: the legs walk in the vertex shader (alternating tetrapod gait), each spider with its own phase.
 
-export function createSpiders(d) {
-  const { B, scene, PH } = d, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
-  const tier = clamp(d.tier | 0, 0, 7), V3 = (a) => new B.Vector3(a[0], a[1], a[2]);
-
-  // ---------------------------------------------------------------- the spider mesh (legs tagged for the shader)
+/* the spider body (legs tagged for the walking shader) and the shaders, shared by the game's swarms and the intro's */
+function skitBase(B) {
   function geo() {
     const P = [], N = [], L = [], I = [];
     const quad = (a, b, c, e, n, tg) => { const o = P.length / 3; for (const [q, t] of [a, b, c, e]) { P.push(q[0], q[1], q[2]); N.push(n[0], n[1], n[2]); L.push(tg[0], tg[1], t, tg[3]); } I.push(o, o + 1, o + 2, o, o + 2, o + 3); };
@@ -62,6 +59,15 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
   if (uFlash > .01) { float edge = smoothstep(.2, .9, length(p) / max(uAsp * .5, .5)); c = mix(c, uFlashC, uFlash / max(a + uFlash, .001)); a = max(a, uFlash * (.28 + .22 * edge)); }
   gl_FragColor = vec4(c, a); }`;
   }
+  return geo;
+}
+
+export function createSpiders(d) {
+  const { B, scene, PH } = d, clamp = (v, a, b) => Math.max(a, Math.min(b, v)), rnd = (a, b) => a + Math.random() * (b - a), pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const tier = clamp(d.tier | 0, 0, 7), V3 = (a) => new B.Vector3(a[0], a[1], a[2]);
+
+  // ---------------------------------------------------------------- the spider mesh (legs tagged for the shader)
+  const geo = skitBase(B);          /* (the body and its shaders live in skitBase, shared with the intro's swarm) */
   const mkMat = (nm) => { const m = new B.ShaderMaterial(nm, scene, 'skit', { attributes: ['position', 'normal', 'leg', 'phase', 'lean'], uniforms: ['world', 'viewProjection', 'uAmp', 'uCam', 'uRim', 'uRim2', 'uT', 'uWet'] });
     m.setVector3('uRim', V3(d.pal.rim)); m.setVector3('uRim2', V3(d.pal.rim2)); m.setFloat('uAmp', 1); m.setFloat('uWet', 0); m.backFaceCulling = false; return m; };
   function swarm(nm, max) { const { vd, L } = geo(), m = new B.Mesh(nm, scene); vd.applyToMesh(m, true); m.setVerticesData('leg', L, false, 4); m.material = mkMat(nm + 'M'); m.alwaysSelectAsActiveMesh = true; m.isPickable = false; m.doNotSyncBoundingInfo = true;
@@ -232,4 +238,19 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
   const api = { step, S, SLO, ramp, get jump() { return JB; }, ageAll: (j, c) => { for (const g of GS) { g.j = j; g.c = c; } }, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
     storm: (z) => spawnStorm(z || 120), strikeTest: () => { const c = CL[CL.length - 1]; if (c) strike(c); }, washTest: () => wash({ tint: pick(d.pal.bolts) }) };
   return api;
+}
+
+/* THE INTRO'S SWARM (owner 2026-11-28): near the end of the title song a pack of spiders skitters across the road around the car, then they all bolt in different
+   directions and are gone before the game's music starts. createSkitterShow(B, scene, pal, n) -> { place(list), hide() }; list items { x, y, z, h, s, ph }. */
+export function createSkitterShow(B, scene, pal, n) {
+  const geo = skitBase(B), { vd, L } = geo(), m = new B.Mesh('skitShow', scene); vd.applyToMesh(m, true); m.setVerticesData('leg', L, false, 4);
+  const mt = new B.ShaderMaterial('skitShowM', scene, 'skit', { attributes: ['position', 'normal', 'leg', 'phase', 'lean'], uniforms: ['world', 'viewProjection', 'uAmp', 'uCam', 'uRim', 'uRim2', 'uT', 'uWet'] });
+  mt.setVector3('uRim', new B.Vector3(...pal.rim)); mt.setVector3('uRim2', new B.Vector3(...pal.rim2)); mt.setFloat('uAmp', 1); mt.setFloat('uWet', 0); mt.backFaceCulling = false; m.material = mt;
+  m.alwaysSelectAsActiveMesh = true; m.isPickable = false; m.doNotSyncBoundingInfo = true;
+  const mat = new Float32Array(16 * n), ph = new Float32Array(n), ln = new Float32Array(2 * n); m.thinInstanceSetBuffer('matrix', mat, 16, false); m.thinInstanceSetBuffer('phase', ph, 1, false); m.thinInstanceSetBuffer('lean', ln, 2, false); m.thinInstanceCount = 0;
+  const M = new B.Matrix(), Q = new B.Quaternion(), SC = new B.Vector3(), TR = new B.Vector3(); let t = 0;
+  return { mesh: m, place(list, dt) { t += dt || 0; const cam = scene.activeCamera; if (cam) mt.setVector3('uCam', cam.globalPosition); mt.setFloat('uT', t); let k = 0;
+      for (const s of list) { if (k >= n || s.s <= .01) continue; SC.set(s.s, s.s, s.s); B.Quaternion.RotationYawPitchRollToRef(s.h, 0, 0, Q); TR.set(s.x, s.y, s.z); B.Matrix.ComposeToRef(SC, Q, TR, M); M.copyToArray(mat, k * 16); ph[k] = s.ph; k++; }
+      m.thinInstanceCount = k; m.thinInstanceBufferUpdated('matrix'); m.thinInstanceBufferUpdated('phase'); },
+    hide() { m.thinInstanceCount = 0; }, dispose() { try { m.dispose(); mt.dispose(); } catch (e) { } } };
 }

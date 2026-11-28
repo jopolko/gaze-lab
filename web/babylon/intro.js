@@ -7,6 +7,7 @@
    Every line is true to the game (checked against index.html: COMP, the strains, shards, rings and RUSH, exits). */
 
 import { PANTRY } from './molpantry.js';
+import { createSkitterShow } from './spiders.js?v=20261128g';
 
 const V = 36;                    // metres a second
 const X0 = 6000, Z0 = 0, Y0 = 0; // the set is built far from the course
@@ -371,8 +372,8 @@ export function createIntro(d) {
     C.root.position.y = Y0 + (IR.crushed && vt < 6.15 ? .06 : 0);
     IR.shk = (IR.shk || 0) * Math.pow(.02, dv); const sh = IR.shk || 0, j = () => (Math.random() * 2 - 1) * sh;
     // the camera: crane down, hold the close-up beside the car's path, then whip after the car
-    const c = ss(0, 1.8, s), P0 = new B.Vector3(X0 - 9, Y0 + 30, Z0 + 15), P1 = new B.Vector3(SCX - 2.0, Y0 + .3, SCZ + .3), hz = s >= 4.0 && s < 5.6, pos = hz ? new B.Vector3(SCX + 1.3, Y0 + .22, SCZ - 2.6) : B.Vector3.Lerp(P0, P1, c);
-    const sc = new B.Vector3(SCX, Y0 + .22, SCZ - .2), car = new B.Vector3(X0, Y0 + .8, Z0 + carZ + 1.5), tgt = hz ? new B.Vector3(SCX + .2, Y0 + .6, SCZ + 80) : B.Vector3.Lerp(sc, car, ss(6.6, 6.9, s));
+    const c = ss(0, 1.8, s), P0 = new B.Vector3(X0 - 9, Y0 + 30, Z0 + 15), P1 = new B.Vector3(SCX - 2.0, Y0 + .3, SCZ + .3), hz = s >= 4.0 && s < 5.6, pos = hz ? new B.Vector3(SCX - 2.6, Y0 + .3, SCZ - 2.6) : B.Vector3.Lerp(P0, P1, c);          /* (owner 2026-11-28: the car first came almost straight at the camera; now the camera stands left of the lane and looks up the road and across it, like the close-up, so the car comes up on screen right the whole way) */
+    const sc = new B.Vector3(SCX, Y0 + .22, SCZ - .2), car = new B.Vector3(X0, Y0 + .8, Z0 + carZ + 1.5), tgt = hz ? new B.Vector3(SCX + 27.4, Y0 + .6, SCZ + 87.4) : B.Vector3.Lerp(sc, car, ss(6.6, 6.9, s));
     cam.position.set(pos.x + j(), pos.y + j(), pos.z + j()); cam.upVector.set(0, 1, 0); cam.setTarget(new B.Vector3(tgt.x, tgt.y + j() * .5, tgt.z));
     if (!IR.hudOff) { IR.hudOff = []; try { const h = scene.getMeshByName('hud'), par = h && h.parent; for (const m of scene.meshes) if (m.isEnabled() && (m === h || (par && m.parent === par) || m.parent === cam)) { m.setEnabled(false); IR.hudOff.push(m); } } catch (e) { } } }          /* (the game's HUD rides on the camera: hidden for the shot) */
   function coldOpen(t, cam) { if (!ui) return false;
@@ -420,8 +421,26 @@ export function createIntro(d) {
     if (IR.beam) IR.beam.rotation.y = t * 1.1; if (IR.mol) { IR.mol.rotation.y = t * 1.6; IR.mol.position.y = Y0 + 9 + Math.sin(t * 2.4) * .6; }
     ui.ph.classList.toggle('on', t > 999);          /* teaser 2: the phone buzzes */
     let cur = -1; SCENES.forEach((S, i) => { if (t >= S.t && t < S.t + HOLD) cur = i; }); if (cur !== IR.shown) { if (cur >= 0) show(cur); else hide(); IR.shown = cur; }
+    skitShow(t, dt, cam);
     if (t >= END_FADE) finish(false);
     return true; }
+  /* THE SWARM'S PREVIEW (owner 2026-11-28): near the end of the title song the road fills with skittering spiders that run with the car and cross under it;
+     at 56 s they all bolt in different directions and are gone by 57.6 s, before the game's music comes in. Their own swarm sound goes with them. */
+  const SK0 = 53.6, SKX = 56, SKN = 26;          /* (the last chapter card holds the screen until 54.8: they come out under it and are in full view after) */
+  function skitShow(t, dt, cam) { try {
+    if (t < SK0 - .5 || t > END_FADE) { if (IR.skit) IR.skit.show.hide(); return; }
+    if (!IR.skit) { const show = createSkitterShow(d.B, d.scene, { rim: [1, .69, .13], rim2: [.18, .84, .78] }, SKN); IR.meshes.push(show.mesh); const L = [];
+      for (let i = 0; i < SKN; i++) { const side = Math.random() < .5 ? -1 : 1; L.push({ t0: SK0 + i * .05 + Math.random() * .15, rz: -38 - Math.random() * 26, vr: 4 + Math.random() * 7, side, wide: 2 + Math.random() * 6.5, wob: Math.random() * 6.3, ph: Math.random() * 6.3, s0: 1.2 + Math.random() * .7, s: 0, x: 0, y: Y0, z: 0, h: 0, a: Math.random() * 6.283, sp: 9 + Math.random() * 16, end: 56.7 + Math.random() * .9, t0x: 0 }); }
+      IR.skit = { show, L, rx: 0 }; }
+    const K = IR.skit, cx = cam.position.x, cz = cam.position.z, list = [], snd = [];
+    if (t >= SKX && !K.fled) { K.fled = true; try { window.__MSFX && window.__MSFX.vox('swarm', cx, Y0, cz - 12, 1, 1.2); } catch (e) { } }
+    for (const q of K.L) { if (t < q.t0) continue; const age = t - q.t0, px = q.x, pz = q.z;
+      if (t < SKX) { q.rz += q.vr * dt; if (q.rz > 8) q.rz = -40 - Math.random() * 15; const lx = q.side * q.wide * Math.sin(age * 1.3 + q.wob);          /* (running with the car, weaving across the road and slipping back past it) */
+        q.x = cx + lx; q.z = cz + q.rz; q.s = Math.min(q.s0, q.s0 * age * 3); }
+      else { const u = t - SKX; if (!q.x) { q.x = cx + q.side * q.wide; q.s = q.s0; } q.rz += Math.sin(q.a) * q.sp * dt; q.x += Math.cos(q.a) * q.sp * dt; q.z = cz + q.rz; q.s = q.s0 * Math.max(0, Math.min(1, (q.end - t) / .5)); }          /* (each bolts its own way and shrinks away) */
+      q.y = Y0; const vx = (q.x - px) / Math.max(dt, 1e-3), vz = (q.z - pz) / Math.max(dt, 1e-3) + 36; if (age > .05) q.h = Math.atan2(vx, vz - 36); q.ph += dt * (t < SKX ? 24 : 40);
+      if (q.s > .01) { list.push(q); const dd = Math.hypot(q.x - cx, q.z - cz); snd.push({ pan: Math.max(-.9, Math.min(.9, (q.x - cx) / 10)), g: 1 / (1 + dd / 14) }); } }
+    K.show.place(list, dt); try { window.__MSFX && window.__MSFX.skitter(dt, snd); } catch (e) { } } catch (e) { if (!IR.skErr) { IR.skErr = 1; console.error('intro spiders', e); } } }
   if (new URLSearchParams(location.search).has('irtest')) window.__IRT = { show: (i) => { buildUI(); show(i); }, hide, tag: (k) => { buildUI(); tag(HITS[k]); }, ui: () => ui };          /* (layout test only) */
   return { IR, start, frame, finish };
 }
