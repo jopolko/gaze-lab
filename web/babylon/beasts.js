@@ -154,7 +154,7 @@ export function createBeasts(d) {
   const DMG = Math.min(1.1, .7 + .05 * T);
   const shove0 = (dir, k) => { PH.vx += dir * k * DMG; try { d.shake(.25 * DMG); } catch (e) { } }; const shove = shove0;
   const drag = (k) => { const kk = 1 - (1 - k) * DMG; PH.vx *= kk; PH.vz *= kk; };
-  const bounce = (b) => { PH.__bumpAt = performance.now(); b.bumpT = 1.2; b.x -= (Math.sign(PH.x - b.x) || 1) * 3; if (b.slot) b.slot *= 1.6; drag(.82); shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
+  const bounce = (b) => { PH.__bumpAt = performance.now(); b.bumpT = 1.2; b.x -= (Math.sign(PH.x - b.x) || 1) * 3; if (b.slot) b.slot *= 1.6; if (speed() > 30) drag(.94);          /* (a bump costs a little speed, and none once you are already slow) */ shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
   const emp = () => { PH.boost_t = 0; drag(.86); try { d.emp(); d.shake(.35); d.sfx('zap'); } catch (e) { } };
 
   // ---------------------------------------------------------------- encounter builders (what spawns for each kind)
@@ -162,7 +162,7 @@ export function createBeasts(d) {
   const ENC = {
     swarm(s) { const n = Math.round((s.big ? 14 : 9) + T * 1.6), z0 = ahead(rnd(110, 150)); for (let k = 0; k < n; k++) BQ.push(() => { const z = z0 - rnd(0, 40), b = make(s, lineX(z, rnd(-13, 13)), z); b.mode = 'swarm'; b.sp = rnd(7, 11) + T * .5; }); },          /* (built a few per frame: a whole swarm in one frame stalled it) */
     drop(s) { const z = ahead(rnd(90, 120)), gap = rnd(-6, 6), n = 6 + Math.floor(T / 2); for (let k = 0; k < n; k++) { const u = -12 + k * 24 / (n - 1); if (Math.abs(u - gap) < 3.2) continue; const b = make(s, lineX(z, u), z); b.mode = 'drop'; b.yOff = 14; b.vy = 0; } },
-    pack(s) { const n = 3 + Math.min(2, Math.floor(T / 3)); for (let k = 0; k < n; k++) { const b = make(s, PH.x, PH.z + 30 + k * 4); b.mode = 'pack'; b.slot = (k % 2 ? 1 : -1) * (4 + Math.floor(k / 2) * 2.5); b.rel = -2 - k * 2; }
+    pack(s) { const n = 3 + Math.min(2, Math.floor(T / 3)); for (let k = 0; k < n; k++) { const b = make(s, PH.x, PH.z + 30 + k * 4); b.mode = 'pack'; b.slot = (k % 2 ? 1 : -1) * (5 + Math.floor(k / 2) * 2.5); b.rel = 2 + k * 2.5; b.packT = 0; }          /* (owner 2026-11-27: the pack runs beside and behind you, never in front: in front it boxed the car in) */
       if (s.leader) { const L = make(s, PH.x, PH.z + 40, { scale: 1.35 }); L.mode = 'leader'; L.hp = L.max = s.hp; L.lead = true; } },
     chaser(s) { const n = s.pair ? 2 : 1; for (let k = 0; k < n; k++) { const b = make(s, PH.x, PH.z + 60 + k * 12); b.mode = 'chase'; b.slot = n > 1 ? (k ? 3.5 : -3.5) : 0; b.cool = 3 + k * 2.5; } },
     carpet(s) { const z0 = ahead(rnd(100, 140)), len = 26 + T * 3, u = rnd(-4, 4), w = 9; const c = { z0, z1: z0 - len, u, w, bits: [] }; for (let k = 0; k < 70; k++) { const z = z0 - rnd(0, len), b = make(s, lineX(z, u + rnd(-w, w)), z); b.mode = 'carpet'; b.carpet = c; c.bits.push(b); } CARPETS.push(c); },
@@ -232,7 +232,7 @@ export function createBeasts(d) {
         const sp = live ? b.sp : b.sp * .2, tx = dx * .6 + Math.sin(b.t * 3 + b.ph) * 2.5, l = Math.hypot(tx, 1); b.x += tx / l * sp * dt; b.z += 1 / l * sp * dt;
         if (b.spec.regen && b.respawn) { } if (rel > 12) { b.gone = true; } break; }
       case 'drop': { if (b.yOff > 0) { b.vy -= 30 * dt; b.yOff = Math.max(0, b.yOff + b.vy * dt); } if (rel > 8) b.gone = true; break; }
-      case 'pack': { const tgtU = d.trailX(PH.z) - d.trailX(b.z); if (live) { hold(b, b.rel, 2); b.x += (PH.x + b.slot * (b.tight ? .5 : 1) - b.x) * Math.min(1, 2.5 * dt); } else { b.z += PH.vz * .5 * dt; b.x += Math.sign(b.slot) * 6 * dt; }
+      case 'pack': { const tgtU = d.trailX(PH.z) - d.trailX(b.z); b.packT = (b.packT || 0) + dt; if (b.packT > 12) { b.rel += dt * 14; if (b.rel > 80) b.gone = true; }          /* (they give up after 12 s and fall away) */ if (live) { hold(b, b.rel, 2); b.x += (PH.x + b.slot * (b.tight ? .5 : 1) - b.x) * Math.min(1, 2.5 * dt); } else { b.z += PH.vz * .5 * dt; b.x += Math.sign(b.slot) * 6 * dt; }
         b.cool -= dt; if (live && b.cool < .6 && !b.tell) { b.tell = true; } if (b.cool < 0) { b.cool = rnd(2.5, 4.5) - T * .15; b.tell = false; if (Math.abs(dx) < 4.5 && Math.abs(rel) < 4) shove(-Math.sign(dx), 7); } if (rel > 60) b.gone = true; break; }
       case 'leader': { if (live) hold(b, 12, 1.2); b.x += (PH.x - b.x) * Math.min(1, 1.2 * dt); b.cool -= dt; if (b.cool < .7) b.tell = true; if (b.cool < 0) { b.cool = 6 - T * .3; b.tell = false; for (const o of LIVE) if (o.mode === 'pack') o.tight = 2.5; try { d.look('howl'); d.sfx('honk'); } catch (e) { } }
         for (const o of LIVE) if (o.mode === 'pack' && o.tight) o.tight = Math.max(0, o.tight - dt);
@@ -295,6 +295,8 @@ export function createBeasts(d) {
 
   // ---------------------------------------------------------------- frame
   function step(dt, live) { DT = dt; if (!live) return; if (BQ.length) BQ.shift()(); director();
+    /* NEVER PINNED (owner 2026-11-27, third report): whatever the creature, if the car is crawling with one on top of it, that one is blown off. Bosses are pushed away instead. */
+    if (speed() < 16) for (const b of LIVE) { if (b.dead || b.under || b.latched || Math.abs(PH.z - b.z) > 9 || Math.abs(PH.x - b.x) > 7) continue; if (b.spec.boss) { b.z -= 30; b.x += (Math.sign(b.x - PH.x) || 1) * 8; } else kill(b, 'ROCKETS'); }
     for (const r of RACKS) { r.g.halo.rotation.y += dt * 2; r.g.halo.scaling.setAll(1 + .08 * Math.sin(performance.now() / 160)); if (!r.used && Math.abs(PH.z - r.z) < 2.4 && Math.abs(PH.x - r.x) < r.g.r + .8 && !PH.set) { r.used = true; fire(salvo(), PH.boost_t > 0); r.R.setEnabled(false); } }
     for (let i = RACKS.length - 1; i >= 0; i--) if (RACKS[i].z > PH.z + 30) { RACKS[i].R.dispose(false, true); RACKS.splice(i, 1); }
     for (let i = ROCKETS.length - 1; i >= 0; i--) { const k = ROCKETS[i]; k.t += dt; let tx, ty, tz; if (k.tg && !k.tg.dead) { tx = k.tg.x; ty = k.tg.y + (k.tg.yOff || 0) + k.tg.h * .55; tz = k.tg.z; } else { k.tg = LIVE.find((b) => !b.dead && !b.under && PH.z - b.z < 170 && b.z < PH.z) || null; tx = k.x + k.vx * .1; ty = k.y; tz = k.z + k.vz * .1; }
