@@ -2679,7 +2679,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     const ms = o.ms || 14000, bar = e.querySelector('.rOk b'); setTimeout(() => { bar.style.transition = 'width ' + ms + 'ms linear'; bar.style.width = '0'; }, 50);
     const close = () => { if (!e.isConnected) return; e.classList.remove('on'); removeEventListener('resize', fit); setTimeout(() => e.remove(), 500); };
     e.querySelector('.rOk').onclick = (ev) => { ev.stopPropagation(); close(); }; const nx = e.querySelector('.rNx'); if (nx) nx.onclick = (ev) => { ev.stopPropagation(); o.next.go(); };
-    e.onclick = (ev) => { if (!ev.target.closest('button')) close(); }; setTimeout(close, ms); return e; }
+    e.onclick = (ev) => { ev.stopPropagation(); }; setTimeout(close, ms); return e; }          /* (owner 2026-11-28: a stray thumb tap closed the card and skipped both choices; only its two buttons (and pause) answer now) */
   function lvEnd() {
     if (Q.get('from') === 'zone') setTimeout(() => { location.href = 'zone.html?back=1'; }, 6500);          /* (open world, 2026-11-27: a run taken as a job from Mile Zero drives you back there after the results) */
     if (solGrade() === 'GOLD') questSet('gold'); if (!(window.__crashes || []).length) questSet('clean');
@@ -4211,7 +4211,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     setTimeout(() => { const b = e.querySelector('#stEndOk b'); if (b) b.style.width = '0'; }, 50);
     const close = () => { e.style.display = 'none'; e.classList.remove('rz'); };
     document.getElementById('stEndOk').onclick = (ev) => { ev.stopPropagation(); close(); }; document.getElementById('stEndNext').onclick = (ev) => { ev.stopPropagation(); location.href = 'index.html?biome=alpine&nointake=1&camp=1&go=1'; };
-    e.onclick = (ev) => { if (!ev.target.closest('button')) close(); }; setTimeout(() => { if (e.classList.contains('rz')) close(); }, 12000);
+    e.onclick = (ev) => { ev.stopPropagation(); }; setTimeout(() => { if (e.classList.contains('rz')) close(); }, 12000);          /* (only the two buttons answer, not a stray tap) */
     try { const GC = { rocket: '#ff8a3d', pole: '#ff5d5d', shield: '#46e0ff', bull: '#e8d3a0' }; offerExits(['rocket', 'pole', 'shield', 'bull'].filter((q) => q !== me).map((q) => ({ label: 'TRY ' + GNAME[q][1].toUpperCase(), sub: GNAME[q][0] + ' replay Route Zero', color: GC[q], onTake: () => { location.href = 'dressup.html?gear=' + q + '&next=' + encodeURIComponent('index.html?story=1&nointake=1&noopen'); } })).concat([{ label: 'ON TO THE SAFE PEAKS', sub: '\u25B6 the next level', color: '#9fe8ff', onTake: () => { location.href = 'index.html?biome=alpine&nointake=1&camp=1&go=1'; } }]), tlAhead() - 700); } catch (x) { console.error('offer', x); } e.querySelectorAll('.stRe').forEach((b) => { b.onclick = () => { location.href = 'dressup.html?gear=' + b.dataset.g + '&next=' + encodeURIComponent('index.html?story=1&nointake=1&noopen'); }; });
   }
 
