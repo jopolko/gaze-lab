@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>The Dial</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&display=swap">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js"></script>
+
 <style>
 /* THE FREQUENCY: a pirate radio booth under ACCORD's nose. Tape presets, VISION faders (what the trip does to your eyes), SOUND faders (what it does to your ears).
    One screen, never scrolls. Everything is saved on this device (dl_lab) and the game reads it at the start of every level. */
@@ -24,11 +24,15 @@ body::after { content:""; position:fixed; inset:0; z-index:-1; pointer-events:no
 header { display:flex; align-items:center; gap:10px 16px; flex-wrap:wrap; }
 h1 { margin:0; font:400 clamp(34px,7vmin,68px)/.9 var(--tt); letter-spacing:.14em; color:#fff; text-shadow:0 0 18px rgba(255,177,74,.55), 0 0 2px #000; }
 .sub { font:italic 500 clamp(12px,1.2vmin + 6px,15px) Georgia,serif; color:var(--dim); }
-.onair { margin-left:auto; font:400 clamp(18px,2.6vmin + 6px,28px)/1 var(--tt); letter-spacing:.16em; padding:.25em .6em; border:2px solid #5a1d14; color:#5a1d14; border-radius:6px; background:rgba(0,0,0,.5); transition:all .3s; }
+.back { margin-left:auto; } .onair { font:400 clamp(18px,2.6vmin + 6px,28px)/1 var(--tt); letter-spacing:.16em; padding:.25em .6em; border:2px solid #5a1d14; color:#5a1d14; border-radius:6px; background:rgba(0,0,0,.5); transition:all .3s; }
 .onair.live { color:#fff; border-color:var(--hot); background:var(--hot); box-shadow:0 0 24px var(--hot), 0 0 60px rgba(255,90,60,.5); }
 a.back { font:700 clamp(14px,1.6vmin + 6px,18px) var(--lb); letter-spacing:.14em; text-transform:uppercase; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:10px; padding:.4em .9em; background:rgba(20,12,8,.8); }
 /* the tapes */
-.tapes { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:1vmin; }
+.tapes { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:1vmin; }
+.spec { font:700 clamp(12px,1vmin + 7px,15px)/1.35 var(--lb); letter-spacing:.04em; color:#ffd9a8; border:1px solid var(--line); border-radius:8px; padding:.5em .7em; background:#0a0604; }
+.spec b { color:var(--amber); font-weight:700; }
+.f select { min-width:0; width:100%; font:700 clamp(13px,1.1vmin + 7px,16px) var(--lb); letter-spacing:.04em; color:var(--fg); background:#1f150e; border:1px solid var(--line); border-radius:6px; padding:.3em .4em; }
+.note { color:var(--dim); font:700 12px var(--lb); letter-spacing:.04em; }
 .tape { position:relative; border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg,#2a1c14,#140d09); padding:.45em .5em .5em; cursor:pointer; text-align:left; color:var(--fg); font:inherit; }
 .tape b { display:block; font:400 clamp(18px,2.4vmin + 6px,28px)/1 var(--tt); letter-spacing:.1em; }
 .tape small { display:block; color:var(--dim); font:700 clamp(11px,1vmin + 6px,14px)/1.1 var(--lb); letter-spacing:.06em; }
@@ -72,7 +76,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
   'Murmur tried to download the vibe. Format not supported.', 'Murmur hears 3% of this. That 3% worries it.', 'Murmur says the signal is “a you problem”.', 'Murmur is pretending not to hum along.', 'Murmur has requested a supervisor. The supervisor is Murmur.'];
   let k = -1; try { k = +localStorage.getItem('dl_murmur') || -1; } catch (e) { } let i = Math.floor(Math.random() * M.length); if (i === k) i = (i + 1) % M.length; try { localStorage.setItem('dl_murmur', String(i)); } catch (e) { }
   document.getElementById('sub').textContent = 'Pirate signal. ACCORD can’t hear this band. ' + M[i]; })();
-</script><span class="onair" id="onair">ON AIR</span><a class="back" href="menu.html" onclick="if (window.__goBack) { event.preventDefault(); window.__goBack('menu.html'); }">&#8592; Back</a></header>
+</script><a class="back" href="menu.html" onclick="if (window.__goBack) { event.preventDefault(); window.__goBack('menu.html'); }">&#8592; Back</a></header>
 <div class="tapes" id="tapes"></div>
 <main>
   <section class="desk"><h2>VISION <small>what it does to your eyes</small></h2>
@@ -83,53 +87,51 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="f"><label for="hng">Hang time</label><input type="range" id="hng" min="0" max="200" value="100"><output id="o_hng"></output></div>
     <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no drones)</label></div>
   </section>
-  <section class="desk"><h2>SOUND <small>what it does to your ears</small></h2>
-    <div class="row"><select id="sty" title="Style"><option value="">Style: each level's own</option><option value="techno">Melodic techno / trance</option><option value="jungle">Jungle (chopped breaks)</option><option value="eastern">Eastern (Hijaz, Hirajoshi)</option><option value="disco">Disco funk</option><option value="boogie">Boogie funk</option><option value="break">Breakbeat funk</option></select></div>
-    <div class="f"><label for="trn">Techno &#8596; Trance</label><input type="range" id="trn" min="0" max="100" value="55"><output id="o_trn"></output></div>
-    <div class="f"><label for="nrg">Energy</label><input type="range" id="nrg" min="0" max="100" value="80"><output id="o_nrg"></output></div>
-    <div class="row"><button class="btn pri" id="listen">&#9654; Listen</button><button class="btn" id="next">&#8635; Next</button><button class="btn" id="save">&#9733; Keep</button></div>
-    <div id="trk"></div>
-    <canvas id="vu"></canvas>
-    <div id="favs"></div>
+  <section class="desk"><h2>YOUR DEVICE <small>how it runs, your call</small></h2>
+    <div class="spec" id="spec">Not measured yet. Play a level and this fills in.</div>
+    <div class="f"><label for="pres">Sharpness</label><select id="pres"><option value="auto">Auto (recommended)</option><option value="high">High</option><option value="med">Medium</option><option value="low">Low (fastest)</option></select><output id="o_pres"></output></div>
+    <div class="f"><label for="pglow">Glow</label><select id="pglow"><option value="auto">Auto (recommended)</option><option value="on">On</option><option value="off">Off (faster)</option></select><output id="o_pglow"></output></div>
+    <div class="f"><label for="pfps">Frame rate</label><select id="pfps"><option value="auto">Auto (recommended)</option><option value="60">Smooth 60</option><option value="30">Steady 30 (easier)</option></select><output id="o_pfps"></output></div>
+    <div class="row"><button class="btn" id="pretest">&#8635; Measure again</button><small class="note" id="pnote"></small></div>
   </section>
 </main>
 <footer><a class="btn pri" id="ride" href="menu.html" style="text-decoration:none">Go live &#8594;</a><small>Saved on this device. Every level reads it when it starts.</small></footer>
 <script>
 /* the tapes: one tap sets every fader */
-const TAPES = { gentle: ['GENTLE', 'soft edges, easy waves', { int: 55, trc: 60, col: 80, wrp: 60, hng: 70, len: 'short', chl: false, trn: 70, nrg: 50 }],
+/* RECOMMENDED (owner 2026-11-27): what the title-screen dial gives right now, eased a little on a device that runs lighter. Moving any VISION fader makes the
+   tuning yours (custom): it then replaces the title dial in every level until you pick a tape again. */
+const DIALC = (() => { let f = 500; try { const v = +localStorage.getItem('dl_freq'); if (v >= 400 && v <= 950) f = v; } catch (e) { } const K = [[400, .3], [500, .55], [620, .8], [700, 1], [790, 1.3], [870, 1.6], [950, 2]]; for (let i = 1; i < K.length; i++) if (f <= K[i][0]) return K[i - 1][1] + (K[i][1] - K[i - 1][1]) * (f - K[i - 1][0]) / (K[i][0] - K[i - 1][0]); return 2; })();
+const PERF0 = (() => { try { return JSON.parse(localStorage.getItem('ag_perf2') || 'null'); } catch (e) { return null; } })(), LIGHT = PERF0 && PERF0.tier && PERF0.tier !== 'full' ? (PERF0.tier === 'low' ? .7 : .85) : 1;
+const recVals = () => { const c = DIALC, x = c > 1 ? 1 + .5 * (c - 1) : .25 + .75 * c, cl = (v, a, b) => Math.round(Math.max(a, Math.min(b, v))); return { int: cl(100 * c, 30, 140), trc: cl(100 * Math.min(1.4, x) * LIGHT, 0, 200), col: cl(100 * Math.max(1, x), 0, 200), wrp: cl(100 * x * LIGHT, 0, 200), hng: 100, len: 'full', chl: false }; };
+const TAPES = { rec: ['RECOMMENDED', 'your dial, sized for this device', recVals()], gentle: ['GENTLE', 'soft edges, easy waves', { int: 55, trc: 60, col: 80, wrp: 60, hng: 70, len: 'short', chl: false, trn: 70, nrg: 50 }],
   classic: ['CLASSIC', 'the way it was tuned', { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, len: 'full', chl: false, trn: 55, nrg: 80 }],
   heroic: ['HEROIC', 'all the way up (road stays readable)', { int: 135, trc: 170, col: 150, wrp: 160, hng: 150, len: 'long', chl: false, trn: 60, nrg: 100 }],
   chill: ['CHILL', 'no drones, long afterglows', { int: 75, trc: 80, col: 100, wrp: 120, hng: 130, len: 'long', chl: true, trn: 90, nrg: 35 }] };
 const COMPS = [['lucid', 'Lucid'], ['embrace', 'Embrace'], ['velocity', 'Velocity'], ['haze', 'Haze'], ['drift', 'Drift'], ['hollow', 'Hollow'], ['fold', 'Fold'], ['deep', 'Deep']];
-const $ = (id) => document.getElementById(id), F = ['int', 'trc', 'col', 'wrp', 'hng', 'trn', 'nrg'];
+const $ = (id) => document.getElementById(id), F = ['int', 'trc', 'col', 'wrp', 'hng'];
 const rd = () => { try { return JSON.parse(localStorage.getItem('dl_lab') || 'null'); } catch (e) { return null; } };
 const wr = (v) => { try { localStorage.setItem('dl_lab', JSON.stringify(v)); } catch (e) { } };
 for (const [k, n] of COMPS) { const o = document.createElement('option'); o.value = k; o.textContent = 'Compound: ' + n; $('cmp').appendChild(o); }
-function state() { const v = { tape: cur }; for (const k of F) v[k] = +$(k).value; v.cmp = $('cmp').value; v.len = $('len').value; v.chl = $('chl').checked; v.sty = $('sty').value; return v; }
-function apply(v) { for (const k of F) if (v[k] !== undefined) $(k).value = v[k]; if (v.cmp !== undefined) $('cmp').value = v.cmp; if (v.len) $('len').value = v.len; if (v.chl !== undefined) $('chl').checked = v.chl; if (v.sty !== undefined) $('sty').value = v.sty; outs(); }
-function outs() { const pct = (k) => $(k).value + '%'; $('o_int').textContent = +$('int').value < 70 ? 'gentle' : +$('int').value > 115 ? 'heroic' : 'classic'; for (const k of ['trc', 'col', 'wrp', 'hng']) $('o_' + k).textContent = +$(k).value === 0 ? 'off' : pct(k); $('o_trn').textContent = +$('trn').value < 35 ? 'techno' : +$('trn').value > 70 ? 'trance' : 'both'; $('o_nrg').textContent = pct('nrg'); }
-let cur = 'classic';
-function drawTapes() { const w = $('tapes'); w.textContent = ''; for (const k in TAPES) { const b = document.createElement('button'); b.className = 'tape' + (k === cur ? ' on' : ''); const t = document.createElement('b'); t.textContent = TAPES[k][0]; const s = document.createElement('small'); s.textContent = TAPES[k][1]; b.append(t, s); b.onclick = () => { cur = k; apply(TAPES[k][2]); drawTapes(); save(); live(); }; w.appendChild(b); } }
+function state() { const v = Object.assign(rd() || {}, { tape: cur, custom: cur !== 'rec' }); for (const k of F) v[k] = +$(k).value; v.cmp = $('cmp').value; v.len = $('len').value; v.chl = $('chl').checked; return v; }          /* (custom: anything but the recommended tape replaces the title dial) */
+function apply(v) { for (const k of F) if (v[k] !== undefined) $(k).value = v[k]; if (v.cmp !== undefined) $('cmp').value = v.cmp; if (v.len) $('len').value = v.len; if (v.chl !== undefined) $('chl').checked = v.chl; outs(); }
+function outs() { const pct = (k) => $(k).value + '%'; $('o_int').textContent = +$('int').value < 70 ? 'gentle' : +$('int').value > 115 ? 'heroic' : 'classic'; for (const k of ['trc', 'col', 'wrp', 'hng']) $('o_' + k).textContent = +$(k).value === 0 ? 'off' : pct(k); }
+let cur = 'rec';
+function drawTapes() { const w = $('tapes'); w.textContent = ''; for (const k in TAPES) { const b = document.createElement('button'); b.className = 'tape' + (k === cur ? ' on' : ''); const t = document.createElement('b'); t.textContent = TAPES[k][0]; const s = document.createElement('small'); s.textContent = TAPES[k][1]; b.append(t, s); b.onclick = () => { cur = k; apply(TAPES[k][2]); drawTapes(); save(); }; w.appendChild(b); } }
 function save() { wr(state()); }
-document.querySelectorAll('input,select').forEach((e) => e.addEventListener('input', () => { if (e.id !== 'cmp' && e.id !== 'len' && e.id !== 'sty') { cur = 'custom'; drawTapes(); } outs(); save(); live(); }));
-$('sty').addEventListener('change', () => { if (ME.on) ME.restyle($('sty').value || 'techno', null); trk(); });
-const s0 = rd(); if (s0) { cur = s0.tape || 'custom'; apply(s0); } else apply(TAPES.classic[2]); drawTapes(); outs();
-/* the music: the same engine the game uses */
-function live() { if (ME.on) ME.set(+$('trn').value / 100, +$('nrg').value / 100); }
-function trk() { setTimeout(() => { const t = ME.track; $('trk').textContent = t ? (t.funk ? ({ disco: 'Disco funk', boogie: 'Boogie funk', break: 'Breakbeat funk' }[t.style]) + ' · ' : '') + t.name + ' · ' + t.bpm + ' BPM · ' + ME.chords() : ''; }, 60); }
-$('listen').onclick = async () => { if (ME.on) { ME.stop(); $('onair').classList.remove('live'); $('listen').innerHTML = '&#9654; Listen'; return; }
-  await ME.start({ style: $('sty').value || 'techno', tr: +$('trn').value / 100, en: +$('nrg').value / 100, lookAhead: .5, strong: true }); ME.volume(-4); $('onair').classList.add('live'); $('listen').innerHTML = '&#10074;&#10074; Stop'; trk(); vu(); };
-$('next').onclick = async () => { if (!ME.on) return $('listen').onclick(); ME.next(); trk(); };
-$('save').onclick = () => { if (!ME.on || !ME.track) return; let a = []; try { a = JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { } if (a.some((t) => t.seed === ME.seed)) return; const t = ME.track; a.unshift({ seed: ME.seed, level: null, style: t.style, prog: t.prog, mode: t.modeName, name: t.name, bpm: t.bpm, chords: ME.chords(), tr: +$('trn').value, en: +$('nrg').value, at: Date.now() }); try { localStorage.setItem('dl_tracks', JSON.stringify(a.slice(0, 30))); } catch (e) { } favs(); };
-function favs() { const w = $('favs'); w.textContent = ''; let a = []; try { a = JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { } a.slice(0, 8).forEach((t) => { const b = document.createElement('button'); b.textContent = '★ ' + (t.style && t.style !== 'techno' ? t.style + ' ' : '') + t.name + ' ' + t.bpm; b.onclick = async () => { if (ME.on) ME.stop(); $('sty').value = t.style || 'techno'; save(); await ME.start({ style: t.style || 'techno', seed: t.seed, tr: (t.tr ?? 55) / 100, en: (t.en ?? 80) / 100, lookAhead: .5, strong: true }); ME.volume(-4); $('onair').classList.add('live'); $('listen').innerHTML = '&#10074;&#10074; Stop'; trk(); vu(); }; w.appendChild(b); }); }
-favs();
-/* the VU meter: amber bars off the main output */
-let an = null; function vu() { if (an) return; an = new Tone.Analyser('fft', 64); Tone.getDestination().connect(an); const cv = $('vu'), cx = cv.getContext('2d');
-  let last = 0, g = null;          /* light on the main thread (a busy page makes the audio drop out): 20 frames a second, the canvas resized only when its size changes, one gradient */
-  (function draw(now) { requestAnimationFrame(draw); if (now - last < 50) return; last = now; const w = Math.round(cv.clientWidth * devicePixelRatio), h0 = Math.round(cv.clientHeight * devicePixelRatio); if (cv.width !== w || cv.height !== h0) { cv.width = w; cv.height = h0; g = null; }
-    const v = an.getValue(), W = cv.width, H = cv.height, bw = W / v.length; cx.clearRect(0, 0, W, H); if (!ME.on) return;
-    if (!g) { g = cx.createLinearGradient(0, H, 0, 0); g.addColorStop(0, '#6b3d1d'); g.addColorStop(.6, '#ffb14a'); g.addColorStop(1, '#ff5a3c'); } cx.fillStyle = g;
-    for (let i = 0; i < v.length; i++) { const h = Math.max(0, (v[i] + 105) / 85) * H; cx.fillRect(i * bw + 1, H - h, bw - 2, h); } })(0); }
+document.querySelectorAll('main input,main select').forEach((e) => { if (/^p(res|glow|fps)$/.test(e.id)) return; e.addEventListener('input', () => { if (e.id !== 'cmp' && e.id !== 'len') { cur = 'custom'; drawTapes(); } outs(); save(); }); });
+
+const s0 = rd(); if (s0 && s0.custom) { cur = s0.tape && s0.tape !== 'rec' ? s0.tape : 'custom'; apply(s0); } else { cur = 'rec'; apply(Object.assign({}, s0 || {}, TAPES.rec[2])); } drawTapes(); outs();
+/* YOUR DEVICE (owner 2026-11-27): what the game measured on this device (ag_perf2), and three choices that override it (ag_perfuser). Auto lets the game decide. */
+const PU = (() => { try { return Object.assign({ res: 'auto', glow: 'auto', fps: 'auto' }, JSON.parse(localStorage.getItem('ag_perfuser') || '{}')); } catch (e) { return { res: 'auto', glow: 'auto', fps: 'auto' }; } })();
+function specText() { const P = PERF0, el = $('spec'); if (!P) { el.textContent = 'Not measured yet. Play a level and this fills in.'; return; }
+  const gpu = String(P.k || '').split('|')[0].replace(/ANGLE \(|\)$|Direct3D11.*|OpenGL ES.*|\(0x[0-9A-F]+\)/gi, '').replace(/\s+/g, ' ').trim() || 'unknown graphics', tier = { full: 'Full effects', lite: 'Lighter effects', low: 'Lightest effects' }[P.tier] || 'Full effects';
+  el.textContent = ''; const add = (k, v) => { const b = document.createElement('b'); b.textContent = k + ' '; el.append(b, v, document.createElement('br')); };
+  add('Graphics', gpu); add('Running at', tier + ' \u00B7 sharpness ' + Math.round((P.rs || 1) * 100) + '%' + (P.lock30 ? ' \u00B7 steady 30' : '')); }
+const OUTS = { pres: { auto: 'auto', high: 'sharpest', med: 'balanced', low: 'fastest' }, pglow: { auto: 'auto', on: 'on', off: 'off' }, pfps: { auto: 'auto', 60: '60', 30: '30' } };
+function perfUi() { $('pres').value = PU.res; $('pglow').value = PU.glow; $('pfps').value = PU.fps; for (const k of ['pres', 'pglow', 'pfps']) $('o_' + k).textContent = OUTS[k][$(k).value]; $('pnote').textContent = PU.res === 'auto' && PU.glow === 'auto' && PU.fps === 'auto' ? 'The game tunes itself as you play.' : 'Your choices stay until you change them.'; }
+for (const [id, key] of [['pres', 'res'], ['pglow', 'glow'], ['pfps', 'fps']]) $(id).addEventListener('change', () => { PU[key] = $(id).value; try { localStorage.setItem('ag_perfuser', JSON.stringify(PU)); } catch (e) { } perfUi(); });
+$('pretest').onclick = () => { try { localStorage.removeItem('ag_perf2'); } catch (e) { } $('spec').textContent = 'Cleared. The next level measures this device again from scratch.'; };
+specText(); perfUi();
 </script>
 <script>/* FULLSCREEN (no browser bars), either way up. &nofs turns it off. */
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();          /* inside the shell (app.html): fullscreen the shell, which stays put while pages change inside it */

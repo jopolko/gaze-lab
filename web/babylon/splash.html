@@ -715,4 +715,8 @@ if (/[?&]layers\b/.test(location.search)) addEventListener('load', () => { const
 setTimeout(() => { try { const P = JSON.parse(localStorage.getItem('dl_prog') || '{}').worlds || {}, done = (id) => { const w = P[id]; return !!(w && w.best && w.best !== 'NONE'); };
   const ORD = [['routezero', 'story'], ['candy', 'candy'], ['alpine', 'alpine'], ['egypt', 'egypt'], ['synthwave', 'synthwave'], ['tunnel', 'tunnel'], ['matrix', 'matrix'], ['psychedelic', 'psychedelic']];
   const nx = ORD.find(([id]) => !done(id)) || ORD[0]; window.AGPrefetch && AGPrefetch.level(nx[1]); } catch (e) { } }, 3500);</script>
+<script>/* (owner 2026-11-27: once you have tuned the visuals yourself in The Dial, that tuning is used everywhere; the title dial steps aside and says where to change it) */
+(() => { let L = null; try { L = JSON.parse(localStorage.getItem('dl_lab') || 'null'); } catch (e) { } if (!L || !L.custom) return; const d = document.getElementById('dial'); if (!d) return;
+  d.style.opacity = '.3'; d.style.pointerEvents = 'none'; const a = document.createElement('a'); a.href = 'lab.html?back=splash.html'; a.textContent = 'Your own tuning · change it in The Dial'; a.style.cssText = 'display:block;text-align:center;margin-top:4px;font:700 13px "Barlow Condensed",system-ui,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--lc,#fff);text-decoration:underline;text-underline-offset:3px;position:relative;z-index:5';
+  a.addEventListener('pointerdown', (e) => e.stopPropagation()); a.addEventListener('click', (e) => e.stopPropagation()); d.insertAdjacentElement('afterend', a); })();</script>
 <script src="chrome.js"></script></body></html>
