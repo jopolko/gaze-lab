@@ -38,8 +38,8 @@ const FUNKP = [[0, 3], [0, 0, 3, 3], [0, 3, 0, 4], [3, 3, 0, 0], [0, 6, 5, 3], [
 const STYLES = { acid: { bpm: [128, 134] }, techno: { bpm: [122, 133] }, jungle: { bpm: [168, 175] }, eastern: { bpm: [116, 126] }, disco: { bpm: [116, 122] }, boogie: { bpm: [104, 112] }, break: { bpm: [92, 102] } };
 const FUNKS = ['disco', 'boogie', 'break'];
 /* each level's music: what hypes it or calms it (the game uses these): name, style, bpm range, trance 0-100, energy 0-100 */
-const LVLP = { routezero: ['Route Zero', 'techno', [126, 130], 30, 92], candy: ['Sugarfall', 'techno', [122, 126], 55, 70], alpine: ['The Safe Peaks', 'techno', [116, 120], 85, 40], egypt: ['Tomb of the Old Servers', 'eastern', [118, 124], 40, 80],
-  synthwave: ['Neon Accord', 'disco', [118, 122], 70, 80], tunnel: ['The Undertow', 'jungle', [170, 174], 35, 100], matrix: ['Cold Rack', 'break', [94, 100], 25, 90], psychedelic: ['The Open Channel', 'techno', [130, 134], 90, 95] };
+const LVLP = { routezero: ['Route Zero', 'techno', [126, 130], 30, 92], candy: ['Sugarfall', 'techno', [122, 126], 55, 70], alpine: ['The Safe Peaks', 'techno', [116, 120], 85, 40], egypt: ['Tomb of the Old Servers', 'techno', [124, 128], 65, 80],
+  synthwave: ['Neon Accord', 'techno', [128, 132], 80, 80], tunnel: ['The Undertow', 'acid', [134, 138], 35, 100], matrix: ['Cold Rack', 'acid', [128, 132], 25, 90],          /* (owner 2026-11-28: every level techno, acid or trance-weighted techno) */ psychedelic: ['The Open Channel', 'techno', [130, 134], 90, 95] };
 /* your saves teach it: progressions and scales you keep come up more */
 const rdT0 = () => { try { return JSON.parse(localStorage.getItem('dl_tracks') || '[]'); } catch (e) { return []; } };
 function pickW(list, keyOf, counts) { const w = list.map((x) => 1 + 3 * (counts[keyOf(x)] || 0)), tot = w.reduce((a, b) => a + b, 0); let q = R() * tot; for (let i = 0; i < list.length; i++) { q -= w[i]; if (q <= 0) return list[i]; } return list[list.length - 1]; }
@@ -152,7 +152,7 @@ function rememberParts() { if (OVR || !T || !T.parts) return; RECENT = RECENT.fi
 /* ---------- the track (made from the seed) */
 let T = null;
 let STYLE = 'techno', LV = null;
-function makeTrack() { if (FUNKS.includes(STYLE)) STYLE = 'techno';          /* (owner 2026-11-26: no funk anywhere in the game, techno until the music is settled) */ R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; for (const t of sv) { if (t.prog) pc[[].concat(t.prog).join(',')] = (pc[[].concat(t.prog).join(',')] || 0) + 1; if (t.mode) mc[t.mode] = (mc[t.mode] || 0) + 1; }
+function makeTrack() { if (FUNKS.includes(STYLE) || STYLE === 'jungle' || STYLE === 'eastern') STYLE = 'techno';          /* (owner 2026-11-28: techno, trance, ambient only: no funk, jungle or eastern) */          /* (owner 2026-11-26: no funk anywhere in the game, techno until the music is settled) */ R = mulberry(SEED); const sv = rdT0(), pc = {}, mc = {}; for (const t of sv) { if (t.prog) pc[[].concat(t.prog).join(',')] = (pc[[].concat(t.prog).join(',')] || 0) + 1; if (t.mode) mc[t.mode] = (mc[t.mode] || 0) + 1; }
   const funk = FUNKS.includes(STYLE), P0 = LV ? LVLP[LV] : null, canon = STYLE === 'acid' && +SEED === 132; let [kn, root] = pick(KEYS); if (canon) { kn = 'F'; root = 53; }
   const br = P0 ? P0[2] : STYLES[STYLE].bpm; let bpm = br[0] + Math.floor(R() * (br[1] - br[0] + 1)); if (canon) bpm = 128;
   const kit = { kick: pick(KIT.kick), clap: pick(KIT.clap), hat: pick(KIT.hat), oh: pick(KIT.oh), ride: pick(KIT.ride), perc: pick(KIT.perc), crash: KIT.crash[0] }, pmask = Array.from({ length: 16 }, (_, i) => (i % 4 === 3 || i === 6 || i === 10) && R() < .45 ? 1 : 0);
@@ -262,6 +262,8 @@ function build() {
     acid() {          // a sawtooth through a resonant low-pass (swept by the sequencer), a touch of drive, pumped by the kick
       const acid = new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: .003, decay: .12, sustain: 0, release: .05 } }), acF = new Tone.BiquadFilter({ type: 'lowpass', frequency: 800, Q: 12 }), acG = new Tone.Gain(0); acid.chain(acF, new Tone.Distortion(.18), acG, duck); acG.connect(dlyS);
       Object.assign(S, { acid, acF, acG }); } };
+  /* (owner 2026-11-28: 'hard-hitting quality techno, no stupid beeps and weird sounds; fat basslines and ethereal pads are fine') the arp plucks, the lead hook and the funk / eastern instruments are cut off at their outputs the moment they're built: whatever the arrangement asks, they stay silent. Kick, basses, sub, reese, pads, drone and acid play. */
+  for (const [k, gs] of [['arp', ['arpG']], ['lead', ['ldG']], ['funk', ['fbG', 'cvG', 'epG', 'hnG']], ['eastern', ['oudG', 'neyG']]]) { const f = MODS[k]; if (f) MODS[k] = () => { f(); for (const g of gs) try { S[g].disconnect(); } catch (e) { } }; }
   S.mods = MODS;
 }
 /* the instruments a style needs, built the first time it plays */

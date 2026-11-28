@@ -24,7 +24,7 @@
       const n = (ic, app, t, sm, fn) => { const e = document.createElement('button'); e.className = 'n'; e.innerHTML = '<i>' + ic + '</i><span><em>' + app + ' \u00B7 now</em><b>' + t + '</b><small>' + sm + '</small></span>'; e.onclick = (ev) => { ev.stopPropagation(); fn(); }; o.appendChild(e); };
       n('\uD83D\uDDFA', 'MAPS', 'Worlds', 'Pick another world.', () => { location.href = 'menu.html'; }); n('\u25C8', 'HOME', 'Title screen', 'Back to the start.', () => { location.href = 'splash.html'; }); n('\u25B6', 'LOADER', 'Keep loading', 'This level is still getting ready.', close);
       document.documentElement.appendChild(o); };
-    document.documentElement.appendChild(b); window.__pz0Close = close; } catch (e) { } })();</script><script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js"></script>
+    document.documentElement.appendChild(b); window.__pz0Close = close; } catch (e) { } })();</script><script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script><script src="musicengine.js?v=20261128a"></script>
 <title>Afterglow</title>
 <style>
   html, body { margin: 0; height: 100%; background: #0b0418; overflow: hidden; color: #fff; font: 600 16px system-ui, sans-serif; }
@@ -104,7 +104,7 @@ const ME_OPTS = () => (Q.has('mseed') ? { seed: +Q.get('mseed'), style: Q.get('m
 const PSY = createPsyFx({ fx: { x_level: parseFloat(new URLSearchParams(location.search).get('level') || '0.6') }, seed: 7, sessionMin: +(new URLSearchParams(location.search).get('min') || 10), cfgTrip: 1, journey: !new URLSearchParams(location.search).has('plain'), onCheer: () => { }, onToast: () => { } });          /* the real trip director: the molecules, the come-up / peak / comedown arc, the moment of clarity */
 import { MOL_EL_COL, MOL_EL_R, MOL_STICK, MOL_SC } from '../downhill-three/molmesh.js';
 MOL_EL_COL.F = [.55, 1, .6]; MOL_EL_R.F = .5;
-const GM = createGvMusic({ base: '../music/', stemsOnly: false }); let gmOn = false; window.__GM = GM; const BTRACK = { psychedelic: ['electric_exodus.ogg', .85], candy: ['bouncer.ogg', .8, 'loop'], tunnel: ['dnb_minute.ogg', .8, 'loop', 3.4], desert: null, matrix: ['moodless_refrain.mp3', .8], synthwave: null, alpine: null };
+const GM = createGvMusic({ base: '../music/', stemsOnly: true })          /* (owner 2026-11-28: no funk: the stem player never crossfades into its funk tracks now) */; let gmOn = false; window.__GM = GM; const BTRACK = { psychedelic: ['electric_exodus.ogg', .85], candy: ['bouncer.ogg', .8, 'loop'], tunnel: ['dnb_minute.ogg', .8, 'loop', 3.4], desert: null, matrix: ['moodless_refrain.mp3', .8], synthwave: null, alpine: null };
 const biomeTrack = () => { if (new URLSearchParams(location.search).has('trip')) return null; const f = Q.get('track'); if (f === 'stems') return null; if (f) return [f, .8]; return BTRACK[WORLD0] || null; };
 /* BEAT SYNC on the recorded tracks (owner 2026-11-26): the song plays at once; its full audio is analysed in the background (tempo, first beat, bars) and the beat
    effects then run off the song's own clock, so they never drift. Visual only here: no beat pickups. */
