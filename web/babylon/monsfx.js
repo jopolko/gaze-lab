@@ -35,6 +35,8 @@ export function createMonSfx(acx, cam) {
     zapp(ac, t, o) { osc(ac, 'sawtooth', 120, 40, t, .4, .25, o); nz(ac, 'bandpass', 3000, 900, 2, t, .3, .2, o); },
     swarm(ac, t, o) { for (let i = 0; i < 26; i++) { const ti = t + rnd(0, 1.1); nz(ac, 'bandpass', rnd(1600, 3800), 0, 5, ti, .02, .12, o); } osc(ac, 'sawtooth', 70, 95, t, 1.2, .1, o, .3); osc(ac, 'sawtooth', 71.5, 93, t, 1.2, .09, o, .3); },          /* a wave of spiders arriving: a rush of legs over a rising drone */
     launch(ac, t, o) { osc(ac, 'sine', 95, 38, t, .2, .55, o); nz(ac, 'bandpass', 700, 2800, 1.2, t + .02, .7, .4, o, .02); nz(ac, 'highpass', 4000, 0, .7, t, .05, .3, o); },          /* a missile leaving: ignition thump and a tearing hiss */
+    defeat(ac, t, o) { osc(ac, 'sawtooth', 330, 300, t, .35, .16, o, .01); osc(ac, 'sawtooth', 262, 196, t + .32, .9, .18, o, .01); osc(ac, 'sine', 98, 55, t + .3, 1.2, .3, o, .02); nz(ac, 'lowpass', 600, 120, .7, t + .3, .9, .2, o, .05); },          /* a falling 'you lost that one' */
+    sting(ac, t, o) { osc(ac, 'sine', 140, 70, t, .22, .22, o); nz(ac, 'bandpass', 2600, 1400, 3, t, .08, .1, o); },          /* soft damage knock */
     impact(ac, t, o) { nz(ac, 'lowpass', 900, 110, .7, t, 1.1, .7, o); osc(ac, 'sine', 60, 28, t, .7, .6, o); },
   };
   let last = {};

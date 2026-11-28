@@ -151,7 +151,7 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
      They go a few at a time, the ones nearest the middle first; when it is over the rest are scattered out to the edge of the glass. */
   const JREF = 100; let JB = null;
   const jumpFrac = (p) => p < .1 ? 0 : .75 * Math.floor(Math.min(1, p) * 20 + 1e-6) / 20;
-  function ramp() { const on = GS.filter((g) => g.st === 'in').sort((a, b) => Math.hypot(a.tx, a.ty) - Math.hypot(b.tx, b.ty)); JB = { t: 0, list: on, n0: on.length, done: 0, hmax: 0 }; return on.length; }
+  function ramp() { for (const g of GS) if (g.st === 'in') g.j = (g.j || 0) + 1; const on = GS.filter((g) => g.st === 'in').sort((a, b) => Math.hypot(a.tx, a.ty) - Math.hypot(b.tx, b.ty)); JB = { t: 0, list: on, n0: on.length, done: 0, hmax: 0 }; return on.length; }
   function jumpStep(dt) { if (!JB) return 0; JB.t += dt; const h = d.airH ? Math.max(0, d.airH()) : 0; JB.hmax = Math.max(JB.hmax, h);
     const frac = jumpFrac(JB.hmax / JREF), want = Math.floor(JB.n0 * frac * Math.min(1, JB.t / 3) + 1e-6);
     while (JB.done < want) { const g = JB.list[JB.done++]; if (g && g.st === 'in') { g.st = 'wait'; g.blow = true; g.delay = 0; } }
@@ -193,7 +193,7 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       c.drops.forEach((q, k) => { q.y -= dt * 24; if (q.y < -12) q.y = rnd(-1, 0); B.Matrix.TranslationToRef(q.x, q.y, q.z, M); M.copyToArray(c.rb, k * 16); }); c.rain.thinInstanceBufferUpdated('matrix');
       if (!c.struck && dz > 0 && dz < Math.max(72, spd * 1.7) && dx < 16) { c.struck = true; strike(c); }
       if (!c.done && dz < 4 && dz > -8 && dx < c.hw && PH.y < c.g.position.y - 3) { c.done = true; wash(c); }          /* (owner 2026-11-28: only driving right underneath it washes them off; passing either side or jumping over it does nothing) */
-      if (!c.done && dz < -8) c.done = true;          /* (missed: it stays dry) */
+      if (!c.done && dz < -8) { c.done = true; for (const g of GS) if (g.st === 'in') g.c = (g.c || 0) + 1; }          /* (missed: it stays dry, and the spiders count one more storm survived) */
       if (dz < -40) { c.g.dispose(false, true); c.m.dispose(); CL.splice(i, 1); } }
     for (let i = BOLTS.length - 1; i >= 0; i--) { const b = BOLTS[i]; b.t += dt; const on = b.t < b.flick[0] || (b.t > b.flick[1] && b.t < b.flick[2]) || (b.t > b.flick[2] + .05 && b.t < b.life * .8);
       for (const p of b.parts) p.isVisible = on; const cp2 = ((d.cam && d.cam()) || scene.activeCamera).globalPosition; for (const mm of b.mats) mm.setVector3('uCam', cp2); b.mats[1].setFloat('uA', 1 - b.t / b.life); if (b.t > b.life) { for (const p of b.parts) p.dispose(); for (const m of b.mats) m.dispose(); BOLTS.splice(i, 1); } }
@@ -224,9 +224,12 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       if (M) { M.wind(lv > 0 && onG.length && d.airH && d.airH() > 0 ? lv : 0, dt);          /* (no spiders on the glass, no wind) */
         if (live) { M.chew(dt, onG.length, () => { const g = onG[Math.floor(Math.random() * onG.length)]; return clamp(g.x * .8, -.9, .9); });          /* (one voice per spider: fewer spiders, fewer bites) */
           const L = []; for (const q of RS) { if (q.tumble > 0) continue; const dd = Math.hypot(q.x - PH.x, q.z - PH.z); if (dd < 90) L.push({ pan: clamp((q.x - PH.x) / 10, -.9, .9), g: 1 / (1 + dd / 14) }); } M.skitter(dt, L); } } }
+    /* DAMAGE (owner 2026-11-28): spiders that have hung on through more than 3 ramp jumps or more than 2 storm clouds start chewing through:
+       a gentle damage flash every few seconds until they are gone */
+    { const bad = live && GS.some((g) => g.st === 'in' && ((g.j || 0) > 3 || (g.c || 0) > 2)); if (bad) { S.dmgT = (S.dmgT ?? 1.2) - dt; if (S.dmgT <= 0) { S.dmgT = 3.2; S.dmg = (S.dmg || 0) + 1; try { d.onDamage && d.onDamage(); } catch (e) { } } } else S.dmgT = undefined; }
     GL.m.thinInstanceCount = m; GL.m.thinInstanceBufferUpdated('matrix'); GL.m.thinInstanceBufferUpdated('phase'); GL.m.thinInstanceBufferUpdated('lean');
   }
-  const api = { step, S, SLO, ramp, get jump() { return JB; }, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
+  const api = { step, S, SLO, ramp, get jump() { return JB; }, ageAll: (j, c) => { for (const g of GS) { g.j = j; g.c = c; } }, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
     storm: (z) => spawnStorm(z || 120), strikeTest: () => { const c = CL[CL.length - 1]; if (c) strike(c); }, washTest: () => wash({ tint: pick(d.pal.bolts) }) };
   return api;
 }
