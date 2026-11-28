@@ -27,6 +27,14 @@ try { window.DAILY && window.DAILY.then((D) => { if (D && D.murmur) SCENES[1].q 
 /* each strain flies you into its home world (WORLDOF in menu.html, JNAME in index.html), with a two-line tag at the top while the sky holds */
 const HITS = [{ t: 29.4, cp: 'haze', sky: 'candy', w: 'SUGARFALL', fx: 'The world melts like wet paint.' }, { t: 39.0, cp: 'embrace', sky: 'synthwave', w: 'NEON ACCORD', fx: 'Crystals come to you.' },
   { t: 999, cp: 'fold', sky: 'egypt', w: 'THE TOMB OF THE OLD SERVERS', fx: 'Stained glass at the seams.' }, { t: 999, cp: 'velocity', sky: 'tunnel', w: 'THE UNDERTOW', fx: 'Time slows when something is right ahead.' }], SKY_HOLD = 2.5, TAG_HOLD = 2.8;
+/* THE TASTE ROTATES (owner 2026-11-28: "why is cacao mentioned but never any other? Change them with each replay so it doesn't look like one special sweet is being
+   recommended"): each time the intro plays, the two flights go through the next two strains in turn, each to its own world; the line under the world is the strain's
+   real effect from the pantry (the same words as the game), and the card shows the strain's hologram art (art/plants, as in the game). */
+const TASTE = { haze: ['candy', 'SUGARFALL'], fold: ['egypt', 'THE TOMB OF THE OLD SERVERS'], hollow: ['alpine', 'THE SAFE PEAKS'], velocity: ['tunnel', 'THE UNDERTOW'], deep: ['matrix', 'COLD RACK'], embrace: ['synthwave', 'NEON ACCORD'], drift: ['synthwave', 'NEON ACCORD'], lucid: ['psychedelic', 'THE OPEN CHANNEL'] }, TASTE_ORDER = Object.keys(TASTE);
+function tasteDeal(avoid) { let n = 0; try { n = parseInt(localStorage.getItem('dl_irtaste'), 10) || 0; } catch (e) { } const pick = []; let i = n * 2;
+  while (pick.length < 2 && i < n * 2 + 16) { const cp = TASTE_ORDER[i % TASTE_ORDER.length]; i++; if (cp !== avoid && !pick.includes(cp)) pick.push(cp); }
+  try { localStorage.setItem('dl_irtaste', String(n + 1)); } catch (e) { }
+  pick.forEach((cp, k) => { const P = PANTRY[cp] || {}, d0 = String(P.does || '').split(';')[0].trim(); HITS[k].cp = cp; HITS[k].sky = TASTE[cp][0]; HITS[k].w = TASTE[cp][1]; HITS[k].fx = d0 ? d0.charAt(0).toUpperCase() + d0.slice(1) + '.' : ''; }); }
 /* FIELD NOTES rotates: a different strain each time the intro plays (green tea first, then the ones the road above doesn't show) */
 const FN_ORDER = ['lucid', 'hollow', 'drift', 'deep', 'embrace', 'velocity', 'haze', 'fold'];
 function fieldNote() { let i = 0; try { i = (parseInt(localStorage.getItem('dl_fieldnote'), 10) || 0) % FN_ORDER.length; } catch (e) { } const cp = FN_ORDER[i], P = PANTRY[cp] || PANTRY.lucid;
@@ -85,7 +93,7 @@ const ART = {
     <g transform="translate(800 640)"><g><animateTransform attributeName="transform" type="translate" values="-90 0;90 0;-90 0" dur="2.2s" repeatCount="indefinite"/><path d="M-60 30 L-44 -22 L44 -22 L60 30 Z" fill="#12101a" stroke="#38e8ff" stroke-width="5"/><rect x="-34" y="-16" width="68" height="16" rx="4" fill="#38e8ff"/></g></g></svg>` };
 
 export function createIntro(d) {
-  const FN = fieldNote(); SCENES[3].q = FN.q; SCENES[3].col = FN.col;
+  const FN = fieldNote(); SCENES[3].q = FN.q; SCENES[3].col = FN.col; tasteDeal(FN.cp);
   /* the strain's real molecule for the card: its atoms seen from the front, bonds as sticks, carbon in the strain's colour */
   function molSVG(cpArg) { try { const C = d.COMP[cpArg || FN.cp] || d.COMP.lucid, M = d.MOLS && d.MOLS[C.mol]; if (!M) throw 0; const A = M.atoms; let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
       for (const a of A) { x0 = Math.min(x0, a[1]); x1 = Math.max(x1, a[1]); y0 = Math.min(y0, a[2]); y1 = Math.max(y1, a[2]); } const k = 400 / Math.max(x1 - x0, (y1 - y0) * 1.4, 1), cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -241,7 +249,7 @@ export function createIntro(d) {
     if (S.art === 'murmur') { const el = ui.art.querySelector('#irCount'); let n = 12; const tick = () => { if (!el.isConnected) return; n = Math.min(98420, Math.round(n * 1.37 + 7)); el.textContent = n.toLocaleString(); if (n < 98420) setTimeout(tick, 120); }; setTimeout(tick, 300); } }
   function hide() { ui.sc.classList.remove('on'); }
   /* the strain tag: its world in its colour, then its plain hook and what it does */
-  function tag(h) { const P = PANTRY[h.cp]; if (!P) return; ui.tg.style.setProperty('--c', '#' + P.c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')); ui.tg.querySelector('.mol').innerHTML = '<svg viewBox="-240 -240 480 480">' + molSVG(h.cp).split('#59d9ff').join('#' + P.c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')) + '</svg>'; { const pl = ui.tg.querySelector('.pl'); if (pl) pl.innerHTML = (window.AGPLANTS && P.plant) ? AGPLANTS.svg(P.plant) : ''; }          /* (the plant beside the molecule) */ ui.tg.querySelector('b').textContent = h.w; ui.tg.querySelector('span').textContent = ((d.HOOK && d.HOOK[h.cp]) ? d.HOOK[h.cp] + ' ' : '') + h.fx; ui.tg.classList.add('on'); IR.tagT = (OPEN.a ? OPEN.a.currentTime : (performance.now() - IR.t0) / 1000) + TAG_HOLD; }
+  function tag(h) { const P = PANTRY[h.cp]; if (!P) return; ui.tg.style.setProperty('--c', '#' + P.c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')); ui.tg.querySelector('.mol').innerHTML = '<svg viewBox="-240 -240 480 480">' + molSVG(h.cp).split('#59d9ff').join('#' + P.c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('')) + '</svg>'; { const pl = ui.tg.querySelector('.pl'); if (pl) pl.innerHTML = P.plant ? '<img alt="" style="width:100%;height:100%;object-fit:contain" src="art/plants/' + P.plant.replace(/ /g, '-') + '-1.webp?v=2">' : ''; }          /* (the strain's hologram art beside the molecule, the same picture as the game's hologram) */ ui.tg.querySelector('b').textContent = h.w; ui.tg.querySelector('span').textContent = ((d.HOOK && d.HOOK[h.cp]) ? d.HOOK[h.cp] + ' ' : '') + h.fx; ui.tg.classList.add('on'); IR.tagT = (OPEN.a ? OPEN.a.currentTime : (performance.now() - IR.t0) / 1000) + TAG_HOLD; }
   const seen = () => { try { return localStorage.getItem('dl_opened') === '1'; } catch (e) { return false; } };
   /* THE IDENTS: before the music, in silence, the production companies fade in one after another the way a film opens: each its own little piece of art,
      on black with film grain. All made up for this game. A tap skips to the intro. */
