@@ -53,13 +53,15 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 .uphint b { color:var(--gold); }
 .cx { flex:1; min-height:0; display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); gap:1.2vmin; }
 .st { position:relative; overflow:hidden; border-radius:14px; border:1px solid rgba(255,255,255,.1); background:radial-gradient(ellipse at 50% 35%, rgba(var(--sc),.16), #05070c 70%); color:var(--fg); font:inherit; text-align:left; padding:0; min-height:0; cursor:pointer; }
-.st canvas { position:absolute; left:0; top:0; width:100%; height:66%; }
+.st .holo { position:absolute; left:0; top:4%; width:100%; height:62%; object-fit:contain; animation:hfloat 3.2s ease-in-out infinite; }
+@keyframes hfloat { 50% { transform:translateY(-4%); } }
+.st .cnt { position:absolute; right:8px; top:6px; font:700 12px system-ui,sans-serif; color:#fff; background:rgba(var(--sc),.35); border:1px solid rgba(var(--sc),.8); border-radius:10px; padding:1px 7px; }
 .st .txt b { font-size:clamp(16px,2.6vmin,30px); letter-spacing:.03em; }
 .st.off { cursor:default; } .st.off .txt b { color:#8a93a6; }
-.st.off canvas { filter:brightness(0) drop-shadow(0 0 1px rgba(255,255,255,.4)); opacity:.7; }
+.st.off .holo { filter:brightness(0) drop-shadow(0 0 1px rgba(255,255,255,.4)); opacity:.7; }
 #sdet { position:fixed; inset:0; z-index:5; display:flex; align-items:center; justify-content:center; background:rgba(3,4,8,.84); padding:max(14px,var(--sa-top, env(safe-area-inset-top,0px))) max(14px,var(--sa-right, env(safe-area-inset-right,0px))) max(14px,var(--sa-bottom, env(safe-area-inset-bottom,0px))) max(14px,var(--sa-left, env(safe-area-inset-left,0px))); }
 #sdet .box { position:relative; width:min(780px,100%); max-height:100%; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.35fr); gap:1.4vmin 2.4vmin; align-items:center; background:#070a12; border:1px solid rgba(var(--sc),.55); border-radius:16px; box-shadow:0 0 40px rgba(var(--sc),.2); padding:2.2vmin 2.6vmin; overflow:hidden; }
-#sdet canvas { width:100%; aspect-ratio:1; max-height:56vh; }
+#sdet .holo { width:100%; aspect-ratio:1; max-height:56vh; object-fit:contain; animation:hfloat 3.2s ease-in-out infinite; }
 #sdet .rar { font:700 clamp(12px,1.4vmin + 5px,16px) var(--lb); letter-spacing:.16em; text-transform:uppercase; color:rgb(var(--sc)); }
 #sdet h2 { margin:.1em 0 .15em; font:400 clamp(24px,4.6vmin,46px)/.95 var(--tt); letter-spacing:.04em; color:#fff; overflow-wrap:anywhere; }
 #sdet .sys { color:#aeb7c9; font:italic 500 clamp(11px,1.1vmin + 6px,15px)/1.25 Georgia,serif; overflow-wrap:anywhere; }
@@ -67,7 +69,7 @@ main { flex:1; min-height:0; display:flex; flex-direction:column; gap:1.2vmin; }
 #sdet p.acc { color:#ffd9a8; } #sdet p.wild { color:#cfe9ff; font-style:italic; }
 #sdet .x { position:absolute; right:.4em; top:.3em; background:none; border:0; color:#cfd6e4; font:700 28px/1 var(--lb); cursor:pointer; padding:.1em .3em; }
 .cxhint { color:#cfe9ff; font:700 clamp(13px,1.5vmin + 6px,18px) var(--lb); letter-spacing:.06em; }
-@media (orientation:portrait) { .cx { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } #sdet .box { grid-template-columns:1fr; } #sdet canvas { height:28vh; width:auto; justify-self:center; } }
+@media (orientation:portrait) { .cx { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } #sdet .box { grid-template-columns:1fr; } #sdet .holo { height:28vh; width:auto; justify-self:center; } }
 [hidden] { display:none !important; }
 @media (orientation:portrait) { .grid { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(4, minmax(0,1fr)); } .up { grid-template-columns:repeat(2, minmax(0,1fr)); grid-template-rows:repeat(2, minmax(0,1fr)); } .tag { display:none; } .txt b { font-size:clamp(20px,5vmin,36px); } }
 .card.upc{display:flex;flex-direction:column}.card.upc .upst{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 55%,#24304d,#090c14 75%);padding:6% 8% 2%}
@@ -151,7 +153,7 @@ function render() {
     g.appendChild(b); });
   const c = document.getElementById('cont'), ci = nextI < 0 ? 0 : nextI;
   c.textContent = (nextI < 0 ? '↻ Replay ' : cleared(LEVELS[0].id) ? '▶ Continue: ' : '▶ Start: ') + LEVELS[ci].name; c.onclick = () => { location.href = LEVELS[ci].url; };
-  const j = document.getElementById('journey'), jok = ALL || cleared('routezero'); j.textContent = jok ? '∞ Endless Journey' : '∞ Journey (clear Route Zero)'; j.disabled = !jok; j.onclick = () => { location.href = 'index.html?journey=1&biome=desert&nointake=1'; };
+  const j = document.getElementById('journey'), jok = true;          /* (owner 2026-11-27: everything open from the start) */ j.textContent = jok ? '∞ Endless Journey' : '∞ Journey (clear Route Zero)'; j.disabled = !jok; j.onclick = () => { location.href = 'index.html?journey=1&biome=desert&nointake=1'; };
   /* upgrades: what a shard is, and how far you are from the next upgrade */
   { const nextG = GEARS.find((G) => (T[G.id] || 1) < 2), have = shards(), h = document.getElementById('uphint'); h.textContent = '';
     if (!nextG) h.textContent = 'Every upgrade owned.';
@@ -183,15 +185,17 @@ let spinOn = false;
 function spinLoop(now) { SPIN = SPIN.filter((q) => q.cv.isConnected && !q.cv.closest('[hidden]')); for (const q of SPIN) molDraw(q.cv, q.M, still ? .6 : q.o + now / 2600); spinOn = SPIN.length > 0 && !still; if (spinOn) requestAnimationFrame(spinLoop); }
 const spinAdd = (cv, M, o) => { SPIN.push({ cv, M, o }); if (!spinOn) { spinOn = true; requestAnimationFrame(spinLoop); } };
 async function codex() { if (!PAN) { try { PAN = (await import('./molpantry.js')).PANTRY; } catch (e) { document.getElementById('cxhint').textContent = 'The strains could not load.'; return; } }
-  const got = new Set(rd('dl_strains', [])), g = document.getElementById('codex'); g.textContent = ''; SPIN = [];
+  const got = new Set(rd('dl_strains', [])), NC = rd('dl_strainN', {}), g = document.getElementById('codex'); g.textContent = ''; SPIN = [];
   const n = Object.keys(PAN).filter((k) => got.has(k)).length;
-  document.getElementById('cxhint').textContent = n + ' of 8 wild strains found. Every world grows its own: take one in a level to log it here.';
-  Object.entries(PAN).forEach(([cp, M], i) => { const on = got.has(cp) || ALL, b = el('button', 'st' + (on ? '' : ' off')); b.style.setProperty('--sc', rgbOf(M.c)); const cv = el('canvas'); b.appendChild(cv);
+  document.getElementById('cxhint').textContent = n + ' of 8 wild strains found. Take one in a level to log it. Deal five into a hand for a trip surge: pairs, a full house, a rainbow run of five different, or all eight in one run.';
+  Object.entries(PAN).forEach(([cp, M], i) => { const on = got.has(cp) || ALL, b = el('button', 'st' + (on ? '' : ' off')); b.style.setProperty('--sc', rgbOf(M.c)); const cv = holoImg(M); b.appendChild(cv); if (on && NC[cp]) b.appendChild(el('span', 'cnt', '\u00D7' + NC[cp]));
     const tx = el('span', 'txt'); tx.appendChild(el('b', null, on ? M.name : '? ? ?')); const sm = el('small', null, on ? '' : 'Grows in ' + WORLDOF[cp]); if (on) { const em = el('em', null, M.eff); em.style.color = 'rgb(' + rgbOf(M.c.map((v) => Math.min(1, .45 + v * .6))) + ')'; sm.append(em, ' \u00B7 ' + ({ 'green tea': 'roadside green tea', cacao: 'black-market cacao', coffee: 'contraband coffee', 'ginger root': 'feral ginger root', chamomile: 'ditch-grown chamomile', peppermint: 'glacier peppermint', turmeric: 'tomb-dust turmeric', chilli: 'server-rack chilli' }[M.plant] || M.plant)); } tx.appendChild(sm); b.appendChild(tx);
-    if (on) b.onclick = () => strainOpen(M); else b.disabled = true; g.appendChild(b); spinAdd(cv, M, i * .8); }); }
-function strainOpen(M) { const d = document.getElementById('sdet'); d.textContent = ''; const bx = el('div', 'box'); bx.style.setProperty('--sc', rgbOf(M.c)); const cv = el('canvas'); bx.appendChild(cv);
-  const t = el('div'); t.append(el('div', 'rar', 'Wild strain \u00B7 ' + M.eff), el('h2', null, M.name), el('div', 'sys', M.sys), el('p', null, M.does + '.'), el('p', 'acc', M.acc), el('p', 'wild', '\u201C' + M.wild + '\u201D')); bx.appendChild(t);
-  const x = el('button', 'x', '\u00D7'); x.setAttribute('aria-label', 'Close'); bx.appendChild(x); d.appendChild(bx); d.hidden = false; spinAdd(cv, M, 0);
+    if (on) b.onclick = () => strainOpen(M, NC[cp] || 0); else b.disabled = true; g.appendChild(b); }); }
+/* (owner 2026-11-27: the strains are shown as the same holograms you collect in the game, with how many you have taken) */
+const holoImg = (M) => { const im = el('img', 'holo'); im.src = 'art/plants/' + M.plant.replace(/ /g, '-') + '-1.webp?v=2'; im.alt = M.plant; im.decoding = 'async'; return im; };
+function strainOpen(M, n) { const d = document.getElementById('sdet'); d.textContent = ''; const bx = el('div', 'box'); bx.style.setProperty('--sc', rgbOf(M.c)); const cv = holoImg(M); bx.appendChild(cv);
+  const t = el('div'); t.append(el('div', 'rar', 'Wild strain \u00B7 ' + M.eff + (n ? ' \u00B7 taken ' + n + (n === 1 ? ' time' : ' times') : '')), el('h2', null, M.name), el('div', 'sys', M.sys), el('p', null, M.does + '.'), el('p', 'acc', M.acc), el('p', 'wild', '\u201C' + M.wild + '\u201D')); bx.appendChild(t);
+  const x = el('button', 'x', '\u00D7'); x.setAttribute('aria-label', 'Close'); bx.appendChild(x); d.appendChild(bx); d.hidden = false;
   const close = () => { d.hidden = true; d.textContent = ''; }; x.onclick = close; d.onclick = (e) => { if (e.target === d) close(); }; }
 /* SHARDS: what they buy, how to earn them, and where you stand in every world (owner 2026-11-27) */
 function shardsOpen() { const d = document.getElementById('sdet'); d.textContent = ''; const bx = el('div', 'shp'), have = shards(), earned = (P.icosa || 0) + questShards();
