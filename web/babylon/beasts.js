@@ -246,6 +246,8 @@ export function createBeasts(d) {
     if (d.inTunZ && d.inTunZ(PH.z, 160) && d.world !== 'tunnel') return; const busy = LIVE.some((b) => !b.dead && !b.minion && !b.carpetBit && b.mode !== 'swarm' && b.mode !== 'drop' && PH.z - b.z < 260 && b.z < PH.z + 90);
     while (DIR.racks.length && PH.z - 220 < DIR.racks[0]) { const z = DIR.racks.shift(); if (!(d.inTunZ && d.inTunZ(z, 40))) rackAt(z); }
     if (!DIR.bossDone && PH.z < BOSSZ && BOSS) { if (BOSS.k === 'bore') { if (!(d.tunnel && d.tunnel())) return; } DIR.bossDone = true; DIR.bossOn = BOSS; ENC[BOSS.k](BOSS); return; }
+    /* (owner 2026-11-27: enemies follow the arc) the machines wait out the calm stretches and never pile onto a heavy moment or a raid in the sky; the AMBUSH moment brings its own */
+    { const ph = d.phase ? d.phase() : ''; if (/^(breath|lensbreath|glide|crystals|warm|pressure|gauntlet|ambush|finale|gate:)/.test(ph) || (d.raidOn && d.raidOn())) return; }
     if (PH.z < DIR.next && !busy && REG.length) { const s = REG[DIR.i++ % REG.length]; if (s.k === 'flyer' && d.world === 'tunnel' && !(d.tunnel && d.tunnel())) { DIR.i--; } else ENC[s.k](s); DIR.next = PH.z - gapM * rnd(.8, 1.2); }
     if (d.world === 'tunnel' && d.tunnel && d.tunnel() && !DIR.tunFly && REG[1]) { DIR.tunFly = true; ENC.flyer(REG[1]); }          /* (the Tunnel Spotter lives in the tunnel) */
   }

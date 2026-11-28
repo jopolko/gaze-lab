@@ -38,7 +38,7 @@ export function shapeOf(beats) { const L = beats.map((b) => (BEATK[b.k] || [.5, 
 const shapeAt = (S, u) => { if (!S || !S.length) return null; if (u <= S[0][0]) return S[0][1]; for (let i = 1; i < S.length; i++) if (u <= S[i][0]) { const t = (u - S[i - 1][0]) / Math.max(1e-6, S[i][0] - S[i - 1][0]); return S[i - 1][1] + (S[i][1] - S[i - 1][1]) * t; } return S[S.length - 1][1]; };
 export const WORLD_ORDER = ['desert', 'alpine', 'candy', 'tunnel', 'synthwave', 'matrix', 'egypt', 'psychedelic'];
 /* the same arc the game will play, from the seed alone (set ids come from their own random stream, so the pools do not change the shape) */
-export function planShape(seed, world) { const L = Math.max(1, WORLD_ORDER.indexOf(world)); return shapeOf(planPlay({ seed, lvIdx: L, setTiers: {}, plainSets: ['a'], hardSets: ['b'] }).beats); }
+export function planShape(seed, world, roadLen) { const L = Math.max(1, WORLD_ORDER.indexOf(world)); return shapeOf(planPlay({ seed, lvIdx: L, setTiers: {}, plainSets: ['a'], hardSets: ['b'], roadLen }).beats); }
 export function planRoad({ catalog, edge, joinCost, seed, n, world, courses, shape }) {
   const R = rng(seed ^ 0x51ed), P = ROADP[world] || ROADP.alpine, sr = ranks(catalog.map((c) => c.slope)), rich = ranks(catalog.map((c) => c.kick * 3 + c.vx * 2 + c.toys + c.feats * .3));
   let rows = catalog.map((c, k) => Object.assign({}, c, { k, sr: sr[k], rich: rich[k], d: 'long_' + c.d })), used = new Set(), plan = [], per = {}; let prev = null; const memo = new Map();
@@ -75,7 +75,7 @@ const KEYABLE = ['WINGS', 'MAGNET', 'SHIELD', 'SPEED', 'LENS'];          // keys
 
 /* the level's script: an ordered list of beats the game's level script builds one after another.
    kinds: warm, speed, threat, breath, mix, pressure, lensbreath, gearpair, finale (the game's own sections), set {id}, fork {a, b}, key {need} */
-export function planPlay({ seed, lvIdx, setTiers, plainSets, hardSets }) {
+export function planPlay({ seed, lvIdx, setTiers, plainSets, hardSets, roadLen }) {
   /* PHRASES (owner 2026-11-27: "use phrases for paths, procedurally generated"; the old fixed 17-beat template made every level feel the same).
      A level is an arc of phrases: OPEN, then BUILDs, a CHOICE (the fork and its first gate), RESTs between, a PEAK or two, the RETURN (the second gate)
      and the FINALE. Each phrase has several variants; which ones, how many and in what order come from the seed. Early worlds rest more and get the
@@ -106,8 +106,19 @@ export function planPlay({ seed, lvIdx, setTiers, plainSets, hardSets }) {
   const first = S.find((b) => b.gate).id, second = GATESET[first === GATESET[ka] ? kb : ka]; S.push({ k: 'set', id: second, gate: true });   // the return: the key you left behind
   if (kc) { if (KEYABLE.includes(kc) && R() < .7) S.push({ k: 'key', need: kc, side: R() < .5 ? -1 : 1 }); S.push(...take('build')); S.push({ k: 'set', id: GATESET[kc], gate: true }); }
   S.push(...take('rest'));
-  const end = R(); if (end < .3) { S.push(...take('peak')); S.push(...take('rest')); S.push(...take('peak')); } else if (end < .5) { S.push(...take('rest')); S.push(...take('peak')); } else S.push(...take('peak'));          /* (the ending varies: sometimes two peaks, sometimes a long calm before the last climb) */
+  const end = R(); if (end < .3 + .45 * hardK) { S.push(...take('peak')); S.push(...take('rest')); S.push(...take('peak')); } else if (end < .5) { S.push(...take('rest')); S.push(...take('peak')); } else S.push(...take('peak'));          /* (the ending varies: sometimes two peaks, sometimes a long calm before the last climb) */
   S.push({ k: 'finale' });
   for (let i = S.length - 1; i > 0; i--) if (S[i].k !== 'set' && S[i].k === S[i - 1].k) S.splice(i, 1);          /* (no moment twice back to back) */
+  /* FIT THE ROAD (owner 2026-11-27: "are the levels well paced?"): the plan is trimmed to the road it will be played on, counting each moment's own length
+     plus the run-up the game leaves before it. Busy moments packed next to other busy moments go first, then a rest next to another rest; the fork,
+     the gates, keys and the finale always stay, and a rest always sits between two peaks. */
+  if (roadLen > 0) { const need = (b) => (BEATK[b.k] || [.5, 400])[1] + 110, keep = (b) => b.gate || b.k === 'fork' || b.k === 'key' || b.k === 'finale', calm = (b) => (BEATK[b.k] || [.5])[0] <= .35, heavy = (b) => !!(b && (b.gate || b.hard || b.k === 'pressure' || b.k === 'gauntlet' || b.k === 'finale')), sep = (i) => !(heavy(S[i - 1]) && heavy(S[i + 1]));          /* (a cut never leaves two heavy moments touching) */
+    let tot = S.reduce((a, b) => a + need(b), 0); const room = roadLen * .95;
+    while (tot > room) { let cut = -1; const free = S.filter((b) => !keep(b)), nCalm = free.filter(calm).length, cutCalm = nCalm > .34 * free.length;          /* (keep the level about a third calm, two thirds action) */
+      if (cutCalm) { for (let i = 1; i < S.length - 1 && cut < 0; i++) if (!keep(S[i]) && calm(S[i]) && sep(i) && (calm(S[i - 1]) || calm(S[i + 1]))) cut = i; for (let i = 1; i < S.length - 1 && cut < 0; i++) if (!keep(S[i]) && calm(S[i]) && sep(i)) cut = i; }
+      else { for (let i = 1; i < S.length - 1 && cut < 0; i++) if (!keep(S[i]) && !calm(S[i]) && sep(i) && !calm(S[i - 1]) && !calm(S[i + 1])) cut = i; for (let i = S.length - 2; i > 0 && cut < 0; i--) if (!keep(S[i]) && !calm(S[i]) && sep(i)) cut = i; }
+      if (cut < 0) break; tot -= need(S[cut]); S.splice(cut, 1); }
+    for (let i = S.length - 1; i > 0; i--) if (S[i].k !== 'set' && S[i].k === S[i - 1].k) S.splice(i, 1);
+    for (let i = S.length - 1; i > 0; i--) if (heavy(S[i]) && heavy(S[i - 1]) && S[i].k !== 'finale') S.splice(i, 0, { k: pick(['breath', 'glide', 'crystals']) }); }
   return { beats: S, keys: [ka, kb], late: kc };
 }
