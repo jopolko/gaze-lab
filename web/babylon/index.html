@@ -38,7 +38,6 @@
 <div id="big"></div>
 <div id="ui"><div id="status" data-k="1">loading Babylon.js...</div><div id="enter">ENTER VR</div><select id="biomeSel" title="biome"></select></div>
 <a id="back" href="/">menu</a>
-<script type="importmap">{"imports":{"three":"../stargaze/vendor/three/three.module.min.js"}}</script>
 <script>addEventListener('load', () => setTimeout(() => { if (!new URLSearchParams(location.search).has('fps')) { const e = document.getElementById('status'); if (e) e.style.display = 'none'; } }, 8000));</script>
 <script src="plants.js"></script>
 <script>/* (owner 2026-11-27: phones too old for WebGL 2 get a clear, kind message instead of a broken game) */
@@ -64,11 +63,10 @@ import { planRoad, planPlay, planShape, findTunnel, seedOf } from './director.js
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
 import { createPsyFx } from '../downhill-three/psyfx.js';
 import { createPostFx, toGLSLPost } from '../downhill-three/postfx.js';
-import * as THREE from 'three';
-import { createToys } from '../downhill-three/toys.js';
-import { createPickupMesh, BUFF_COL } from '../downhill-three/pickupmesh.js';
-import { iconGeo } from '../downhill-three/icons.js';
-import { createSnowball } from '../downhill-three/snowball.js';
+import { createToys, createM4 } from './toys.js?v=20261128b';          /* (2026-11-28: three.js removed; toys, pickup meshes, icons and boulders are Babylon ports in this folder) */
+import { createPickupMesh, BUFF_COL } from './pickupmesh.js?v=20261128b';
+import { iconGeo } from './icons.js?v=20261128b';
+import { createSnowball } from './snowball.js?v=20261128b';
 import { createSfx } from '../downhill-three/sfxset.js';
 import { createAudioWire } from '../downhill-three/audiowire.js';
 const WORLD0 = (() => { const q = new URLSearchParams(location.search); const list = ['psychedelic', 'alpine', 'candy', 'egypt', 'tunnel', 'desert', 'matrix', 'synthwave']; if (list.includes(q.get('biome'))) return q.get('biome'); if (q.has('story')) return 'desert'; try { const o = JSON.parse(localStorage.getItem('bab_opts2') || '{}'); if (o.biome !== undefined && list[o.biome]) return list[o.biome]; } catch (e) { } return 'alpine'; })();
@@ -2198,9 +2196,9 @@ const CFG = {
 
   // ================================================================ TOYS, GATES, SLINGS, SPRINGS (toys.js, the three.js game's own module, run on the same dump)
   //   bumpers kick you sideways, colour gates chain, a sling draws you in and lets go, a pad with a tube is a spring that carries you through it, the molecules on the course are collected, and anything chained for 7 s counts in the MIX.
-  //   toys.js moves nodes with three.js matrices; each touched node gets a stand-in whose matrix is copied into Babylon's instance buffer after every tick (and the piece stops being driven by animStep).
-  const TFLUSH = [], TREGN = new Proxy({}, { get(o, k) { if (typeof k !== 'string') return undefined; const key = nameOfN(k); if (!(key in o)) o[key] = (BYNAME[key] || []).map((rc) => { const m = new THREE.Matrix4(); m.elements.set(rc.M.m); const px = { matrix: m, rc, last: Float32Array.from(m.elements) }; TFLUSH.push(px); return px; }); return o[key]; } });
-  const toys = createToys({ lvl: { rows: phys.rows, nodes: meta.nodes }, PH, th, SPK, hideNode: (n) => { try { hideBuffGroup({ n }); } catch (e) { } }, toast: () => { }, SFX, REGN: TREGN,
+  //   toys.js (the Babylon port in this folder) moves nodes with three-style matrices (M4, a Babylon Matrix); each touched node gets a stand-in whose matrix is copied into Babylon's instance buffer after every tick (and the piece stops being driven by animStep).
+  const M4T = createM4(B), TFLUSH = [], TREGN = new Proxy({}, { get(o, k) { if (typeof k !== 'string') return undefined; const key = nameOfN(k); if (!(key in o)) o[key] = (BYNAME[key] || []).map((rc) => { const m = new M4T().fromArray(rc.M.m); const px = { matrix: m, rc, last: Float32Array.from(m.elements) }; TFLUSH.push(px); return px; }); return o[key]; } });
+  const toys = createToys({ B, lvl: { rows: phys.rows, nodes: meta.nodes }, PH, th, SPK, hideNode: (n) => { try { hideBuffGroup({ n }); } catch (e) { } }, toast: () => { }, SFX, REGN: TREGN,
     hooks: { noLift: (z) => inTunZ(z, 160) || !!PH.set, lkSpeedK: 1.6, pillK: () => (PH.mult > 0 ? 2.6 : 1.7), pillPull: () => (PH.mult > 0 ? 30 : 9), quant: (f) => f(), onTrip: (k) => { U.trip = Math.min(1, U.trip + k); try { dopAdd('mol'); } catch (e) { } },
       onBump: (x, y, z) => { try { FXB.E.orb([x, y + 1.5, z]); FXB.E.cheer([x, y + 2, z], 0xffcc44, 1); } catch (e) { } },
       onRing: () => { try { FXB.E.orb([PH.x, PH.y, PH.z]); } catch (e) { } },
@@ -2273,7 +2271,7 @@ const CFG = {
   // ================================================================ ZONES, THE PHRASE DECK, BANKS AND SLALOM (gv_trip.js __zoneOf / __zoneRow / slalom, kit.js planCourse / buildRow / makePad / makeBuff, pickupmesh.js, icons.js)
   //   The original does not use the course's own pads: every pad of the dump is hidden and a seeded DECK of phrases (open, boostrun, zigzag, fork, sweep, boostgrind, warm) puts boost pads, ring streams and powerups where it wants them. Toys are cleared from slalom / clear rows and thinned (density) in the others.
   //   Slalom rows (where nothing else stands) get a field of striped pylons and gate posts; a pylon you hit flies out of the wall. Powerups (shield / magnet / wings / saw) go into a bank of up to 2 each and are spent automatically; the dump's own powerups stay as they are (they are the molecules).
-  const PM = createPickupMesh(THREE), BDEFB = ({ alpine: { density: .4 }, candy: { density: .7 }, tunnel: { density: .3, slalomrun: 3 }, desert: { density: .4 }, matrix: { density: .35 }, synthwave: { density: .5 } })[WORLD0] || {};
+  const PM = createPickupMesh(B, scene), BDEFB = ({ alpine: { density: .4 }, candy: { density: .7 }, tunnel: { density: .3, slalomrun: 3 }, desert: { density: .4 }, matrix: { density: .35 }, synthwave: { density: .5 } })[WORLD0] || {};
   const vdOf = (g) => { const vd = new B.VertexData(), pos = g.attributes.position.array, n = pos.length / 3; vd.positions = Array.from(pos); if (g.attributes.normal) vd.normals = Array.from(g.attributes.normal.array); if (g.attributes.uv) vd.uvs = Array.from(g.attributes.uv.array); vd.indices = g.index ? Array.from(g.index.array) : Array.from({ length: n }, (_, i) => i); const c = g.attributes.color; if (c) { const a = c.array, k = c.itemSize, o = []; for (let i = 0; i < n; i++) o.push(a[i * k], a[i * k + 1], a[i * k + 2], 1); vd.colors = o; } return vd; };
   const SMAT = (name, vs, fs, uni, att, blend) => { B.Effect.ShadersStore[name + 'VertexShader'] = vs; B.Effect.ShadersStore[name + 'FragmentShader'] = fs; const m = new B.ShaderMaterial(name, scene, name, { attributes: att, uniforms: ['viewProjection', 'view', 'projection', 'world', 'uCam'].concat(uni) }); m.backFaceCulling = false; if (blend) { m.alphaMode = B.Engine.ALPHA_ADD; m.needAlphaBlending = () => true; m.disableDepthWrite = true; } return m; };
   const VSH = 'precision highp float;\n';
@@ -2297,7 +2295,7 @@ const CFG = {
   const rotXq = (a) => B.Quaternion.RotationYawPitchRollToRef(0, a, 0, _q), rotYq = (a) => B.Quaternion.RotationYawPitchRollToRef(a, 0, 0, _q);
   const KC = 192, KPADS = [], KB = [];
   const PADM = (() => { const sp = PM.pad(false), c = sp.col; return { bars: master('padbars', sp.parts[0].geo, metalMat(c, 0, 'padbars'), KC), pool: master('padpool', quadVD, glowMat(c, .5, false, 'pad'), KC), gem: master('padgem', sp.parts[2].geo, molMat, KC), halo: master('padhalo', quadVD, glowMat(c, .55, true, 'padh'), KC) }; })();
-  const BM = {}; for (const t of ['boost', 'shield', 'mult', 'donut', 'saw']) { const c = BUFF_COL[t] || BUFF_COL.donut; BM[t] = { body: master('bb_' + t, iconGeo(THREE, t), molMat, 48), halo: master('bh_' + t, quadVD, glowMat(c, .8, true, 'bh' + t), 48), pool: master('bp_' + t, quadVD, glowMat(c, .55, false, 'bp' + t), 48) }; }
+  const BM = {}; for (const t of ['boost', 'shield', 'mult', 'donut', 'saw']) { const c = BUFF_COL[t] || BUFF_COL.donut; BM[t] = { body: master('bb_' + t, iconGeo(B, t), molMat, 48), halo: master('bh_' + t, quadVD, glowMat(c, .8, true, 'bh' + t), 48), pool: master('bp_' + t, quadVD, glowMat(c, .55, false, 'bp' + t), 48) }; }
 
   // ---- BEACONS, the rays of light (gv_trip.js mkBeacon / beaconTick): a tall camera-facing bar over every molecule (7 x 160 m, in the molecule's colour), powerup (3.2 x 48), pad (3 x 38) and ramp (5 x 64), never thinner than a fixed angle on screen
   const VS_BEAC = VSH + 'attribute vec3 position; attribute vec2 uv;\n#include<instancesDeclaration>\nuniform mat4 viewProjection; uniform vec3 uCam; uniform float uW; uniform float uH; uniform float uMA; varying vec2 vUv;\nvoid main(){\n#include<instancesVertex>\n vUv = uv; vec3 o = finalWorld[3].xyz; vec3 toC = uCam - o; float dd = length(toC); toC.y = 0.; vec3 rr = normalize(cross(vec3(0., 1., 0.), toC + vec3(1e-4))); float W = max(uW, dd * uMA); vec3 wp = o + rr * position.x * W + vec3(0., position.y * max(uH, dd * uMA * 7.), 0.); gl_Position = viewProjection * vec4(wp, 1.); }';
@@ -3302,31 +3300,17 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     Bq.forEach(([x, z]) => { const yy = th(x, z), a = alloc(POSTM), c = alloc(CAPM); if (a >= 0) put(POSTM, a, x, yy, z, null, 1, 1, 1); if (c >= 0) put(CAPM, c, x, yy + 9.6, z, null, 1, 1.5, 1); addOb(x, z, .5, { post: [a, c] }); });
   }
 
-  // ================================================================ THE ROLLING BOULDERS (snowball.js, the three.js game's own module, run unchanged)
+  // ================================================================ THE ROLLING BOULDERS (snowball.js, ported to Babylon 2026-11-28: its balls are Babylon nodes in this scene)
   //   BEHIND: a boulder spawns 75 m back on a steep stretch and rolls after you (it turns slowly: step aside; get 150 m ahead and you have escaped: +500); SIDE: boulders roll across the slope timed to cross where you will be in 2.6 s (dodge +60, a hit is a shove, 0.5 s hurt, chain reset; a shield takes it).
-  //   The module builds three.js objects in a scene that is never drawn; each frame every mesh in it is mirrored into a Babylon instance (the rock shader is the module's own).
-  const sbScene = new THREE.Scene(), SBM = new Map(), SBGEO = new Map(), SBMAT = new Map();
-  const VS_ROCK = VSH + 'attribute vec3 position; attribute vec3 normal;\n#include<instancesDeclaration>\nuniform mat4 viewProjection; varying vec3 vN; varying vec3 vW; varying vec3 vL;\nvoid main(){\n#include<instancesVertex>\n vL = position; vec4 w = finalWorld * vec4(position, 1.); vW = w.xyz; vN = normalize(mat3(finalWorld) * normal); gl_Position = viewProjection * w; }';
-  const FS_ROCK = VSH + 'uniform vec3 uBase; uniform vec3 uAlt; uniform vec3 uSun; uniform vec3 uCam; varying vec3 vN; varying vec3 vW; varying vec3 vL; float h(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); } float n(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y), mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); } void main() { vec3 N = normalize(vN); float g = n(vL * 1.6) * 0.6 + n(vL * 5.0) * 0.3 + n(vL * 14.0) * 0.1; float crack = smoothstep(0.0, 0.07, abs(n(vL * 3.2) - 0.5)); vec3 c = mix(uBase, uAlt, g) * (0.7 + 0.3 * crack); float dl = max(dot(N, normalize(uSun)), 0.0), rim = pow(1.0 - max(dot(N, normalize(uCam - vW)), 0.0), 3.0); c *= 0.5 + 0.7 * dl; c += rim * 0.12; gl_FragColor = vec4(c, 1.0); }';
-  const rockMats = [];
-  function sbMaterial(tm) { let m = SBMAT.get(tm.uuid); if (m) return m; if (tm.uniforms && tm.uniforms.uBase) { m = SMAT('pkrock' + rockMats.length, VS_ROCK, FS_ROCK, ['uBase', 'uAlt', 'uSun'], ['position', 'normal'], false); const a = tm.uniforms.uBase.value, b = tm.uniforms.uAlt.value; m.setColor3('uBase', new B.Color3(a.r, a.g, a.b)); m.setColor3('uAlt', new B.Color3(b.r, b.g, b.b)); m.setVector3('uSun', new B.Vector3(.4, .8, .3)); rockMats.push(m); } else { const c = tm.color || { r: 1, g: 1, b: 1 }; m = solidMat([c.r, c.g, c.b], 'sb' + SBMAT.size); } SBMAT.set(tm.uuid, m); return m; }
-  function sbMirror() {
-    sbScene.updateMatrixWorld(true); const seen = new Set(), cp = scene.activeCamera ? scene.activeCamera.globalPosition : cam.position;
-    for (const m of rockMats) m.setVector3('uCam', cp);
-    sbScene.traverseVisible((o) => { if (!o.isMesh) return; seen.add(o); let e = SBM.get(o);
-      if (!e) { let src = SBGEO.get(o.geometry.uuid); if (!src) { src = new B.Mesh('sbsrc', scene); vdOf(o.geometry).applyToMesh(src); src.isVisible = false; src.isPickable = false; src.material = sbMaterial(o.material); SBGEO.set(o.geometry.uuid, src); } const mat = sbMaterial(o.material); if (src.material !== mat) { src = src.clone('sbsrc2'); src.material = mat; src.isVisible = false; } const inst = src.createInstance('sb'); inst.isPickable = false; inst.alwaysSelectAsActiveMesh = true; inst.rotationQuaternion = new B.Quaternion(); e = { inst }; SBM.set(o, e); }
-      const mw = B.Matrix.FromArray(o.matrixWorld.elements), sc = new B.Vector3(), q = new B.Quaternion(), ps = new B.Vector3(); mw.decompose(sc, q, ps); e.inst.position.copyFrom(ps); e.inst.rotationQuaternion.copyFrom(q); e.inst.scaling.copyFrom(sc); e.inst.setEnabled(true); });
-    for (const [o, e] of SBM) if (!seen.has(o)) { e.inst.dispose(); SBM.delete(o); }
-  }
-  const SBX = createSnowball({ boulders: true, glow: (m) => m, THREE, scene: sbScene, th, PH, toast: () => { }, SFX, SPK, halfW: C.W_HALF, worldEnd: -(NROWSK * 180) + 220, molColors: MOL_ORDER.map((id) => MOLS[id].c),
+  const SBX = createSnowball({ boulders: true, glow: (m) => m, B, scene, th, PH, toast: () => { }, SFX, SPK, halfW: C.W_HALF, worldEnd: -(NROWSK * 180) + 220, molColors: MOL_ORDER.map((id) => MOLS[id].c),
     onHit: () => { try { (window.__crashes = window.__crashes || []).push({ z: Math.round(PH.z), x: Math.round(PH.x), kind: 'rolling boulder', story: Q.has('story') }); } catch (e) { } PH.chain = 0; shake = Math.max(shake, .8); try { PSY.events.onCrash('snowball', { shield: PH.shield > 0 }); } catch (e) { } try { FXB.E.ballHit([PH.x, PH.y, PH.z]); } catch (e) { } },
     onDodge: () => { chainHit(); try { PSY.events.onSnowball('dodge', 0); } catch (e) { } },
     onEscape: () => { chainHit(); chainHit(); try { FXB.E.snowballEnd([PH.x, PH.y, PH.z]); } catch (e) { } try { PSY.events.onSnowball('escape', 0); } catch (e) { } },
     onWarn: (lv) => { PH.sbWarn = lv; try { PSY.events.onSnowball('close', lv); } catch (e) { } }, onShake: () => { } });
   function sbStep(dt) {
-    if (!Q.has('wild')) { if (SBM.size) { for (const [, e] of SBM) e.inst.dispose(); SBM.clear(); } if (PH.shake > 0) { shake = Math.max(shake, PH.shake); PH.shake = Math.max(0, PH.shake - dt * 2); } return; }          /* the story level has no rolling boulders: the road is for reading and driving */
+    if (!Q.has('wild')) { if (PH.shake > 0) { shake = Math.max(shake, PH.shake); PH.shake = Math.max(0, PH.shake - dt * 2); } return; }          /* the story level has no rolling boulders: the road is for reading and driving */
     const sh0 = PH.shield > 0; SBX.tick(dt); if (sh0 && !(PH.shield > 0)) { BANK.shield = Math.max(0, BANK.shield - 1); bankSync(); }
-    if (PH.shake > 0) { shake = Math.max(shake, PH.shake); PH.shake = Math.max(0, PH.shake - dt * 2); } PH.sbWarn = Math.max(0, (PH.sbWarn || 0) - dt * 2); sbMirror();
+    if (PH.shake > 0) { shake = Math.max(shake, PH.shake); PH.shake = Math.max(0, PH.shake - dt * 2); } PH.sbWarn = Math.max(0, (PH.sbWarn || 0) - dt * 2);
   }
   function buildSingles(j, rr, z0) {
     const spans = spansOf(j, rr), P = [], lanes = [-9, 8, 0, 10, -8]; for (let k = 0; k < 3; k++) { const z = z0 - 35 - k * 55, x = trailX(z) + lanes[(j * 3 + k) % lanes.length]; if (spans.some((q) => z > q[0] && z < q[1])) continue; P.push([x, z]); }
