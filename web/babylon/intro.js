@@ -311,7 +311,7 @@ export function createIntro(d) {
     if (!IR.preDone && QI.has('idents')) {          /* (owner 2026-11-26: the joke studios are out of the intro; ?idents still shows them for testing) */          /* (the first viewing: the opening four; later: two fresh ones from the pool, never the same pair twice) */ IR.on = true; IR.pre = true; idents(() => { IR.pre = false; IR.on = false; IR.preDone = true; start(); }); return; } build(); buildUI(); IR.on = true; try { document.getElementById('preBlack').remove(); } catch (e) { } try { const cb = [...document.querySelectorAll('body *:not(script):not(style)')].find((x) => x.children.length === 0 && /^\s*USE CAMERA\s*$/i.test(x.textContent)); IR.camEl = cb && cb.parentElement; if (IR.camEl) IR.camEl.style.visibility = 'hidden'; } catch (e) { } IR.t0 = performance.now(); document.body.classList.add('irOn'); try { localStorage.setItem('dl_fieldnote', String(FN.i + 1)); } catch (e) { } d.onStart();
     setTimeout(() => { ui.sk.classList.add('on'); ui.ctl.classList.add('on'); }, seen() ? 600 : 1500); }          /* (skip, pause and rewind on every scene, from the start) */
   /* the fade out: the screen goes black, the set is put away, Route Zero starts underneath and the black lifts */
-  function finish(skipped) { if (IR.done) return; IR.done = true; try { document.getElementById('preBlack').remove(); } catch (e) { } ui.sk.remove(); ui.ctl.remove(); ui.pz.remove(); ui.ea.remove(); ui.tv.remove(); ui.ff.remove(); ui.ti.remove(); ui.fl.remove(); for (const m of IR.hudOff || []) { try { m.setEnabled(true); } catch (e) { } } ui.ph.classList.remove('on'); ui.tg.classList.remove('on'); hide(); ui.fd.classList.remove('off'); try { localStorage.setItem('dl_opened', '1'); } catch (e) { }
+  function finish(skipped) { if (IR.done) return; IR.done = true; try { document.getElementById('preBlack').remove(); } catch (e) { } ui.sk.remove(); ui.ctl.remove(); ui.pz.remove(); ui.ea.remove(); ui.tv.remove(); ui.ff.remove(); ui.ti.remove(); ui.fl.remove(); if (IR.menu) { IR.menu.remove(); IR.menu = null; } for (const m of IR.hudOff || []) { try { m.setEnabled(true); } catch (e) { } } ui.ph.classList.remove('on'); ui.tg.classList.remove('on'); hide(); ui.fd.classList.remove('off'); try { localStorage.setItem('dl_opened', '1'); } catch (e) { }
     if (IR.lr) IR.lr.classList.remove('on'); if (IR.gh) IR.gh.classList.remove('on');
     setTimeout(() => { IR.on = false; document.body.classList.remove('irOn'); if (IR.camEl) IR.camEl.style.visibility = ''; for (const m of IR.meshes) { try { m.dispose(); } catch (e) { } } IR.meshes = []; d.onEnd(skipped); setTimeout(() => ui.fd.classList.add('off'), 350); }, skipped ? 700 : 1100); }
   /* COLD OPEN timing (seconds of the track): studio card, TV channel flips, the scorpion shot (freeze card, then the car, the crush in slow motion), black, the title slams on the bar at 7.72 */
@@ -421,7 +421,7 @@ export function createIntro(d) {
         if (once('jetIn')) sfx('jet'); ffShow(u > .38 && u < .74 ? 'raider' : (IR.ffk === 'raider' ? null : IR.ffk)); } else if (IR.ffk === 'raider') ffShow(null); }
     grind(t);
     const zc = z(tc) - sOff, eye = Y0 + 1.9 + hop + Math.sin(t * 9) * .03; cam.position.set(X0 + IR.dx, eye, zc); cam.setTarget(new B.Vector3(X0 + IR.dx * .6, eye - .35, zc - 40)); cam.upVector.set(Math.sin(-s * .05), Math.cos(s * .05), 0); cam.fov *= 1 + .2 * punch;
-    if (IR.hits) for (const h of IR.hits) { if (h.done) continue; if (h.m) { h.m.rotation.y = t * 2.2; h.m.rotation.x = t * .7; } if (t >= h.t) { h.done = true; try { h.m.setEnabled(false); h.g.setEnabled(false); } catch (e) { } try { d.onHit(h.cp); d.sky(h.sky); IR.skyT = t + SKY_HOLD; } catch (e) { } tag(h); } }
+    if (IR.hits) for (const h of IR.hits) { if (h.done) continue; if (h.m) { h.m.rotation.y = t * 2.2; h.m.rotation.x = t * .7; } if (t >= h.t) { h.done = true; try { h.m.setEnabled(false); h.g.setEnabled(false); } catch (e) { } try { d.onHit(h.cp); d.sky(h.sky); IR.skyT = t + SKY_HOLD; } catch (e) { } } }
     if (IR.tagT && t >= IR.tagT) { IR.tagT = 0; ui.tg.classList.remove('on'); }
     { const b4 = Math.floor(t / 8.73); if (b4 !== IR.b4) { IR.b4 = b4; if (t > 4) d.BEATFX.glass = 1; } }          /* the stained glass over the sun, every four bars of the track */
     if (IR.skyT && t >= IR.skyT) { IR.skyT = 0; try { d.sky(null); } catch (e) { } }
@@ -429,9 +429,27 @@ export function createIntro(d) {
     if (IR.beam) IR.beam.rotation.y = t * 1.1; if (IR.mol) { IR.mol.rotation.y = t * 1.6; IR.mol.position.y = Y0 + 9 + Math.sin(t * 2.4) * .6; }
     ui.ph.classList.toggle('on', t > 999);          /* teaser 2: the phone buzzes */
     let cur = -1; SCENES.forEach((S, i) => { if (t >= S.t && t < S.t + HOLD) cur = i; }); if (cur !== IR.shown) { if (cur >= 0) show(cur); else hide(); IR.shown = cur; }
-    skitShow(t, dt, cam);
+    skitShow(t, dt, cam); sweetsMenu(t);
     if (t >= END_FADE) finish(false);
     return true; }
+  /* THE SWEETS MENU (owner 2026-11-28: "show them all, like a sweets menu with descriptions; highlighting one makes it look like the most important one, and players
+     watch the intro once"). On each flight through a strain the whole menu shows: every strain's hologram art, its name and its real effect (the pantry's words, as
+     in the game), always in the same order, none picked out. Up from the first flight to just before the gunship's freeze card, and again on the second flight. */
+  const MENU_ON = [[0, 34.2], [1, 41.4]];
+  function sweetsMenu(t) { try {
+    const on = MENU_ON.some(([k, end]) => HITS[k] && t >= HITS[k].t && t < end);
+    if (!IR.menu) { if (!on) return; const css = document.createElement('style');
+      css.textContent = '#irMenu{position:fixed;left:50%;top:calc(max(10px,var(--sa-top, env(safe-area-inset-top,0px))) + 52px);transform:translateX(-50%);width:min(96vw,920px);z-index:61;pointer-events:none;opacity:0;transition:opacity .45s;background:rgba(6,7,14,.82);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:8px 10px 10px;box-sizing:border-box;font-family:system-ui,sans-serif;color:#f2efe6}#irMenu.on{opacity:1}'
+        + '#irMenu h4{margin:0 0 6px;text-align:center;font:400 clamp(16px,2.6vmin + 6px,26px)/1 "Bebas Neue",Impact,sans-serif;letter-spacing:.2em;color:#ffd23a}#irMenu h4 small{display:block;margin-top:3px;font:italic 500 clamp(11px,1.4vmin + 5px,14px)/1.2 Georgia,serif;letter-spacing:0;color:#cfd6e4}'
+        + '#irMenu .g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}#irMenu .it{display:flex;gap:7px;align-items:center;min-width:0;background:rgba(255,255,255,.06);border-radius:10px;padding:4px 6px}#irMenu img{flex:0 0 auto;width:clamp(30px,6vmin,46px);height:clamp(30px,6vmin,46px);object-fit:contain}'
+        + '#irMenu .tx{min-width:0}#irMenu b{display:block;font:800 clamp(11px,1.3vmin + 6px,14px)/1.1 system-ui,sans-serif;letter-spacing:.06em}#irMenu em{display:block;font:normal 600 clamp(9px,1vmin + 5px,11px)/1.1 system-ui,sans-serif;opacity:.65;text-transform:uppercase;letter-spacing:.06em}#irMenu span{display:block;font:clamp(10px,1.1vmin + 6px,13px)/1.2 system-ui,sans-serif;opacity:.9}'
+        + '@media (orientation:portrait){#irMenu .g{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-height:460px){#irMenu{padding:5px 8px 7px}#irMenu h4{margin-bottom:4px}#irMenu .it{padding:3px 5px}}';
+      document.head.appendChild(css); const m = document.createElement('div'); m.id = 'irMenu';
+      const hex = (c) => '#' + c.map((v) => Math.round(Math.min(1, v * 1.15) * 255).toString(16).padStart(2, '0')).join('');
+      m.innerHTML = '<h4>THE SWEETS<small>Drive into a column of light to take one.</small></h4><div class="g">' + Object.keys(PANTRY).map((cp) => { const P = PANTRY[cp], d0 = String(P.does || '').split(';')[0].trim();
+        return '<div class="it"><img alt="" src="art/plants/' + String(P.plant).replace(/ /g, '-') + '-1.webp?v=2"><div class="tx"><b style="color:' + hex(P.c) + '">' + P.eff + '</b><em>' + P.plant + '</em><span>' + d0.charAt(0).toUpperCase() + d0.slice(1) + '</span></div></div>'; }).join('') + '</div>';
+      document.body.appendChild(m); IR.menu = m; }
+    IR.menu.classList.toggle('on', on); } catch (e) { } }
   /* THE SWARM'S PREVIEW (owner 2026-11-28): near the end of the title song the road fills with skittering spiders that run with the car and cross under it;
      at 56 s they all bolt in different directions and are gone by 57.6 s, before the game's music comes in. Their own swarm sound goes with them. */
   const SK0 = 53.6, SKX = 56, SKN = 26;          /* (the last chapter card holds the screen until 54.8: they come out under it and are in full view after) */
