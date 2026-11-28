@@ -62,7 +62,7 @@ import { createBeasts } from './beasts.js?v=20261127n';
 import { planRoad, planPlay, planShape, findTunnel, seedOf } from './director.js?v=20261127d';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
 import { createPsyFx } from '../downhill-three/psyfx.js';
-import { createPostFx, toGLSLPost } from '../downhill-three/postfx.js';
+import { createPostFx, toGLSLPost } from './postfx.js?v=20261128b';          /* (2026-11-28: the Babylon port, no three.js stand-in) */
 import { createToys, createM4 } from './toys.js?v=20261128b';          /* (2026-11-28: three.js removed; toys, pickup meshes, icons and boulders are Babylon ports in this folder) */
 import { createPickupMesh, BUFF_COL } from './pickupmesh.js?v=20261128b';
 import { iconGeo } from './icons.js?v=20261128b';
@@ -1234,7 +1234,7 @@ void main() {
   /* the Godot picture pass as a shader and a uniform feeder, shared by the flat camera and the headset */
   function warpShader() { if (WSH) return WSH;
       class V { constructor(...a) { this.x = a[0] || 0; this.y = a[1] || 0; this.z = a[2] || 0; this.w = a[3] || 0; } set() { } }
-      const PF = createPostFx({ THREE: { Vector2: V, Vector3: V, Vector4: V, ShaderMaterial: class { constructor(o) { Object.assign(this, o); } } } }), gdefs = PF.uniformDefs.filter((d) => d.source === 'godot');
+      const PF = createPostFx({}), gdefs = PF.uniformDefs.filter((d) => d.source === 'godot');
       const nums = (d) => (d ? (d.match(/-?\d+\.?\d*(?:e-?\d+)?/gi) || []).map(Number) : []);
       const decl = gdefs.map((d) => 'uniform ' + d.type + ' ' + d.name + ';').join('\n');
       const frag = 'precision highp float; varying vec2 vUV; uniform sampler2D textureSampler; uniform float TIME, hurtA, flashA; uniform vec2 uRes; uniform sampler2D screenTex; uniform sampler2D gA; uniform sampler2D gB; uniform sampler2D gC; uniform float glowI, lv4, lv8, lv16, uHasFeed;\n#define vUv vUV\nconst float layer = 1.0;\n' + decl + '\nvec3 scr(vec2 u){ vec3 h = texture2D(screenTex, u).rgb; if (glowI > 0.) { vec3 g = (texture2D(gA, u).rgb * lv4 + texture2D(gB, u).rgb * lv8 + texture2D(gC, u).rgb * lv16) * glowI; h = max(h + g - h * g, vec3(0.)); } vec3 c = mix(h, vec3(1., .1, .1), hurtA); return mix(c, vec3(1.), flashA); } vec3 trailDisp(vec2 u){ return uHasFeed > .5 ? texture2D(textureSampler, u).rgb : scr(u); } vec3 curDisp(vec2 u){ return scr(u); } vec3 viewMode(vec3 c, vec2 uv){ return c; }\n' + toGLSLPost(PF.GODOT_POST_SRC);
@@ -1287,7 +1287,7 @@ void main() {
   function xrPassSet(i) { const had = !!XRP.pp; XRP.i = i; if (had) { xrPassDrop(); if (XRP.ratios[i]) xrPassBuild(); } }
   function syncXRPass() { if (!inXR || !XRP.on || XRP.err) return; const want = !!XRP.ratios[XRP.i]; if (want && !XRP.pp) xrPassBuild(); else if (!want && XRP.pp) xrPassDrop(); }
 
-  /* ================================================================ THE THREE.JS PICTURE PASS, AS IT IS (gv.js postOld + renderPost), for the Trip world (and Tunnel; &p3=1 any world, &p3=0 off).
+  /* ================================================================ THE PICTURE PASS (Babylon; a port of the old three.js game's gv.js postOld + renderPost), for the Trip world (and Tunnel; &p3=1 any world, &p3=0 off).
      Babylon's world shaders tone-map themselves (Cineon, finish()), so the HDR picture three.js feeds its pass is rebuilt from the screen by inverting that curve
      (s2l, ^(1/2.2), inverse Cineon, / exposure). Then exactly gv.js: the trail feed max(c * .55, prev * .86) at half size with a .004 zoom, with ITS OWN history;
      Godot's glow (bright pass at 1/4, 4-tap boxes to 1/8 and 1/16); the picture pass with the filmic tonemap, the warp, the colour split, the tracer ghosts
