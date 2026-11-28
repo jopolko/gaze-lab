@@ -120,8 +120,11 @@ const BIO = ['Place your left elbow flat on the screen.', 'Elbow accepted. Now t
 const disabled = () => { try { return localStorage.getItem('dl_nolock') === '1'; } catch (e) { return false; } };
 const enable = () => { try { localStorage.removeItem('dl_nolock'); } catch (e) { } };
 const SAT = '<svg class="sat" viewBox="0 0 24 16" width="18" height="12" style="vertical-align:-1px;margin-right:5px;opacity:.95" aria-hidden="true"><rect x="9" y="5" width="6" height="6" rx="1" fill="currentColor"/><rect x="1" y="6" width="7" height="4" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="16" y="6" width="7" height="4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M12 5V2M10 1.5h4" stroke="currentColor" stroke-width="1.3"/></svg>';          /* (owner 2026-11-27: a little satellite carrier mark beside the battery) */          /* (module scope: the pause lock screen (paint) uses it too; inside show() it crashed paint, so the pause menu had no lock screen) */
+/* (owner 2026-11-28: never the real time in a game) the lock screen's clock is the game's own: it starts at 11:11 PM on a made-up Wednesday, March 3, and moves with your time on the page */
+function AGT() { const d = new Date(2077, 2, 3, 23, 11); d.setMinutes(d.getMinutes() + Math.floor(((typeof performance !== 'undefined' && performance.now()) || 0) / 60000)); return d; }
+if (typeof window !== 'undefined') window.AGTime = AGT;
 function show(o) { o = o || {}; if (LK.on) return; const kind = o.kind || KIND(), L = o.line || (ME.city && Math.random() < .3 ? ((q) => [q[0], q[1].replace('{city}', ME.city)])(deal('c', CITYL)) : deal('l', LINES)), away = o.away || 30; LK.done = o.onDone || null;
-  const sv = SERV[kind] && Math.random() < (kind === 'vr' ? .7 : .4) ? deal(kind, SERV[kind]) : deal('all', SERV.all), now = new Date();
+  const sv = SERV[kind] && Math.random() < (kind === 'vr' ? .7 : .4) ? deal(kind, SERV[kind]) : deal('all', SERV.all), now = AGT();
   const h12 = now.getHours() % 12 || 12, ap = now.getHours() < 12 ? 'AM' : 'PM', mm = String(now.getMinutes()).padStart(2, '0'), hh = String(h12), hm = h12 + ':' + mm, AP = '<small style="font-size:.3em;font-weight:500;letter-spacing:.04em;margin-left:.2em">' + ap + '</small>';
   const dt = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }), BAT = (ME.bat == null ? 12 : ME.bat) + '%';
   const card = (app, title, body) => { const n = document.createElement('div'); n.className = 'nt'; n.innerHTML = '<i class="ic"></i><div class="nb"><div class="nh"><b></b><span>now</span></div><strong></strong><p></p></div>';
@@ -174,7 +177,7 @@ function paint(box, o) { o = o || {}; if (disabled() && !o.force) { box.innerHTM
     : deal(SERV[kind] && Math.random() < .4 ? kind : 'all', SERV[kind] && Math.random() < .4 ? SERV[kind] : SERV.all);
   const R = react(o.ctx); let fr = fresh; if (R.N.length && Math.random() < .55) fr = R.N[Math.floor(Math.random() * R.N.length)];
   const notes = [fr].concat(M.prev ? [M.prev] : []); M.prev = fr; try { localStorage.setItem('dl_lkmf', JSON.stringify(M)); } catch (e) { }
-  const now = new Date(), h12 = now.getHours() % 12 || 12, ap = now.getHours() < 12 ? 'AM' : 'PM', mm = String(now.getMinutes()).padStart(2, '0'), BAT = (ME.bat == null ? 12 : ME.bat) + '%';
+  const now = AGT(), h12 = now.getHours() % 12 || 12, ap = now.getHours() < 12 ? 'AM' : 'PM', mm = String(now.getMinutes()).padStart(2, '0'), BAT = (ME.bat == null ? 12 : ME.bat) + '%';
   const dt = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
   box.innerHTML = ''; const el = document.createElement('div'); el.id = 'lk'; el.className = kind + ' mn wake';
   el.innerHTML = '<div class="wp"></div><div class="wp-in"><div class="sb"><span>' + (kind === 'pc' ? 'ACCORD-Guest \u2022 Connected, watched' : kind === 'vr' ? 'Headset OS' : 'StarLeash \u2726') + '</span><span>' + SAT + BAT + '<span class="bat" style="--bl:' + BAT + '"></span></span></div>'

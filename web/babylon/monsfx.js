@@ -53,6 +53,11 @@ export function createMonSfx(acx, cam) {
     solid(ac, t, o, k) { const f = 1500 / k; osc(ac, 'sine', f, 0, t, .9, .2, o, .002); osc(ac, 'sine', f * 2.76, 0, t, .5, .08, o, .002); osc(ac, 'sine', f * 5.4, 0, t, .25, .04, o, .002); },          /* a crystal ding: bigger crystals ring lower */
     holo(ac, t, o) { [0, 4, 7, 11, 14].forEach((s, i) => { osc(ac, 'sine', 440 * Math.pow(2, s / 12), 0, t + i * .07, 1.1, .08, o, .04); osc(ac, 'triangle', 440 * Math.pow(2, s / 12) * 1.003, 0, t + i * .07, 1, .04, o, .04); }); },          /* a shimmering major-seventh chord */
     orbget(ac, t, o, k) { osc(ac, 'sine', 400 * k, 1100 * k, t, .09, .2, o); osc(ac, 'sine', 1200 * k, 0, t + .06, .15, .06, o); },          /* a bubble pop */
+    /* THE ORBITAL STRIKE (owner 2026-11-28): the lock, the release in orbit, the tungsten rod's long fall, the hit */
+    rodlock(ac, t, o) { [1800, 2250, 2700].forEach((f, i) => osc(ac, 'square', f, 0, t + i * .11, .07, .09, o)); nz(ac, 'bandpass', 3500, 1200, 6, t + .36, .25, .1, o); },
+    rodrel(ac, t, o) { metal(ac, 180, t, .9, .3, o); nz(ac, 'bandpass', 900, 300, 2, t, .5, .2, o, .02); osc(ac, 'sine', 60, 40, t, .5, .3, o); },
+    roddrop(ac, t, o) { osc(ac, 'sine', 3400, 180, t, 1.7, .22, o, .05); osc(ac, 'sine', 3300, 170, t + .02, 1.7, .14, o, .05); nz(ac, 'bandpass', 600, 4000, 1.5, t, 1.65, .4, o, .4); for (let i = 0; i < 18; i++) nz(ac, 'highpass', 4000, 0, .7, t + .4 + Math.random() * 1.2, .02, .12, o); },          /* a whistling plunge, the air tearing, re-entry crackle */
+    rodhit(ac, t, o) { nz(ac, 'highpass', 2500, 0, .7, t, .12, .9, o); osc(ac, 'sine', 55, 18, t, 2.6, 1, o); nz(ac, 'lowpass', 3200, 70, .7, t, 2.4, 1, o, .005); osc(ac, 'sawtooth', 40, 22, t + .05, 1.8, .3, o); for (let i = 0; i < 10; i++) nz(ac, 'bandpass', rnd(200, 900), 0, 2, t + .3 + Math.random() * 1.5, .15, .25, o); },          /* the end of the world, locally */
     impact(ac, t, o) { nz(ac, 'lowpass', 900, 110, .7, t, 1.1, .7, o); osc(ac, 'sine', 60, 28, t, .7, .6, o); },
   };
   let last = {};
