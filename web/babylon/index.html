@@ -1300,7 +1300,7 @@ void main() {
      (s2l, ^(1/2.2), inverse Cineon, / exposure). Then exactly gv.js: the trail feed max(c * .55, prev * .86) at half size with a .004 zoom, with ITS OWN history;
      Godot's glow (bright pass at 1/4, 4-tap boxes to 1/8 and 1/16); the picture pass with the filmic tonemap, the warp, the colour split, the tracer ghosts
      (hue-cycled where the picture has changed), the wash, punch, vignette, and the motion aftereffect. Babylon's own bloom and contrast are off while it runs. */
-  const P3 = Q.get('p3') !== '0';
+  const P3 = Q.get('p3') === '1' ? true : Q.get('p3') === '0' ? false : !(() => { try { return (matchMedia('(pointer:coarse)').matches && Math.min(innerWidth, innerHeight) < 900) || /Android|iPhone|iPad/.test(navigator.userAgent); } catch (e) { return false; } })();          /* (owner 2026-11-28: on a Pixel 9 this chain was the bottleneck: off, the frame rate jumped and the look barely changed. Phones and tablets go without it; desktops keep it; ?p3=1 / ?p3=0 force it) */
   const MAE3 = { adapt: 0, v: 0 };
   function psy3Build(camera) {
     const SHS = B.Effect.ShadersStore, HF = PFXTT();
