@@ -97,7 +97,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="f"><label for="col">Colour</label><input type="range" id="col" min="0" max="200" value="100"><output id="o_col"></output></div>
     <div class="f"><label for="wrp">Warp &amp; breath</label><input type="range" id="wrp" min="0" max="200" value="100"><output id="o_wrp"></output></div>
     <div class="f"><label for="hng">Hang time</label><input type="range" id="hng" min="0" max="200" value="100"><output id="o_hng"></output></div>
-    <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no drones)</label></div>
+    <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no enemies)</label></div>
   </section>
   <section class="desk"><h2>OVERRIDE <span class="led" id="led" title="Override off"></span><small>speed or sparkle, your call</small></h2>
     <div class="spec" id="spec">Not measured yet. Play a level and this fills in.</div>
@@ -120,7 +120,7 @@ const recVals = () => { const c = DIALC, x = c > 1 ? 1 + .5 * (c - 1) : .25 + .7
 const TAPES = { rec: ['RECOMMENDED', 'your dial, sized for this device', recVals()], gentle: ['GENTLE', 'soft edges, easy waves', { int: 55, trc: 60, col: 80, wrp: 60, hng: 70, len: 'short', chl: false, trn: 70, nrg: 50 }],
   classic: ['CLASSIC', 'the way it was tuned', { int: 100, trc: 100, col: 100, wrp: 100, hng: 100, len: 'full', chl: false, trn: 55, nrg: 80 }],
   heroic: ['HEROIC', 'all the way up (road stays readable)', { int: 135, trc: 170, col: 150, wrp: 160, hng: 150, len: 'long', chl: false, trn: 60, nrg: 100 }],
-  chill: ['CHILL', 'no drones, long afterglows', { int: 75, trc: 80, col: 100, wrp: 120, hng: 130, len: 'long', chl: true, trn: 90, nrg: 35 }] };
+  chill: ['CHILL', 'no enemies, long afterglows', { int: 75, trc: 80, col: 100, wrp: 120, hng: 130, len: 'long', chl: true, trn: 90, nrg: 35 }] };
 const COMPS = [['lucid', 'Lucid'], ['embrace', 'Embrace'], ['velocity', 'Velocity'], ['haze', 'Haze'], ['drift', 'Drift'], ['hollow', 'Hollow'], ['fold', 'Fold'], ['deep', 'Deep']];
 const $ = (id) => document.getElementById(id), F = ['int', 'trc', 'col', 'wrp', 'hng'];
 const rd = () => { try { return JSON.parse(localStorage.getItem('dl_lab') || 'null'); } catch (e) { return null; } };
