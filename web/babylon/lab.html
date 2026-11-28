@@ -114,7 +114,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="row"><button class="btn" id="pretest">&#8635; Measure again</button><small class="note" id="pnote"></small></div>
   </section>
 </main>
-<footer><button class="btn" id="resetAll" title="Visuals back to Recommended, Override off, this device measured again">&#8634; Reset to optimized defaults</button><a class="btn pri" id="ride" href="menu.html" style="text-decoration:none">Go live &#8594;</a><small>Saved on this device. Every level reads it when it starts.</small></footer>
+<footer><button class="btn" id="resetAll" title="Visuals back to Recommended, Override off, this device measured again">&#8634; Reset to optimized defaults</button><a class="btn pri" id="ride" href="menu.html" style="text-decoration:none">Go live &#8594;</a><small id="chgSt">Saved on this device. Every level reads it when it starts.</small></footer>
 <script>
 /* the tapes: one tap sets every fader */
 /* RECOMMENDED (owner 2026-11-27): what the title-screen dial gives right now, eased a little on a device that runs lighter. Moving any VISION fader makes the
@@ -209,6 +209,29 @@ specText(); perfUi(); led();
 { const rb = $('resetAll'); let armed = 0; rb.onclick = () => { if (Date.now() - armed > 4000) { armed = Date.now(); rb.textContent = '↺ Tap again to reset everything'; return; }
     armed = 0; cur = 'rec'; apply(TAPES.rec[2]); drawTapes(); save(); for (const k of ['res', 'glow', 'fps', 'view']) PU[k] = 'auto'; commit('off'); try { localStorage.removeItem('ag_perf2'); } catch (e) { }
     $('spec').textContent = 'Back to the optimized defaults. The next level measures this device again.'; rb.textContent = '✓ Reset to optimized defaults'; setTimeout(() => { rb.innerHTML = '&#8634; Reset to optimized defaults'; }, 2500); }; }
+/* WHAT'S CHANGED (owner 2026-11-28: "highlight custom settings and the reset option, always, and especially when the settings differ from the optimized default;
+   the title screen's notice links here and makes clear which ones were altered"). Every setting is compared with the optimized default for this device (the
+   RECOMMENDED tape for the faders, each world's compound, a full trip, enemies on, every Override choice on Auto): a changed row is marked in amber with its
+   default beside it, the footer says how many differ, and the reset button glows while anything does. */
+(() => { const st = document.createElement('style');
+  st.textContent = '.f.chg,.row .chg{box-shadow:inset 3px 0 #ffb14a;background:rgba(255,177,74,.1);border-radius:6px}.f.chg label::after{content:" \u2022 changed";color:#ffb14a;font-size:.78em;font-weight:700;letter-spacing:.04em}.def{display:block;font:600 10px/1.1 system-ui,sans-serif;color:#ffb14a;white-space:nowrap}'
+    + '#resetAll.hot{border-color:#ffb14a!important;color:#ffd27a!important;box-shadow:0 0 0 2px rgba(255,177,74,.35),0 0 14px rgba(255,177,74,.45);animation:rsHot 2.2s ease-in-out infinite}@keyframes rsHot{50%{box-shadow:0 0 0 2px rgba(255,177,74,.15),0 0 4px rgba(255,177,74,.2)}}'
+    + '#chgSt.cust{color:#ffd27a!important;font-weight:700}#chgSt.dflt{color:#8fe3a8!important}.flashChg{animation:flChg .55s ease-in-out 4}@keyframes flChg{50%{background:rgba(255,177,74,.35)}}';
+  document.head.appendChild(st);
+  const NAME = { int: 'Intensity', trc: 'Tracers', col: 'Colour', wrp: 'Warp & breath', hng: 'Hang time', cmp: 'Compound', len: 'Trip length', chl: 'Chill', pres: 'Sharpness', pglow: 'Glow', pview: 'View', pfps: 'Frame rate' };
+  const show = (k, v) => k === 'cmp' ? (v ? v : "each world's own") : k === 'len' ? v : k === 'chl' ? (v ? 'on' : 'off') : /^p/.test(k) ? 'Auto' : v + '%';
+  window.markChanges = () => { try { const R = recVals(), D = { int: R.int, trc: R.trc, col: R.col, wrp: R.wrp, hng: R.hng, cmp: '', len: 'full', chl: false, pres: 'auto', pglow: 'auto', pview: 'auto', pfps: 'auto' };
+      const val = (k) => k === 'chl' ? $('chl').checked : /^(int|trc|col|wrp|hng)$/.test(k) ? +$(k).value : $(k).value; const changed = [];
+      for (const k in D) { const el = $(k), row = el && (el.closest('.f') || el.closest('label') || el); if (!row) continue; const ch = val(k) !== D[k]; row.classList.toggle('chg', ch); if (ch) changed.push(NAME[k]);
+        let df = row.querySelector('.def'); if (ch) { if (!df) { df = document.createElement('em'); df.className = 'def'; (row.querySelector('output') || row).appendChild(df); } df.textContent = 'default: ' + show(k, D[k]); } else if (df) df.remove(); }
+      const s = $('chgSt'), rb = $('resetAll'); rb.classList.toggle('hot', changed.length > 0);
+      if (changed.length) { s.className = 'cust'; s.textContent = 'Custom settings: ' + changed.length + ' changed from the optimized defaults (marked). Reset puts them back.'; } else { s.className = 'dflt'; s.textContent = 'Optimized defaults for this device. Saved here; every level reads it when it starts.'; }
+      return changed; } catch (e) { return []; } };
+  const _save = save; save = function () { _save(); markChanges(); }; const _perf = perfUi; perfUi = function () { _perf(); markChanges(); };
+  document.addEventListener('input', () => setTimeout(markChanges, 0)); document.addEventListener('change', () => setTimeout(markChanges, 0)); document.addEventListener('click', () => setTimeout(markChanges, 50));
+  markChanges();
+  if (/[?&]changed\b/.test(location.search)) setTimeout(() => { document.querySelectorAll('.chg').forEach((e) => e.classList.add('flashChg')); $('resetAll').classList.add('flashChg'); }, 400);          /* (from the title screen's notice: the altered ones blink) */
+})();
 </script>
 <script>/* FULLSCREEN (no browser bars), either way up. &nofs turns it off. */
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();          /* inside the shell (app.html): fullscreen the shell, which stays put while pages change inside it */
