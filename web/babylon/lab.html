@@ -35,6 +35,15 @@ a.back { font:700 clamp(14px,1.6vmin + 6px,18px) var(--lb); letter-spacing:.14em
 .demo { position:relative; flex:1; min-height:44px; border:1px solid var(--line); border-radius:8px; background:#0a0604; overflow:hidden; }
 .demo canvas { position:absolute; inset:0; width:100%; height:100%; }
 .demo span { position:absolute; left:.6em; bottom:.35em; font:700 12px var(--lb); letter-spacing:.06em; color:#ffd9a8; text-shadow:0 1px 2px #000; }
+.led { display:inline-block; width:.62em; height:.62em; border:2px solid #4a3a2c; border-radius:3px; background:#1a0e0a; box-shadow:inset 0 0 3px #000; vertical-align:middle; }
+.led.on { background:radial-gradient(circle at 40% 35%, #ffb0a0, #ff2a12 45%, #8a0a00); border-color:#6a1a10; box-shadow:0 0 8px #ff2a12, 0 0 18px rgba(255,42,18,.6); animation:ledp 1.6s ease-in-out infinite; }
+@keyframes ledp { 50% { box-shadow:0 0 4px #ff2a12, 0 0 10px rgba(255,42,18,.4); } }
+#ovr { position:fixed; inset:0; z-index:50; display:grid; place-items:center; background:rgba(4,2,2,.72); padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left)); }
+#ovr .bx { width:min(460px,100%); max-height:100%; overflow:hidden; display:flex; flex-direction:column; gap:.5em; border:2px solid #ff2a12; border-radius:10px; background:linear-gradient(180deg,#1e0d09,#0c0504); padding:.9em 1em; box-shadow:0 0 30px rgba(255,42,18,.35); }
+#ovr h3 { margin:0; display:flex; align-items:center; gap:.5em; font:400 clamp(22px,2.6vmin + 10px,32px)/1 var(--tt); letter-spacing:.14em; color:#ff5a3c; }
+#ovr p { margin:0; font:700 clamp(13px,1vmin + 8px,16px)/1.3 var(--lb); letter-spacing:.03em; color:var(--fg); }
+#ovr .k { color:var(--amber); } #ovr .w { color:#ff9a86; } #ovr .acc { font:italic 500 13px/1.35 Georgia,serif; color:var(--dim); }
+#ovr .row { justify-content:flex-end; }
 .note { color:var(--dim); font:700 12px var(--lb); letter-spacing:.04em; }
 .tape { position:relative; border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg,#2a1c14,#140d09); padding:.45em .5em .5em; cursor:pointer; text-align:left; color:var(--fg); font:inherit; }
 .tape b { display:block; font:400 clamp(18px,2.4vmin + 6px,28px)/1 var(--tt); letter-spacing:.1em; }
@@ -90,11 +99,12 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="f"><label for="hng">Hang time</label><input type="range" id="hng" min="0" max="200" value="100"><output id="o_hng"></output></div>
     <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no drones)</label></div>
   </section>
-  <section class="desk"><h2>GPU BOOST <small>speed or sparkle, your call</small></h2>
+  <section class="desk"><h2>OVERRIDE <span class="led" id="led" title="Override off"></span><small>speed or sparkle, your call</small></h2>
     <div class="spec" id="spec">Not measured yet. Play a level and this fills in.</div>
-    <div class="f"><label for="pres">Sharpness</label><select id="pres"><option value="auto">Auto (recommended)</option><option value="high">Boost: sharpest</option><option value="med">Balanced</option><option value="low">Saver: fastest</option></select><output id="o_pres"></output></div>
-    <div class="f"><label for="pglow">Glow</label><select id="pglow"><option value="auto">Auto (recommended)</option><option value="on">Boost: glow on</option><option value="off">Saver: glow off</option></select><output id="o_pglow"></output></div>
-    <div class="f"><label for="pfps">Frame rate</label><select id="pfps"><option value="auto">Auto (recommended)</option><option value="60">Boost: smooth 60</option><option value="30">Saver: steady 30</option></select><output id="o_pfps"></output></div>
+    <div class="f"><label for="pres">Sharpness</label><select id="pres"><option value="auto">Auto (recommended)</option><option value="ultra">ULTRA · Supersampled 125%</option><option value="high">Boost · Native lock</option><option value="med">Balanced</option><option value="low">Saver · Max speed</option></select><output id="o_pres"></output></div>
+    <div class="f"><label for="pglow">Glow</label><select id="pglow"><option value="auto">Auto (recommended)</option><option value="ultra">ULTRA · Full spectrum</option><option value="on">Boost · Bloom lock</option><option value="off">Saver · Clean</option></select><output id="o_pglow"></output></div>
+    <div class="f"><label for="pview">View</label><select id="pview"><option value="auto">Auto (recommended)</option><option value="ultra">ULTRA · Long range 2.5 km</option></select><output id="o_pview"></output></div>
+    <div class="f"><label for="pfps">Frame rate</label><select id="pfps"><option value="auto">Auto (recommended)</option><option value="60">Boost · 60 FPS lock</option><option value="30">Saver · Steady 30</option></select><output id="o_pfps"></output></div>
     <div class="demo" id="demo"><canvas id="dcv"></canvas><span id="dtx"></span></div>
     <div class="row"><button class="btn" id="pretest">&#8635; Measure again</button><small class="note" id="pnote"></small></div>
   </section>
@@ -126,18 +136,18 @@ document.querySelectorAll('main input,main select').forEach((e) => { if (/^p(res
 
 const s0 = rd(); if (s0 && s0.custom) { cur = s0.tape && s0.tape !== 'rec' ? s0.tape : 'custom'; apply(s0); } else { cur = 'rec'; apply(Object.assign({}, s0 || {}, TAPES.rec[2])); } drawTapes(); outs();
 /* YOUR DEVICE (owner 2026-11-27): what the game measured on this device (ag_perf2), and three choices that override it (ag_perfuser). Auto lets the game decide. */
-const PU = (() => { try { return Object.assign({ res: 'auto', glow: 'auto', fps: 'auto' }, JSON.parse(localStorage.getItem('ag_perfuser') || '{}')); } catch (e) { return { res: 'auto', glow: 'auto', fps: 'auto' }; } })();
+const PU = (() => { try { return Object.assign({ res: 'auto', glow: 'auto', fps: 'auto', view: 'auto' }, JSON.parse(localStorage.getItem('ag_perfuser') || '{}')); } catch (e) { return { res: 'auto', glow: 'auto', fps: 'auto', view: 'auto' }; } })();
 function specText() { const P = PERF0, el = $('spec'); if (!P) { el.textContent = 'Not measured yet. Play a level and this fills in.'; return; }
   const gpu = String(P.k || '').split('|')[0].replace(/ANGLE \(|\)$|Direct3D11.*|OpenGL ES.*|\(0x[0-9A-F]+\)/gi, '').replace(/\s+/g, ' ').trim() || 'unknown graphics', tier = { full: 'Full effects', lite: 'Lighter effects', low: 'Lightest effects' }[P.tier] || 'Full effects';
   el.textContent = ''; const add = (k, v) => { const b = document.createElement('b'); b.textContent = k + ' '; el.append(b, v, document.createElement('br')); };
   add('Graphics', gpu); add('Running at', tier + ' \u00B7 sharpness ' + Math.round((P.rs || 1) * 100) + '%' + (P.lock30 ? ' \u00B7 steady 30' : '')); }
-const OUTS = { pres: { auto: 'auto', high: 'sharpest', med: 'balanced', low: 'fastest' }, pglow: { auto: 'auto', on: 'on', off: 'off' }, pfps: { auto: 'auto', 60: '60', 30: '30' } };
-function perfUi() { $('pres').value = PU.res; $('pglow').value = PU.glow; $('pfps').value = PU.fps; for (const k of ['pres', 'pglow', 'pfps']) $('o_' + k).textContent = OUTS[k][$(k).value]; $('pnote').textContent = PU.res === 'auto' && PU.glow === 'auto' && PU.fps === 'auto' ? 'The game tunes itself as you play.' : 'Your choices stay until you change them.'; }
-for (const [id, key] of [['pres', 'res'], ['pglow', 'glow'], ['pfps', 'fps']]) $(id).addEventListener('change', () => { PU[key] = $(id).value; try { localStorage.setItem('ag_perfuser', JSON.stringify(PU)); } catch (e) { } perfUi(); });
+const OUTS = { pres: { auto: 'auto', ultra: 'ULTRA', high: 'full', med: 'balanced', low: 'fastest' }, pglow: { auto: 'auto', ultra: 'ULTRA', on: 'on', off: 'off' }, pview: { auto: 'auto', ultra: 'ULTRA' }, pfps: { auto: 'auto', 60: '60', 30: '30' } };
+function perfUi() { $('pres').value = PU.res; $('pglow').value = PU.glow; $('pview').value = PU.view || 'auto'; $('pfps').value = PU.fps; for (const k of ['pres', 'pglow', 'pview', 'pfps']) $('o_' + k).textContent = OUTS[k][$(k).value]; $('pnote').textContent = PU.res === 'auto' && PU.glow === 'auto' && PU.fps === 'auto' && (PU.view || 'auto') === 'auto' ? 'The game tunes itself as you play.' : 'Your choices stay until you change them.'; }
+for (const [id, key] of [['pres', 'res'], ['pglow', 'glow'], ['pview', 'view'], ['pfps', 'fps']]) $(id).addEventListener('change', () => { const was = PU[key], v = $(id).value; PU[key] = v; if (v === 'auto') { commit(!!PU.once && (PU.res !== 'auto' || PU.glow !== 'auto' || PU.fps !== 'auto' || (PU.view || 'auto') !== 'auto')); return; } ovrAsk(key, v, () => { PU[key] = was; perfUi(); led(); }); });
 $('pretest').onclick = () => { try { localStorage.removeItem('ag_perf2'); } catch (e) { } $('spec').textContent = 'Cleared. The next level measures this device again from scratch.'; };
 /* THE DEMO (owner 2026-11-27: "show what each choice does"): a little road scene drawn live. Sharpness draws it at that resolution, glow adds the bloom,
    frame rate moves the lights at 60 or 30 updates a second, so you can see the difference before you play. Auto shows what this device was running. */
-const DM = { last: 0, t: 0 }; function demo(now) { requestAnimationFrame(demo); const cv = $('dcv'); if (!cv || cv.closest('[hidden]')) return; const P = PERF0 || {}, res = PU.res === 'auto' ? (P.rs || .8) : { high: 1, med: .72, low: .5 }[PU.res], glow = PU.glow === 'auto' ? (!P.tier || P.tier === 'full') : PU.glow === 'on', fps = PU.fps === 'auto' ? (P.lock30 ? 30 : 60) : +PU.fps;
+const DM = { last: 0, t: 0 }; function demo(now) { requestAnimationFrame(demo); const cv = $('dcv'); if (!cv || cv.closest('[hidden]')) return; const P = PERF0 || {}, res = PU.res === 'auto' ? (P.rs || .8) : { ultra: 1.25, high: 1, med: .72, low: .5 }[PU.res], glow = PU.glow === 'auto' ? (!P.tier || P.tier === 'full') : PU.glow !== 'off', fps = PU.fps === 'auto' ? (P.lock30 ? 30 : 60) : +PU.fps;
   if (now - DM.last < 1000 / fps - 2) return; DM.t += (now - (DM.last || now)) / 1000; DM.last = now; const W = Math.max(2, Math.round(cv.clientWidth * res * Math.min(2, devicePixelRatio || 1))), H = Math.max(2, Math.round(cv.clientHeight * res * Math.min(2, devicePixelRatio || 1))); if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
   const x = cv.getContext('2d'), hz = H * .38, t = DM.t; x.fillStyle = '#12061c'; x.fillRect(0, 0, W, H); const g = x.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#2b0d4a'); g.addColorStop(1, '#ff5a3c'); x.fillStyle = g; x.fillRect(0, 0, W, hz);
   x.fillStyle = '#ffb14a'; x.beginPath(); x.arc(W * .5, hz, H * .22, Math.PI, 0); x.fill(); x.strokeStyle = '#38e8ff'; x.lineWidth = Math.max(1, H / 90);
@@ -146,7 +156,25 @@ const DM = { last: 0, t: 0 }; function demo(now) { requestAnimationFrame(demo); 
   for (let i = 0; i < 3; i++) { const z = ((i / 3 + t * .6) % 1), y = hz + (H - hz) * z * z, r = Math.max(1.5, H * .08 * z), xx = W / 2 + (i - 1) * W * .3 * z * z; if (glow) { x.shadowColor = '#c6ff4d'; x.shadowBlur = r * 3; } x.fillStyle = '#c6ff4d'; x.beginPath(); x.arc(xx, y - r, r, 0, 7); x.fill(); x.shadowBlur = 0; }
   $('dtx').textContent = Math.round(res * 100) + '% sharp \u00B7 glow ' + (glow ? 'on' : 'off') + ' \u00B7 ' + fps + ' fps'; }
 requestAnimationFrame(demo);
-specText(); perfUi();
+/* OVERRIDE (owner 2026-11-27): a choice other than Auto overrides the game's own tuning. A warning says what it does, what it costs, and asks: keep it on, or just
+   for the next run. The red LED in the panel title is lit while any override is on. (In-world: it switches off ACCORD's Wellness Limiter; it never claims
+   to change the phone's real settings, a web page cannot.) */
+const OVT = { res: { ultra: ['SUPERSAMPLED 125%', 'Every frame rendered past native resolution, then scaled down: razor-sharp edges, fine detail at full speed. Auto never goes this far.'], high: ['NATIVE LOCK', 'Locked at 100% resolution. The picture never softens, whatever the road throws at it.'], med: ['BALANCED', 'A touch softer, rock steady.'], low: ['MAX SPEED', 'Resolution traded for raw frame rate. The fastest it can run.'] },
+  view: { ultra: ['LONG RANGE 2.5 KM', 'Draw distance pushed from 1.8 to 2.5 km and held there. See the next three hills coming; the world never fades in.'] },
+  glow: { ultra: ['FULL SPECTRUM', 'Every bloom, glow and picture pass lit, on any device. The whole trip, the way it looks on the big rig.'], on: ['BLOOM LOCK', 'Every light burns bright, even when the device is working hard.'], off: ['CLEAN', 'No bloom. Crisp, cool, faster.'] },
+  fps: { 60: ['60 FPS LOCK', 'Holds out for 60 frames a second and never settles for 30. Buttery motion.'], 30: ['STEADY 30', 'An even, locked 30. Smooth on a slower device and easy on the battery.'] } };
+const SAVER = { res: ['med', 'low'], glow: ['off'], fps: ['30'], view: [] };
+function led() { const on = PU.res !== 'auto' || PU.glow !== 'auto' || PU.fps !== 'auto' || (PU.view || 'auto') !== 'auto'; $('led').classList.toggle('on', on); $('led').title = on ? 'Override on' + (PU.once ? ' (next run only)' : '') : 'Override off'; }
+function ovrAsk(key, val, revert) { const t = OVT[key][val], saver = SAVER[key].includes(val), d = document.createElement('div'); d.id = 'ovr';
+  const bx = document.createElement('div'); bx.className = 'bx'; const h = document.createElement('h3'); const l = document.createElement('span'); l.className = 'led on'; h.append(l, 'OVERRIDE');
+  const p1 = document.createElement('p'); p1.innerHTML = '<span class="k"></span> '; p1.firstChild.textContent = t[0] + '.'; p1.append(t[1]);
+  const p2 = document.createElement('p'); p2.className = 'w'; p2.textContent = saver ? 'Side effects: none worth mentioning. Your battery thanks you.' : val === 'ultra' ? 'Side effects: the battery drains a lot faster, the device runs hot, and a weaker device will drop frames. Increased appetite has been reported.' : 'Side effects: the battery drains faster and the device runs warmer. Increased appetite has been reported.';
+  const p3 = document.createElement('p'); p3.className = 'acc'; p3.textContent = 'Switches off ACCORD\u2019s Wellness Limiter on this device. ACCORD has been notified. ACCORD is always notified.';
+  const r = document.createElement('div'); r.className = 'row'; const b = (txt, cls, fn) => { const e = document.createElement('button'); e.className = 'btn' + (cls ? ' ' + cls : ''); e.textContent = txt; e.onclick = () => { fn(); d.remove(); }; r.appendChild(e); };
+  b('Cancel', '', revert); b('Just the next run', '', () => commit(true)); b('Keep it on', 'pri', () => commit(false));
+  bx.append(h, p1, p2, p3, r); d.appendChild(bx); d.addEventListener('click', (e) => { if (e.target === d) { revert(); d.remove(); } }); document.body.appendChild(d); }
+function commit(once) { PU.once = once; try { localStorage.setItem('ag_perfuser', JSON.stringify(PU)); } catch (e) { } perfUi(); led(); }
+specText(); perfUi(); led();
 </script>
 <script>/* FULLSCREEN (no browser bars), either way up. &nofs turns it off. */
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();          /* inside the shell (app.html): fullscreen the shell, which stays put while pages change inside it */
