@@ -44,6 +44,9 @@ a.back { font:700 clamp(14px,1.6vmin + 6px,18px) var(--lb); letter-spacing:.14em
 #ovr p { margin:0; font:700 clamp(13px,1vmin + 8px,16px)/1.3 var(--lb); letter-spacing:.03em; color:var(--fg); }
 #ovr .k { color:var(--amber); } #ovr .w { color:#ff9a86; } #ovr .acc { font:italic 500 13px/1.35 Georgia,serif; color:var(--dim); }
 #ovr .row { justify-content:flex-end; }
+.ovst { display:flex; align-items:center; gap:.6em; flex-wrap:wrap; border:1px solid var(--line); border-radius:8px; padding:.4em .6em; background:#0a0604; font:700 clamp(12px,1vmin + 7px,15px)/1.2 var(--lb); letter-spacing:.04em; }
+.ovst b { color:var(--dim); letter-spacing:.12em; } .ovst.on { border-color:#ff2a12; box-shadow:0 0 12px rgba(255,42,18,.35); } .ovst.on b { color:#ff5a3c; } .ovst span { color:var(--fg); flex:1; min-width:8em; } .ovst .btn { padding:.35em .8em; font-size:12px; }
+@media (orientation:landscape) and (max-height:520px) { #spec { display:none; } .demo { min-height:28px; } }          /* (short screens: the measured-device line gives its room to the four choices) */
 .note { color:var(--dim); font:700 12px var(--lb); letter-spacing:.04em; }
 .tape { position:relative; border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg,#2a1c14,#140d09); padding:.45em .5em .5em; cursor:pointer; text-align:left; color:var(--fg); font:inherit; }
 .tape b { display:block; font:400 clamp(18px,2.4vmin + 6px,28px)/1 var(--tt); letter-spacing:.1em; }
@@ -100,6 +103,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no enemies)</label></div>
   </section>
   <section class="desk"><h2>OVERRIDE <span class="led" id="led" title="Override off"></span><small>speed or sparkle, your call</small></h2>
+    <div class="ovst" id="ovst"><b id="ovsT">OVERRIDE OFF</b><span id="ovsS">The game tunes itself.</span><button class="btn" id="ovSave" hidden>Save permanently</button><button class="btn" id="ovOff" hidden>Turn off</button></div>
     <div class="spec" id="spec">Not measured yet. Play a level and this fills in.</div>
     <div class="f"><label for="pres">Sharpness</label><select id="pres"><option value="auto">Auto (recommended)</option><option value="ultra">ULTRA · Supersampled 125%</option><option value="high">Boost · Native lock</option><option value="med">Balanced</option><option value="low">Saver · Max speed</option></select><output id="o_pres"></output></div>
     <div class="f"><label for="pglow">Glow</label><select id="pglow"><option value="auto">Auto (recommended)</option><option value="ultra">ULTRA · Full spectrum</option><option value="on">Boost · Bloom lock</option><option value="off">Saver · Clean</option></select><output id="o_pglow"></output></div>
@@ -109,7 +113,7 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="row"><button class="btn" id="pretest">&#8635; Measure again</button><small class="note" id="pnote"></small></div>
   </section>
 </main>
-<footer><a class="btn pri" id="ride" href="menu.html" style="text-decoration:none">Go live &#8594;</a><small>Saved on this device. Every level reads it when it starts.</small></footer>
+<footer><button class="btn" id="resetAll" title="Visuals back to Recommended, Override off, this device measured again">&#8634; Reset to optimized defaults</button><a class="btn pri" id="ride" href="menu.html" style="text-decoration:none">Go live &#8594;</a><small>Saved on this device. Every level reads it when it starts.</small></footer>
 <script>
 /* the tapes: one tap sets every fader */
 /* RECOMMENDED (owner 2026-11-27): what the title-screen dial gives right now, eased a little on a device that runs lighter. Moving any VISION fader makes the
@@ -136,14 +140,19 @@ document.querySelectorAll('main input,main select').forEach((e) => { if (/^p(res
 
 const s0 = rd(); if (s0 && s0.custom) { cur = s0.tape && s0.tape !== 'rec' ? s0.tape : 'custom'; apply(s0); } else { cur = 'rec'; apply(Object.assign({}, s0 || {}, TAPES.rec[2])); } drawTapes(); outs();
 /* YOUR DEVICE (owner 2026-11-27): what the game measured on this device (ag_perf2), and three choices that override it (ag_perfuser). Auto lets the game decide. */
-const PU = (() => { try { return Object.assign({ res: 'auto', glow: 'auto', fps: 'auto', view: 'auto' }, JSON.parse(localStorage.getItem('ag_perfuser') || '{}')); } catch (e) { return { res: 'auto', glow: 'auto', fps: 'auto', view: 'auto' }; } })();
+/* (owner 2026-11-28: Override must be obviously on or off, and saved either permanently or for this session only) STATE: this session's choices (sessionStorage ag_perfuser_s, gone when the browser closes) win over saved ones (localStorage ag_perfuser). mode: off | saved | session. */
+const PU = (() => { const D = { res: 'auto', glow: 'auto', fps: 'auto', view: 'auto' }; try { const ss = sessionStorage.getItem('ag_perfuser_s'); if (ss) return Object.assign(D, JSON.parse(ss), { mode: 'session' }); const ls = localStorage.getItem('ag_perfuser'); if (ls) return Object.assign(D, JSON.parse(ls), { mode: 'saved' }); } catch (e) { } return Object.assign(D, { mode: 'off' }); })();
+const anyOn = () => ['res', 'glow', 'fps', 'view'].some((k) => (PU[k] || 'auto') !== 'auto');
 function specText() { const P = PERF0, el = $('spec'); if (!P) { el.textContent = 'Not measured yet. Play a level and this fills in.'; return; }
   const gpu = String(P.k || '').split('|')[0].replace(/ANGLE \(|\)$|Direct3D11.*|OpenGL ES.*|\(0x[0-9A-F]+\)/gi, '').replace(/\s+/g, ' ').trim() || 'unknown graphics', tier = { full: 'Full effects', lite: 'Lighter effects', low: 'Lightest effects' }[P.tier] || 'Full effects';
   el.textContent = ''; const add = (k, v) => { const b = document.createElement('b'); b.textContent = k + ' '; el.append(b, v, document.createElement('br')); };
   add('Graphics', gpu); add('Running at', tier + ' \u00B7 sharpness ' + Math.round((P.rs || 1) * 100) + '%' + (P.lock30 ? ' \u00B7 steady 30' : '')); }
 const OUTS = { pres: { auto: 'auto', ultra: 'ULTRA', high: 'full', med: 'balanced', low: 'fastest' }, pglow: { auto: 'auto', ultra: 'ULTRA', on: 'on', off: 'off' }, pview: { auto: 'auto', ultra: 'ULTRA' }, pfps: { auto: 'auto', 60: '60', 30: '30' } };
-function perfUi() { $('pres').value = PU.res; $('pglow').value = PU.glow; $('pview').value = PU.view || 'auto'; $('pfps').value = PU.fps; for (const k of ['pres', 'pglow', 'pview', 'pfps']) $('o_' + k).textContent = OUTS[k][$(k).value]; $('pnote').textContent = PU.res === 'auto' && PU.glow === 'auto' && PU.fps === 'auto' && (PU.view || 'auto') === 'auto' ? 'The game tunes itself as you play.' : 'Your choices stay until you change them.'; }
-for (const [id, key] of [['pres', 'res'], ['pglow', 'glow'], ['pview', 'view'], ['pfps', 'fps']]) $(id).addEventListener('change', () => { const was = PU[key], v = $(id).value; PU[key] = v; if (v === 'auto') { commit(!!PU.once && (PU.res !== 'auto' || PU.glow !== 'auto' || PU.fps !== 'auto' || (PU.view || 'auto') !== 'auto')); return; } ovrAsk(key, v, () => { PU[key] = was; perfUi(); led(); }); });
+function perfUi() { $('pres').value = PU.res; $('pglow').value = PU.glow; $('pview').value = PU.view || 'auto'; $('pfps').value = PU.fps; for (const k of ['pres', 'pglow', 'pview', 'pfps']) $('o_' + k).textContent = OUTS[k][$(k).value]; $('pnote').textContent = !anyOn() ? 'The game tunes itself as you play.' : PU.mode === 'session' ? 'Your choices last until you close the browser.' : 'Your choices are saved on this device.';
+  const on = anyOn(); $('ovst').classList.toggle('on', on); $('ovsT').textContent = on ? 'OVERRIDE ON' : 'OVERRIDE OFF'; $('ovsS').textContent = !on ? 'The game tunes itself.' : PU.mode === 'session' ? 'This session only.' : 'Saved on this device.'; $('ovOff').hidden = !on; $('ovSave').hidden = !(on && PU.mode === 'session'); }
+for (const [id, key] of [['pres', 'res'], ['pglow', 'glow'], ['pview', 'view'], ['pfps', 'fps']]) $(id).addEventListener('change', () => { const was = PU[key], v = $(id).value; PU[key] = v; if (v === 'auto') { commit(anyOn() ? PU.mode : 'off'); return; } ovrAsk(key, v, () => { PU[key] = was; perfUi(); led(); }); });
+$('ovOff').onclick = () => { for (const k of ['res', 'glow', 'fps', 'view']) PU[k] = 'auto'; commit('off'); };
+$('ovSave').onclick = () => commit('saved');
 $('pretest').onclick = () => { try { localStorage.removeItem('ag_perf2'); } catch (e) { } $('spec').textContent = 'Cleared. The next level measures this device again from scratch.'; };
 /* THE DEMO (owner 2026-11-27: "show what each choice does"): a little road scene drawn live. Sharpness draws it at that resolution, glow adds the bloom,
    frame rate moves the lights at 60 or 30 updates a second, so you can see the difference before you play. Auto shows what this device was running. */
@@ -164,17 +173,25 @@ const OVT = { res: { ultra: ['SUPERSAMPLED 125%', 'Every frame rendered past nat
   glow: { ultra: ['FULL SPECTRUM', 'Every bloom, glow and picture pass lit, on any device. The whole trip, the way it looks on the big rig.'], on: ['BLOOM LOCK', 'Every light burns bright, even when the device is working hard.'], off: ['CLEAN', 'No bloom. Crisp, cool, faster.'] },
   fps: { 60: ['60 FPS LOCK', 'Holds out for 60 frames a second and never settles for 30. Buttery motion.'], 30: ['STEADY 30', 'An even, locked 30. Smooth on a slower device and easy on the battery.'] } };
 const SAVER = { res: ['med', 'low'], glow: ['off'], fps: ['30'], view: [] };
-function led() { const on = PU.res !== 'auto' || PU.glow !== 'auto' || PU.fps !== 'auto' || (PU.view || 'auto') !== 'auto'; $('led').classList.toggle('on', on); $('led').title = on ? 'Override on' + (PU.once ? ' (next run only)' : '') : 'Override off'; }
+function led() { const on = anyOn(); $('led').classList.toggle('on', on); $('led').title = on ? 'Override on' + (PU.mode === 'session' ? ' (this session)' : ' (saved)') : 'Override off'; }
 function ovrAsk(key, val, revert) { const t = OVT[key][val], saver = SAVER[key].includes(val), d = document.createElement('div'); d.id = 'ovr';
   const bx = document.createElement('div'); bx.className = 'bx'; const h = document.createElement('h3'); const l = document.createElement('span'); l.className = 'led on'; h.append(l, 'OVERRIDE');
   const p1 = document.createElement('p'); p1.innerHTML = '<span class="k"></span> '; p1.firstChild.textContent = t[0] + '.'; p1.append(t[1]);
   const p2 = document.createElement('p'); p2.className = 'w'; p2.textContent = saver ? 'Side effects: none worth mentioning. Your battery thanks you.' : val === 'ultra' ? 'Side effects: the battery drains a lot faster, the device runs hot, and a weaker device will drop frames. Increased appetite has been reported.' : 'Side effects: the battery drains faster and the device runs warmer. Increased appetite has been reported.';
   const p3 = document.createElement('p'); p3.className = 'acc'; p3.textContent = 'Switches off ACCORD\u2019s Wellness Limiter on this device. ACCORD has been notified. ACCORD is always notified.';
   const r = document.createElement('div'); r.className = 'row'; const b = (txt, cls, fn) => { const e = document.createElement('button'); e.className = 'btn' + (cls ? ' ' + cls : ''); e.textContent = txt; e.onclick = () => { fn(); d.remove(); }; r.appendChild(e); };
-  b('Cancel', '', revert); b('Just the next run', '', () => commit(true)); b('Keep it on', 'pri', () => commit(false));
+  b('Cancel', '', revert); b('This session only', PU.mode === 'session' ? 'pri' : '', () => commit('session')); b('Save permanently', PU.mode === 'session' ? '' : 'pri', () => commit('saved'));
   bx.append(h, p1, p2, p3, r); d.appendChild(bx); d.addEventListener('click', (e) => { if (e.target === d) { revert(); d.remove(); } }); document.body.appendChild(d); }
-function commit(once) { PU.once = once; try { localStorage.setItem('ag_perfuser', JSON.stringify(PU)); } catch (e) { } perfUi(); led(); }
+function commit(mode) { const data = { res: PU.res, glow: PU.glow, fps: PU.fps, view: PU.view || 'auto' }; if (!anyOn()) mode = 'off'; PU.mode = mode;
+  try { sessionStorage.removeItem('ag_perfuser_s'); } catch (e) { } try { localStorage.removeItem('ag_perfuser'); } catch (e) { }
+  try { if (mode === 'session') sessionStorage.setItem('ag_perfuser_s', JSON.stringify(data)); else if (mode === 'saved') localStorage.setItem('ag_perfuser', JSON.stringify(data)); } catch (e) { }
+  perfUi(); led(); }
 specText(); perfUi(); led();
+/* (owner 2026-11-28: one button back to the optimized defaults) visuals to the RECOMMENDED tape (your dial, sized for this device), Override off (saved and session),
+   and the device measured again on the next level. Two taps: the first asks, the second does it. */
+{ const rb = $('resetAll'); let armed = 0; rb.onclick = () => { if (Date.now() - armed > 4000) { armed = Date.now(); rb.textContent = '↺ Tap again to reset everything'; return; }
+    armed = 0; cur = 'rec'; apply(TAPES.rec[2]); drawTapes(); save(); for (const k of ['res', 'glow', 'fps', 'view']) PU[k] = 'auto'; commit('off'); try { localStorage.removeItem('ag_perf2'); } catch (e) { }
+    $('spec').textContent = 'Back to the optimized defaults. The next level measures this device again.'; rb.textContent = '✓ Reset to optimized defaults'; setTimeout(() => { rb.innerHTML = '&#8634; Reset to optimized defaults'; }, 2500); }; }
 </script>
 <script>/* FULLSCREEN (no browser bars), either way up. &nofs turns it off. */
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();          /* inside the shell (app.html): fullscreen the shell, which stays put while pages change inside it */
