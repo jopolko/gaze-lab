@@ -91,10 +91,10 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
   const cloudMat = (tint) => { const m = new B.StandardMaterial('skitCloudM', scene); m.diffuseColor = new B.Color3(.2, .22, .3); m.emissiveColor = new B.Color3(.12 + tint[0] * .18, .13 + tint[1] * .18, .2 + tint[2] * .2); m.specularColor = B.Color3.Black();
     const f = new B.FresnelParameters(); f.leftColor = new B.Color3(tint[0] * .9 + .1, tint[1] * .9 + .1, tint[2] * .9 + .2); f.rightColor = new B.Color3(.16, .17, .26); f.power = 1.4; m.emissiveFresnelParameters = f; return m; };
   function spawnStorm(zAhead) { const z = PH.z - zAhead, x = d.trailX(z), tint = pick(d.pal.bolts), g = new B.TransformNode('skitStorm', scene), m = cloudMat(tint), puffs = [];
-    for (let k = 0; k < 14; k++) { const s = B.MeshBuilder.CreateSphere('skitPuff', { diameter: rnd(5, 10), segments: 10 }, scene); s.material = m; s.parent = g; s.isPickable = false; s.position.set(rnd(-9, 9), rnd(-1.5, 2.5), rnd(-5, 5)); puffs.push(s); }
+    let hw = 4; for (let k = 0; k < 14; k++) { const dia = rnd(5, 10), s = B.MeshBuilder.CreateSphere('skitPuff', { diameter: dia, segments: 10 }, scene); s.material = m; s.parent = g; s.isPickable = false; s.position.set(rnd(-9, 9), rnd(-1.5, 2.5), rnd(-5, 5)); hw = Math.max(hw, Math.abs(s.position.x) + dia * .35); puffs.push(s); }          /* (hw: how far the cloud body reaches to each side) */
     const rain = B.MeshBuilder.CreateBox('skitRain', { width: .05, height: 2.2, depth: .05 }, scene), rm = new B.StandardMaterial('skitRainM', scene); rm.emissiveColor = new B.Color3(tint[0] * .7, tint[1] * .8, tint[2]); rm.disableLighting = true; rm.alpha = .5; rain.material = rm; rain.parent = g; rain.isPickable = false; rain.alwaysSelectAsActiveMesh = true;
     const drops = []; for (let k = 0; k < 140; k++) drops.push({ x: rnd(-10, 10), y: rnd(-12, 0), z: rnd(-6, 6) }); const rb = new Float32Array(16 * drops.length); rain.thinInstanceSetBuffer('matrix', rb, 16, false);
-    const gy = ground(x, z); g.position.set(x, gy + 12, z); CL.push({ g, m, puffs, rain, rb, drops, x, z, gy, tint, struck: false, done: false, flick: 0, wob: rnd(0, 6) }); }
+    const gy = ground(x, z); g.position.set(x, gy + 12, z); CL.push({ g, m, puffs, rain, rb, drops, x, z, gy, tint, hw, struck: false, done: false, flick: 0, wob: rnd(0, 6) }); }
 
   // ---------------------------------------------------------------- the bolt: a new shape every strike (midpoint displacement + branches)
   function jag(a, b, rough, depth, out) { if (depth <= 0) { out.push(b); return; } const m = a.add(b).scale(.5), len = B.Vector3.Distance(a, b); m.x += rnd(-1, 1) * len * rough; m.z += rnd(-1, 1) * len * rough * .6; m.y += rnd(-.2, .2) * len * rough;
@@ -198,7 +198,8 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       c.m.emissiveColor.set(.12 + c.tint[0] * (.18 + .7 * c.flick), .13 + c.tint[1] * (.18 + .7 * c.flick), .2 + c.tint[2] * (.2 + .8 * c.flick));
       c.drops.forEach((q, k) => { q.y -= dt * 24; if (q.y < -12) q.y = rnd(-1, 0); B.Matrix.TranslationToRef(q.x, q.y, q.z, M); M.copyToArray(c.rb, k * 16); }); c.rain.thinInstanceBufferUpdated('matrix');
       if (!c.struck && dz > 0 && dz < Math.max(72, spd * 1.7) && dx < 16) { c.struck = true; strike(c); }
-      if (!c.done && dz < 4 && dz > -8 && dx < 12) { c.done = true; wash(c); }
+      if (!c.done && dz < 4 && dz > -8 && dx < c.hw && PH.y < c.g.position.y - 3) { c.done = true; wash(c); }          /* (owner 2026-11-28: only driving right underneath it washes them off; passing either side or jumping over it does nothing) */
+      if (!c.done && dz < -8) c.done = true;          /* (missed: it stays dry) */
       if (dz < -40) { c.g.dispose(false, true); c.m.dispose(); CL.splice(i, 1); } }
     for (let i = BOLTS.length - 1; i >= 0; i--) { const b = BOLTS[i]; b.t += dt; const on = b.t < b.flick[0] || (b.t > b.flick[1] && b.t < b.flick[2]) || (b.t > b.flick[2] + .05 && b.t < b.life * .8);
       for (const p of b.parts) p.isVisible = on; const cp2 = ((d.cam && d.cam()) || scene.activeCamera).globalPosition; for (const mm of b.mats) mm.setVector3('uCam', cp2); b.mats[1].setFloat('uA', 1 - b.t / b.life); if (b.t > b.life) { for (const p of b.parts) p.dispose(); for (const m of b.mats) m.dispose(); BOLTS.splice(i, 1); } }
