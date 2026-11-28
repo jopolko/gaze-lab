@@ -65,7 +65,7 @@
     if (!g.querySelector('.lh')) g.insertAdjacentHTML('afterbegin', '<div class="lh"><svg viewBox="0 0 24 24"><path d="M12 2l2.6 6.6L21 9.3l-5 4.4 1.6 6.8L12 17l-5.6 3.5L8 13.7 3 9.3l6.4-.7z" fill="#f5c400"/></svg><span><b>StarLeash</b><br><i>Your connection. Our leash.</i></span></div>');
     pg.innerHTML = '<div class="tag">Customer Protection · on behalf of ACCORD Network Safety</div><h1>Device not registered</h1>'
       + '<p>Dear Valued Subscriber, this device just tried to reach <b>AFTERGLOW</b>, an unlicensed transmission, for the first time. The attempt has been logged, timestamped and lightly judged.</p>'
-      + '<p>First-time visit only. After this, we will remember you.</p>'
+      + '<p>First-time visit only. After this, we will remember you. Forever.</p>'
       + '<div class="row" style="justify-content:flex-start"><button type="button" class="pri ver">Continue</button></div>'
       + '<div class="fine">StarLeash is a trading name of StarLeash Holdings, a wholly owned subsidiary of your data. Ref. 7731-B.</div>';
     pg.querySelector('.ver').onclick = (e) => { e.stopPropagation(); leave(); }; }); };          /* (owner 2026-11-28: no captcha after the browser gag: "just give me the game". Continue goes straight in; the captcha below is no longer reached) */
