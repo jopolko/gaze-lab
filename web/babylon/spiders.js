@@ -155,6 +155,16 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       else { const a = Math.atan2(g.ty, g.tx) + rnd(-.3, .3), r = rnd(1, 1.08); g.tx = Math.cos(a) * r; g.ty = Math.sin(a) * r; g.idle = rnd(2, 5); } }
     return n; }
 
+  /* WIND (owner 2026-11-28): flying off a ramp with spiders on the glass, a gentle wind whistles past them, its pitch wandering. No spiders, no wind. */
+  const WIND = { g: null, f: null, k: 0 };
+  function windStep(dt, want) { try { const ac = d.audio && d.audio(); if (!ac) return;
+      if (!WIND.g) { if (!want) return; const n = ac.sampleRate * 3, buf = ac.createBuffer(1, n, ac.sampleRate), ch = buf.getChannelData(0); let b = 0; for (let i = 0; i < n; i++) { b = .985 * b + .015 * (Math.random() * 2 - 1); ch[i] = b * 6 + (Math.random() * 2 - 1) * .15; }
+        const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 600; f.Q.value = 2.2; const g = ac.createGain(); g.gain.value = 0; src.connect(f); f.connect(g); g.connect(ac.destination); src.start(); WIND.g = g; WIND.f = f; }
+      WIND.k += ((want ? 1 : 0) - WIND.k) * Math.min(1, dt * (want ? 2.5 : 4)); const t = S.t, now = ac.currentTime;
+      WIND.f.frequency.setTargetAtTime(520 + 260 * Math.sin(t * .9) + 170 * Math.sin(t * 2.3 + 1.3) + 90 * Math.sin(t * 5.1), now, .08);
+      WIND.f.Q.setTargetAtTime(1.8 + .9 * Math.sin(t * 1.7), now, .1);
+      WIND.g.gain.setTargetAtTime(WIND.k * (.07 + .025 * Math.sin(t * 3.1 + .5)), now, .05); } catch (e) { } }
+
   // ---------------------------------------------------------------- per frame
   function step(dt, live) {
     const cam = (d.cam && d.cam()) || scene.activeCamera; if (!cam) return; S.t += dt; const t = S.t;
@@ -215,9 +225,10 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       if (slip > .05) g.ph += dt * 45; else if (ll > .1) g.ph += dt * 4;          /* (legs scrabble when they slip) */
       GL.ln[m * 2] = lx; GL.ln[m * 2 + 1] = lz;
       B.Matrix.ScalingToRef(s, s, s, M); M.multiplyToRef(B.Matrix.RotationY(g.h), M); M.multiplyToRef(B.Matrix.RotationX(Math.PI / 2), M); M.multiplyToRef(B.Matrix.Translation(clamp(g.x + sx, -1.3, 1.3) * hw, clamp(g.y + sy, -1.3, 1.3) * hh, -GZ), M); M.copyToArray(GL.mat, m * 16); GL.ph[m] = g.ph; m++; }
+    windStep(dt, !!(live && d.rampAir && d.rampAir() && GS.some((g) => g.st === 'in')));
     GL.m.thinInstanceCount = m; GL.m.thinInstanceBufferUpdated('matrix'); GL.m.thinInstanceBufferUpdated('phase'); GL.m.thinInstanceBufferUpdated('lean');
   }
-  const api = { step, S, SLO, blowHalf, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
+  const api = { step, S, SLO, blowHalf, get wind() { return WIND.k; }, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
     storm: (z) => spawnStorm(z || 120), strikeTest: () => { const c = CL[CL.length - 1]; if (c) strike(c); }, washTest: () => wash({ tint: pick(d.pal.bolts) }) };
   return api;
 }

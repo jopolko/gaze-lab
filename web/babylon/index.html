@@ -57,7 +57,7 @@ import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
 import { createIntro } from './intro.js?v=20261127f';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js?v=20261127c';
-import { createSpiders } from './spiders.js?v=20261128b';
+import { createSpiders } from './spiders.js?v=20261128c';
 import { createBeasts } from './beasts.js?v=20261128a';
 import { planRoad, planPlay, planShape, findTunnel, seedOf } from './director.js?v=20261128a';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
@@ -2562,7 +2562,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     candy: { rim: [.79, .66, 1], rim2: [.49, 1, .85], bolts: [[.8, .65, 1], [.5, 1, .85], [1, .9, .6]] }, tunnel: { rim: [.22, .91, 1], rim2: [.62, .48, 1], bolts: [[.3, .95, 1], [.62, .48, 1], [.85, .9, 1]] },
     synthwave: { rim: [.69, .48, 1], rim2: [.22, .91, 1], bolts: [[.69, .48, 1], [.22, .91, 1], [1, .85, .4]] }, matrix: { rim: [.49, 1, .54], rim2: [.78, 1, .82], bolts: [[.49, 1, .54], [.8, 1, .85], [.3, .9, 1]] },
     egypt: { rim: [1, .82, .23], rim2: [.29, .66, 1], bolts: [[1, .85, .35], [.3, .66, 1], [.85, .9, 1]] }, psychedelic: { rim: [.49, 1, .54], rim2: [1, .69, .13], bolts: [[.49, 1, .54], [1, .69, .13], [.3, .95, 1], [.69, .48, 1]] } };
-  const SKIT = (!TESTFEAT || Q.has('story') || Q.has('tutorial') || Q.has('splash') || Q.has('shot') || Q.has('noskit') || (Q.get('beast') ? !/^skitters?$/i.test(Q.get('beast')) : !['alpine', 'psychedelic'].includes(WORLD0))) ? null : (() => { try { return createSpiders({ B, scene, PH, th, trailX, cam: () => (scene.activeCameras && scene.activeCameras.length ? scene.activeCameras[0] : scene.activeCamera), inTunZ: (z, p) => inTunZ(z, p), tier: LVIDX, pal: SKITPAL[WORLD0] || SKITPAL.desert, audio: () => acx(), onSmash: (p) => { try { FXB.E.orb(p); } catch (e) { } shake = Math.max(shake, .05); },
+  const SKIT = (!TESTFEAT || Q.has('story') || Q.has('tutorial') || Q.has('splash') || Q.has('shot') || Q.has('noskit') || (Q.get('beast') ? !/^skitters?$/i.test(Q.get('beast')) : !['alpine', 'psychedelic'].includes(WORLD0))) ? null : (() => { try { return createSpiders({ B, scene, PH, th, trailX, cam: () => (scene.activeCameras && scene.activeCameras.length ? scene.activeCameras[0] : scene.activeCamera), inTunZ: (z, p) => inTunZ(z, p), tier: LVIDX, pal: SKITPAL[WORLD0] || SKITPAL.desert, audio: () => acx(), rampAir: () => !PH.grounded && PH.lipAt > 0 && performance.now() - PH.lipAt < 6000, onSmash: (p) => { try { FXB.E.orb(p); } catch (e) { } shake = Math.max(shake, .05); },
     onStrike: (col, at) => { shake = Math.max(shake, .55); U.beat = 1; try { FXB.E.blast(at); } catch (e) { } try { tlook(rndOf(LOOKLINGER), 1, 0, 1.6, .85, 'snap'); } catch (e) { } },
     onZap: (n, at) => { U.beat = 1; shake = Math.max(shake, .3); try { FXB.E.blast(at); if (n > 0) { chainHit(); PH.score += 15 * n; } if (n > 6) tlook(rndOf(LOOKLINGER), 2, 0, 1, .6, 'snap'); } catch (e) { } },
     onWash: (n) => { U.beat = 1; try { tlook(rndOf(LOOKLINGER), 2, .15, 3.4, .75); } catch (e) { } if (n > 0) { PH.score += 20 * n; try { chainHit(); dopAdd('pad', Math.min(.2, .01 * n)); FXB.E.cheer([PH.x, PH.y + 2, PH.z]); } catch (e) { } } } }); } catch (e) { console.error('skitters', e); return null; } })();
