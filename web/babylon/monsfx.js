@@ -37,6 +37,22 @@ export function createMonSfx(acx, cam) {
     launch(ac, t, o) { osc(ac, 'sine', 95, 38, t, .2, .55, o); nz(ac, 'bandpass', 700, 2800, 1.2, t + .02, .7, .4, o, .02); nz(ac, 'highpass', 4000, 0, .7, t, .05, .3, o); },          /* a missile leaving: ignition thump and a tearing hiss */
     defeat(ac, t, o) { osc(ac, 'sawtooth', 330, 300, t, .35, .16, o, .01); osc(ac, 'sawtooth', 262, 196, t + .32, .9, .18, o, .01); osc(ac, 'sine', 98, 55, t + .3, 1.2, .3, o, .02); nz(ac, 'lowpass', 600, 120, .7, t + .3, .9, .2, o, .05); },          /* a falling 'you lost that one' */
     sting(ac, t, o) { osc(ac, 'sine', 140, 70, t, .22, .22, o); nz(ac, 'bandpass', 2600, 1400, 3, t, .08, .1, o); },          /* soft damage knock */
+    /* HITS (owner 2026-11-28: "every object its own sound"): each sounds like what it is */
+    tree(ac, t, o) { osc(ac, 'sine', 120, 58, t, .26, .5, o); nz(ac, 'bandpass', 420, 260, 3, t, .12, .35, o); nz(ac, 'highpass', 3500, 0, .7, t + .04, .35, .12, o, .03); },          /* a woody thunk and the leaves shaking */
+    stone(ac, t, o) { nz(ac, 'bandpass', 2400, 900, 2, t, .06, .55, o); osc(ac, 'sine', 85, 40, t, .3, .5, o); for (let i = 0; i < 6; i++) nz(ac, 'bandpass', rnd(700, 1800), 0, 4, t + .05 + Math.random() * .25, .03, .14, o); },          /* a crack, a thud, gravel */
+    plant(ac, t, o, k) { nz(ac, 'bandpass', 1300 * k, 700 * k, 2.5, t, .1, .3, o); osc(ac, 'triangle', 620 * k, 300 * k, t, .14, .18, o); },          /* a leafy pop */
+    post(ac, t, o) { metal(ac, rnd(460, 560), t, .7, .22, o); nz(ac, 'highpass', 2800, 0, .7, t, .03, .25, o); },          /* a signpost clang */
+    pylon(ac, t, o) { osc(ac, 'triangle', 310, 190, t, .13, .35, o); nz(ac, 'bandpass', 1500, 0, 2, t, .03, .2, o); },          /* a plastic bonk */
+    spider(ac, t, o) { metal(ac, rnd(1700, 2300), t, .08, .1, o, 1); nz(ac, 'bandpass', 2600, 1200, 3, t, .07, .35, o); for (let i = 0; i < 4; i++) nz(ac, 'bandpass', rnd(3000, 5000), 0, 6, t + .04 + i * .025, .015, .12, o); },          /* a little machine crunched */
+    bump(ac, t, o) { osc(ac, 'sine', 70, 38, t, .3, .6, o); metal(ac, rnd(220, 300), t, .4, .2, o); nz(ac, 'lowpass', 700, 150, .7, t, .2, .4, o); },          /* a creature slams the car */
+    /* REWARDS: bright, rising, musical */
+    pad(ac, t, o) { nz(ac, 'bandpass', 500, 3200, 1.4, t, .45, .22, o, .05); [0, 4, 7, 12].forEach((s, i) => osc(ac, 'triangle', 523 * Math.pow(2, s / 12), 0, t + i * .05, .22, .12, o)); },          /* boost: a sweep up and an arpeggio */
+    ring(ac, t, o, k) { const f = 880 * k; osc(ac, 'sine', f, 0, t, .6, .16, o, .002); osc(ac, 'sine', f * 1.5, 0, t + .03, .5, .09, o, .002); osc(ac, 'sine', f * 2.01, 0, t + .06, .4, .05, o, .002); },          /* a chime that climbs with the chain */
+    ramp(ac, t, o) { nz(ac, 'bandpass', 300, 2600, 1.2, t, .55, .3, o, .04); osc(ac, 'sawtooth', 180, 520, t, .5, .08, o, .03); for (let i = 0; i < 5; i++) osc(ac, 'sine', rnd(1800, 3200), 0, t + .25 + i * .05, .2, .05, o); },          /* launch: a rising rush and sparkle */
+    rail(ac, t, o) { [0, 7, 12, 19].forEach((s, i) => osc(ac, 'sine', 660 * Math.pow(2, s / 12), 0, t + i * .04, .35, .08, o)); nz(ac, 'highpass', 5000, 0, .7, t, .3, .06, o, .05); },          /* a bright shimmer onto the rail */
+    solid(ac, t, o, k) { const f = 1500 / k; osc(ac, 'sine', f, 0, t, .9, .2, o, .002); osc(ac, 'sine', f * 2.76, 0, t, .5, .08, o, .002); osc(ac, 'sine', f * 5.4, 0, t, .25, .04, o, .002); },          /* a crystal ding: bigger crystals ring lower */
+    holo(ac, t, o) { [0, 4, 7, 11, 14].forEach((s, i) => { osc(ac, 'sine', 440 * Math.pow(2, s / 12), 0, t + i * .07, 1.1, .08, o, .04); osc(ac, 'triangle', 440 * Math.pow(2, s / 12) * 1.003, 0, t + i * .07, 1, .04, o, .04); }); },          /* a shimmering major-seventh chord */
+    orbget(ac, t, o, k) { osc(ac, 'sine', 400 * k, 1100 * k, t, .09, .2, o); osc(ac, 'sine', 1200 * k, 0, t + .06, .15, .06, o); },          /* a bubble pop */
     impact(ac, t, o) { nz(ac, 'lowpass', 900, 110, .7, t, 1.1, .7, o); osc(ac, 'sine', 60, 28, t, .7, .6, o); },
   };
   let last = {};

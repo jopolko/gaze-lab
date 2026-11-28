@@ -7,7 +7,7 @@
    Every line is true to the game (checked against index.html: COMP, the strains, shards, rings and RUSH, exits). */
 
 import { PANTRY } from './molpantry.js';
-import { createSkitterShow } from './spiders.js?v=20261128g';
+import { createSkitterShow } from './spiders.js?v=20261128h';
 
 const V = 36;                    // metres a second
 const X0 = 6000, Z0 = 0, Y0 = 0; // the set is built far from the course

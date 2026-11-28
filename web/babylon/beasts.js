@@ -184,7 +184,7 @@ export function createBeasts(d) {
   const DMG = Math.min(1.1, .7 + .05 * T);
   const shove0 = (dir, k) => { PH.vx += dir * k * DMG; try { d.shake(.25 * DMG); } catch (e) { } }; const shove = shove0;
   const drag = (k) => { const kk = 1 - (1 - k) * DMG; PH.vx *= kk; PH.vz *= kk; };
-  const bounce = (b) => { PH.__bumpAt = performance.now(); b.bumpT = 1.2; b.x -= (Math.sign(PH.x - b.x) || 1) * 3; if (b.slot) b.slot *= 1.6; if (speed() > 30) drag(.94);          /* (a bump costs a little speed, and none once you are already slow) */ shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
+  const bounce = (b) => { vox('bump', b); PH.__bumpAt = performance.now(); b.bumpT = 1.2; b.x -= (Math.sign(PH.x - b.x) || 1) * 3; if (b.slot) b.slot *= 1.6; if (speed() > 30) drag(.94);          /* (a bump costs a little speed, and none once you are already slow) */ shove(Math.sign(PH.x - b.x) || 1, 5); try { d.sfx('bonk'); } catch (e) { } };
   const emp = () => { PH.boost_t = 0; drag(.86); try { d.emp(); d.shake(.35); d.sfx('zap'); } catch (e) { } };
 
   // ---------------------------------------------------------------- encounter builders (what spawns for each kind)
