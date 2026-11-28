@@ -181,4 +181,8 @@ specText(); perfUi(); led();
   if (/[?&]nofs\b/.test(location.search) || (window.top !== window.self && !SH) || /OculusBrowser|Quest/.test(navigator.userAgent)) return; const D = SH ? SH.document : document, de = D.documentElement, req = de.requestFullscreen || de.webkitRequestFullscreen, isFs = () => !!(D.fullscreenElement || D.webkitFullscreenElement);
   if (!req) return; const go = () => { if (isFs()) return; try { const p = req.call(de, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => { }); } catch (e) { } };
   for (const ev of ['pointerup', 'touchend', 'click', 'keydown']) addEventListener(ev, go, { capture: true, passive: true }); })();</script>
+<script>/* (owner 2026-11-27) opened over the paused game: Back and Go live close it and return to the game */
+(() => { if (!/[?&]inframe\b/.test(location.search) || window.top === window.self) return; const close = (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } try { window.parent.postMessage('agDialClose', '*'); } catch (er) { } };
+  const r = document.getElementById('ride'); if (r) { r.textContent = 'Back to the road \u2192'; r.addEventListener('click', close, true); } const b = document.querySelector('a.back'); if (b) { b.removeAttribute('onclick'); b.addEventListener('click', close, true); }
+  const sm = document.querySelector('footer small'); if (sm) sm.textContent = 'Saved on this device. The next level uses it.'; })();</script>
 <script src="chrome.js?v=20261127n"></script></body></html>
