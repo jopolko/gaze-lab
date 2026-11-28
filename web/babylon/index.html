@@ -275,8 +275,13 @@ void main(){
   float near = 1. - smoothstep(26., 150., dist);
   // MOIRE: two nearly equal lattices, slightly rotated, beat against each other (on the ground in plan, on objects around the normal)
   vec2 mp = uKind > .5 ? vW.xz : (abs(N.y) > .6 ? vW.xz : vec2(vW.x + vW.z, vW.y * 1.5));
-  float m1 = lat(mp, .0, 1.15), m2 = lat(mp, .035 + .02 * sin(uTime * .2), 1.19), moire = smoothstep(.1, .8, m1 * m2 + .35 * sin(uTime + dist * .05));
-  float dots = smoothstep(.55, .9, abs(m1)) * near * step(uKind, .5);          /* (owner 2026-11-28: the world's patterns are never shed: computed either way, hiding them saved nothing and left the worlds flat) */
+  /* ORGANIC (owner 2026-11-28: "still seeing very regularly spaced diagonal lines and a grid of dots"): the lattice is bent by slow flowing noise, its spacing and angle
+     wander across the world, and the dots show in drifting patches; nothing lines up. The psychedelic world keeps its own exactly (ORG 0). */
+  float ORG = ${WORLD0 === 'psychedelic' ? '0.' : '1.'}; vec2 wq = mp * .37; mp += ORG * 2.4 * vec2(sin(wq.y + uTime * .23 + sin(wq.x * .7)), sin(wq.x * 1.1 - uTime * .19 + sin(wq.y * .6)));
+  float kz = 1. + .45 * ORG * sin(mp.x * .043 + mp.y * .031), an = ORG * .6 * sin(mp.y * .021 - mp.x * .017 + uTime * .05);
+  float m1 = lat(mp, an, 1.15 * kz), m2 = lat(mp, an + .035 + .02 * sin(uTime * .2), 1.19 * kz), moire = smoothstep(.1, .8, m1 * m2 + .35 * sin(uTime + dist * .05));
+  float ptch = mix(1., smoothstep(-.15, .65, sin(mp.x * .09 + uTime * .15) * sin(mp.y * .07 - uTime * .11) + .25), ORG);
+  float dots = smoothstep(.55 + .2 * ORG * sin(mp.x * .3 + mp.y * .2), .9, abs(m1)) * near * step(uKind, .5) * ptch;          /* (owner 2026-11-28: the world's patterns are never shed: computed either way, hiding them saved nothing and left the worlds flat) */
   vec3 col = base; col = mix(col, bp * (.4 + .85 * lum), .6 * uBk);
   col = mix(col, pal * (.35 + .5 * lum), .3 + .45 * uTrip);
   col += pal * moire * (.05 + .16 * uTrip) * (.4 + .6 * near) * step(uKind, .5);          /* (no moire on the ground) */
@@ -602,7 +607,7 @@ void main() { vec3 N = normalize(vN); if (!gl_FrontFacing) N = -N; vec3 V = norm
     B.Effect.ShadersStore['tmtnVertexShader'] = 'precision highp float; attribute vec3 position; uniform mat4 world; uniform mat4 viewProjection; varying vec3 lp; varying vec3 wpm; void main(){ lp = position; vec4 w = world * vec4(position, 1.); wpm = w.xyz; gl_Position = viewProjection * w; }';
     B.Effect.ShadersStore['tmtnFragmentShader'] = 'precision highp float; varying vec3 lp; varying vec3 wpm; uniform float uTime, mo_k, br_k, pol_k, trav; uniform vec2 mo_t; uniform vec3 cam_pos; ' + S2L_ + `
  void main(){
-      float dist = length(wpm - cam_pos); vec2 q = (lp.xz + lp.y * 1.2) * 0.157; q += vec2(0.0, trav * 0.012); float fine = 1.0 + 0.9 * smoothstep(300.0, 1500.0, dist);
+      float dist = length(wpm - cam_pos); vec2 q = (lp.xz + lp.y * 1.2) * 0.157; q += vec2(0.0, trav * 0.012); float ORG = ${WORLD0 === 'psychedelic' ? '0.' : '1.'}; q += ORG * 1.7 * vec2(sin(q.y * 0.43 + uTime * 0.2 + sin(q.x * 0.3)), sin(q.x * 0.51 - uTime * 0.17 + sin(q.y * 0.37))); float fine = (1.0 + 0.9 * smoothstep(300.0, 1500.0, dist)) * (1.0 + 0.4 * ORG * sin(q.x * 0.11 + q.y * 0.07));          /* (organic: the dot lattice flows instead of standing in rows) */
       float s1 = sin(q.x * fine) * sin(q.y * fine); float s2 = sin(q.x * fine * 1.037 + mo_t.x * 0.3) * sin(q.y * fine * 1.037 + mo_t.y * 0.3); float mm = smoothstep(-0.5, 0.5, s1 * s2);
       vec3 hc = clamp(abs(fract(vec3(mm * 0.5 + uTime * 0.04 + lp.y * 0.0008) + vec3(0.0, 0.6667, 0.3333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0);
       float band = 0.5 + 0.5 * sin(lp.y * 0.085 - uTime * 1.1 + trav * 0.015); band = smoothstep(0.55, 0.95, band);
@@ -777,7 +782,8 @@ vec3 hsv(float h, float s, float v){ vec3 k = vec3(1., 2./3., 1./3.); vec3 p = a
 void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
   float h = fract(.7 + el * .18 + az * .03 + uTime * .02 + sin(az * 3. + uTime * .3) * .04 * (.4 + uTrip));
   vec3 c = hsv(h, .7, mix(.18, .75, smoothstep(-.1, .8, el)));
-  float w1 = sin(az * 22. + el * 18. + uTime * .5), w2 = sin(az * 23. - el * 17. - uTime * .4); float moire = smoothstep(.2, 1., w1 * w2) * (.18 + .4 * uTrip) * smoothstep(-.05, .3, el);
+  float ORG = ${WORLD0 === 'psychedelic' ? '0.' : '1.'}; float az2 = az + ORG * .07 * sin(el * 9. + uTime * .2 + sin(az * 4.)), el2 = el + ORG * .05 * sin(az * 7. - uTime * .17);          /* (organic: the bands bend and drift instead of standing in straight diagonals) */
+  float w1 = sin(az2 * 22. + el2 * 18. + uTime * .5), w2 = sin(az2 * 23. - el2 * 17. - uTime * .4); float moire = smoothstep(.2, 1., w1 * w2) * (.18 + .4 * uTrip) * smoothstep(-.05, .3, el);
   c += hsv(fract(h + .5), .8, 1.) * moire;
   vec2 sp = floor(vec2(az * 60., el * 60.)); float st = step(.995, fract(sin(dot(sp, vec2(12.9898, 78.233))) * 43758.5453)) * smoothstep(.1, .5, el); c += vec3(st) * .9;
   c += hsv(fract(h + .3), .6, 1.) * pow(max(0., 1. - abs(el - .02) * 6.), 3.) * (.3 + uBeat);
