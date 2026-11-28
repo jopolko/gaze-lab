@@ -182,7 +182,7 @@ body.tearing .wrap { animation:tear2 .16s steps(2) 1; }
 <nav class="toc" id="toc"></nav>
 <main id="dests"></main>
 </div>
-<div class="bar"><a class="go" href="index.html?story=1&amp;nointake=1">&#9654; Drive</a><a href="#" id="tgClose">&#10005; Close</a><a href="#" id="toTop">&#9650; Top</a></div>
+<div class="bar"><a href="#" id="tgClose">&#10005; Close</a><a href="#" id="toTop">&#9650; Top</a></div>
 <div id="sheet" hidden><div class="sc"><button type="button" class="sx" aria-label="Back to the Brochure">‹ Back</button><div class="sb"></div></div></div>
 <script src="plants.js"></script><script src="codex.js"></script>
 <script>
@@ -345,7 +345,7 @@ function closeSheet(fromPop) { if (sheet.hidden) return; sheet.hidden = true; do
 document.getElementById('dests').addEventListener('click', (e) => { const b = e.target.closest('.it[data-k]'); if (b) openSheet(b.dataset.k); });
 sheet.querySelector('.sx').onclick = () => closeSheet(); sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
 addEventListener('popstate', () => closeSheet(true)); addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheet(); });
-{ const dn = document.querySelector('.bar a.go'); if (dn) { dn.href = NEXT.url; dn.textContent = '\u25B6 ' + (clearedId(ORDER[0].id) ? 'Continue' : 'Drive'); } }
+/* (owner 2026-11-28: the bottom Drive is gone; every destination has its own) */ { const dn = document.querySelector('.bar a.go'); if (dn) { dn.href = NEXT.url; dn.textContent = '\u25B6 ' + (clearedId(ORDER[0].id) ? 'Continue' : 'Drive'); } }
 document.getElementById('toTop').addEventListener('click', (e) => { e.preventDefault(); scrollTo({ top: 0, behavior: 'smooth' }); });
 { const Q = new URLSearchParams(location.search), inFrame = Q.has('inframe'), back = Q.get('back');
   document.getElementById('tgClose').addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
