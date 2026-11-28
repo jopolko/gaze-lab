@@ -99,11 +99,8 @@ const HUE = (t) => { let h = 0; for (const ch of t) h = (h * 31 + ch.charCodeAt(
 /* decks: every pool is dealt without repeats (remembered across visits), so frequent lockers always see something new until the whole pool has gone round */
 const deal = (name, arr) => { let d = null; try { d = JSON.parse(localStorage.getItem('dl_lkd_' + name) || 'null'); } catch (e) { } if (!Array.isArray(d) || !d.length || d.some((i) => i >= arr.length)) { d = arr.map((_, i) => i); for (let i = d.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]]; } }
   const i = d.shift(); try { localStorage.setItem('dl_lkd_' + name, JSON.stringify(d)); } catch (e) { } return arr[i]; };
-/* small personal touches, all read on the device and never sent anywhere: the real battery level, the city from the time zone, the phone model */
+/* (owner 2026-11-28: no personal touches. No city from the time zone, no phone model, no real battery level: only the time and date are the player's own) */
 const ME = { city: '', model: '', bat: null };
-try { const z = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; if (z.includes('/') && !/^Etc\//.test(z)) ME.city = z.split('/').pop().replace(/_/g, ' '); } catch (e) { }
-try { const m = navigator.userAgent.match(/Android [\d.]+; ([^;)]+?)(?: Build|\))/); if (m && !/^K$/.test(m[1])) ME.model = m[1].trim(); } catch (e) { }
-try { if (navigator.getBattery) navigator.getBattery().then((b) => { ME.bat = Math.round(b.level * 100); }).catch(() => { }); } catch (e) { }
 const CITYL = [['ACCORD', 'Courier located near {city}. Units are enjoying the weather.'], ['MURMUR', '3 people in {city} are talking about you rn \u263A\uFE0E'], ['ACCORD', '{city} curfew moved to whenever you leave the house.'],
   ['MURMUR', '{city} forecast: watched, with a chance of you.'], ['ACCORD', 'Roadblocks are up around {city}. For your convenience.'], ['MURMUR', 'u were trending in {city} for 4 min. we screenshotted it']];
 /* WIDGET COLOURS, as a real service shows them (from the service's own point of view, which is the joke): g = good (green), w = caution (amber), b = warning (red) */
