@@ -80,7 +80,7 @@ import { createIntro } from './intro.js?v=20261128e';          /* (bump on every
 import { createSets } from './chains.js?v=20261127c';
 import { createSpiders } from './spiders.js?v=20261128g';
 import { createMonSfx } from './monsfx.js?v=20261128b';
-import { createBeasts } from './beasts.js?v=20261128b';
+import { createBeasts } from './beasts.js?v=20261128c';
 import { planRoad, planPlay, planShape, findTunnel, seedOf } from './director.js?v=20261128a';
 import { joinCost, rowOffsets, assemble, moveHeavy } from '../downhill-three/trip_compose.mjs';
 import { createPsyFx } from '../downhill-three/psyfx.js';
@@ -895,6 +895,17 @@ void main(){ vec3 d = normalize(vP); float el = d.y, az = atan(d.x, -d.z);
       addOb(x, z, r, { hard: true, roadRock: true }); M.push(B.Matrix.Compose(new B.Vector3(r * 1.25, r * (.75 + .3 * rnd()), r * 1.1), B.Quaternion.RotationYawPitchRoll(rnd() * 6.28, rnd() * .4, rnd() * .4), new B.Vector3(x, g + r * .35, z))); RRK.n++; }
     if (M.length) { const buf = new Float32Array(M.length * 16); M.forEach((m, i) => m.copyToArray(buf, i * 16)); src.thinInstanceSetBuffer('matrix', buf, 16, true); src.thinInstanceRefreshBoundingInfo(false); src.alwaysSelectAsActiveMesh = true; } else src.dispose(); }
   window.__roadRocks = RRK;
+  /* NO TREES IN THE ROAD (owner 2026-11-28, "still trees in the way in Trip"): the level's drawn trees and the ones it collides with are separate lists, and about
+     1,700 drawn trees in Trip (960 in the Alps) stood within 10 m of the path with nothing to hit, so you drove through them. Every drawn plant taller than 1.5 m
+     within 14 m of the path is hidden; low ground plants stay. ?roadtrees keeps them. */
+  function clearRoadVeg() { if (Q.has('roadtrees')) return 0; let n = 0;
+    for (const m of scene.meshes) { if (m.__cat !== 'veg' || !m.thinInstanceCount) continue; const buf = m._thinInstanceDataStorage && m._thinInstanceDataStorage.matrixData; if (!buf) continue;
+      let lh = 0; try { const pv = m.getVerticesData('position'); let a = 1e9, b = -1e9; for (let i = 1; i < pv.length; i += 3) { a = Math.min(a, pv[i]); b = Math.max(b, pv[i]); } lh = b - a; } catch (e) { continue; }
+      let hit = false; const cnt = buf.length / 16;
+      for (let i = 0; i < cnt; i++) { const o = i * 16, sy = Math.hypot(buf[o + 4], buf[o + 5], buf[o + 6]); if (sy < 1e-4 || lh * sy < 1.5) continue; const x = buf[o + 12], z = buf[o + 14], c = inBasin(z) ? 0 : trailX(z); if (Math.abs(x - c) >= 14) continue;
+        for (let q = 0; q < 12; q++) buf[o + q] = 0; if (m.__buf && m.__buf !== buf) for (let q = 0; q < 12; q++) m.__buf[o + q] = 0; hit = true; n++; }
+      if (hit) m.thinInstanceBufferUpdated('matrix'); }
+    return n; }
   const trailX = (z) => { const i = clamp(-z / PER, 0, trailx.length - 2), a = Math.floor(i), f = i - a; return trailx[a] * (1 - f) + trailx[a + 1] * f; };
   const pitchY = (z) => { const j = clamp(Math.floor(-z / meta.ROW_GAP), 0, pitch.length - 1), p = pitch[j]; return p.h + p.s * (z - p.z); };
   const PH = { x: 0, y: 0, z: -6, vx: 0, vy: 0, vz: -22 * SPK, heading: 0, steer: 0, sv: 0, grounded: true, air_t: 0, boost_t: 0, mom: 0, vxa: 0, stickT: 0, gh_prev: 0, vlock: null, hurt: 0, grade: 0, lastGh: null, score: 0, chain: 0, landT: 0, jumps: 0, ready: false };
@@ -1935,7 +1946,7 @@ void main() {
     btn('Restart', () => { location.reload(); });
     if (!Q.has('story') && !Q.has('tutorial')) { const w = PZ('pzW'); if (w) { w.title = 'World'; G.appendChild(w); } }
     btn('Worlds', () => { location.href = 'menu.html'; }); btn('Title screen', () => { location.href = 'splash.html'; });          /* (owner 2026-11-26: the level select is 'Worlds'; the title screen is one tap away, progress kept, no training) */
-    const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Settings'; { const ib = document.createElement('button'); ib.className = 'sm'; ib.textContent = '\u2316 Inspect & copy'; ib.onclick = () => { try { window.__inspMode(true); } catch (e) { } }; G.appendChild(ib); } dv.onclick = () => { window.__openDial(); };          /* (owner 2026-11-27: Settings did nothing on a phone (it toggled a hidden developer panel); it opens The Dial: visuals and Override; a double click still toggles the developer panel) */ dv.ondblclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
+    const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Ultra'; { const ib = document.createElement('button'); ib.className = 'sm'; ib.textContent = '\u2316 Inspect & copy'; ib.onclick = () => { try { window.__inspMode(true); } catch (e) { } }; G.appendChild(ib); } dv.onclick = () => { window.__openDial(); };          /* (owner 2026-11-27: Settings did nothing on a phone (it toggled a hidden developer panel); it opens The Dial: visuals and Override; a double click still toggles the developer panel) */ dv.ondblclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
     /* MAX INTENSITY, changeable mid-game (owner 2026-11-26: if someone changes their mind): re-tunes the trip live and is remembered for the next run */
     { const R = el.querySelector('#pmSigR'), V = el.querySelector('#pmSigV'), show = (f) => { V.textContent = Math.round(f) + ' THz \u00B7 ' + ((f) => f < 450 ? 'HINT' : f < 560 ? 'MILD' : f < 660 ? 'MEDIUM' : f < 745 ? 'FULL' : f <= 790 ? 'INTENSE' : 'ULTRAVIOLET')(f); V.style.color = f > 790 ? '#d68cff' : '#9fd8ff'; };
       R.value = String(window.__SIG ? window.__SIG.f : 500); show(+R.value); for (const ev of ['pointerdown', 'touchstart']) R.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
@@ -1962,7 +1973,7 @@ void main() {
       for (const [re, ic, t] of [[/^Restart$/, '\u21BB', 'Restart'], [/^Worlds$/, '\uD83D\uDDFA', 'Worlds'], [/^Look$/, '\uD83D\uDD27', 'Garage'], [null, '\u25C6', 'Brochure'], [/^Hint$/, '\uD83D\uDCAC', 'Hint'], [/^Log$/, '\u2630', 'Log'], [/^Title screen$/, '\u25C8', 'Title'], [/^Visuals$/, '\u2699\uFE0E', 'Visuals']]) {
         if (!re) { const b = document.createElement('button'); b.onclick = () => window.__openGuide(); MB(b, ic, t); continue; } const b = by(re); if (b) MB(b, ic, t); }
       qp.insertAdjacentHTML('afterbegin', '<h6>SETTINGS</h6>');
-      { const r = document.createElement('div'); r.className = 'dvb'; const w = all.find((x) => x.title === 'World'); if (w) r.appendChild(w); for (const re of [/Settings/, /Inspect/]) { const b = by(re); if (b) { b.className = 'chip'; r.appendChild(b); } } qp.appendChild(r); }
+      { const r = document.createElement('div'); r.className = 'dvb'; const w = all.find((x) => x.title === 'World'); if (w) r.appendChild(w); for (const re of [/Ultra$/, /Inspect/]) { const b = by(re); if (b) { b.className = 'chip'; r.appendChild(b); } } qp.appendChild(r); }
       /* DEVELOPER (owner 2026-11-27: every option on the lock screen): diagnostics, the look and head-axis overrides and the layer switches, in a drawer */
       { const dv = document.createElement('details'); dv.className = 'lkdev'; dv.innerHTML = '<summary>Developer ▸</summary><div class="dvb"></div>'; const box2 = dv.querySelector('.dvb');
         for (const id of ['pzS', 'pzC', 'pzK', 'pzA']) { const e = PZ(id); if (e) { if (e.tagName === 'BUTTON') e.className = 'chip'; box2.appendChild(e); } }
@@ -4526,7 +4537,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     setInterval(() => { for (const r0 of rows) { if (document.activeElement === r0.i) continue; const v = +r0.get() || 0; r0.i.value = v; r0.v.textContent = r0.fmt ? r0.fmt(v) : v.toFixed(2); } }, 120);
   })(); }
   window.__GEAR_T = () => GEAR.T || []; window.__G = { treeLim, REACH, shed: (l) => applyShed(l), TUNE, featX: (f, z) => featX(f, z), railY: (f, z) => railY(f, z), SOL, solPut, LV, OG, ZM, TUT, DOP, dopAdd, PH, PADS, KPADS, KB, BUFFS, ORBS, th, HF, VXS, BYNAME, ANREC, phys, trailX, DOSE, TL: () => TL, toys: () => toys, RAILS, ufo: (k) => { UFO.done = true; UFO.force = k || null; try { ufoStart(); } catch (e) { console.error(e); } }, UFO, smashProp: (o) => smashProp(o), poleTopple: (o, g, sf) => poleTopple(o, g, sf), offerExits: (o, z) => offerExits(o, z), itemCard: (k, c) => itemCard(k, c), flyTo: (k, i, w) => flyTo(k, i, w), BANK, doseTake: (cp) => doseTake(cp || 'lucid', PH.x, PH.y, PH.z), COMP, warp: (z) => { window.__legit = 'warp (test tool)'; PH.z = z; PH.x = trailX(z); PH.y = th(PH.x, z); PH.gh_prev = PH.y; PH.vx = 0; } };          /* (for inspecting and testing from the console) */
-  try { roadRocks(); } catch (e) { console.error('road rocks', e); } try { if (!TLL) tlBuild(); } catch (e) { console.error('tree line', e); }          /* (built once the level is: rocks on the road, trees cleared in front of everything you can touch, the tree-line edge) */
+  try { window.__roadVegHidden = clearRoadVeg(); } catch (e) { console.error('road trees', e); } try { roadRocks(); } catch (e) { console.error('road rocks', e); } try { if (!TLL) tlBuild(); } catch (e) { console.error('tree line', e); }          /* (built once the level is: rocks on the road, trees cleared in front of everything you can touch, the tree-line edge) */
 })();
 </script><script>/* FULLSCREEN, always: browsers only allow it from a tap, click or key, so the first one goes fullscreen (and turns the phone sideways where it can), and any tap after leaving fullscreen goes back in. &nofs turns it off. */
 (() => { const SH = (() => { try { return window.top !== window.self && window.top.__SHELL ? window.top : null; } catch (e) { return null; } })();          /* inside the shell (app.html): fullscreen the shell, which stays put while pages change inside it */
