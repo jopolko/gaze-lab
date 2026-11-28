@@ -1,5 +1,14 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><script>if (!/[?&]flat/.test(location.search)) document.documentElement.classList.add('depth');</script><script>/* THE SHELL: opened on its own, this page reloads inside app.html (fullscreen survives page changes). &noshell skips it. */
+<html lang="en"><head><meta charset="utf-8"><script>/* NO OGG ON IPHONE (owner 2026-11-28: "Tunnel was just silent on iPhone"). Safari can't play Ogg Vorbis, and most tracks and every stem were .ogg. Each one now has
+   an .mp3 twin on the server; where the browser can't play .ogg, every request for a music .ogg (fetch, request or audio element) asks for the .mp3 instead. */
+(() => { try { const a = document.createElement('audio'); if (!/[?&]noogg(&|$)/.test(location.search) && a.canPlayType && a.canPlayType('audio/ogg; codecs="vorbis"')) return; window.__noOgg = true;
+    const sw = (u) => (typeof u === 'string' && /\.ogg(\?|#|$)/i.test(u) && /music\//.test(u)) ? u.replace(/\.ogg(?=\?|#|$)/i, '.mp3') : u;
+    const f0 = window.fetch; if (f0) window.fetch = function (r, o) { if (typeof r === 'string') r = sw(r); else if (r && r.url && /\.ogg/i.test(r.url)) { try { r = new Request(sw(r.url), r); } catch (e) { } } return f0.call(this, r, o); };
+    const xo = XMLHttpRequest.prototype.open; XMLHttpRequest.prototype.open = function (m, u, ...rest) { return xo.call(this, m, sw(u), ...rest); };
+    const A0 = window.Audio; if (A0) { const A1 = function (u) { return u === undefined ? new A0() : new A0(sw(u)); }; A1.prototype = A0.prototype; window.Audio = A1; }          /* (new Audio(url) skips the src setter) */
+    const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'src'); if (d && d.set) Object.defineProperty(HTMLMediaElement.prototype, 'src', { configurable: true, get: d.get, set(v) { d.set.call(this, sw(v)); } });
+  } catch (e) { } })();</script>
+<script>if (!/[?&]flat/.test(location.search)) document.documentElement.classList.add('depth');</script><script>/* THE SHELL: opened on its own, this page reloads inside app.html (fullscreen survives page changes). &noshell skips it. */
 (() => { try { if (window.top === window.self && !/[?&]noshell\b/.test(location.search) && !navigator.webdriver) location.replace('app.html?p=' + encodeURIComponent(location.pathname.split('/').pop() + location.search + location.hash)); } catch (e) { } })();</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Afterglow</title>
