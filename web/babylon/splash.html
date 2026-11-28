@@ -538,6 +538,7 @@ function molRoom(short) { let top, bot; const R = (id) => { const e = document.g
   /* (owner 2026-11-26, second pass: beside the title was the wrong place. It stays centred under the title, as in fullscreen, and grows into the space down to
      TAP TO TUNE IN; its name and notes move under it, just above the button) */
   if (!short && W > H && bot - top < H * .26) { const tp = R('tap'), sh = (strainEl.getBoundingClientRect().height || 40), tpTop = tp && tp.height > 0 ? tp.top : H * .82; { const b2 = tpTop - sh - 20, r2 = Math.max(24, Math.min((b2 - top) / 2 * .95, H * .2, W * .2)); if (r2 > r) return { x: W / 2, y: (top + b2) / 2, r: r2, side: true }; } }
+  if (!short && W < H && r < W * .2) { const r2 = Math.min(r * 2, W * .24); return { y: bot - r2 * .92, r: r2 }; }          /* (owner 2026-11-28: on an iPhone 12 in Safari the strip under the title is ~100 px, so the hologram was tiny. In portrait it is twice that, standing on the caption and rising behind the subtitle: it is light, the title stays on top) */
   return { y, r }; }
 /* THE PLANT (owner 2026-11-27: the plants read better than the molecules): the strain's plant, big and glowing in its own colour, breathing and swaying.
    A drag on it still turns it, like a coin. Falls back to the molecule if the plant art is missing. */
