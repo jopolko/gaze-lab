@@ -32,6 +32,9 @@ a.back { font:700 clamp(14px,1.6vmin + 6px,18px) var(--lb); letter-spacing:.14em
 .spec { font:700 clamp(12px,1vmin + 7px,15px)/1.35 var(--lb); letter-spacing:.04em; color:#ffd9a8; border:1px solid var(--line); border-radius:8px; padding:.5em .7em; background:#0a0604; }
 .spec b { color:var(--amber); font-weight:700; }
 .f select { min-width:0; width:100%; font:700 clamp(13px,1.1vmin + 7px,16px) var(--lb); letter-spacing:.04em; color:var(--fg); background:#1f150e; border:1px solid var(--line); border-radius:6px; padding:.3em .4em; }
+.demo { position:relative; flex:1; min-height:44px; border:1px solid var(--line); border-radius:8px; background:#0a0604; overflow:hidden; }
+.demo canvas { position:absolute; inset:0; width:100%; height:100%; }
+.demo span { position:absolute; left:.6em; bottom:.35em; font:700 12px var(--lb); letter-spacing:.06em; color:#ffd9a8; text-shadow:0 1px 2px #000; }
 .note { color:var(--dim); font:700 12px var(--lb); letter-spacing:.04em; }
 .tape { position:relative; border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg,#2a1c14,#140d09); padding:.45em .5em .5em; cursor:pointer; text-align:left; color:var(--fg); font:inherit; }
 .tape b { display:block; font:400 clamp(18px,2.4vmin + 6px,28px)/1 var(--tt); letter-spacing:.1em; }
@@ -87,11 +90,12 @@ footer small { color:var(--dim); font:italic 500 13px Georgia,serif; margin-left
     <div class="f"><label for="hng">Hang time</label><input type="range" id="hng" min="0" max="200" value="100"><output id="o_hng"></output></div>
     <div class="row"><select id="cmp" title="Compound"><option value="">Compound: each world's own</option></select><select id="len" title="Trip length"><option value="short">Trip: short</option><option value="full">Trip: full</option><option value="long">Trip: long</option></select><label class="tog"><input type="checkbox" id="chl"> Chill (no drones)</label></div>
   </section>
-  <section class="desk"><h2>YOUR DEVICE <small>how it runs, your call</small></h2>
+  <section class="desk"><h2>GPU BOOST <small>speed or sparkle, your call</small></h2>
     <div class="spec" id="spec">Not measured yet. Play a level and this fills in.</div>
-    <div class="f"><label for="pres">Sharpness</label><select id="pres"><option value="auto">Auto (recommended)</option><option value="high">High</option><option value="med">Medium</option><option value="low">Low (fastest)</option></select><output id="o_pres"></output></div>
-    <div class="f"><label for="pglow">Glow</label><select id="pglow"><option value="auto">Auto (recommended)</option><option value="on">On</option><option value="off">Off (faster)</option></select><output id="o_pglow"></output></div>
-    <div class="f"><label for="pfps">Frame rate</label><select id="pfps"><option value="auto">Auto (recommended)</option><option value="60">Smooth 60</option><option value="30">Steady 30 (easier)</option></select><output id="o_pfps"></output></div>
+    <div class="f"><label for="pres">Sharpness</label><select id="pres"><option value="auto">Auto (recommended)</option><option value="high">Boost: sharpest</option><option value="med">Balanced</option><option value="low">Saver: fastest</option></select><output id="o_pres"></output></div>
+    <div class="f"><label for="pglow">Glow</label><select id="pglow"><option value="auto">Auto (recommended)</option><option value="on">Boost: glow on</option><option value="off">Saver: glow off</option></select><output id="o_pglow"></output></div>
+    <div class="f"><label for="pfps">Frame rate</label><select id="pfps"><option value="auto">Auto (recommended)</option><option value="60">Boost: smooth 60</option><option value="30">Saver: steady 30</option></select><output id="o_pfps"></output></div>
+    <div class="demo" id="demo"><canvas id="dcv"></canvas><span id="dtx"></span></div>
     <div class="row"><button class="btn" id="pretest">&#8635; Measure again</button><small class="note" id="pnote"></small></div>
   </section>
 </main>
@@ -131,6 +135,17 @@ const OUTS = { pres: { auto: 'auto', high: 'sharpest', med: 'balanced', low: 'fa
 function perfUi() { $('pres').value = PU.res; $('pglow').value = PU.glow; $('pfps').value = PU.fps; for (const k of ['pres', 'pglow', 'pfps']) $('o_' + k).textContent = OUTS[k][$(k).value]; $('pnote').textContent = PU.res === 'auto' && PU.glow === 'auto' && PU.fps === 'auto' ? 'The game tunes itself as you play.' : 'Your choices stay until you change them.'; }
 for (const [id, key] of [['pres', 'res'], ['pglow', 'glow'], ['pfps', 'fps']]) $(id).addEventListener('change', () => { PU[key] = $(id).value; try { localStorage.setItem('ag_perfuser', JSON.stringify(PU)); } catch (e) { } perfUi(); });
 $('pretest').onclick = () => { try { localStorage.removeItem('ag_perf2'); } catch (e) { } $('spec').textContent = 'Cleared. The next level measures this device again from scratch.'; };
+/* THE DEMO (owner 2026-11-27: "show what each choice does"): a little road scene drawn live. Sharpness draws it at that resolution, glow adds the bloom,
+   frame rate moves the lights at 60 or 30 updates a second, so you can see the difference before you play. Auto shows what this device was running. */
+const DM = { last: 0, t: 0 }; function demo(now) { requestAnimationFrame(demo); const cv = $('dcv'); if (!cv || cv.closest('[hidden]')) return; const P = PERF0 || {}, res = PU.res === 'auto' ? (P.rs || .8) : { high: 1, med: .72, low: .5 }[PU.res], glow = PU.glow === 'auto' ? (!P.tier || P.tier === 'full') : PU.glow === 'on', fps = PU.fps === 'auto' ? (P.lock30 ? 30 : 60) : +PU.fps;
+  if (now - DM.last < 1000 / fps - 2) return; DM.t += (now - (DM.last || now)) / 1000; DM.last = now; const W = Math.max(2, Math.round(cv.clientWidth * res * Math.min(2, devicePixelRatio || 1))), H = Math.max(2, Math.round(cv.clientHeight * res * Math.min(2, devicePixelRatio || 1))); if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const x = cv.getContext('2d'), hz = H * .38, t = DM.t; x.fillStyle = '#12061c'; x.fillRect(0, 0, W, H); const g = x.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, '#2b0d4a'); g.addColorStop(1, '#ff5a3c'); x.fillStyle = g; x.fillRect(0, 0, W, hz);
+  x.fillStyle = '#ffb14a'; x.beginPath(); x.arc(W * .5, hz, H * .22, Math.PI, 0); x.fill(); x.strokeStyle = '#38e8ff'; x.lineWidth = Math.max(1, H / 90);
+  for (let i = 0; i < 9; i++) { const z = ((i / 9 + t * .45) % 1), y = hz + (H - hz) * z * z, w = W * (.04 + .9 * z * z); x.beginPath(); x.moveTo(W / 2 - w, y); x.lineTo(W / 2 + w, y); x.stroke(); }
+  for (const s of [-1, 1]) { x.beginPath(); x.moveTo(W / 2, hz); x.lineTo(W / 2 + s * W * .95, H); x.stroke(); }
+  for (let i = 0; i < 3; i++) { const z = ((i / 3 + t * .6) % 1), y = hz + (H - hz) * z * z, r = Math.max(1.5, H * .08 * z), xx = W / 2 + (i - 1) * W * .3 * z * z; if (glow) { x.shadowColor = '#c6ff4d'; x.shadowBlur = r * 3; } x.fillStyle = '#c6ff4d'; x.beginPath(); x.arc(xx, y - r, r, 0, 7); x.fill(); x.shadowBlur = 0; }
+  $('dtx').textContent = Math.round(res * 100) + '% sharp \u00B7 glow ' + (glow ? 'on' : 'off') + ' \u00B7 ' + fps + ' fps'; }
+requestAnimationFrame(demo);
 specText(); perfUi();
 </script>
 <script>/* FULLSCREEN (no browser bars), either way up. &nofs turns it off. */
