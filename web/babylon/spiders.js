@@ -146,6 +146,15 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
     const n = GS.filter((g) => g.st !== 'out').length; for (const g of GS) if (g.st !== 'out') { g.st = 'wait'; g.delay = rnd(0, .9); }
     S.washes++; try { d.onWash && d.onWash(n, cl.tint); } catch (e) { } }
 
+  /* RAMP BLAST (owner 2026-11-28): leaving any ramp blows half of the spiders on the glass away, a few at a time over 3 seconds, the ones nearest the middle first.
+     The half that hangs on is scattered back out to the edge of the windscreen. Every ramp halves them again. */
+  function blowHalf() { const on = GS.filter((g) => g.st === 'in'); const n = Math.floor(on.length / 2); if (!n) return 0;
+    on.sort((a, b) => Math.hypot(a.tx, a.ty) - Math.hypot(b.tx, b.ty));
+    for (let k = 0; k < on.length; k++) { const g = on[k];
+      if (k < n) { g.st = 'wait'; g.blow = true; g.delay = (k + Math.random()) / n * 3; }
+      else { const a = Math.atan2(g.ty, g.tx) + rnd(-.3, .3), r = rnd(1, 1.08); g.tx = Math.cos(a) * r; g.ty = Math.sin(a) * r; g.idle = rnd(2, 5); } }
+    return n; }
+
   // ---------------------------------------------------------------- per frame
   function step(dt, live) {
     const cam = (d.cam && d.cam()) || scene.activeCamera; if (!cam) return; S.t += dt; const t = S.t;
@@ -193,8 +202,8 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       const tx = clamp(-yr * sp2 * .018, -.7, .7), ty = clamp(-acc * .012, -.35, .35) + (PH.grounded ? 0 : .12); SLO.vx += ((tx - SLO.x) * 38 - SLO.vx * 5.5) * dt; SLO.vy += ((ty - SLO.y) * 38 - SLO.vy * 5.5) * dt; SLO.x += SLO.vx * dt; SLO.y += SLO.vy * dt; }          /* (a spring on the car's turn and braking: they get flung and swing back) */
     let m = 0;
     for (let i = GS.length - 1; i >= 0; i--) { const g = GS[i];
-      if (g.st === 'wait') { g.delay -= dt; g.ph += dt * 30; if (g.delay <= 0) { g.st = 'out'; g.vx = rnd(-.08, .08); g.vy = -rnd(.1, .4); g.spin = rnd(-5, 5); } continue; }
-      if (g.st === 'out') { g.vy -= 3.2 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.h += g.spin * dt; g.ph += dt * 24; if (g.y < -1.5 || Math.abs(g.x) > 1.5) GS.splice(i, 1); continue; }
+      if (g.st === 'wait') { g.delay -= dt; g.ph += dt * 30; if (g.delay <= 0) { g.st = 'out'; if (g.blow) { const a = Math.atan2(g.y, g.x) + rnd(-.4, .4), v = rnd(1.6, 2.6); g.vx = Math.cos(a) * v; g.vy = Math.sin(a) * v + .4; g.spin = rnd(-14, 14); } else { g.vx = rnd(-.08, .08); g.vy = -rnd(.1, .4); g.spin = rnd(-5, 5); } } continue; }          /* (blown: flung off the glass outward, tumbling) */
+      if (g.st === 'out') { g.vy -= 3.2 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.h += g.spin * dt; g.ph += dt * 24; if (Math.abs(g.y) > 1.5 || Math.abs(g.x) > 1.5) GS.splice(i, 1); continue; }
       g.life = (g.life || 40) - dt; if (g.life <= 0) { g.st = 'out'; g.vx = rnd(-.08, .08); g.vy = -rnd(.05, .2); g.spin = rnd(-6, 6); continue; }
       const dx = g.tx - g.x, dy = g.ty - g.y, dd = Math.hypot(dx, dy);
       if (dd > .006) { const v = Math.min(dd, 1.9 * dt); g.x += dx / dd * v; g.y += dy / dd * v; g.h = Math.atan2(dx * hw, -dy * hh); g.ph += dt * 26; }
@@ -208,7 +217,7 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       B.Matrix.ScalingToRef(s, s, s, M); M.multiplyToRef(B.Matrix.RotationY(g.h), M); M.multiplyToRef(B.Matrix.RotationX(Math.PI / 2), M); M.multiplyToRef(B.Matrix.Translation(clamp(g.x + sx, -1.3, 1.3) * hw, clamp(g.y + sy, -1.3, 1.3) * hh, -GZ), M); M.copyToArray(GL.mat, m * 16); GL.ph[m] = g.ph; m++; }
     GL.m.thinInstanceCount = m; GL.m.thinInstanceBufferUpdated('matrix'); GL.m.thinInstanceBufferUpdated('phase'); GL.m.thinInstanceBufferUpdated('lean');
   }
-  const api = { step, S, SLO, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
+  const api = { step, S, SLO, blowHalf, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
     storm: (z) => spawnStorm(z || 120), strikeTest: () => { const c = CL[CL.length - 1]; if (c) strike(c); }, washTest: () => wash({ tint: pick(d.pal.bolts) }) };
   return api;
 }
