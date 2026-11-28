@@ -31,18 +31,26 @@ const curveAt = (C, u) => { for (let i = 1; i < C.length; i++) if (u <= C[i][0])
 const ranks = (vals) => { const idx = vals.map((v, i) => i).sort((a, b) => vals[a] - vals[b]), r = new Array(vals.length); idx.forEach((i, k) => (r[i] = k / Math.max(1, vals.length - 1))); return r; };
 
 /* catalog: data/row_catalog.json; edge(d, j): data/trip_edges.json entry; joinCost: trip_compose.mjs. Returns [{ d: 'long_s11', j }], n long. */
-export function planRoad({ catalog, edge, joinCost, seed, n, world, courses }) {
+/* THE ARC ON THE ROAD (owner 2026-11-27: road and phrases should know about each other). How hard each beat is, and how long it runs, so the road can be
+   picked to fit: rests on gentle ground, peaks on steep ground with ramps. shapeOf(beats) -> [[u, intensity]] over the level. */
+const BEATK = { warm: [.3, 300], speed: [.55, 400], threat: [.6, 400], mix: [.6, 400], breath: [.15, 420], lensbreath: [.15, 420], glide: [.1, 520], pressure: [.9, 600], gearpair: [.5, 440], set: [.7, 450], fork: [.4, 300], key: [.45, 200], finale: [.95, 760], ambush: [.75, 420], gauntlet: [.8, 520], boostline: [.65, 420], crystals: [.35, 460] };
+export function shapeOf(beats) { const L = beats.map((b) => (BEATK[b.k] || [.5, 400])[1]), tot = L.reduce((a, b) => a + b, 0) || 1; let acc = 0; return beats.map((b, i) => { const u = (acc + L[i] / 2) / tot; acc += L[i]; return [u, b.gate || (b.k === 'set' && b.hard) ? .85 : (BEATK[b.k] || [.5])[0]]; }); }
+const shapeAt = (S, u) => { if (!S || !S.length) return null; if (u <= S[0][0]) return S[0][1]; for (let i = 1; i < S.length; i++) if (u <= S[i][0]) { const t = (u - S[i - 1][0]) / Math.max(1e-6, S[i][0] - S[i - 1][0]); return S[i - 1][1] + (S[i][1] - S[i - 1][1]) * t; } return S[S.length - 1][1]; };
+export const WORLD_ORDER = ['desert', 'alpine', 'candy', 'tunnel', 'synthwave', 'matrix', 'egypt', 'psychedelic'];
+/* the same arc the game will play, from the seed alone (set ids come from their own random stream, so the pools do not change the shape) */
+export function planShape(seed, world) { const L = Math.max(1, WORLD_ORDER.indexOf(world)); return shapeOf(planPlay({ seed, lvIdx: L, setTiers: {}, plainSets: ['a'], hardSets: ['b'] }).beats); }
+export function planRoad({ catalog, edge, joinCost, seed, n, world, courses, shape }) {
   const R = rng(seed ^ 0x51ed), P = ROADP[world] || ROADP.alpine, sr = ranks(catalog.map((c) => c.slope)), rich = ranks(catalog.map((c) => c.kick * 3 + c.vx * 2 + c.toys + c.feats * .3));
   let rows = catalog.map((c, k) => Object.assign({}, c, { k, sr: sr[k], rich: rich[k], d: 'long_' + c.d })), used = new Set(), plan = [], per = {}; let prev = null; const memo = new Map();
   /* each level builds from a handful of courses (6), all of one family (courses of one generator setup join cleanly; the first four and the 2026-11-26 bake do not join each other): a level downloads only those courses' meshes; other levels and seeds pick other courses */
   { const fam = (d) => /^long_s1\d\d$/.test(d) ? 'b2' : 'b1', all = [...new Set(rows.map((r) => r.d))], f = fam(all[Math.floor(R() * all.length)]), mine = all.filter((d) => fam(d) === f).sort(() => R() - .5).slice(0, courses || 6), keepSet = new Set(mine); for (let i = rows.length - 1; i >= 0; i--) if (!keepSet.has(rows[i].d)) rows.splice(i, 1); }
   const jc = (a, b) => { const key = a.k * 100000 + b.k; let v = memo.get(key); if (v === undefined) { v = joinCost(edge(a.d, a.j), edge(b.d, b.j)); memo.set(key, v); } return v; };
   for (let v = 0; v < n; v++) {
-    const u = v / Math.max(1, n - 1), want = curveAt(P.curve, u); let pick = null;
+    const u = v / Math.max(1, n - 1), arc = shapeAt(shape, u), want = arc === null ? curveAt(P.curve, u) : curveAt(P.curve, u) * .45 + arc * .55, rampK = arc === null ? 1 : .4 + 1.2 * arc; let pick = null;          /* (the world keeps its own character; the arc decides where the calm and the steep fall) */
     for (const lim of [.35, .6, 1.2, 99]) {
       const cand = [];
       for (const r of rows) { if (used.has(r.k)) continue; if (v === 0 ? r.j !== 0 : (r.j === 0 || r.j >= 61)) continue; if (prev && jc(prev, r) >= lim) continue;
-        const sc = v === 0 ? R() : -Math.abs(r.sr - want) * 3 + P.ramps * r.rich * .6 + (prev && r.d === prev.d && r.j === prev.j + 1 ? .25 : 0) - .06 * (per[r.d] || 0) + R() * .5;          /* (the first section: any course's start; after that, a course used a lot gives way to fresh ones) */          // (a section's own next one joins perfectly: a small pull to keep runs of Godot's own flow)
+        const sc = v === 0 ? R() : -Math.abs(r.sr - want) * 3 + P.ramps * rampK * r.rich * .6 + (prev && r.d === prev.d && r.j === prev.j + 1 ? .25 : 0) - .06 * (per[r.d] || 0) + R() * .5;          /* (the first section: any course's start; after that, a course used a lot gives way to fresh ones) */          // (a section's own next one joins perfectly: a small pull to keep runs of Godot's own flow)
         cand.push([sc, r]); }
       if (cand.length) { cand.sort((a, b) => b[0] - a[0]); pick = cand[Math.floor(R() * Math.min(3, cand.length))][1]; break; }
     }
@@ -72,19 +80,21 @@ export function planPlay({ seed, lvIdx, setTiers, plainSets, hardSets }) {
      A level is an arc of phrases: OPEN, then BUILDs, a CHOICE (the fork and its first gate), RESTs between, a PEAK or two, the RETURN (the second gate)
      and the FINALE. Each phrase has several variants; which ones, how many and in what order come from the seed. Early worlds rest more and get the
      plain set pieces; later worlds build longer and get the harder ones, never brutal (it's meant to be relaxing). The fork, both gates and the finale always come. */
-  const R = rng(seed ^ 0xd1ec), pick = (a) => a[Math.floor(R() * a.length)], usedSets = new Set(), L = Math.max(0, Math.min(7, lvIdx)), hardK = L / 7;
-  const setOf = (pool) => { const free = pool.filter((id) => !usedSets.has(id) && (setTiers[id] ?? 0) <= Math.max(1, L)); const id = free.length ? pick(free) : pick(pool); usedSets.add(id); return { k: 'set', id }; };
-  const keys = KEYABLE.filter((n) => (GATETIER[n] || 0) <= Math.max(1, L)), shuffled = keys.slice().sort(() => R() - .5);
+  const R = rng(seed ^ 0xd1ec), RS = rng(seed ^ 0x5e75), pick = (a) => a[Math.floor(R() * a.length)], pickS = (a) => a[Math.floor(RS() * a.length)], usedSets = new Set(), L = Math.max(0, Math.min(7, lvIdx)), hardK = L / 7;
+  const setOf = (pool) => { const free = pool.filter((id) => !usedSets.has(id) && (setTiers[id] ?? 0) <= Math.max(1, L)); const id = free.length ? pickS(free) : pickS(pool); usedSets.add(id); return { k: 'set', id, hard: pool === hardSets }; };
+  const keys = KEYABLE.filter((n) => (GATETIER[n] || 0) <= Math.max(1, L)), shuffled = keys.slice().sort(() => RS() - .5);
   const [ka, kb] = shuffled.length >= 2 ? shuffled : ['SPEED', 'WINGS'];
-  const late = Object.keys(GATESET).filter((n) => n !== ka && n !== kb && (GATETIER[n] || 0) <= Math.max(1, L)); const kc = L >= 1 && late.length ? pick(late) : null;
+  const late = Object.keys(GATESET).filter((n) => n !== ka && n !== kb && (GATETIER[n] || 0) <= Math.max(1, L)); const kc = L >= 1 && late.length ? pickS(late) : null;
   const plainOrHard = () => setOf(R() < .25 + .5 * hardK ? hardSets : plainSets);
+  /* (owner 2026-11-27: more variety) new phrases from what the game already has: an AMBUSH (machines on a straight), a GAUNTLET (hazards side to side, no exits),
+     a BOOSTLINE (a chain of boost pads), CRYSTALS (an arc of crystals to weave through), a GLIDE (nothing but a long, gentle, scenic stretch). */
   const PH = {
-    open: [() => [{ k: 'warm' }, setOf(plainSets)], () => [{ k: 'warm' }, { k: 'speed' }], () => [{ k: 'warm' }, { k: 'breath' }, setOf(plainSets)]],
-    build: [() => [{ k: 'speed' }, plainOrHard()], () => [{ k: 'threat' }, { k: 'mix' }], () => [{ k: 'mix' }, plainOrHard()], () => [plainOrHard(), { k: 'threat' }], () => [{ k: 'speed' }, { k: 'threat' }, plainOrHard()]],
-    rest: [() => [{ k: 'breath' }], () => [{ k: 'lensbreath' }], () => [{ k: 'breath' }, { k: 'lensbreath' }]],
-    peak: [() => [{ k: 'pressure' }, setOf(hardSets)], () => [setOf(hardSets), { k: 'gearpair' }], () => [{ k: 'pressure' }, { k: 'gearpair' }], () => [setOf(L >= 2 ? hardSets.concat(['remix']) : hardSets)]],
+    open: [() => [{ k: 'warm' }, setOf(plainSets)], () => [{ k: 'warm' }, { k: 'speed' }], () => [{ k: 'warm' }, { k: 'breath' }, setOf(plainSets)], () => [{ k: 'warm' }, { k: 'crystals' }], () => [{ k: 'glide' }, { k: 'boostline' }]],
+    build: [() => [{ k: 'speed' }, plainOrHard()], () => [{ k: 'threat' }, { k: 'mix' }], () => [{ k: 'mix' }, plainOrHard()], () => [plainOrHard(), { k: 'threat' }], () => [{ k: 'speed' }, { k: 'threat' }, plainOrHard()], () => [{ k: 'boostline' }, { k: 'ambush' }], () => [{ k: 'crystals' }, plainOrHard()], () => [{ k: 'ambush' }, { k: 'mix' }], () => [plainOrHard(), { k: 'boostline' }]],
+    rest: [() => [{ k: 'breath' }], () => [{ k: 'lensbreath' }], () => [{ k: 'breath' }, { k: 'lensbreath' }], () => [{ k: 'glide' }], () => [{ k: 'crystals' }]],
+    peak: [() => [{ k: 'pressure' }, setOf(hardSets)], () => [setOf(hardSets), { k: 'gearpair' }], () => [{ k: 'pressure' }, { k: 'gearpair' }], () => [setOf(L >= 2 ? hardSets.concat(['remix']) : hardSets)], () => [{ k: 'gauntlet' }, setOf(hardSets)], () => [{ k: 'ambush' }, { k: 'gauntlet' }], () => [{ k: 'boostline' }, setOf(hardSets), { k: 'ambush' }]],
   };
-  const take = (name) => pick(PH[name])();
+  const lastV = {}; const take = (name) => { const A = PH[name]; let i = Math.floor(R() * A.length); if (i === lastV[name] && A.length > 1) i = (i + 1 + Math.floor(R() * (A.length - 1))) % A.length; lastV[name] = i; return A[i](); };          /* (never the same variant of a phrase twice in a row) */
   const S = [];
   S.push(...take('open'));
   const builds1 = 1 + (L >= 3 ? 1 : 0) + (R() < .3 ? 1 : 0); for (let i = 0; i < builds1; i++) { S.push(...take('build')); if (L <= 2 || R() < .45) S.push(...take('rest')); }
@@ -96,7 +106,8 @@ export function planPlay({ seed, lvIdx, setTiers, plainSets, hardSets }) {
   const first = S.find((b) => b.gate).id, second = GATESET[first === GATESET[ka] ? kb : ka]; S.push({ k: 'set', id: second, gate: true });   // the return: the key you left behind
   if (kc) { if (KEYABLE.includes(kc) && R() < .7) S.push({ k: 'key', need: kc, side: R() < .5 ? -1 : 1 }); S.push(...take('build')); S.push({ k: 'set', id: GATESET[kc], gate: true }); }
   S.push(...take('rest'));
-  S.push(...take('peak'));
+  const end = R(); if (end < .3) { S.push(...take('peak')); S.push(...take('rest')); S.push(...take('peak')); } else if (end < .5) { S.push(...take('rest')); S.push(...take('peak')); } else S.push(...take('peak'));          /* (the ending varies: sometimes two peaks, sometimes a long calm before the last climb) */
   S.push({ k: 'finale' });
+  for (let i = S.length - 1; i > 0; i--) if (S[i].k !== 'set' && S[i].k === S[i - 1].k) S.splice(i, 1);          /* (no moment twice back to back) */
   return { beats: S, keys: [ka, kb], late: kc };
 }
