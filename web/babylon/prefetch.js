@@ -11,7 +11,7 @@
   let busy = null;
   async function files(world) {
     if (world === 'story') { const out = ['long_s7/meta.json', 'long_s7/physics.json']; for (let j = 0; j < NROWS_STORY; j++) out.push('long_s7/row_' + pad2(j) + '.json'); return out; }
-    const M = await import('./director.js?v=20261127d'); const [catalog, EDG] = await Promise.all([json('row_catalog.json'), json('trip_edges.json')]); if (!catalog || !EDG) return [];
+    const M = await import('./director.js?v=20261128a'); const [catalog, EDG] = await Promise.all([json('row_catalog.json'), json('trip_edges.json')]); if (!catalog || !EDG) return [];
     const { joinCost } = await import('../downhill-three/trip_compose.mjs');
     const seed = M.seedOf(world + ':' + ('d' + new Date().toISOString().slice(0, 10))), plan = M.planRoad({ catalog, edge: (d, j) => EDG[d][j], joinCost, seed, n: NROWS_COMPOSE, world, shape: M.planShape(seed, world, NROWS_COMPOSE * 180) });
     const out = ['bank/shared.json']; for (const d of new Set(plan.map((p) => p.d))) out.push('bank/shared_' + d + '.json');

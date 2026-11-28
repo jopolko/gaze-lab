@@ -84,8 +84,8 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
   function spawnWave() { const grp = { zaps: 0 }, ahead = Math.random() < .6; for (let k = 0; k < waveN && RS.length < ROAD.max; k++) { const side = Math.random() < .5 ? -1 : 1, rz = ahead ? -rnd(30, 70) : rnd(25, 50);
       RS.push({ x: PH.x + side * rnd(4, 9), z: PH.z + rz, rz, side, wide: rnd(1.5, 4.5), catch: rnd(6, 10) + tier * .6, ph: rnd(0, 6.28), s: rnd(1.2, 1.8), h: 0, wob: rnd(0, 6.28), grp, tumble: 0, back: 0 }); } }          /* (they run with you and gain a little each second) */
   function attach(cam) { if (GS.length >= GL.max) return; const [hw, hh] = half(cam), fill = GS.length / GL.max, near = GS.length && Math.random() < .7 ? GS[Math.floor(Math.random() * GS.length)] : null;
-    const a = near ? Math.atan2(near.ty / hh, near.tx / hw) + rnd(-.25, .25) : rnd(0, 6.28), r = clamp(1.02 - .95 * Math.pow(fill, .9) + rnd(-.05, .12), .05, 1.08);
-    const tx = Math.cos(a) * r, ty = Math.sin(a) * r; GS.push({ x: Math.cos(a) * 1.25, y: Math.sin(a) * 1.25, tx, ty, ph: rnd(0, 6.28), s: rnd(.13, .2), h: 0, st: 'in', vx: 0, vy: 0, spin: 0, idle: rnd(1, 4) }); S.attached++; }
+    const a = near ? Math.atan2(near.ty / hh, near.tx / hw) + rnd(-.25, .25) : rnd(0, 6.28), r = clamp(1.05 - .42 * Math.pow(fill, 1.3) + rnd(-.04, .06), .62, 1.08);          /* (owner 2026-11-28: they gather round the very edge of the view and crowd in slowly; the middle stays clear) */
+    const tx = Math.cos(a) * r, ty = Math.sin(a) * r; GS.push({ x: Math.cos(a) * 1.25, y: Math.sin(a) * 1.25, tx, ty, ph: rnd(0, 6.28), s: rnd(.13, .2), h: 0, st: 'in', vx: 0, vy: 0, spin: 0, idle: rnd(1, 4), life: rnd(30, 55) }); S.attached++; }          /* (each one dies off after half a minute or so and falls away; what they do later is still to be designed) */
 
   // ---------------------------------------------------------------- the storm cloud
   const cloudMat = (tint) => { const m = new B.StandardMaterial('skitCloudM', scene); m.diffuseColor = new B.Color3(.2, .22, .3); m.emissiveColor = new B.Color3(.12 + tint[0] * .18, .13 + tint[1] * .18, .2 + tint[2] * .2); m.specularColor = B.Color3.Black();
@@ -162,7 +162,9 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       if (s.tumble > 0) { s.tumble -= dt; s.rz += s.back * dt; s.z = PH.z + s.rz; s.back *= Math.exp(-2 * dt); s.x += s.side * 4 * dt; s.h += dt * 14; s.ph += dt * 40; if (s.pop && s.tumble < .3) { RS.splice(i, 1); continue; } continue; }
       const giveUp = s.grp.zaps >= 2, vz = giveUp ? -spd * .55 : -(spd + s.catch * (rel > 0 ? 1 : -.9)), off = giveUp ? s.side * 18 : s.side * s.wide * clamp(Math.abs(rel) / 10, .15, 1);
       const tx = (PH.x + off + Math.sin(t * 3 + s.wob) * .8) - s.x, vx = clamp(tx * 2.2, -9, 9); s.x += vx * dt; s.rz += (giveUp ? spd * .45 : (rel > 0 ? -s.catch : s.catch * .9)) * dt; s.z = PH.z + s.rz; s.h = Math.atan2(vx, vz);          /* (moved relative to the car: they close in at the same rate at any frame rate) */ s.ph += (20 + s.catch) * dt;          /* (a readable scurry, not a blur, whatever the speed) */
-      if (live && !giveUp && Math.abs(rel) < 1.8 && Math.abs(dx) < 2.4 && Math.abs(ground(s.x, s.z) - PH.y) < 3.5) { RS.splice(i, 1); attach(cam); continue; }
+      if (live && !giveUp && Math.abs(rel) < 1.8 && Math.abs(dx) < 2.4 && Math.abs(ground(s.x, s.z) - PH.y) < 3.5) {          /* (owner 2026-11-28: one in front of the car is smashed out of the way; from the side or behind it climbs on) */
+        if (rel <= .4 && Math.abs(dx) < 1.5) { s.tumble = .7; s.pop = true; s.back = -(spd * .9 + 10); s.side = (Math.sign(s.x - PH.x) || 1) * 3.5; S.smashed = (S.smashed || 0) + 1; try { d.onSmash && d.onSmash([s.x, ground(s.x, s.z) + .4, s.z]); } catch (e) { } continue; }
+        RS.splice(i, 1); attach(cam); continue; }
       if (rel > 120 || rel < -220 || (giveUp && Math.abs(s.x - PH.x) > 16)) { RS.splice(i, 1); continue; } }
     for (const s of RS) { SC.set(s.s, s.s, s.s); B.Quaternion.RotationYawPitchRollToRef(s.h, s.tumble > 0 ? s.h * 1.7 : 0, s.tumble > 0 ? s.h : 0, Q); TR.set(s.x, ground(s.x, s.z), s.z); B.Matrix.ComposeToRef(SC, Q, TR, M); M.copyToArray(ROAD.mat, n * 16); ROAD.ph[n] = s.ph; n++; }
     ROAD.m.thinInstanceCount = n; ROAD.m.thinInstanceBufferUpdated('matrix'); ROAD.m.thinInstanceBufferUpdated('phase');
@@ -193,9 +195,10 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
     for (let i = GS.length - 1; i >= 0; i--) { const g = GS[i];
       if (g.st === 'wait') { g.delay -= dt; g.ph += dt * 30; if (g.delay <= 0) { g.st = 'out'; g.vx = rnd(-.08, .08); g.vy = -rnd(.1, .4); g.spin = rnd(-5, 5); } continue; }
       if (g.st === 'out') { g.vy -= 3.2 * dt; g.x += g.vx * dt; g.y += g.vy * dt; g.h += g.spin * dt; g.ph += dt * 24; if (g.y < -1.5 || Math.abs(g.x) > 1.5) GS.splice(i, 1); continue; }
+      g.life = (g.life || 40) - dt; if (g.life <= 0) { g.st = 'out'; g.vx = rnd(-.08, .08); g.vy = -rnd(.05, .2); g.spin = rnd(-6, 6); continue; }
       const dx = g.tx - g.x, dy = g.ty - g.y, dd = Math.hypot(dx, dy);
       if (dd > .006) { const v = Math.min(dd, 1.9 * dt); g.x += dx / dd * v; g.y += dy / dd * v; g.h = Math.atan2(dx * hw, -dy * hh); g.ph += dt * 26; }
-      else { g.idle -= dt; g.ph += dt * 3; if (g.idle < 0) { g.idle = rnd(1.5, 5); g.tx = clamp(g.tx + rnd(-.05, .05), -1.1, 1.1); g.ty = clamp(g.ty + rnd(-.05, .05), -1.1, 1.1); } } }
+      else { g.idle -= dt; g.ph += dt * 3; if (g.idle < 0) { g.idle = rnd(1.5, 5); g.tx = clamp(g.tx + rnd(-.05, .05), -1.1, 1.1); g.ty = clamp(g.ty + rnd(-.05, .05), -1.1, 1.1); const rr = Math.hypot(g.tx, g.ty), rmin = 1.05 - .42 * Math.pow(GS.length / GL.max, 1.3); if (rr < rmin && rr > 1e-3) { g.tx *= rmin / rr; g.ty *= rmin / rr; } } } }          /* (a wandering spider stays in the edge band) */
         for (const g of GS) { if (g.grip == null) g.grip = rnd(.6, 1.3); const s = g.s * hh, out = g.st === 'out';
       const wx = out ? 0 : SLO.x * hw * g.grip, wy = out ? 0 : SLO.y * hh * g.grip, ch = Math.cos(g.h), sh = Math.sin(g.h);          /* (the pull on this spider, in glass units) */
       let lx = (wx * ch + wy * sh) / s, lz = (wx * sh - wy * ch) / s; const ll = Math.hypot(lx, lz), cap = .42, k = ll > cap ? cap / ll : 1; lx *= k; lz *= k;          /* (its body leans up to a body-length; past that the feet let go) */

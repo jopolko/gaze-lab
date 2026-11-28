@@ -60,11 +60,11 @@ export function planRoad({ catalog, edge, joinCost, seed, n, world, courses, sha
 }
 
 /* the straightest, gentlest 460 m near the middle of the road: [z0, z1] (z0 > z1), or null. trailX(z) and pitch slope come from the composed road. */
-export function findTunnel({ trailX, slopeAt, end, len = 460 }) {
+export function findTunnel({ trailX, slopeAt, end, len = 460, avoid = [] }) {          /* avoid: [[zTop, zBottom], ...] stretches the tunnel must not cover (the ramps: a jump cannot happen inside it) */
   let best = null; const L = -end;
   for (let s = L * .38; s <= L * .66; s += 30) { let curv = 0, prevD = null, sl = 0;
     for (let k = 0; k <= len; k += 20) { const z = -(s + k), d = trailX(z - 10) - trailX(z + 10); if (prevD !== null) curv += Math.abs(d - prevD); prevD = d; sl += Math.abs(slopeAt(z)); }
-    const sc = curv * 3 + sl * .5; if (!best || sc < best.sc) best = { sc, z0: -s, z1: -(s + len) }; }
+    const z0 = -s + 60, z1 = -(s + len) - 30, hit = avoid.some(([a, b]) => a > z1 && b < z0); const sc = curv * 3 + sl * .5 + (hit ? 1e6 : 0); if (!best || sc < best.sc) best = { sc, z0: -s, z1: -(s + len) }; }          /* (owner 2026-11-28: a stretch with a ramp in it, or just before it, is never chosen while another is free) */
   return best ? [best.z0, best.z1] : null;
 }
 
