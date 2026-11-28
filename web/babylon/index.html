@@ -67,7 +67,7 @@ import { createGvMusic } from '../downhill-three/gvmusic.js';
 import { startLoop, preloadLoop } from '../downhill-three/looper.js?v=20261126b';
 import { MOLS, MOL_ORDER } from '../downhill-three/molecules.js';
 import { PANTRY } from './molpantry.js';
-import { createIntro } from './intro.js?v=20261127f';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
+import { createIntro } from './intro.js?v=20261128a';          /* (bump on every intro deploy: a hard refresh of the shell does not refetch modules) */
 import { createSets } from './chains.js?v=20261127c';
 import { createSpiders } from './spiders.js?v=20261128f';
 import { createMonSfx } from './monsfx.js?v=20261128b';
@@ -3994,7 +3994,7 @@ const GROT = ['rocket', 'pole', 'shield', 'bull'], gw = (k) => GROT[(k + Math.ma
     const mWall = solidMat([.16, .15, .2], 'dnrW'), mTrim = solidMat([2.2, 1.5, .35], 'dnrT'), mRoof = solidMat([.1, .1, .13], 'dnrR'), mCan = solidMat([1.6, 1.6, 1.5], 'dnrC'), mPump = solidMat([.25, .9, 1.1], 'dnrP'); DINER.win = solidMat([1.4, 1, .55], 'dnrWin');
     box(9, 4.2, 22, 4.5, 2.1, 0, mWall); box(9.4, .5, 22.4, 4.5, 4.45, 0, mRoof); box(.15, .25, 22.2, -.05, 4.2, 0, mTrim); box(.15, .25, 22.2, -.05, .3, 0, mTrim);          /* (the road is on the -x side: x 0 is the front wall) */
     for (let i = 0; i < 4; i++) box(.1, 1.9, 3.6, -.06, 2.1, -7.5 + i * 5, DINER.win);
-    const sg = B.MeshBuilder.CreatePlane('dnrSign', { width: 12, height: 5 }, scene), st = neonTex([['DINER', 150, '#38e8ff', 150], ['OPEN 24 HRS \u00B7 GAS', 46, '#ffb14a', 222]], 600, 250), sm = new B.StandardMaterial('dnrSignM', scene); sm.diffuseTexture = st; sm.emissiveTexture = st; sm.disableLighting = true; sm.backFaceCulling = false; sg.material = sm; sg.parent = root; sg.position.set(1, 7.4, 0); sg.rotation.y = 2.4; sg.isPickable = false;
+    const sg = B.MeshBuilder.CreatePlane('dnrSign', { width: 12, height: 5 }, scene), st = neonTex([['DINER', 150, '#38e8ff', 150], ['OPEN 24 HRS \u00B7 GAS', 46, '#ffb14a', 222]], 600, 250), sm = new B.StandardMaterial('dnrSignM', scene); sm.diffuseTexture = st; sm.emissiveTexture = st; sm.disableLighting = true; sm.backFaceCulling = false; sg.material = sm; sg.parent = root; sg.position.set(1, 7.4, 0); sg.rotation.y = 2.4 - Math.PI; sg.isPickable = false;          /* (owner 2026-11-28: the road saw the back of the sign, mirrored; turned to face the road) */
     box(7, .35, 12, -6, 5, 0, mRoof); box(7.05, .12, 12.05, -6, 4.8, 0, mCan); for (const zz of [-4, 4]) { box(.4, 4.6, .4, -6, 2.5, zz, mRoof); box(.8, 1.6, .5, -6, .8, zz + 1.2, mPump); }
     DINER.root = stThing(root, ZD, 22, 0, 'diner');
     const car = new B.TransformNode('dexCar', scene), part = (mesh, m, x, y, z) => { mesh.material = m; mesh.parent = car; mesh.position.set(x, y, z); mesh.isPickable = false; return mesh; }; DINER.haz = solidMat([2.4, 1.2, .2], 'dexH');
