@@ -446,7 +446,7 @@ export function createIntro(d) {
         + '@media (orientation:portrait){#irMenu .g{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-height:460px){#irMenu{padding:5px 8px 7px}#irMenu h4{margin-bottom:4px}#irMenu .it{padding:3px 5px}}';
       document.head.appendChild(css); const m = document.createElement('div'); m.id = 'irMenu';
       const hex = (c) => '#' + c.map((v) => Math.round(Math.min(1, v * 1.15) * 255).toString(16).padStart(2, '0')).join('');
-      m.innerHTML = '<h4>THE SWEETS<small>Drive into a column of light to take one.</small></h4><div class="g">' + Object.keys(PANTRY).map((cp) => { const P = PANTRY[cp], d0 = String(P.does || '').split(';')[0].trim();
+      m.innerHTML = '<h4>TREATS<small>Drive into a column of light to take one.</small></h4><div class="g">' + Object.keys(PANTRY).map((cp) => { const P = PANTRY[cp], d0 = String(P.does || '').split(';')[0].trim();
         return '<div class="it"><img alt="" src="art/plants/' + String(P.plant).replace(/ /g, '-') + '-1.webp?v=2"><div class="tx"><b style="color:' + hex(P.c) + '">' + P.eff + '</b><em>' + P.plant + '</em><span>' + d0.charAt(0).toUpperCase() + d0.slice(1) + '</span></div></div>'; }).join('') + '</div>';
       document.body.appendChild(m); IR.menu = m; }
     IR.menu.classList.toggle('on', on); } catch (e) { } }
