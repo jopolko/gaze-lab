@@ -18,9 +18,10 @@ export function createBeasts(d) {
     synthwave: { a: [.69, .48, 1], b: [.22, .91, 1], shell: [.12, .1, .22] }, matrix: { a: [.49, 1, .54], b: [.78, 1, .82], shell: [.03, .12, .06] },
     egypt: { a: [1, .82, .23], b: [.29, .66, 1], shell: [.18, .14, .05] }, psychedelic: { a: [.49, 1, .54], b: [1, .69, .13], shell: [.1, .05, .18] } };
   const P = PAL[d.world] || PAL.desert, MATS = {};
-  const shellM = (k, col) => { const key = 'sh' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene), c = col || P.shell; m.disableLighting = true;          /* (owner 2026-11-27: the scene has no lights, so lit materials came out as black silhouettes; the shells glow from within, with a neon rim in the world's colours) */
+  const fam = (c, f, k) => c ? [c[0] * (1 - k) + f[0] * k, c[1] * (1 - k) + f[1] * k, c[2] * (1 - k) + f[2] * k] : f;          /* (owner 2026-11-28: each world's creatures are one family: their colours lean to the world's palette, keeping a hint of their own) */
+  const shellM = (k, col) => { const key = 'sh' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene), c = fam(col, P.shell, .6); m.disableLighting = true;          /* (owner 2026-11-27: the scene has no lights, so lit materials came out as black silhouettes; the shells glow from within, with a neon rim in the world's colours) */
     const f = new B.FresnelParameters(); f.leftColor = new B.Color3(Math.min(1, P.a[0] * 1.1 + .15), Math.min(1, P.a[1] * 1.1 + .15), Math.min(1, P.a[2] * 1.1 + .15)); f.rightColor = new B.Color3(c[0] * 2.4 + .1, c[1] * 2.4 + .1, c[2] * 2.4 + .14); f.power = 1.6; f.bias = .08; m.emissiveFresnelParameters = f; m.emissiveColor = new B.Color3(1, 1, 1); return MATS[key] = m; };
-  const glowM = (k, col, a) => { const key = 'gl' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene); m.emissiveColor = C3(col); m.disableLighting = true; if (a != null) m.alpha = a; return MATS[key] = m; };
+  const glowM = (k, col, a) => { const key = 'gl' + k; if (MATS[key]) return MATS[key]; const m = new B.StandardMaterial('bst_' + key, scene); m.emissiveColor = C3(fam(col, P.a, .45)); m.disableLighting = true; if (a != null) m.alpha = a; return MATS[key] = m; };
   const own = (k, col) => { const m = new B.StandardMaterial('bst_own' + k, scene); m.emissiveColor = C3(col); m.disableLighting = true; return m; };          /* (a beast's own glow: it can flash and fade alone) */
 
   // ---------------------------------------------------------------- modelling: primitive parts under one root
@@ -159,7 +160,30 @@ export function createBeasts(d) {
   const BQ = [];          /* the build queue: big groups are made a few per frame */
   function make(spec, x, z, extra) { const R = new B.TransformNode('beast', scene), g = BUILD[spec.model](R, spec.v); const sc = (g.scale || 1) * (spec.boss ? 1 : 1) * (extra && extra.scale || 1); R.scaling.setAll(sc);
     const b = Object.assign({ id: ++uid, spec, R, g, x, z, y: ground(x, z), u: 0, vz: 0, vx: 0, hp: spec.hp + (spec.boss ? Math.floor(T / 3) : 0), t: 0, state: 'go', cool: rnd(1, 3), blind: 0, hitT: 0, ph: rnd(0, 6.28), sc, r: g.r * sc, h: g.h * sc, len: g.len * sc }, extra || {});
+    try { livery(b); } catch (e) { }
     b.max = b.hp; LIVE.push(b); LOG.seen[spec.name] = (LOG.seen[spec.name] || 0) + 1; return b; }
+  /* LIVERY (owner 2026-11-28: "fitting colour schemes and markings for all enemies; small ones resemble the boss, the boss clearly marked as boss"): every creature
+     wears its world's family mark on its back (Route Zero amber hazard chevrons, the Alps an ice seam cross, Candy cane stripes, the Tunnel caution bars, Synthwave a
+     neon grid, the Matrix glyphs, Egypt the Eye, the Trip a black widow's red hourglass). A boss wears the same mark, bigger, under a spinning gold crown, with a
+     red and white boss collar and two blinking beacons. */
+  const MARKS = {};
+  function markTex(world) { if (MARKS[world]) return MARKS[world]; const dt = new B.DynamicTexture('mark_' + world, { width: 128, height: 128 }, scene, true), x = dt.getContext(), A = 'rgb(' + P.a.map((v) => Math.round(v * 255)).join(',') + ')', Bc = 'rgb(' + P.b.map((v) => Math.round(v * 255)).join(',') + ')'; x.clearRect(0, 0, 128, 128); x.lineCap = 'round';
+    if (world === 'desert') { for (let k = 0; k < 4; k++) { x.fillStyle = k % 2 ? '#111' : '#ffb020'; x.beginPath(); x.moveTo(8 + k * 28, 20); x.lineTo(36 + k * 28, 64); x.lineTo(8 + k * 28, 108); x.lineTo(22 + k * 28, 108); x.lineTo(50 + k * 28, 64); x.lineTo(22 + k * 28, 20); x.fill(); } }
+    else if (world === 'alpine') { x.strokeStyle = '#bfeaff'; x.lineWidth = 12; x.beginPath(); x.moveTo(64, 10); x.lineTo(64, 118); x.moveTo(10, 64); x.lineTo(118, 64); x.stroke(); x.strokeStyle = Bc; x.lineWidth = 5; x.beginPath(); x.moveTo(26, 26); x.lineTo(102, 102); x.moveTo(102, 26); x.lineTo(26, 102); x.stroke(); }
+    else if (world === 'candy') { for (let k = -4; k < 6; k++) { x.strokeStyle = k % 2 ? '#fff' : '#ff3a78'; x.lineWidth = 12; x.beginPath(); x.moveTo(k * 24, 128); x.lineTo(k * 24 + 128, 0); x.stroke(); } }
+    else if (world === 'tunnel') { for (let k = 0; k < 5; k++) { x.fillStyle = k % 2 ? '#111' : '#ff8a1a'; x.fillRect(4 + k * 24, 30, 22, 68); } }
+    else if (world === 'synthwave') { x.strokeStyle = A; x.lineWidth = 4; for (let k = 0; k <= 4; k++) { x.beginPath(); x.moveTo(8 + k * 28, 8); x.lineTo(8 + k * 28, 120); x.moveTo(8, 8 + k * 28); x.lineTo(120, 8 + k * 28); x.stroke(); } x.strokeStyle = Bc; x.lineWidth = 6; x.strokeRect(8, 8, 112, 112); }
+    else if (world === 'matrix') { x.fillStyle = '#7dff8a'; x.font = 'bold 30px monospace'; const G = 'アイウ01ﾊﾐﾋｰ<>'; for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) x.fillText(G[(r * 4 + c * 3) % G.length], 6 + c * 30, 30 + r * 30); }
+    else if (world === 'egypt') { x.strokeStyle = '#ffd23a'; x.lineWidth = 7; x.beginPath(); x.ellipse(64, 60, 50, 26, 0, 0, 7); x.stroke(); x.fillStyle = '#2a6aff'; x.beginPath(); x.arc(64, 60, 17, 0, 7); x.fill(); x.beginPath(); x.moveTo(54, 86); x.quadraticCurveTo(50, 116, 30, 118); x.stroke(); }
+    else { x.fillStyle = '#ff1a2e'; x.beginPath(); x.moveTo(34, 14); x.lineTo(94, 14); x.lineTo(64, 62); x.closePath(); x.fill(); x.beginPath(); x.moveTo(34, 114); x.lineTo(94, 114); x.lineTo(64, 66); x.closePath(); x.fill(); }          /* (the Trip: the black widow's hourglass) */
+    dt.hasAlpha = true; dt.update(); const m = new B.StandardMaterial('markM_' + world, scene); m.disableLighting = true; m.emissiveTexture = dt; m.opacityTexture = dt; m.backFaceCulling = false; m.fogEnabled = false; return MARKS[world] = m; }
+  function livery(b) { const g = b.g, sp = b.spec, sz = Math.max(.7, (g.len || 2) * .55) * (sp.boss ? 1.4 : 1), d0 = B.MeshBuilder.CreatePlane('mark', { size: sz }, scene); d0.material = markTex(d.world); d0.parent = b.R; d0.position.set(0, (g.h || 1) * (sp.boss ? .98 : 1.02) + .05, (g.len || 2) * .1); d0.rotation.x = Math.PI / 2; d0.isPickable = false;
+    if (!sp.boss) return; const gold = glowM('crown', [1, .82, .23]), red = own('boss' + b.id, [1, .1, .14]), Rr = Math.max(1.5, g.r || 2), H = g.h || 4;
+    const crown = B.MeshBuilder.CreateTorus('crown', { diameter: Rr * 1.9, thickness: Rr * .12, tessellation: 40 }, scene); crown.material = gold; crown.parent = b.R; crown.position.y = H * 1.18 + 1; crown.isPickable = false;
+    for (let k = 0; k < 6; k++) { const sp2 = B.MeshBuilder.CreateCylinder('crownSpike', { height: Rr * .5, diameterTop: 0, diameterBottom: Rr * .22, tessellation: 6 }, scene); sp2.material = gold; sp2.parent = crown; const a = k / 6 * Math.PI * 2; sp2.position.set(Math.cos(a) * Rr * .95, Rr * .25, Math.sin(a) * Rr * .95); sp2.isPickable = false; }
+    const collar = B.MeshBuilder.CreateTorus('collar', { diameter: Rr * 2.2, thickness: Rr * .16, tessellation: 24 }, scene); collar.material = red; collar.parent = b.R; collar.position.y = H * .55; collar.isPickable = false;
+    const bc = []; for (const s of [-1, 1]) { const bk = B.MeshBuilder.CreateSphere('beacon', { diameter: Rr * .35, segments: 10 }, scene); bk.material = red; bk.parent = b.R; bk.position.set(s * Rr * .9, H * 1.05, 0); bk.isPickable = false; bc.push(bk); }
+    g.crown = crown; g.bossRed = red; }
   /* THE BOOMS (owner 2026-11-27): every species has its own deep harmonic boom: a root note from its name, its own blend of partials, a soft thump under it;
      each one a little different (detune, partial mix, length). Bosses an octave down. Kept soft. */
   const ROOTS = [55, 61.74, 65.41, 73.42, 82.41, 87.31, 98, 110];
@@ -353,6 +377,7 @@ export function createBeasts(d) {
         k.m.dispose(); if (k.ring) k.ring.dispose(); ROCKETS.splice(i, 1); } }
     for (let i = LIVE.length - 1; i >= 0; i--) { const b = LIVE[i]; b.t += dt; b.hitT = Math.max(0, b.hitT - dt); b.blind = Math.max(0, b.blind - dt);
       if (b.dead) { b.fall += dt; if (b.fly) { const f = b.fly; f.vy -= 30 * dt; b.x += f.vx * dt; b.z += f.vz * dt; f.y += f.vy * dt; b.R.position.set(b.x, b.y + f.y, b.z); b.R.rotation.x += dt * 14; b.R.rotation.z += dt * 11; }          /* (smashed: it tumbles up and away) */ b.R.scaling.setAll(b.sc * Math.max(0, 1 - b.fall * (b.fly ? 1.4 : 2.2))); b.R.rotation.y += dt * 9; if (b.fall > .5) { b.R.dispose(false, true); if (b.ridge) b.ridge.dispose(); if (b.grid) b.grid.dispose(false, true); if (b.spec.regen && !b.minion && !b.respawned && mastNear(b)) { const n = make(b.spec, b.x, b.z - 4); n.mode = 'swarm'; n.sp = 8; n.respawned = true; } LIVE.splice(i, 1); } continue; }
+      if (b.g.crown) { b.g.crown.rotation.y += dt * 1.4; const on = Math.sin(b.t * 7) > 0; b.g.bossRed.emissiveColor.set(on ? 1 : .35, on ? .1 : .03, on ? .14 : .05); }
       behave(b, dt); voices(b, dt); if (b.gone) { b.R.dispose(false, true); if (b.ridge) b.ridge.dispose(); if (b.grid) b.grid.dispose(false, true); LIVE.splice(i, 1); continue; }
       if (b.mode !== 'swarm' || !b.latched) b.y = ground(b.x, b.z);
       const yo = (b.mode === 'drop' || b.mode === 'fly') ? (b.yOff || 0) : b.mode === 'sysadmin' ? -10 * b.sc * (b.crouch || 0) : b.mode === 'sphinx' ? -12 * b.sc * (b.bow || 0) : (b.g.hover ? 1.2 + Math.sin(b.t * 2 + b.ph) * .4 : 0), up = b.mode === 'ridge' ? -b.h * (1 - (b.up || 0)) : 0;
