@@ -351,5 +351,5 @@ document.getElementById('toTop').addEventListener('click', (e) => { e.preventDef
   document.getElementById('tgClose').addEventListener('click', (e) => { e.preventDefault(); if (inFrame) { try { window.parent.postMessage({ tg: 'close' }, '*'); } catch (er) { } return; } if (back && /^[\w.\-\/?=&%]+$/.test(back)) { location.href = back; return; } try { if (document.referrer && new URL(document.referrer).origin === location.origin) { history.back(); return; } } catch (er) { } location.href = 'splash.html'; });
   if (inFrame) for (const a of document.querySelectorAll('a.drive, .bar a.go, .mast a')) a.target = '_top'; }
 </script>
-<script src="chrome.js"></script>
+<script src="chrome.js?v=20261127n"></script>
 </body></html>

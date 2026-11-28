@@ -6,7 +6,7 @@
 (() => {
   if (window.__AGCHROME) return; window.__AGCHROME = 1;
   const css = document.createElement('style');
-  css.textContent = '.aglk,#lkBtn,#pzb{position:fixed!important;top:max(10px,var(--sa-top, env(safe-area-inset-top,0px)))!important;right:max(10px,var(--sa-right, env(safe-area-inset-right,0px)))!important;left:auto!important;bottom:auto!important;margin:0!important;width:44px!important;height:44px!important;z-index:130!important;display:grid!important;place-items:center!important;padding:0!important;cursor:pointer}';
+  css.textContent = '.aglk,#lkBtn,#pzb{position:fixed!important;top:max(10px,var(--sa-top, env(safe-area-inset-top,0px)))!important;right:max(10px,var(--sa-right, env(safe-area-inset-right,0px)))!important;left:auto!important;bottom:auto!important;margin:0!important;width:44px!important;height:44px!important;z-index:950!important;display:grid!important;place-items:center!important;padding:0!important;cursor:pointer}';
   (document.head || document.documentElement).appendChild(css);
   /* 4. BACK (owner 2026-11-27): every Back/Close returns you to where you came from: the ?back= page, else the page before this one, else the fallback */
   window.__goBack = (fallback) => { const b = new URLSearchParams(location.search).get('back'); if (b && /^[\w.\-\/?=&%]+$/.test(b)) { location.href = b; return; }

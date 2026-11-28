@@ -39,4 +39,4 @@ const W = [
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 document.getElementById('list').innerHTML = W.map(([id, name, col, teach, ms]) => `<div class="world" style="--wc:${col}"><h2>${esc(name)}</h2><span>${esc(teach)}</span></div><div class="grid">` + ms.map(([n, role, how]) => `<a class="m" style="--wc:${col}" href="test.html?noshell&biome=${id}&nointake=1&beast=${encodeURIComponent(n)}"><i>${esc(role)}</i><b>${esc(n)}</b><small>${esc(how)}</small></a>`).join('') + '</div>').join('');
 </script>
-<script src="chrome.js"></script></body></html>
+<script src="chrome.js?v=20261127n"></script></body></html>

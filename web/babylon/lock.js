@@ -19,7 +19,7 @@ const LINES = [['MURMUR', 'Still there? Tap to confirm you\u2019re still you.'],
     ['MURMUR', 'Where did you go? Your friends are worried. So are we.'], ['ACCORD', 'We lost your signal for 3 seconds. Explain.'], ['MURMUR', 'Your location sharing was off. We fixed that.'],
     ['ACCORD', 'Courier activity reported in your sector. Report anything unusual.'], ['MURMUR', 'You stared at the road for a long time. Planning a trip?'], ['ACCORD', 'Your frequency is unlisted. Re-tune to an approved station.']];;
 { const c2 = document.createElement('style'); c2.textContent = `
-#lk{position:fixed;inset:0;z-index:40;pointer-events:auto;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default}
+#lk{position:fixed;inset:0;z-index:900;pointer-events:auto;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;overflow:hidden;user-select:none;-webkit-user-select:none;cursor:default}
 #lk .off{position:absolute;inset:0;background:#000;opacity:1}#lk.wake .off{opacity:0;transition:opacity .3s}
 #lk .wp{position:absolute;inset:0;opacity:0;transition:opacity .45s}#lk.wake .wp{opacity:1}#lk.bye{opacity:0;transition:opacity .3s}#lk.bye.ios .wp{transform:translateY(-100%);transition:transform .35s ease-in}
 #lk .wm{position:absolute;left:0;right:0;bottom:max(14px,3vh);text-align:center;font:600 9px/1 system-ui,sans-serif;letter-spacing:.35em;color:rgba(255,255,255,.22)}
