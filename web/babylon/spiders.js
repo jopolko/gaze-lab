@@ -81,7 +81,7 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
   const M = new B.Matrix(), Q = new B.Quaternion(), SC = new B.Vector3(), TR = new B.Vector3();
   const ground = (x, z) => { try { const g = d.th(x, z); return Number.isFinite(g) ? g : PH.y; } catch (e) { return PH.y; } };
 
-  function spawnWave() { const grp = { zaps: 0 }, ahead = Math.random() < .6; for (let k = 0; k < waveN && RS.length < ROAD.max; k++) { const side = Math.random() < .5 ? -1 : 1, rz = ahead ? -rnd(30, 70) : rnd(25, 50);
+  function spawnWave() { const grp = { zaps: 0 }, ahead = Math.random() < .6; try { d.msfx && d.msfx.vox('swarm', PH.x + (Math.random() < .5 ? -8 : 8), PH.y, PH.z + (ahead ? -40 : 35), 1, 1.4); } catch (e) { } for (let k = 0; k < waveN && RS.length < ROAD.max; k++) { const side = Math.random() < .5 ? -1 : 1, rz = ahead ? -rnd(30, 70) : rnd(25, 50);
       RS.push({ x: PH.x + side * rnd(4, 9), z: PH.z + rz, rz, side, wide: rnd(1.5, 4.5), catch: rnd(6, 10) + tier * .6, ph: rnd(0, 6.28), s: rnd(1.2, 1.8), h: 0, wob: rnd(0, 6.28), grp, tumble: 0, back: 0 }); } }          /* (they run with you and gain a little each second) */
   function attach(cam) { if (GS.length >= GL.max) return; const [hw, hh] = half(cam), fill = GS.length / GL.max, near = GS.length && Math.random() < .7 ? GS[Math.floor(Math.random() * GS.length)] : null;
     const a = near ? Math.atan2(near.ty / hh, near.tx / hw) + rnd(-.25, .25) : rnd(0, 6.28), r = clamp(1.05 - .42 * Math.pow(fill, 1.3) + rnd(-.04, .06), .62, 1.08);          /* (owner 2026-11-28: they gather round the very edge of the view and crowd in slowly; the middle stays clear) */
@@ -146,24 +146,18 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
     const n = GS.filter((g) => g.st !== 'out').length; for (const g of GS) if (g.st !== 'out') { g.st = 'wait'; g.delay = rnd(0, .9); }
     S.washes++; try { d.onWash && d.onWash(n, cl.tint); } catch (e) { } }
 
-  /* RAMP BLAST (owner 2026-11-28): leaving any ramp blows half of the spiders on the glass away, a few at a time over 3 seconds, the ones nearest the middle first.
-     The half that hangs on is scattered back out to the edge of the windscreen. Every ramp halves them again. */
-  function blowHalf() { const on = GS.filter((g) => g.st === 'in'); const n = Math.floor(on.length / 2); if (!n) return 0;
-    on.sort((a, b) => Math.hypot(a.tx, a.ty) - Math.hypot(b.tx, b.ty));
-    for (let k = 0; k < on.length; k++) { const g = on[k];
-      if (k < n) { g.st = 'wait'; g.blow = true; g.delay = (k + Math.random()) / n * 3; }
-      else { const a = Math.atan2(g.ty, g.tx) + rnd(-.3, .3), r = rnd(1, 1.08); g.tx = Math.cos(a) * r; g.ty = Math.sin(a) * r; g.idle = rnd(2, 5); } }
-    return n; }
-
-  /* WIND (owner 2026-11-28): flying off a ramp with spiders on the glass, a gentle wind whistles past them, its pitch wandering. No spiders, no wind. */
-  const WIND = { g: null, f: null, k: 0 };
-  function windStep(dt, want) { try { const ac = d.audio && d.audio(); if (!ac) return;
-      if (!WIND.g) { if (!want) return; const n = ac.sampleRate * 3, buf = ac.createBuffer(1, n, ac.sampleRate), ch = buf.getChannelData(0); let b = 0; for (let i = 0; i < n; i++) { b = .985 * b + .015 * (Math.random() * 2 - 1); ch[i] = b * 6 + (Math.random() * 2 - 1) * .15; }
-        const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; const f = ac.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 600; f.Q.value = 2.2; const g = ac.createGain(); g.gain.value = 0; src.connect(f); f.connect(g); g.connect(ac.destination); src.start(); WIND.g = g; WIND.f = f; }
-      WIND.k += ((want ? 1 : 0) - WIND.k) * Math.min(1, dt * (want ? 2.5 : 4)); const t = S.t, now = ac.currentTime;
-      WIND.f.frequency.setTargetAtTime(520 + 260 * Math.sin(t * .9) + 170 * Math.sin(t * 2.3 + 1.3) + 90 * Math.sin(t * 5.1), now, .08);
-      WIND.f.Q.setTargetAtTime(1.8 + .9 * Math.sin(t * 1.7), now, .1);
-      WIND.g.gain.setTargetAtTime(WIND.k * (.07 + .025 * Math.sin(t * 3.1 + .5)), now, .05); } catch (e) { } }
+  /* RAMP JUMPS (owner 2026-11-28): the higher the flight, the more of the spiders on the glass are blown off in the 3 seconds after leaving the ramp.
+     Height = the most clearance above the ground in those 3 s; JREF m counts as 100 %. At 100 %, 75 % of them go; 5 % less height, 3.75 % fewer; under 10 % none go and there is no wind.
+     They go a few at a time, the ones nearest the middle first; when it is over the rest are scattered out to the edge of the glass. */
+  const JREF = 100; let JB = null;
+  const jumpFrac = (p) => p < .1 ? 0 : .75 * Math.floor(Math.min(1, p) * 20 + 1e-6) / 20;
+  function ramp() { const on = GS.filter((g) => g.st === 'in').sort((a, b) => Math.hypot(a.tx, a.ty) - Math.hypot(b.tx, b.ty)); JB = { t: 0, list: on, n0: on.length, done: 0, hmax: 0 }; return on.length; }
+  function jumpStep(dt) { if (!JB) return 0; JB.t += dt; const h = d.airH ? Math.max(0, d.airH()) : 0; JB.hmax = Math.max(JB.hmax, h);
+    const frac = jumpFrac(JB.hmax / JREF), want = Math.floor(JB.n0 * frac * Math.min(1, JB.t / 3) + 1e-6);
+    while (JB.done < want) { const g = JB.list[JB.done++]; if (g && g.st === 'in') { g.st = 'wait'; g.blow = true; g.delay = 0; } }
+    const lv = JB.hmax / JREF >= .1 ? Math.min(1, h / JREF) : 0;
+    if (JB.t >= 3) { if (JB.done) for (const g of JB.list) if (g.st === 'in') { const a = Math.atan2(g.ty, g.tx) + rnd(-.3, .3), r = rnd(1, 1.08); g.tx = Math.cos(a) * r; g.ty = Math.sin(a) * r; g.idle = rnd(2, 5); } JB.res = { n0: JB.n0, blown: JB.done, h: Math.round(JB.hmax) }; S.lastJump = JB.res; JB = null; }
+    return lv; }
 
   // ---------------------------------------------------------------- per frame
   function step(dt, live) {
@@ -226,10 +220,13 @@ void main(){ vec2 p = vec2((vUV.x - .5) * uAsp, vUV.y - .5); float a = 0.; vec3 
       if (slip > .05) g.ph += dt * 45; else if (ll > .1) g.ph += dt * 4;          /* (legs scrabble when they slip) */
       GL.ln[m * 2] = lx; GL.ln[m * 2 + 1] = lz;
       B.Matrix.ScalingToRef(s, s, s, M); M.multiplyToRef(B.Matrix.RotationY(g.h), M); M.multiplyToRef(B.Matrix.RotationX(Math.PI / 2), M); M.multiplyToRef(B.Matrix.Translation(clamp(g.x + sx, -1.3, 1.3) * hw, clamp(g.y + sy, -1.3, 1.3) * hh, -GZ), M); M.copyToArray(GL.mat, m * 16); GL.ph[m] = g.ph; m++; }
-    windStep(dt, !!(live && d.rampAir && d.rampAir() && GS.some((g) => g.st === 'in')));
+    { const lv = live ? jumpStep(dt) : 0, onG = GS.filter((g) => g.st === 'in'), M = d.msfx;
+      if (M) { M.wind(lv > 0 && onG.length && d.airH && d.airH() > 0 ? lv : 0, dt);          /* (no spiders on the glass, no wind) */
+        if (live) { M.chew(dt, onG.length, () => { const g = onG[Math.floor(Math.random() * onG.length)]; return clamp(g.x * .8, -.9, .9); });          /* (one voice per spider: fewer spiders, fewer bites) */
+          const L = []; for (const q of RS) { if (q.tumble > 0) continue; const dd = Math.hypot(q.x - PH.x, q.z - PH.z); if (dd < 90) L.push({ pan: clamp((q.x - PH.x) / 10, -.9, .9), g: 1 / (1 + dd / 14) }); } M.skitter(dt, L); } } }
     GL.m.thinInstanceCount = m; GL.m.thinInstanceBufferUpdated('matrix'); GL.m.thinInstanceBufferUpdated('phase'); GL.m.thinInstanceBufferUpdated('lean');
   }
-  const api = { step, S, SLO, blowHalf, get wind() { return WIND.k; }, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
+  const api = { step, S, SLO, ramp, get jump() { return JB; }, zapTest: () => spawnZap(), chaseTest: () => spawnWave(), get glass() { return GS.length; }, get road() { return RS.length; }, attach: (k) => { for (let i = 0; i < k; i++) attach((d.cam && d.cam()) || scene.activeCamera); }, settle: () => { for (const g of GS) { g.x = g.tx; g.y = g.ty; } },
     storm: (z) => spawnStorm(z || 120), strikeTest: () => { const c = CL[CL.length - 1]; if (c) strike(c); }, washTest: () => wash({ tint: pick(d.pal.bolts) }) };
   return api;
 }
