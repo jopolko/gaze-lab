@@ -175,7 +175,10 @@
     padding:0 max(16px, var(--sa-right, env(safe-area-inset-right, 0px))) 0 max(16px, var(--sa-left, env(safe-area-inset-left, 0px))); background:radial-gradient(ellipse at 50% 60%, #1a0f2c, #07050f 70%); color:#f4f1ea;
     transition:opacity .6s; pointer-events:none; font-family:'Barlow Condensed', system-ui, sans-serif; }
   #ldr.out { opacity:0; }
-  #ldr .k { font:700 13px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.34em; color:#9fe8ff; }
+  #ldr .mus { margin-top:14px; font:700 clamp(14px, 1.6vmin + 8px, 18px)/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.14em; text-transform:uppercase; color:#05070c; background:#38e8ff; border:0; border-radius:999px; padding:.7em 1.4em; box-shadow:0 0 18px rgba(56,232,255,.55); cursor:pointer; animation:ldMus 1.6s ease-in-out infinite; }
+#ldr .mus.on { background:transparent; color:#9fe8ff; box-shadow:none; animation:none; border:1px solid rgba(159,232,255,.4); }
+@keyframes ldMus { 50% { transform:scale(1.05); box-shadow:0 0 28px rgba(56,232,255,.8); } }
+#ldr .k { font:700 13px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.34em; color:#9fe8ff; }
   #ldr .lv { font:400 clamp(40px, 10vmin, 92px)/.9 'Bebas Neue', Impact, sans-serif; letter-spacing:.08em; color:#fff; text-align:center; text-shadow:0 0 30px rgba(56,232,255,.4); margin-top:-4px; }
   #ldr .ep { font:700 12px/1 'Barlow Condensed', system-ui, sans-serif; letter-spacing:.3em; color:#ffd23a; margin-top:-6px; }
   #ldr canvas { position:static; width:min(560px, 86vw); height:clamp(70px, 16vmin, 110px); display:block; }
@@ -188,7 +191,7 @@
   const el = document.createElement('div'); el.id = 'ldr'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
   const LVN = { desert: 'ROUTE ZERO', alpine: 'THE SAFE PEAKS', candy: 'SUGARFALL', tunnel: 'THE UNDERTOW', synthwave: 'NEON ACCORD', matrix: 'COLD RACK', egypt: 'TOMB OF THE OLD SERVERS', psychedelic: 'THE OPEN CHANNEL' };
   const lvName = Q.has('tutorial') ? 'TRAINING' : (LVN[lvl] || lvl.toUpperCase()), lvEp = Q.has('story') ? 'EPISODE 1' : '';
-  el.innerHTML = '<div class="k">AFTERGLOW</div><div class="lv">' + lvName + '</div>' + (lvEp ? '<div class="ep">' + lvEp + '</div>' : '') + '<canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div>';
+  el.innerHTML = '<div class="k">AFTERGLOW</div><div class="lv">' + lvName + '</div>' + (lvEp ? '<div class="ep">' + lvEp + '</div>' : '') + '<canvas aria-hidden="true"></canvas><div class="st"><span></span></div><div class="pc"></div><button type="button" class="mus">♪ Tap for music</button>'; { const mb = el.querySelector('.mus'); if (mb) { try { if (localStorage.getItem('dl_mute') === '1') mb.style.display = 'none'; } catch (e) { } const on = () => { mb.classList.add('on'); mb.textContent = '♪ Music on'; try { const C = window.Tone && Tone.context; if (C && C.state !== 'running') C.resume(); } catch (e) { } }; mb.addEventListener('pointerup', on); mb.addEventListener('click', on); } }          /* (owner 2026-11-27: a tap during loading starts the level's music, so the loading screen says so) */
   const mount = () => { (document.head || document.documentElement).appendChild(css); (document.body || document.documentElement).appendChild(el); };
   mount(); if (!document.body) document.addEventListener('DOMContentLoaded', () => { if (el.parentNode !== document.body) document.body.appendChild(el); });          /* (owner 2026-11-27: up from the first moment, before the big engine files download) */
   const cv = el.querySelector('canvas'), cx = cv.getContext('2d'), stEl = el.querySelector('.st span'), pcEl = el.querySelector('.pc');
