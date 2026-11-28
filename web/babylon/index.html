@@ -1402,7 +1402,7 @@ void main() {
   function perfSave() { try { localStorage.setItem('ag_perf2', JSON.stringify({ k: PERF.key, rs: +POST.rs.toFixed(3), shed: TUNE.level, tier: PERF.tier, lock30: PERF.lock30, t: Date.now() })); } catch (e) { } }
   function perfSend(why) { if (Q.has('noshare')) return; try { const ft = PERF.ft.slice().sort((a, b) => a - b), p95 = ft.length ? ft[Math.floor(ft.length * .95)] : 0, dpr = window.devicePixelRatio || 1;
     fetch('/gaze-lab/log.php', { method: 'POST', keepalive: true, body: JSON.stringify({ kind: 'perf', app: 'afterglow', who: 'afterglow', sid: PERF.sid, t: Math.round(performance.now() / 1000), device: Math.round(innerWidth * dpr) + 'x' + Math.round(innerHeight * dpr) + '@' + dpr.toFixed(2), hw: POST.gpu, gameFps: Math.round(fps), frameP95ms: +p95.toFixed(1), mode: PERF.tier + (PERF.lock30 ? '/30' : ''), value: +POST.rs.toFixed(2), cfg: { level: POST.level, shed: TUNE.level, world: WORLD0, hz: POST.refresh }, reason: why }) }).catch(() => { }); } catch (e) { } }
-  function setTier(t) { if (t === PERF.tier) return; PERF.tier = t; POST.rsMin = PU.res !== 'auto' ? PERF.rsMin0 : t === 'min' ? .35 : t === 'low' ? .42 : (t === 'lite' ? Math.min(PERF.rsMin0, .5) : PERF.rsMin0); applyRes(POST.rs); applyPost(POST.level); try { applyShed(TUNE.level); } catch (e) { } perfSave(); perfSend('tier'); try { window.__perfNote && window.__perfNote(); } catch (e) { } }
+  function setTier(t) { if (t === PERF.tier) return; PERF.tier = t; POST.rsMin = PU.res !== 'auto' ? PERF.rsMin0 : Math.min(POST.rsMin, t === 'min' ? .35 : t === 'low' ? .42 : (t === 'lite' ? Math.min(PERF.rsMin0, .5) : PERF.rsMin0)); applyRes(POST.rs); applyPost(POST.level); try { applyShed(TUNE.level); } catch (e) { } perfSave(); perfSend('tier'); try { window.__perfNote && window.__perfNote(); } catch (e) { } }
   window.__perf = () => ({ tier: PERF.tier, lock30: PERF.lock30, rs: POST.rs, rsMin: POST.rsMin, shed: TUNE.level, level: POST.level, measured: PERF.measured });
   const POST = { level: 4, cap: 4, rs: 1, rsMin: .6, rsMax: 1, good: 0, settle: 3, refresh: 60, gpu: '' };
   let warpOn = true;
@@ -1411,7 +1411,7 @@ void main() {
   function probeDevice() {
     let gpu = ''; try { const g = engine.getGlInfo(); gpu = (g.renderer || '') + ' | ' + (g.vendor || ''); } catch (e) { } POST.gpu = gpu; const dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight, touch = (navigator.maxTouchPoints || 0) > 0 && matchMedia('(pointer:coarse)').matches;
     const strong = /NVIDIA|GeForce|RTX|GTX|Radeon RX|Radeon Pro|Apple M|Apple GPU|Adreno \(TM\) 7|Adreno 7|Immortalis/i.test(gpu), mid = /Mali-G7/i.test(gpu), weak = /Intel|UHD|Iris|SwiftShader|llvmpipe|Adreno \(TM\) [2-5]|Mali-[T4]/i.test(gpu);
-    /* (owner 2026-11-27: a Pixel 9, Mali-G715, ran under 30 fps starting at full resolution; Mali-G7 phones start at the mid budget but keep every effect) */ const budget = touch ? (strong ? 4.5e6 : 2.6e6) : (strong ? 9.5e6 : (weak ? 2.8e6 : 5e6)); POST.cap = touch ? (strong || mid ? 3 : 2) : (strong ? 4 : (weak ? 2 : 3)); if (PU.glow === 'ultra') POST.cap = 4;          /* (Override ULTRA picture: every glow and picture pass, phones too) */ POST.rsMin = touch ? (P3 ? .62 : .66) : (P3 ? .55 : .6);          /* (owner 2026-11-26: a phone ended at .4, 164 px wide, and everything read plain and blurry) */ if (Q.get('postcap')) POST.cap = Math.max(0, Math.min(4, +Q.get('postcap'))); POST.level = POST.cap; PERF.rsMin0 = POST.rsMin;
+    /* (owner 2026-11-27: a Pixel 9, Mali-G715, ran under 30 fps starting at full resolution; Mali-G7 phones start at the mid budget but keep every effect) */ const budget = touch ? (strong ? 4.5e6 : 2.6e6) : (strong ? 9.5e6 : (weak ? 2.8e6 : 5e6)); POST.cap = touch ? (strong || mid ? 3 : 2) : (strong ? 4 : (weak ? 2 : 3)); if (PU.glow === 'ultra') POST.cap = 4;          /* (Override ULTRA picture: every glow and picture pass, phones too) */ POST.rsMin = touch ? .5 : (P3 ? .55 : .6);          /* (owner 2026-11-26: a phone ended at .4, 164 px wide, and everything read plain and blurry) */ if (Q.get('postcap')) POST.cap = Math.max(0, Math.min(4, +Q.get('postcap'))); POST.level = POST.cap; PERF.rsMin0 = POST.rsMin;
     let rs0 = clamp(Math.sqrt(budget / (W * H * dpr * dpr)), POST.rsMin, 1);
     PERF.key = gpu + '|' + Math.round(Math.max(W, H) * dpr) + 'x' + Math.round(Math.min(W, H) * dpr); let sv = null; try { sv = Q.has('perfreset') ? null : JSON.parse(localStorage.getItem('ag_perf2') || 'null'); } catch (e) { }
     if (sv && sv.k === PERF.key && Date.now() - (sv.t || 0) < 60 * 864e5) { PERF.tier = sv.tier || 'full'; POST.rsMin = PERF.tier === 'min' ? .35 : PERF.tier === 'low' ? .42 : (PERF.tier === 'lite' ? Math.min(PERF.rsMin0, .5) : PERF.rsMin0); PERF.lock30 = !!sv.lock30; PERF.measured = true; if (sv.rs > 0) rs0 = clamp(sv.rs, POST.rsMin, 1); try { applyShed(Math.max(0, Math.min(SHEDN.length, sv.shed | 0))); } catch (e) { } }          /* (this phone has run before: start where it ended) */
@@ -1419,7 +1419,7 @@ void main() {
     if (PU.res !== 'auto') { const R0 = { ultra: [1, 1.25], high: [.85, 1], med: [.65, .8], low: [.45, .6] }[PU.res] || [POST.rsMin, 1]; POST.rsMin = R0[0]; POST.rsMax = R0[1]; rs0 = PU.res === 'ultra' ? R0[1] : clamp(rs0, R0[0], R0[1]);          /* (ULTRA starts supersampled) */ PERF.rsMin0 = R0[0]; }          /* (the player's sharpness: the governor stays inside this band) */
     if (PU.fps === '30') { PERF.lock30 = true; PERF.noUnlock = true; } else if (PU.fps === '60') PERF.lock30 = false;
     applyRes(rs0); applyPost(POST.level);
-    let n = 0, t0 = performance.now(), prev = t0; const ds = []; const tick = (t) => { ds.push(t - prev); prev = t; if (++n < 45) requestAnimationFrame(tick); else { ds.sort((a, b) => a - b); const med = ds[ds.length >> 1] || 16.7, hz = 1000 / med, snap = [30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240].reduce((a, b) => Math.abs(b - hz) < Math.abs(a - hz) ? b : a); POST.refresh = Math.min(snap, 144);  } }; requestAnimationFrame(tick);
+    let n = 0, t0 = performance.now(), prev = t0; const ds = []; const tick = (t) => { ds.push(t - prev); prev = t; if (++n < 45) requestAnimationFrame(tick); else { ds.sort((a, b) => a - b); const med = ds[ds.length >> 1] || 16.7, hz = 1000 / med, snap = [30, 48, 50, 60, 72, 75, 90, 100, 120, 144, 165, 240].reduce((a, b) => Math.abs(b - hz) < Math.abs(a - hz) ? b : a); POST.refresh = Math.max(60, Math.min(snap, 144));          /* (owner 2026-11-27: measured during loading it read 30 or 48 on a Pixel 9, so the game aimed for 30 fps; every screen is at least 60) */  } }; requestAnimationFrame(tick);
   }
   function tune2d(f) {
     if (inXR || !started || panelOpen || Q.get('postcap') || POST.settle-- > 0) return; POST.settle = Math.max(0, POST.settle); const target = PERF.lock30 ? 30 : Math.min(POST.refresh, 60);
@@ -1429,8 +1429,25 @@ void main() {
        see the trade-off below) */
     /* (owner 2026-11-26, the trade-off: SMOOTH first, the world immersive and trippy second, sharpness last. So resolution goes first, all the way to its floor;
        only then draw distance and detail; the trip's effects are never cut. Coming back: draw distance and detail first, then resolution.) */
-    if (f < target * .84) { POST.good = 0; if (POST.rs > POST.rsMin + .001) applyRes(Math.max(POST.rsMin, POST.rs - (f < target * .6 ? .08 : .025)));          /* (small steps: it eases down, owner 2026-11-26) */ else if (TUNE.level < SHEDN.length) applyShed(TUNE.level + 1); else if (PERF.tier === 'full') setTier('lite'); else if (!PERF.lock30 && POST.refresh > 40 && PU.fps !== '60') { PERF.lock30 = true; PERF.okT = 0; PERF.noUnlock = true; perfSave(); perfSend('lock30'); } else if (PERF.tier === 'lite') setTier('low'); else if (PERF.tier === 'low') setTier('min'); POST.settle = f < target * .6 ? 0 : 2; }          /* (well under: it steps faster and sooner) */
-    else if (f > target * .92) { if (++POST.good >= 6) { POST.good = 0; if (POST.level < POST.cap) applyPost(POST.level + 1); else if (TUNE.level > 0) applyShed(TUNE.level - 1); else if (POST.rs < POST.rsMax - .001) applyRes(POST.rs + .025); else if (PERF.tier !== 'full' && !PERF.lock30) setTier(PERF.tier === 'min' ? 'low' : PERF.tier === 'low' ? 'lite' : 'full'); else if (PERF.lock30 && !PERF.noUnlock && (PERF.okT += 12) > 180) { PERF.lock30 = false; perfSave(); } POST.settle = 2; } }
+    /* (owner 2026-11-27: "fps more than anything; give up resolution first, then effects") ORDER DOWN: resolution to the floor, the floor itself down in steps
+       to 35%, then draw distance and detail, then the glow, then a steady 30. ORDER UP (slow, only after 15 s without a step down, and only when there is
+       real headroom): glow, then detail, then resolution. */
+    const FLOORS = PU.res !== 'auto' ? [POST.rsMin] : [PERF.rsMin0, .42, .35].filter((v, k, a) => k === 0 || v < a[0]), now = performance.now();
+    if (f < target * .84) { POST.good = 0; PERF.upAt = now + 15000;
+      if (POST.rs > POST.rsMin + .001) applyRes(Math.max(POST.rsMin, POST.rs - (f < target * .6 ? .1 : .04)));
+      else if ((PERF.fl || 0) < FLOORS.length - 1) { PERF.fl = (PERF.fl || 0) + 1; POST.rsMin = FLOORS[PERF.fl]; applyRes(POST.rs - .05); }
+      else if (TUNE.level < SHEDN.length) applyShed(TUNE.level + 1);
+      else if (PERF.tier === 'full' || PERF.tier === 'lite') setTier(PERF.tier === 'full' ? 'lite' : 'min');
+      else if (!PERF.lock30 && PU.fps !== '60') { PERF.lock30 = true; PERF.okT = 0; PERF.noUnlock = true; perfSave(); perfSend('lock30'); }
+      POST.settle = f < target * .6 ? 0 : 1; }
+    else if (f > target * .95 && now > (PERF.upAt || 0)) { if (++POST.good >= 8) { POST.good = 0;
+      if (POST.level < POST.cap) applyPost(POST.level + 1);
+      else if (PERF.tier !== 'full' && !PERF.lock30) setTier(PERF.tier === 'min' ? 'lite' : 'full');
+      else if (TUNE.level > 0) applyShed(TUNE.level - 1);
+      else if (POST.rs < POST.rsMax - .001) applyRes(POST.rs + .025);
+      else if ((PERF.fl || 0) > 0) { PERF.fl--; POST.rsMin = FLOORS[PERF.fl] || POST.rsMin; }
+      else if (PERF.lock30 && !PERF.noUnlock && (PERF.okT += 12) > 180) { PERF.lock30 = false; perfSave(); }
+      POST.settle = 2; } }
     else POST.good = 0;
   }
   function tune(f, hz) {
@@ -1737,7 +1754,6 @@ void main() {
       btn('Log', () => { const L = (st() && st().log) || []; show(L.length ? L.map((e) => '<div><b>' + e.k + '</b> ' + e.t + '</div>').join('') : 'Nothing yet. Signs, messages and hits are kept here.'); });
     }
     if (window.ME) btn('Next track', () => { try { ME.next(); } catch (e) { } });
-    btn('Visuals & device', () => { location.href = 'lab.html?back=' + encodeURIComponent('menu.html'); });          /* (owner 2026-11-27: The Dial: your visuals and how this device runs) */          /* not feeling this one? a fresh track for the same level */
     { const sb = btn('', () => { STORYON = !STORYON; try { localStorage.setItem('dl_story', STORYON ? '1' : '0'); } catch (e) { } sb.textContent = 'Story: ' + (STORYON ? 'on' : 'off'); }); sb.textContent = 'Story: ' + (STORYON ? 'on' : 'off'); }
     btn('Look', () => { location.href = 'dressup.html?next=' + encodeURIComponent('index.html' + location.search); });
     { const lab = () => 'Lock screens: ' + ((() => { try { return localStorage.getItem('dl_nolock') === '1'; } catch (e) { return false; } })() ? 'off' : 'on'); const lb = btn(lab(), () => { try { if (localStorage.getItem('dl_nolock') === '1') localStorage.removeItem('dl_nolock'); else localStorage.setItem('dl_nolock', '1'); } catch (e) { } lb.textContent = lab(); try { AGLock.paint(document.getElementById('pmLk'), { ctx: window.__lkCtx && window.__lkCtx() }); } catch (e) { } }); }          /* (one tap, no digging) */
@@ -1745,7 +1761,7 @@ void main() {
     btn('Restart', () => { location.reload(); });
     if (!Q.has('story') && !Q.has('tutorial')) { const w = PZ('pzW'); if (w) { w.title = 'World'; G.appendChild(w); } }
     btn('Worlds', () => { location.href = 'menu.html'; }); btn('Title screen', () => { location.href = 'splash.html'; });          /* (owner 2026-11-26: the level select is 'Worlds'; the title screen is one tap away, progress kept, no training) */
-    const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Settings'; { const ib = document.createElement('button'); ib.className = 'sm'; ib.textContent = '\u2316 Inspect & copy'; ib.onclick = () => { try { window.__inspMode(true); } catch (e) { } }; G.appendChild(ib); } dv.onclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
+    const dv = document.createElement('button'); dv.className = 'sm'; dv.textContent = '\u2699\uFE0E Settings'; { const ib = document.createElement('button'); ib.className = 'sm'; ib.textContent = '\u2316 Inspect & copy'; ib.onclick = () => { try { window.__inspMode(true); } catch (e) { } }; G.appendChild(ib); } dv.onclick = () => { location.href = 'lab.html?back=' + encodeURIComponent('menu.html'); };          /* (owner 2026-11-27: Settings did nothing on a phone (it toggled a hidden developer panel); it opens The Dial: visuals and Override; a double click still toggles the developer panel) */ dv.ondblclick = () => { const on = document.body.classList.toggle('devmenu'); try { localStorage.setItem('dl_dev', on ? '1' : '0'); } catch (e) { } }; G.appendChild(dv); try { localStorage.removeItem('dl_dev'); } catch (e) { }
     /* MAX INTENSITY, changeable mid-game (owner 2026-11-26: if someone changes their mind): re-tunes the trip live and is remembered for the next run */
     { const R = el.querySelector('#pmSigR'), V = el.querySelector('#pmSigV'), show = (f) => { V.textContent = Math.round(f) + ' THz \u00B7 ' + ((f) => f < 450 ? 'HINT' : f < 560 ? 'MILD' : f < 660 ? 'MEDIUM' : f < 745 ? 'FULL' : f <= 790 ? 'INTENSE' : 'ULTRAVIOLET')(f); V.style.color = f > 790 ? '#d68cff' : '#9fd8ff'; };
       R.value = String(window.__SIG ? window.__SIG.f : 500); show(+R.value); for (const ev of ['pointerdown', 'touchstart']) R.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
