@@ -1,6 +1,6 @@
 /* THE GATE (owner 2026-11-27): the very first visit only. A browser-style "connection not private" page glitches three times
    and turns into an ACCORD notice: this device is not registered, and it was seen trying to reach AFTERGLOW.
-   The way past is the world's simplest captcha: nine tiles, one has a dot. Any answer gets you in.
+   Continue goes straight in (the captcha that used to follow was cut 2026-11-28).
    Under ten seconds, a Skip link from the first frame. ?gate shows it again; ?nogate never shows it. */
 (() => {
   const Q = location.search; let seen = false; try { seen = localStorage.getItem('dl_gate') === '1'; } catch (e) { }
@@ -66,9 +66,9 @@
     pg.innerHTML = '<div class="tag">Customer Protection · on behalf of ACCORD Network Safety</div><h1>Device not registered</h1>'
       + '<p>Dear Valued Subscriber, this device just tried to reach <b>AFTERGLOW</b>, an unlicensed transmission, for the first time. The attempt has been logged, timestamped and lightly judged.</p>'
       + '<p>First-time visit only. After this, we will remember you.</p>'
-      + '<div class="row" style="justify-content:flex-start"><button type="button" class="pri ver">Prove you are human</button></div>'
+      + '<div class="row" style="justify-content:flex-start"><button type="button" class="pri ver">Continue</button></div>'
       + '<div class="fine">StarLeash is a trading name of StarLeash Holdings, a wholly owned subsidiary of your data. Ref. 7731-B.</div>';
-    pg.querySelector('.ver').onclick = (e) => { e.stopPropagation(); captcha(); }; }); };
+    pg.querySelector('.ver').onclick = (e) => { e.stopPropagation(); leave(); }; }); };          /* (owner 2026-11-28: no captcha after the browser gag: "just give me the game". Continue goes straight in; the captcha below is no longer reached) */
   /* the check: "select all squares containing your personal data". Tap anything and ACCORD selects all nine for you. */
   const captcha = () => { if (stage >= 2) return; stage = 2;
     const IC = [['\uD83D\uDCF7', 'Photos'], ['\uD83C\uDFE0', 'Home'], ['\uD83D\uDCAC', 'Messages'], ['\uD83D\uDDFA\uFE0F', 'Location'], ['\uD83C\uDFB5', 'Music'], ['\u2764\uFE0F', 'Dating'], ['\uD83D\uDED2', 'Cart'], ['\uD83D\uDD11', 'Passwords'], ['\uD83E\uDDE0', 'Thoughts']];
